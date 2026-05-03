@@ -20,7 +20,7 @@ import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
@@ -413,6 +413,66 @@ export async function registerRoutes(
       const clustered = clusterAssets(normalized);
       const profile = buyerProfile ?? DEFAULT_BUYER_PROFILE;
 
+      // Task #695: hydrate per-asset category_confidence + asset_class from
+      // ingested_assets where any of the asset's source URLs match a row we've
+      // already classified. This lets scoreAssets() apply the full
+      // confidence-aware formula (min(category_confidence, coverage)) on the
+      // /api/search path instead of silently falling back to coverage-only,
+      // matching the behavior of /api/scout/search and /api/scout/recently-added.
+      // Assets without a matching ingested row keep category_confidence
+      // undefined and scoreAssets's existing coverage-only fallback applies.
+      try {
+        const allUrls = Array.from(new Set(
+          clustered.flatMap((a) => a.source_urls ?? []).filter((u): u is string => typeof u === "string" && u.length > 0)
+        ));
+        if (allUrls.length > 0) {
+          const hydrationRows = await db.execute(sql`
+            SELECT source_url, category_confidence, asset_class
+            FROM ingested_assets
+            WHERE source_url = ANY(${allUrls}::text[])
+              AND (category_confidence IS NOT NULL OR asset_class IS NOT NULL)
+          `);
+          const urlToMeta = new Map<string, { categoryConfidence: number | undefined; assetClass: string | null }>();
+          for (const row of hydrationRows.rows as Record<string, unknown>[]) {
+            const url = typeof row.source_url === "string" ? row.source_url : null;
+            if (!url) continue;
+            const cc = row.category_confidence != null && !Number.isNaN(parseFloat(String(row.category_confidence)))
+              ? Math.max(0, Math.min(1, parseFloat(String(row.category_confidence))))
+              : undefined;
+            const ac = typeof row.asset_class === "string" && row.asset_class ? row.asset_class : null;
+            const existing = urlToMeta.get(url);
+            // If multiple ingested rows share a URL, keep the highest confidence.
+            if (!existing || (cc !== undefined && (existing.categoryConfidence === undefined || cc > existing.categoryConfidence))) {
+              urlToMeta.set(url, { categoryConfidence: cc, assetClass: ac ?? existing?.assetClass ?? null });
+            } else if (existing && existing.assetClass == null && ac) {
+              urlToMeta.set(url, { ...existing, assetClass: ac });
+            }
+          }
+          if (urlToMeta.size > 0) {
+            for (const a of clustered) {
+              let bestConf: number | undefined;
+              let bestClass: string | null | undefined;
+              for (const u of a.source_urls ?? []) {
+                const meta = urlToMeta.get(u);
+                if (!meta) continue;
+                if (meta.categoryConfidence !== undefined && (bestConf === undefined || meta.categoryConfidence > bestConf)) {
+                  bestConf = meta.categoryConfidence;
+                }
+                if (!bestClass && meta.assetClass) bestClass = meta.assetClass;
+              }
+              if (bestConf !== undefined && a.category_confidence === undefined) {
+                a.category_confidence = bestConf;
+              }
+              if (bestClass && !a.asset_class) {
+                a.asset_class = bestClass;
+              }
+            }
+          }
+        }
+      } catch (hydrateErr) {
+        console.warn("[search] category_confidence hydration failed, falling back to coverage-only:", hydrateErr);
+      }
+
       let scored: import("./lib/types").ScoredAsset[];
       try {
         const userOffsets = searchUserId
@@ -616,45 +676,121 @@ export async function registerRoutes(
           mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
-          first_seen_at
+          first_seen_at, category_confidence, asset_class
         FROM ingested_assets
         WHERE relevant = true AND completeness_score >= 0.4
         ORDER BY first_seen_at DESC NULLS LAST
         LIMIT 12
       `);
-      const assets = (rows.rows as Record<string, unknown>[]).map((r) => ({
-        id: String(r.id),
-        asset_name: typeof r.asset_name === "string" ? r.asset_name : String(r.asset_name ?? ""),
-        target: typeof r.target === "string" ? r.target : String(r.target ?? ""),
-        modality: typeof r.modality === "string" ? r.modality : String(r.modality ?? ""),
-        indication: typeof r.indication === "string" ? r.indication : String(r.indication ?? ""),
-        development_stage: typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? ""),
-        institution: typeof r.institution === "string" ? r.institution : String(r.institution ?? ""),
-        summary: typeof r.summary === "string" ? r.summary : null,
-        source_url: typeof r.source_url === "string" ? r.source_url : null,
-        source_name: typeof r.source_name === "string" ? r.source_name : null,
-        completeness_score: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
-        licensing_readiness: typeof r.licensing_readiness === "string" ? r.licensing_readiness : null,
-        ip_type: typeof r.ip_type === "string" ? r.ip_type : null,
-        innovation_claim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
-        stage_changed_at: r.stage_changed_at ? String(r.stage_changed_at) : null,
-        previous_stage: typeof r.previous_stage === "string" ? r.previous_stage : null,
-        first_seen_at: r.first_seen_at ? String(r.first_seen_at) : null,
-        score: 0,
-        score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
-        owner_name: typeof r.institution === "string" ? r.institution : "",
-        owner_type: "university" as const,
-        patent_status: "unknown",
-        licensing_status: typeof r.licensing_readiness === "string" ? r.licensing_readiness : "unknown",
-        why_it_matters: typeof r.innovation_claim === "string" ? r.innovation_claim : "",
-        source_urls: typeof r.source_url === "string" ? [r.source_url] : [],
-        source_types: ["tech_transfer" as const],
-        latest_signal_date: "",
-        matching_tags: [],
-        evidence_count: 1,
-        confidence: "medium" as const,
-        signals: [],
-      }));
+      const assets = (rows.rows as Record<string, unknown>[]).map((r) => {
+        const institution = typeof r.institution === "string" ? r.institution : String(r.institution ?? "");
+        const developmentStage = typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? "");
+        const licensingReadiness = typeof r.licensing_readiness === "string" ? r.licensing_readiness : null;
+        const firstSeenAt = r.first_seen_at ? String(r.first_seen_at) : null;
+        const sourceUrl = typeof r.source_url === "string" ? r.source_url : null;
+        const catConfRaw = r.category_confidence;
+        const catConf = catConfRaw != null && !Number.isNaN(parseFloat(String(catConfRaw)))
+          ? Math.max(0, Math.min(1, parseFloat(String(catConfRaw))))
+          : undefined;
+        const assetClass = typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null;
+
+        // Inline confidence-aware scoring (Task #695) — mirrors /api/scout/search
+        // so the same asset shows the same score & confidence pill on every screen.
+        const partialAsset: Partial<ScoredAsset> = {
+          development_stage: developmentStage,
+          licensing_status: licensingReadiness ?? "unknown",
+          owner_name: institution,
+          owner_type: "university",
+          source_types: ["tech_transfer"],
+          latest_signal_date: firstSeenAt ?? "",
+          evidence_count: 1,
+          patent_status: "unknown",
+        };
+
+        const freshnessResult = firstSeenAt
+          ? scoreFreshness(partialAsset)
+          : { score: 0, hasData: false, basis: "No signal date available" };
+        const noveltyResult = scoreNovelty(partialAsset);
+        const readinessResult = scoreReadiness(partialAsset);
+        const licensabilityResult = scoreLicensability(partialAsset);
+        const competitionResult = scoreCompetition(partialAsset);
+        const fitResult = { score: 0, hasData: false, basis: "No buyer profile configured" };
+
+        const dimResults = {
+          freshness: freshnessResult,
+          novelty: noveltyResult,
+          readiness: readinessResult,
+          licensability: licensabilityResult,
+          fit: fitResult,
+          competition: competitionResult,
+        };
+
+        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults);
+
+        const coverageNorm = signal_coverage / 100;
+        const confidenceFactor = catConf !== undefined ? Math.min(catConf, coverageNorm) : coverageNorm;
+        const total = CONFIDENCE_AWARE_RANKING_ENABLED
+          ? Math.max(0, Math.min(100, Math.round(rawTotal * (CONFIDENCE_FLOOR + (1 - CONFIDENCE_FLOOR) * confidenceFactor))))
+          : rawTotal;
+        const confidence: "high" | "medium" | "low" =
+          confidenceFactor >= 0.75 ? "high" : confidenceFactor >= 0.5 ? "medium" : "low";
+
+        return {
+          id: String(r.id),
+          asset_name: typeof r.asset_name === "string" ? r.asset_name : String(r.asset_name ?? ""),
+          target: typeof r.target === "string" ? r.target : String(r.target ?? ""),
+          modality: typeof r.modality === "string" ? r.modality : String(r.modality ?? ""),
+          indication: typeof r.indication === "string" ? r.indication : String(r.indication ?? ""),
+          development_stage: developmentStage,
+          institution,
+          summary: typeof r.summary === "string" ? r.summary : null,
+          source_url: sourceUrl,
+          source_name: typeof r.source_name === "string" ? r.source_name : null,
+          completeness_score: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
+          licensing_readiness: licensingReadiness,
+          ip_type: typeof r.ip_type === "string" ? r.ip_type : null,
+          innovation_claim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
+          stage_changed_at: r.stage_changed_at ? String(r.stage_changed_at) : null,
+          previous_stage: typeof r.previous_stage === "string" ? r.previous_stage : null,
+          first_seen_at: firstSeenAt,
+          score: total,
+          score_breakdown: {
+            freshness: freshnessResult.score,
+            novelty: noveltyResult.score,
+            readiness: readinessResult.score,
+            licensability: licensabilityResult.score,
+            fit: fitResult.score,
+            competition: competitionResult.score,
+            total,
+            signal_coverage,
+            scored_dimensions,
+            dimension_basis,
+            confidence_factor: Math.round(confidenceFactor * 100) / 100,
+            ...(catConf !== undefined ? { category_confidence: catConf } : {}),
+          },
+          owner_name: institution,
+          owner_type: "university" as const,
+          patent_status: "unknown",
+          licensing_status: licensingReadiness ?? "unknown",
+          why_it_matters: typeof r.innovation_claim === "string" ? r.innovation_claim : "",
+          source_urls: sourceUrl ? [sourceUrl] : [],
+          source_types: ["tech_transfer" as const],
+          latest_signal_date: firstSeenAt ?? "",
+          matching_tags: [],
+          evidence_count: 1,
+          confidence,
+          ...(catConf !== undefined ? { category_confidence: catConf } : {}),
+          asset_class: assetClass,
+          signals: [],
+        };
+      });
+
+      // Preserve recency ordering (already sorted by first_seen_at DESC) — this
+      // is a "what's new" feed, not a ranked search. The confidence pill and
+      // confidence-aware score are still surfaced per asset, but we deliberately
+      // do NOT apply applyTopKConfidenceGate here because that helper partitions
+      // the entire list and would push older high-confidence rows above newer
+      // low-confidence rows, breaking the recency contract of this endpoint.
       return res.json({ assets });
     } catch (err: any) {
       console.error("[scout/recently-added] Error:", err);
