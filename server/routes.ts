@@ -8177,15 +8177,17 @@ If multiple assets appear, return each as a separate array item.`;
         await db.insert(emailUnsubscribes).values({ email }).onConflictDoNothing();
         // Best-effort: if the address belongs to an Eden user, also flip their
         // industry_profiles.subscribed_to_digest so the unsubscribe takes
-        // effect across both manual and automated digests.
-        try {
-          const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
-          const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-          if (sbUrl && sbKey) {
+        // effect across both manual and automated digests. Run async so the
+        // unauthenticated /unsubscribe response stays fast and isn't a perf
+        // hotspot for repeat hits.
+        void (async () => {
+          try {
+            const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
+            const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+            if (!sbUrl || !sbKey) return;
             const { createClient } = await import("@supabase/supabase-js");
             const sb = createClient(sbUrl, sbKey);
-            // Paginate through Supabase users so account-matching works regardless
-            // of org size; cap at 50 pages × 200 = 10k users to bound work.
+            // Paginate through Supabase users; cap at 50 pages × 200 = 10k.
             let matchedId: string | null = null;
             for (let page = 1; page <= 50 && !matchedId; page++) {
               const { data } = await sb.auth.admin.listUsers({ page, perPage: 200 });
@@ -8197,10 +8199,10 @@ If multiple assets appear, return each as a separate array item.`;
               await db.insert(industryProfiles).values({ userId: matchedId, subscribedToDigest: false })
                 .onConflictDoUpdate({ target: industryProfiles.userId, set: { subscribedToDigest: false } });
             }
+          } catch (syncErr: any) {
+            console.warn("[unsubscribe] best-effort account sync failed:", syncErr?.message);
           }
-        } catch (syncErr: any) {
-          console.warn("[unsubscribe] best-effort account sync failed:", syncErr?.message);
-        }
+        })();
         console.log(`[unsubscribe] Email ${email} added to email_unsubscribes via token link`);
         return { ok: true };
       } catch (err: any) {
