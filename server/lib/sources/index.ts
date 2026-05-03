@@ -431,21 +431,23 @@ const KEY_GATED_SOURCES: ReadonlyArray<{ id: SourceKey; envVar: string }> = [
 ];
 
 export function getSourceHealthEntries(): SourceHealthEntry[] {
-  const entries: SourceHealthEntry[] = [];
+  // Precedence per source id: runtime probe result > missing_key (env) > flaky (known).
+  // Deduped so admin diagnostics never show conflicting rows for one source.
+  const byId = new Map<SourceKey, SourceHealthEntry>();
   for (const gated of KEY_GATED_SOURCES) {
     const runtime = runtimeHealth.get(gated.id);
     if (runtime) {
-      entries.push(runtime);
-      continue;
-    }
-    if (!process.env[gated.envVar]) {
-      entries.push({ id: gated.id, status: "missing_key", detail: `${gated.envVar} not set — source returns empty silently` });
+      byId.set(gated.id, runtime);
+    } else if (!process.env[gated.envVar]) {
+      byId.set(gated.id, { id: gated.id, status: "missing_key", detail: `${gated.envVar} not set — source returns empty silently` });
     }
   }
   for (const flaky of KNOWN_FLAKY_SOURCES) {
-    entries.push({ id: flaky.id, status: "flaky", detail: flaky.reason });
+    if (!byId.has(flaky.id)) {
+      byId.set(flaky.id, { id: flaky.id, status: "flaky", detail: flaky.reason });
+    }
   }
-  return entries;
+  return Array.from(byId.values());
 }
 
 /**
