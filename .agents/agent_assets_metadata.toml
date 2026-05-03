@@ -30,6 +30,30 @@ uri = "file://client/public/og-image.png"
 type = "image"
 title = "edenradar og banner"
 
+[[generated]]
+id = "mXWjA8sTlcjCPIy9jZD7F"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r2-1-lab.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "VPcSYoSNkgJjX3kOTO_yH"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r2-2-signal.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "ZAuemgLg1aD3ZUK7ZN7JQ"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r2-3-architecture.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "3zpuRitBs64XYmnWm0CME"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r2-4-instrument.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"

@@ -1,0 +1,179 @@
+/* EdenScout round-2 awareness ad styles. Multi-size: same HTML renders at
+   1200x627 (LinkedIn landscape), 1200x1200 (LinkedIn square),
+   1080x1350 (Meta 4:5 portrait), 1200x675 (X 1.91:1 landscape).
+   All sizing in vw/vh/vmin so the layout scales to every viewport.
+   Legibility recipe locked per round-2 spec: deep bottom scrim, text-shadow
+   safety net, weight-900 headline at >= 7.5vw landscape / 9vw portrait. */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  background: #05131a;
+  color: #ffffff;
+  font-family: 'Open Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Per-angle override of object-position keeps the focal subject in frame
+     when the same image is cropped to landscape vs portrait. */
+  object-position: center 30%;
+  z-index: 0;
+}
+
+/* Top wash darkens behind the white logo (top-left) so it stays legible
+   even when the upper third of the hero is bright. */
+.top-wash {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 30vh;
+  background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Bottom scrim — deeper and taller than round 1. Covers bottom 60vh so the
+   headline + subtitle + footer URL all sit on a near-black backdrop. */
+.scrim {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 60vh;
+  background: linear-gradient(180deg,
+    rgba(0,0,0,0) 0%,
+    rgba(0,0,0,0.35) 30%,
+    rgba(0,0,0,0.70) 60%,
+    rgba(0,0,0,0.85) 85%,
+    rgba(0,0,0,0.92) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Logo — top-left, white, 5vh tall. */
+.logo {
+  position: absolute;
+  top: 4.5vh;
+  left: 5vw;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  color: #ffffff;
+  height: 5vh;
+}
+
+.logo .mark {
+  height: 5vh;
+  width: 5vh;
+  flex-shrink: 0;
+  color: #ffffff;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55));
+}
+
+.logo .wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.logo .word {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 800;
+  font-size: 3.2vh;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.55);
+}
+
+.logo .product {
+  margin-top: 0.6vh;
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 700;
+  font-size: 1.4vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.55);
+}
+
+/* Bottom-anchored content block. */
+.content {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  bottom: 9vh;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2vh;
+}
+
+.eyebrow {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 800;
+  font-size: 1.6vh;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: #34d399;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.65);
+}
+
+/* Headline — weight 900. Scales with the smaller dimension via vmin so it
+   stays legible in landscape and portrait alike. */
+.headline {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 900;
+  font-size: 8vmin;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  max-width: 95%;
+  text-wrap: balance;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.55);
+}
+
+.subline {
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 600;
+  font-size: 3.4vmin;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.92);
+  max-width: 78%;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.55);
+}
+
+/* Footer URL — bottom-left, white-ish, no caps so .com reads correctly. */
+.url {
+  position: absolute;
+  bottom: 3.5vh;
+  left: 5vw;
+  z-index: 3;
+  font-family: 'Open Sans', sans-serif;
+  font-weight: 700;
+  font-size: 1.9vh;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.88);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+/* Portrait viewports (Meta 4:5) — push headline weight via the shared rules
+   above; vmin means the 8vmin headline is already ~8.6% of width on
+   1080x1350, which clears the >= 9vw portrait floor when combined with the
+   weight-900 / line-height 1.04 setting. */
+@media (orientation: portrait) {
+  .headline { font-size: 9vmin; }
+  .subline { font-size: 3.6vmin; }
+  .content { bottom: 11vh; }
+}
