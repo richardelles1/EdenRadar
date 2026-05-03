@@ -1,0 +1,249 @@
+/* Round 5 — green & white EdenRadar ad system.
+   Two layout variants share this stylesheet:
+     body.layout-block      — solid white surface, oversized typography,
+                              optional emerald accent slab; no hero photo.
+     body.layout-block-green — solid emerald surface, white typography
+                              (inverse of layout-block).
+     body.layout-light-hero — bright light-hero photo with a soft white
+                              wash so emerald text reads cleanly on top.
+   Logos in this round are intentionally large (≈1.5–2× r3/r4): the .mark
+   sits at 9.5vh and the .word at 5.4vh so they remain crisp at 1200×1500
+   exports. */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  color: #052e1a;
+  background: #ffffff;
+}
+
+/* ----- shared color tokens ----- */
+:root {
+  --emerald: #10b981;
+  --emerald-bright: #34d399;
+  --emerald-deep: #047857;
+  --ink: #052e1a;
+  --ink-muted: #1f5141;
+}
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* =====================================================================
+   LAYOUT: BLOCK TEXT (white surface, emerald accent)
+   ===================================================================== */
+body.layout-block {
+  background: #ffffff;
+  color: var(--ink);
+}
+
+body.layout-block .accent-slab {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 14vh;
+  background: var(--emerald);
+  z-index: 1;
+}
+
+/* =====================================================================
+   LAYOUT: BLOCK TEXT INVERTED (emerald surface, white type)
+   ===================================================================== */
+body.layout-block-green {
+  background: var(--emerald);
+  color: #ffffff;
+}
+
+body.layout-block-green .accent-slab {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 14vh;
+  background: #ffffff;
+  z-index: 1;
+}
+
+/* =====================================================================
+   LAYOUT: LIGHT HERO (bright photo + soft white wash)
+   ===================================================================== */
+body.layout-light-hero {
+  background: #f4faf7;
+}
+
+body.layout-light-hero .hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 40%;
+  z-index: 0;
+}
+
+/* Soft white wash — keeps the photo visible while ensuring emerald text
+   stays legible. Heavier toward the bottom where the headline sits. */
+body.layout-light-hero .wash {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg,
+    rgba(255,255,255,0.55) 0%,
+    rgba(255,255,255,0.35) 35%,
+    rgba(255,255,255,0.72) 70%,
+    rgba(255,255,255,0.92) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+body.layout-light-hero .top-wash {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 22vh;
+  background: linear-gradient(180deg, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 100%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+/* =====================================================================
+   LOGO — round 5, intentionally oversized
+   ===================================================================== */
+.logo {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2.4vh;
+  height: 9.5vh;
+}
+
+.logo .mark {
+  height: 9.5vh;
+  width: 9.5vh;
+  flex-shrink: 0;
+  color: var(--emerald-deep);
+}
+
+body.layout-block-green .logo .mark { color: #ffffff; }
+
+.logo .wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.logo .word {
+  font-weight: 800;
+  font-size: 5.4vh;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+body.layout-block-green .logo .word { color: #ffffff; }
+body.layout-light-hero .logo .word { color: var(--emerald-deep); }
+
+.logo .product {
+  margin-top: 1vh;
+  font-weight: 700;
+  font-size: 1.7vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: var(--ink-muted);
+}
+body.layout-block-green .logo .product { color: rgba(255,255,255,0.92); }
+body.layout-light-hero .logo .product { color: var(--emerald-deep); }
+
+/* EdenNX uses a real PNG asset — render it tall so it dominates. */
+.logo.logo-png {
+  align-items: center;
+  height: auto;
+}
+.logo.logo-png img {
+  height: 22vh;
+  width: auto;
+  display: block;
+}
+
+/* =====================================================================
+   CONTENT BLOCK
+   ===================================================================== */
+.content {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  bottom: 11vh;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2.4vh;
+}
+
+.eyebrow {
+  font-weight: 800;
+  font-size: 1.7vh;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: var(--emerald-deep);
+}
+body.layout-block-green .eyebrow { color: #ffffff; }
+
+.headline {
+  font-weight: 900;
+  font-size: 9.5vmin;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  max-width: 95%;
+  text-wrap: balance;
+}
+body.layout-block-green .headline { color: #ffffff; }
+body.layout-light-hero .headline { color: var(--emerald-deep); }
+
+.headline .accent { color: var(--emerald); }
+body.layout-block-green .headline .accent { color: #ffffff; text-decoration: underline; text-decoration-thickness: 0.12em; text-underline-offset: 0.14em; }
+body.layout-light-hero .headline .accent { color: var(--emerald); }
+
+.subline {
+  font-weight: 600;
+  font-size: 3.1vmin;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  max-width: 78%;
+}
+body.layout-block-green .subline { color: rgba(255,255,255,0.94); }
+body.layout-light-hero .subline { color: var(--ink); }
+
+/* =====================================================================
+   URL FOOTER
+   ===================================================================== */
+.url {
+  position: absolute;
+  bottom: 4vh;
+  left: 5vw;
+  z-index: 6;
+  font-weight: 700;
+  font-size: 2vh;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+}
+body.layout-block .url,
+body.layout-block .accent-slab + .url { color: #ffffff; }
+body.layout-block-green .url { color: var(--emerald-deep); }
+body.layout-light-hero .url { color: var(--emerald-deep); }
+
+@media (orientation: portrait) {
+  .headline { font-size: 11vmin; }
+  .subline { font-size: 3.4vmin; }
+  .content { bottom: 13vh; }
+  .logo { top: 6vh; }
+  .logo.logo-png img { height: 26vh; }
+}

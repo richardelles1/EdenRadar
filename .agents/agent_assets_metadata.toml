@@ -138,6 +138,30 @@ uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r4-4-firstlight.p
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "ZtRVKT0hpBbgErjlFmfXX"
+uri = "file://artifacts/mockup-sandbox/public/images/r5-light-lab.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "trcDnhf_q0Gu91OrgBje2"
+uri = "file://artifacts/mockup-sandbox/public/images/r5-light-leaves.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "nJkcofgKEp0XYbtUGmQzl"
+uri = "file://artifacts/mockup-sandbox/public/images/r5-light-desk.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "LI71H0vIHt4uPeIv18Igi"
+uri = "file://artifacts/mockup-sandbox/public/images/r5-light-atlas.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"
