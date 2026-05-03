@@ -62,6 +62,10 @@ type NavButtonProps = {
   testId: string;
   badgeCount?: number;
   showDot?: boolean;
+  /** When true, tint the inactive label/icon with `accent` (used by
+   *  cross-portal jump entries so they always carry the destination
+   *  portal's color even though they're never "active" here). */
+  tintInactive?: boolean;
 };
 
 export function SidebarNavButton({
@@ -73,6 +77,7 @@ export function SidebarNavButton({
   testId,
   badgeCount,
   showDot,
+  tintInactive,
 }: NavButtonProps) {
   const { open, animate } = useSidebar();
 
@@ -82,12 +87,18 @@ export function SidebarNavButton({
       className={cn(
         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
         "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        isActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+        isActive
+          ? ""
+          : tintInactive
+            ? "hover:bg-accent/60"
+            : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
       )}
       style={
         isActive
           ? { backgroundColor: accentMix(accent, 10), color: accent }
-          : undefined
+          : tintInactive
+            ? { color: accent }
+            : undefined
       }
       data-testid={testId}
     >

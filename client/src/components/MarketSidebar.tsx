@@ -186,6 +186,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
               isActive={false}
               onClick={() => navigate("/industry/dashboard")}
               accent={SCOUT_ACCENT}
+              tintInactive
               testId="market-sidebar-link-scout"
             />
           </div>
