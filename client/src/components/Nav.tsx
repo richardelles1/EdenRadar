@@ -3,7 +3,10 @@ import { Button } from "@/components/ui/button";
 import {
   Bookmark, Moon, Sun, Sprout, Radar, Menu, X, ChevronDown,
   FlaskConical, Lightbulb, ShoppingBag,
+  Layers, BookOpen, Award, Sparkles, Target, Rocket,
+  TrendingUp, FileBarChart2, Bell, Briefcase,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
@@ -25,12 +28,15 @@ function normalizePath(path: string) {
   return stripped.length > 1 ? stripped.replace(/\/+$/, "") : stripped;
 }
 
+type PreviewItem = { Icon: LucideIcon; label: string };
+
 type PortalEntry = {
   name: string;
   blurb: string;
   href: string;
-  Icon: typeof FlaskConical;
+  Icon: LucideIcon;
   accent: string;
+  preview: PreviewItem[];
 };
 
 const RESEARCHER_PORTALS: PortalEntry[] = [
@@ -40,6 +46,12 @@ const RESEARCHER_PORTALS: PortalEntry[] = [
     href: "/research",
     Icon: FlaskConical,
     accent: "262 80% 60%",
+    preview: [
+      { Icon: Layers, label: "Projects" },
+      { Icon: BookOpen, label: "Library" },
+      { Icon: Award, label: "Grants" },
+      { Icon: Bell, label: "Alerts" },
+    ],
   },
   {
     name: "EdenDiscovery",
@@ -47,6 +59,11 @@ const RESEARCHER_PORTALS: PortalEntry[] = [
     href: "/discovery",
     Icon: Lightbulb,
     accent: "38 92% 50%",
+    preview: [
+      { Icon: Sparkles, label: "Scoring" },
+      { Icon: Target, label: "Signal" },
+      { Icon: Rocket, label: "Graduate" },
+    ],
   },
 ];
 
@@ -57,6 +74,12 @@ const INDUSTRY_PORTALS: PortalEntry[] = [
     href: "/scout",
     Icon: Radar,
     accent: "142 52% 36%",
+    preview: [
+      { Icon: TrendingUp, label: "Signals" },
+      { Icon: Layers, label: "Assets" },
+      { Icon: FileBarChart2, label: "Reports" },
+      { Icon: Bell, label: "Alerts" },
+    ],
   },
   {
     name: "EdenMarket",
@@ -64,6 +87,11 @@ const INDUSTRY_PORTALS: PortalEntry[] = [
     href: "/market/preview",
     Icon: ShoppingBag,
     accent: "234 80% 58%",
+    preview: [
+      { Icon: ShoppingBag, label: "Browse" },
+      { Icon: Briefcase, label: "Deals" },
+      { Icon: FileBarChart2, label: "EOIs" },
+    ],
   },
 ];
 
@@ -128,24 +156,50 @@ function PortalDropdown({
           <ChevronDown className="w-3.5 h-3.5 opacity-70" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[320px] p-2">
+      <DropdownMenuContent align="start" className="w-[380px] p-2">
         {entries.map((e) => (
           <Link key={e.href} href={e.href}>
             <a
-              className="flex items-start gap-3 p-2.5 rounded-md hover:bg-accent transition-colors"
+              className="group block p-2.5 rounded-md hover:bg-accent transition-colors"
               data-testid={`link-portal-${e.name.toLowerCase()}`}
             >
-              <div
-                className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                style={{ background: `hsl(${e.accent} / 0.12)`, color: `hsl(${e.accent})` }}
-              >
-                <e.Icon className="w-4 h-4" />
-              </div>
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-foreground" style={{ color: `hsl(${e.accent})` }}>
-                  {e.name}
+              <div className="flex items-start gap-3">
+                <div
+                  className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition-colors"
+                  style={{ background: `hsl(${e.accent} / 0.12)`, color: `hsl(${e.accent})` }}
+                >
+                  <e.Icon className="w-4 h-4" />
                 </div>
-                <div className="text-xs text-muted-foreground leading-snug">{e.blurb}</div>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-semibold" style={{ color: `hsl(${e.accent})` }}>
+                    {e.name}
+                  </div>
+                  <div className="text-xs text-muted-foreground leading-snug">{e.blurb}</div>
+                </div>
+              </div>
+              <div
+                className="mt-2.5 ml-12 flex items-stretch gap-1.5 rounded-md p-1.5 border border-border/60 group-hover:border-transparent transition-colors"
+                style={{
+                  background: `linear-gradient(135deg, hsl(${e.accent} / 0.06), hsl(${e.accent} / 0.02))`,
+                }}
+                data-testid={`preview-portal-${e.name.toLowerCase()}`}
+              >
+                {e.preview.map((p) => (
+                  <div
+                    key={p.label}
+                    className="flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-sm"
+                    style={{ background: `hsl(${e.accent} / 0.08)` }}
+                    title={p.label}
+                  >
+                    <p.Icon className="w-3.5 h-3.5" style={{ color: `hsl(${e.accent})` }} />
+                    <span
+                      className="text-[9px] font-medium uppercase tracking-wide leading-none"
+                      style={{ color: `hsl(${e.accent})` }}
+                    >
+                      {p.label}
+                    </span>
+                  </div>
+                ))}
               </div>
             </a>
           </Link>
