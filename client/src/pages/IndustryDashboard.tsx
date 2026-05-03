@@ -180,7 +180,7 @@ function EdenMarketTeaser() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const VIOLET = "hsl(234 80% 58%)";
+  const INDIGO = "hsl(234 80% 58%)";
   const newListings7d = data?.newListings7d ?? 0;
   const matchingFilters = data?.matchingFilters ?? 0;
   const hasAccess = data?.hasAccess ?? false;
@@ -201,12 +201,12 @@ function EdenMarketTeaser() {
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
-                <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
+                <ShoppingBag className="w-4 h-4" style={{ color: INDIGO }} />
               </div>
               <p className="text-sm font-bold text-foreground">EdenMarket activity</p>
               <span
                 className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                style={{ background: "hsl(234 80% 58% / 0.15)", color: VIOLET }}
+                style={{ background: "hsl(234 80% 58% / 0.15)", color: INDIGO }}
               >
                 Marketplace
               </span>
@@ -222,7 +222,7 @@ function EdenMarketTeaser() {
               <Button
                 size="sm"
                 className="font-semibold h-9 text-xs gap-1.5"
-                style={{ background: VIOLET, color: "white", border: "none" }}
+                style={{ background: INDIGO, color: "white", border: "none" }}
                 data-testid="button-dashboard-edenmarket-unlock"
               >
                 <Lock className="w-3 h-3" />
@@ -251,12 +251,12 @@ function EdenMarketTeaser() {
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
-              <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
+              <ShoppingBag className="w-4 h-4" style={{ color: INDIGO }} />
             </div>
             <p className="text-sm font-bold text-foreground">EdenMarket activity</p>
             <span
               className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-              style={{ background: "hsl(234 80% 58% / 0.15)", color: VIOLET }}
+              style={{ background: "hsl(234 80% 58% / 0.15)", color: INDIGO }}
             >
               Marketplace
             </span>
@@ -292,7 +292,7 @@ function EdenMarketTeaser() {
             <Button
               size="sm"
               className="w-full font-semibold h-8 text-xs gap-1.5"
-              style={{ background: VIOLET, color: "white", border: "none" }}
+              style={{ background: INDIGO, color: "white", border: "none" }}
               data-testid="button-dashboard-edenmarket-browse"
             >
               <ShoppingBag className="w-3 h-3" />
@@ -305,7 +305,7 @@ function EdenMarketTeaser() {
               size="sm"
               variant="outline"
               className="w-full h-8 text-xs gap-1.5"
-              style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: VIOLET }}
+              style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: INDIGO }}
               data-testid="button-dashboard-edenmarket-list"
             >
               <Lock className="w-3 h-3" />

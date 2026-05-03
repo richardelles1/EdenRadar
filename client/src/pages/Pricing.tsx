@@ -298,7 +298,7 @@ function PlanCTA({
 function EdenMarketTier({ session }: { session: Session | null }) {
   const [, navigate] = useLocation();
   const { subscribe, isLoading } = useMarketSubscribe();
-  const VIOLET = "hsl(234 80% 58%)";
+  const INDIGO = "hsl(234 80% 58%)";
 
   const { data: access } = useQuery<{ access: boolean; orgId: number | null }>({
     queryKey: ["/api/market/access"],
@@ -321,7 +321,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
         <h2 className="text-lg font-semibold text-foreground">EdenMarket</h2>
         <span
           className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
-          style={{ background: "hsl(234 80% 58% / 0.12)", color: VIOLET }}
+          style={{ background: "hsl(234 80% 58% / 0.12)", color: INDIGO }}
         >
           Marketplace
         </span>
@@ -338,9 +338,9 @@ function EdenMarketTier({ session }: { session: Session | null }) {
         <div className="p-6 md:col-span-1 flex flex-col gap-4 md:border-r" style={{ borderColor: "hsl(234 80% 58% / 0.18)" }}>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
-              <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
+              <ShoppingBag className="w-4 h-4" style={{ color: INDIGO }} />
             </div>
-            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: VIOLET }}>Access</span>
+            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: INDIGO }}>Access</span>
           </div>
           <div>
             <div className="flex items-baseline gap-1">
@@ -351,26 +351,26 @@ function EdenMarketTier({ session }: { session: Session | null }) {
           </div>
           <ul className="space-y-2 text-xs text-foreground/90">
             <li className="flex items-start gap-2">
-              <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: INDIGO }} />
               <span>Browse all live blind listings</span>
             </li>
             <li className="flex items-start gap-2">
-              <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: INDIGO }} />
               <span>Submit unlimited Expressions of Interest</span>
             </li>
             <li className="flex items-start gap-2">
-              <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: INDIGO }} />
               <span>NDA-gated deal rooms with audit trail</span>
             </li>
             <li className="flex items-start gap-2">
-              <Handshake className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <Handshake className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: INDIGO }} />
               <span>Document exchange + secure messaging</span>
             </li>
           </ul>
           {hasAccess ? (
             <Button
               className="w-full font-semibold h-9 text-sm gap-1.5"
-              style={{ background: VIOLET, color: "white", border: "none" }}
+              style={{ background: INDIGO, color: "white", border: "none" }}
               onClick={() => navigate("/market")}
               data-testid="button-pricing-edenmarket-active"
             >
@@ -380,7 +380,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
           ) : (
             <Button
               className="w-full font-semibold h-9 text-sm gap-1.5"
-              style={{ background: VIOLET, color: "white", border: "none" }}
+              style={{ background: INDIGO, color: "white", border: "none" }}
               onClick={handleClick}
               disabled={isLoading}
               data-testid="button-pricing-edenmarket-subscribe"
@@ -397,7 +397,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
         {/* Right: success fee table */}
         <div className="p-6 md:col-span-2 space-y-4 bg-card/30">
           <div className="flex items-center gap-2">
-            <Handshake className="w-4 h-4" style={{ color: VIOLET }} />
+            <Handshake className="w-4 h-4" style={{ color: INDIGO }} />
             <p className="text-xs font-semibold uppercase tracking-widest text-foreground">Success fees — paid only when a deal closes</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -412,7 +412,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
                 style={{ background: "hsl(var(--background))", border: "1px solid hsl(234 80% 58% / 0.15)" }}
                 data-testid={`edenmarket-fee-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: VIOLET }}>{t.label}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: INDIGO }}>{t.label}</p>
                 <p className="text-xl font-black text-foreground tabular-nums">{t.fee}</p>
                 <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">{t.desc}</p>
               </div>
@@ -427,7 +427,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
                 variant="outline"
                 size="sm"
                 className="h-8 px-3 text-xs gap-1.5 whitespace-nowrap"
-                style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: VIOLET }}
+                style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: INDIGO }}
                 data-testid="button-pricing-edenmarket-list"
               >
                 List your assets

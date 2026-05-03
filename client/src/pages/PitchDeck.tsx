@@ -34,6 +34,7 @@ import {
   Shield,
   Check,
   Bell,
+  ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence, useInView, useReducedMotion } from "framer-motion";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
@@ -57,6 +58,8 @@ const DARK = {
   amberDim: "rgba(210,153,34,0.14)",
   violet: "#a371f7",
   violetDim: "rgba(163,113,247,0.14)",
+  indigo: "#7c89f9",
+  indigoDim: "rgba(124,137,249,0.14)",
   accent: "#58a6ff",
   red: "#f85149",
   redDim: "rgba(248,81,73,0.14)",
@@ -74,6 +77,8 @@ const LIGHT = {
   amberDim: "rgba(154,103,0,0.10)",
   violet: "#6e40c9",
   violetDim: "rgba(110,64,201,0.10)",
+  indigo: "#3b4ad1",
+  indigoDim: "rgba(59,74,209,0.10)",
   accent: "#0969da",
   red: "#cf222e",
   redDim: "rgba(207,34,46,0.10)",
@@ -694,119 +699,150 @@ function ProblemSlide({ colors }: { colors: Colors }) {
   );
 }
 
-/* ═══════════════════════ SLIDE 6 — SOLUTION + PORTALS (COMBINED) ═══════════════════════ */
+/* ═══════════════════════ SLIDE 4 — SOLUTION + PORTALS (INDUSTRY-FORWARD) ═══════════════════════ */
 function SolutionPortalsSlide({ colors }: { colors: Colors }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInView = useInView(gridRef, { once: false, amount: 0.2 });
   const reducedMotion = useReducedMotion();
   const skip = !!reducedMotion;
-  const supportingTiers = [
+
+  const industryPortals = [
     {
-      title: "EdenDiscovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
-      items: ["Submit hypotheses before research begins", "EDEN scoring and credibility scoring", "Discovered by collaborators and funders"],
+      title: "EdenScout", tagline: "Industry intelligence across 300+ TTOs", money: "Industry SaaS subscription",
+      color: colors.green, dim: colors.greenDim, icon: Search,
+      items: [
+        "EDEN-scored and enriched asset dossiers",
+        "Personalised alerts and live TTO feeds",
+        "Direct lab signals from EdenLab + Discovery",
+      ],
+      featured: true,
     },
     {
-      title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
-      items: ["Literature search across 40+ data sources", "Structured 11-section project canvas", "AI synthesis and evidence extraction"],
+      title: "EdenMarket", tagline: "Blind marketplace for licensable biotech assets", money: "Transactional · listing & deal-room access",
+      color: colors.indigo, dim: colors.indigoDim, icon: ShoppingBag,
+      items: [
+        "NDA-gated deal rooms close the loop on Scout finds",
+        "Confidential EOIs between buyers and sellers",
+        "Where industry transacts on what Scout discovers",
+      ],
+      featured: false,
+    },
+  ];
+
+  const researcherPortals = [
+    {
+      title: "EdenDiscovery", tagline: "Creative concept community · supply side", role: "Top-of-funnel · supply",
+      color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
+      items: ["Submit hypotheses before research begins", "EDEN credibility scoring (0–100)", "Surfaces to Scout subscribers"],
+    },
+    {
+      title: "EdenLab", tagline: "Project-based research workspace · supply side", role: "Researcher community · supply",
+      color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
+      items: ["11-section structured project canvas", "Literature synthesis across 40+ sources", "Signals flow into Scout"],
     },
   ];
 
   return (
     <Slide index={4} section="Our Solution" accent={colors.green} colors={colors}>
-      <PitchDots color={colors.amber} count={4} seed={0} />
-      <PitchDots color={colors.violet} count={4} seed={1} />
-      <PitchDots color={colors.green} count={4} seed={2} />
-      <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 sm:mb-5" style={{ color: colors.text }}>
+      <PitchDots color={colors.green} count={4} seed={0} />
+      <PitchDots color={colors.indigo} count={4} seed={1} />
+      <PitchDots color={colors.amber} count={3} seed={2} />
+      <p className="text-xs sm:text-sm font-bold uppercase tracking-widest mb-2" style={{ color: colors.green }}>Two tracks. One ecosystem. Industry pays. Researchers supply.</p>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 sm:mb-4" style={{ color: colors.text }}>
         EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
       </h2>
 
-      {/* Supporting tiers — smaller, equal weight */}
-      <div ref={gridRef} className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-3 sm:mb-4 opacity-80">
-        {supportingTiers.map((p, i) => (
-          <motion.div
-            key={p.title}
-            className="rounded-xl p-3 sm:p-4 flex flex-col relative"
-            style={{ background: p.dim, border: `1px solid ${p.color}33`, borderTop: `2px solid ${p.color}` }}
-            initial={skip ? false : { opacity: 0, y: -8 }}
-            animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
-            transition={skip ? { duration: 0 } : { duration: 0.4, delay: i * 0.1, ease: "easeOut" }}
-          >
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${p.color}88` }}>
-                <p.icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
+      {/* ── FOR INDUSTRY (top, dominant) ── */}
+      <div ref={gridRef} className="mb-3 sm:mb-4">
+        <div className="flex items-center gap-2 mb-2 sm:mb-2.5">
+          <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" style={{ color: colors.green }} />
+          <p className="text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: colors.green }}>For Industry · Revenue Engines</p>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+          {industryPortals.map((p, i) => (
+            <motion.div
+              key={p.title}
+              className="rounded-2xl p-3 sm:p-4 flex flex-col relative overflow-hidden"
+              style={{
+                background: p.featured
+                  ? `linear-gradient(135deg, ${p.dim} 0%, ${colors.bgLight} 100%)`
+                  : p.dim,
+                border: `2px solid ${p.color}${p.featured ? "88" : "55"}`,
+                borderTop: `3px solid ${p.color}`,
+                boxShadow: p.featured ? `0 0 32px ${p.color}22` : "none",
+              }}
+              initial={skip ? false : { opacity: 0, y: -8 }}
+              animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+              transition={skip ? { duration: 0 } : { duration: 0.4, delay: i * 0.1, ease: "easeOut" }}
+            >
+              <div className="flex items-center gap-2.5 mb-2">
+                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: p.color }}>
+                  <p.icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: "#fff" }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h3 className="text-sm sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>
+                    Eden<span style={{ color: p.color }}>{p.title.replace("Eden", "")}</span>
+                  </h3>
+                  <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier} · Free</p>
-                <h3 className="text-xs sm:text-sm font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
+              <div
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs sm:text-xs font-bold uppercase tracking-wider w-fit mb-2"
+                style={{ background: `${p.color}22`, color: p.color, border: `1px solid ${p.color}55` }}
+              >
+                💰 {p.money}
               </div>
-            </div>
-            <p className="text-[9px] sm:text-[10px] mb-1.5 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
-            <ul className="space-y-1 mt-auto">
-              {p.items.map((item) => (
-                <li key={item} className="flex items-start gap-1.5 text-[9px] sm:text-[10px]" style={{ color: colors.text }}>
-                  <ArrowRight className="w-2.5 h-2.5 mt-0.5 shrink-0" style={{ color: p.color }} />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        ))}
+              <ul className="space-y-1 mt-auto">
+                {p.items.map((item) => (
+                  <li key={item} className="flex items-start gap-1.5 text-xs sm:text-xs" style={{ color: colors.text }}>
+                    <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: p.color }} />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+            </motion.div>
+          ))}
+        </div>
       </div>
 
-      {/* EdenScout — featured card */}
-      <motion.div
-        className="rounded-2xl p-4 sm:p-6 relative overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`,
-          border: `2px solid ${colors.green}88`,
-          boxShadow: `0 0 40px ${colors.green}22`,
-        }}
-        initial={skip ? false : { opacity: 0, y: 16 }}
-        animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
-        transition={skip ? { duration: 0 } : { duration: 0.45, delay: 0.25, ease: "easeOut" }}
-      >
-        {/* Glow accent bar */}
-        <div className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-2xl" style={{ background: colors.green }} />
-
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          {/* Icon + label */}
-          <div className="flex items-center gap-3 shrink-0">
-            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center" style={{ background: colors.green }}>
-              <Search className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: "#fff" }} />
-            </div>
-            <div>
-              <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3 · Paid</p>
-              <h3 className="text-base sm:text-xl font-bold" style={{ color: colors.text }}>EdenScout</h3>
-              <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Industry intelligence platform</p>
-            </div>
-          </div>
-
-          {/* Feature list */}
-          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1">
-            {[
-              "300+ TTOs monitored continuously",
-              "EDEN-scored and enriched asset dossiers",
-              "Competing asset cross-reference by target",
-              "Personalised alert feeds for every scout",
-              "TTO contact details and licensing pathways",
-              "EdenLab + EdenDiscovery full access included",
-            ].map((item) => (
-              <li key={item} className="flex items-start gap-1.5 text-[10px] sm:text-xs" style={{ color: colors.text }}>
-                <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.green }} />
-                {item}
-              </li>
-            ))}
-          </ul>
+      {/* ── FOR RESEARCHERS (below, smaller / supply-side) ── */}
+      <div className="opacity-90">
+        <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
+          <FlaskConical className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: colors.amber }} />
+          <p className="text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>For Researchers · Supply Side</p>
         </div>
-      </motion.div>
-      <div className="mt-4 sm:mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: "1px solid transparent" }}>
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
-        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
-          One Pipeline of Innovation
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
+          {researcherPortals.map((p, i) => (
+            <motion.div
+              key={p.title}
+              className="rounded-xl p-2.5 sm:p-3 flex flex-col"
+              style={{ background: p.dim, border: `1px solid ${p.color}33`, borderTop: `2px solid ${p.color}` }}
+              initial={skip ? false : { opacity: 0, y: 8 }}
+              animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
+              transition={skip ? { duration: 0 } : { duration: 0.4, delay: 0.2 + i * 0.08, ease: "easeOut" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: `${p.color}88` }}>
+                  <p.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: "#fff" }} />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-xs sm:text-sm font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
+                  <p className="text-xs sm:text-xs font-semibold uppercase tracking-wider leading-none mt-0.5" style={{ color: p.color }}>{p.role}</p>
+                </div>
+              </div>
+              <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 sm:mt-4 relative flex items-center rounded-lg overflow-hidden" style={{ height: 32, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33, ${colors.indigo}44)`, border: "1px solid transparent" }}>
+        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22, ${colors.indigo}33)` }} />
+        <span className="relative z-10 flex-1 text-center text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
+          Supply → Discover → Transact
         </span>
-        <div className="relative z-10 flex items-center justify-center w-9 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.green}44, ${colors.green}88)` }}>
-          <ChevronRight className="w-5 h-5" style={{ color: colors.green }} />
+        <div className="relative z-10 flex items-center justify-center w-8 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.indigo}66, ${colors.indigo}aa)` }}>
+          <ChevronRight className="w-4 h-4" style={{ color: "#fff" }} />
         </div>
       </div>
     </Slide>
@@ -957,15 +993,15 @@ function PitchDemoAssetCard({ asset, colors }: { asset: PitchAssetCard; colors: 
       }}
     >
       <div className="flex items-start justify-between gap-2">
-        <p className="text-[10px] sm:text-xs font-semibold leading-snug flex-1" style={{ color: colors.text }}>{asset.title}</p>
+        <p className="text-xs sm:text-xs font-semibold leading-snug flex-1" style={{ color: colors.text }}>{asset.title}</p>
         <span
-          className="flex-shrink-0 text-[10px] sm:text-xs font-bold px-1.5 py-0.5 rounded-full"
+          className="flex-shrink-0 text-xs sm:text-xs font-bold px-1.5 py-0.5 rounded-full"
           style={{ background: asset.color.replace(")", " / 0.15)"), color: asset.color }}
         >
           {asset.score}
         </span>
       </div>
-      <div className="flex flex-wrap gap-1 text-[9px] sm:text-[10px]">
+      <div className="flex flex-wrap gap-1 text-xs sm:text-xs">
         <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: colors.bgLight, color: colors.textMuted }}>{asset.institution}</span>
         <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: asset.color.replace(")", " / 0.12)"), color: asset.color }}>{asset.area}</span>
         <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: colors.bgLight, color: colors.textMuted }}>{asset.stage}</span>
@@ -1028,7 +1064,7 @@ function PitchEdenChat({ colors, mobile = false, chatHeight = 320 }: { colors: C
             {msg.role === "eden" && <EdenAvatar size={26} />}
             <div className="max-w-[84%] flex flex-col gap-2">
               <div
-                className="px-3.5 py-2.5 rounded-xl text-[11px] sm:text-xs leading-relaxed"
+                className="px-3.5 py-2.5 rounded-xl text-xs sm:text-xs leading-relaxed"
                 style={
                   msg.role === "user"
                     ? { background: colors.green, color: "#fff", borderRadius: "14px 14px 4px 14px" }
@@ -1148,23 +1184,23 @@ function PullDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
     <div className="rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${panelColor}33` }}>
       <div className="flex items-center gap-2 mb-3">
         <Database className="w-3.5 h-3.5" style={{ color: panelColor }} />
-        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>Live TTO Feed · 300+ Sources</p>
+        <p className="text-xs sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>Live TTO Feed · 300+ Sources</p>
         <div className="ml-auto flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full" style={{ background: panelColor, animation: "bounce 1.5s ease-in-out infinite" }} />
-          <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>Updating now</p>
+          <p className="text-xs sm:text-xs" style={{ color: colors.textMuted }}>Updating now</p>
         </div>
       </div>
       <div className={`grid gap-2 sm:gap-3 ${mobile ? "grid-cols-1" : "grid-cols-3"}`}>
         {PULL_MOCK.map((asset) => (
           <div key={asset.id} className="rounded-lg p-2.5 sm:p-3" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
             <div className="flex items-start justify-between gap-2 mb-1.5">
-              <p className="text-[10px] sm:text-xs font-semibold leading-snug" style={{ color: colors.text }}>{asset.title}</p>
-              <span className="text-[10px] sm:text-xs font-extrabold tabular-nums shrink-0 px-1.5 py-0.5 rounded" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
+              <p className="text-xs sm:text-xs font-semibold leading-snug" style={{ color: colors.text }}>{asset.title}</p>
+              <span className="text-xs sm:text-xs font-extrabold tabular-nums shrink-0 px-1.5 py-0.5 rounded" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
             </div>
-            <p className="text-[9px] sm:text-[10px] mb-2" style={{ color: colors.textMuted }}>{asset.institution}</p>
+            <p className="text-xs sm:text-xs mb-2" style={{ color: colors.textMuted }}>{asset.institution}</p>
             <div className="flex flex-wrap gap-1">
               {[asset.modality, asset.stage, asset.area].map((tag) => (
-                <span key={tag} className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>{tag}</span>
+                <span key={tag} className="text-xs sm:text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>{tag}</span>
               ))}
             </div>
           </div>
@@ -1184,27 +1220,27 @@ function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
             <Bell className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
+            <p className="text-xs sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
             <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 new TTO assets match your alert</p>
-            <p className="text-[9px] sm:text-[10px] mt-0.5" style={{ color: colors.textMuted }}>Alert: "Oncology · Pre-Clinical · Any modality"</p>
+            <p className="text-xs sm:text-xs mt-0.5" style={{ color: colors.textMuted }}>Alert: "Oncology · Pre-Clinical · Any modality"</p>
           </div>
         </div>
         <div className="px-4 py-3" style={{ background: colors.bgLight }}>
-          <p className="text-[10px] sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
+          <p className="text-xs sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
             EDEN found 3 new assets this week matching your saved criteria across 2 institutions.
           </p>
           <div className="space-y-2">
             {PULL_MOCK.slice(0, 2).map((asset) => (
               <div key={asset.id} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
-                <span className="text-[10px] sm:text-xs font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
+                <span className="text-xs sm:text-xs font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
                 <div className="min-w-0">
                   <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>{asset.title}</p>
-                  <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>{asset.institution} · {asset.stage}</p>
+                  <p className="text-xs sm:text-xs" style={{ color: colors.textMuted }}>{asset.institution} · {asset.stage}</p>
                 </div>
               </div>
             ))}
           </div>
-          <p className="text-[9px] sm:text-[10px] mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
+          <p className="text-xs sm:text-xs mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
             View all 3 assets in EdenScout
           </p>
         </div>
@@ -1217,13 +1253,13 @@ function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
             <Database className="w-4 h-4 text-white" />
           </div>
           <div>
-            <p className="text-[10px] sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
+            <p className="text-xs sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
             <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 New Tech Transfer Offices Added</p>
-            <p className="text-[9px] sm:text-[10px] mt-0.5" style={{ color: colors.textMuted }}>Network update · EdenScout coverage expanded</p>
+            <p className="text-xs sm:text-xs mt-0.5" style={{ color: colors.textMuted }}>Network update · EdenScout coverage expanded</p>
           </div>
         </div>
         <div className="px-4 py-3" style={{ background: colors.bgLight }}>
-          <p className="text-[10px] sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
+          <p className="text-xs sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
             EDEN added 3 new tech transfer offices to the monitored network this week.
           </p>
           <div className="space-y-2">
@@ -1231,11 +1267,11 @@ function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
               <div key={office} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
                 <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: panelColor }} />
                 <p className="text-xs font-semibold flex-1" style={{ color: colors.text }}>{office}</p>
-                <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>New</span>
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>New</span>
               </div>
             ))}
           </div>
-          <p className="text-[9px] sm:text-[10px] mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
+          <p className="text-xs sm:text-xs mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
             Explore new TTO assets in EdenScout
           </p>
         </div>
@@ -1254,7 +1290,7 @@ function EdenDetailZone({ panelId, colors, panelColor, mobile = false }: { panel
     >
       <div className="flex items-center gap-2 mb-3">
         <Brain className="w-3.5 h-3.5" style={{ color: panelColor }} />
-        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>
+        <p className="text-xs sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>
           EDEN AI Query · Live Demo
         </p>
       </div>
@@ -1286,7 +1322,7 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
       {/* ── HEADER ── */}
       <div className="flex items-start justify-between mb-4 sm:mb-5">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: colors.green }}>How EDEN works</p>
+          <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: colors.green }}>How EDEN works</p>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold leading-tight" style={{ color: colors.text }}>
             The Intelligence Engine.
           </h2>
@@ -1321,12 +1357,12 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
                     <panel.icon className="w-5 h-5" style={{ color: isActive ? "#fff" : panel.color }} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest leading-none" style={{ color: `${panel.color}88` }}>{panel.step}</p>
+                    <p className="text-xs font-bold uppercase tracking-widest leading-none" style={{ color: `${panel.color}88` }}>{panel.step}</p>
                     <p className="text-base font-extrabold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
                   </div>
                 </div>
                 <p className="text-xs leading-relaxed flex-1" style={{ color: colors.textMuted }}>{panel.desc}</p>
-                <p className="text-[9px] mt-2.5 font-semibold" style={{ color: `${panel.color}88` }}>
+                <p className="text-xs mt-2.5 font-semibold" style={{ color: `${panel.color}88` }}>
                   {isActive ? "Click to close" : "Click to explore"}
                 </p>
               </button>
@@ -1378,7 +1414,7 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-xs font-bold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
-                  <p className="text-[10px] leading-snug mt-0.5 line-clamp-2" style={{ color: colors.textMuted }}>{panel.desc}</p>
+                  <p className="text-xs leading-snug mt-0.5 line-clamp-2" style={{ color: colors.textMuted }}>{panel.desc}</p>
                 </div>
                 <ChevronRight
                   className="w-4 h-4 shrink-0 transition-transform duration-200"
@@ -1446,6 +1482,23 @@ function RadarSlide({ colors }: { colors: Colors }) {
           </div>
         ))}
       </div>
+
+      {/* Industry handoff to Market */}
+      <div
+        className="mt-4 sm:mt-5 rounded-xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3"
+        style={{ background: colors.indigoDim, border: `1px solid ${colors.indigo}55`, borderLeft: `3px solid ${colors.indigo}` }}
+      >
+        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: colors.indigo }}>
+          <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-xs sm:text-xs font-bold uppercase tracking-wider mb-0.5" style={{ color: colors.indigo }}>The Industry track continues →</p>
+          <p className="text-xs sm:text-sm leading-snug" style={{ color: colors.text }}>
+            …and when industry is ready to transact, <span className="font-bold" style={{ color: colors.indigo }}>EdenMarket</span> closes the loop with NDA-gated deal rooms.
+          </p>
+        </div>
+        <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 hidden sm:block" style={{ color: colors.indigo }} />
+      </div>
     </Slide>
   );
 }
@@ -1469,7 +1522,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
     <Slide index={6} section="Supply Side" accent={colors.green} colors={colors}>
       <PitchDots color={colors.amber} count={5} seed={0} />
       <PitchDots color={colors.violet} count={5} seed={2} />
-      <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>The supply side of the ecosystem</p>
+      <p className="text-xs sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>The supply side of the ecosystem</p>
       <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-4 sm:mb-7" style={{ color: colors.text }}>
         Early Signal <span style={{ color: colors.green }}>Pipeline</span>.
       </h2>
@@ -1485,7 +1538,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
               <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>
                 Eden<span style={{ color: colors.amber }}>Discovery</span>
               </h3>
-              <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Tier 1 · Concept Community</p>
+              <p className="text-xs sm:text-xs" style={{ color: colors.textMuted }}>Tier 1 · Concept Community</p>
             </div>
           </div>
           <ul className="space-y-2 flex-1 mb-4">
@@ -1497,7 +1550,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
             ))}
           </ul>
           <div
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold w-fit"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold w-fit"
             style={{ background: `${colors.amber}22`, color: colors.amber, border: `1px solid ${colors.amber}44` }}
           >
             <Globe className="w-3 h-3" />
@@ -1522,7 +1575,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
         <div className="sm:hidden flex items-center gap-2">
           <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${colors.amber}55, ${colors.violet}55)` }} />
           <div className="text-center shrink-0">
-            <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: colors.textMuted }}>concept → research → signal</p>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color: colors.textMuted }}>concept → research → signal</p>
           </div>
           <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${colors.violet}55, ${colors.green}55)` }} />
         </div>
@@ -1537,7 +1590,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
               <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>
                 Eden<span style={{ color: colors.violet }}>Lab</span>
               </h3>
-              <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Tier 2 · Research Workspace</p>
+              <p className="text-xs sm:text-xs" style={{ color: colors.textMuted }}>Tier 2 · Research Workspace</p>
             </div>
           </div>
           <ul className="space-y-2 flex-1 mb-4">
@@ -1549,7 +1602,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
             ))}
           </ul>
           <div
-            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-semibold w-fit"
+            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold w-fit"
             style={{ background: `${colors.violet}22`, color: colors.violet, border: `1px solid ${colors.violet}44` }}
           >
             <ArrowRight className="w-3 h-3" />
@@ -1558,9 +1611,23 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
         </div>
       </div>
 
-      <p className="text-[10px] sm:text-xs text-center mt-4 sm:mt-5 max-w-2xl mx-auto leading-relaxed" style={{ color: colors.textMuted }}>
-        Every concept and research project published becomes an enriched, scored signal visible to EdenScout subscribers.
-      </p>
+      {/* Funnel: Discovery → Lab → Scout → Market (terminates at the revenue endpoint) */}
+      <div className="mt-4 sm:mt-5 max-w-3xl mx-auto">
+        <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap text-xs sm:text-xs font-bold uppercase tracking-wider">
+          <span className="px-2 py-1 rounded-md" style={{ background: `${colors.amber}22`, color: colors.amber, border: `1px solid ${colors.amber}55` }}>Discovery</span>
+          <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: colors.textMuted }} />
+          <span className="px-2 py-1 rounded-md" style={{ background: `${colors.violet}22`, color: colors.violet, border: `1px solid ${colors.violet}55` }}>Lab</span>
+          <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: colors.textMuted }} />
+          <span className="px-2 py-1 rounded-md" style={{ background: `${colors.green}22`, color: colors.green, border: `1px solid ${colors.green}55` }}>Scout</span>
+          <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: colors.indigo }} />
+          <span className="px-2 py-1 rounded-md inline-flex items-center gap-1" style={{ background: `${colors.indigo}33`, color: colors.indigo, border: `2px solid ${colors.indigo}` }}>
+            <ShoppingBag className="w-3 h-3" /> Market
+          </span>
+        </div>
+        <p className="text-xs sm:text-xs text-center mt-2.5 max-w-2xl mx-auto leading-relaxed" style={{ color: colors.textMuted }}>
+          Every concept and research project becomes an enriched, scored signal — funneled into Scout, transacted in <span className="font-semibold" style={{ color: colors.indigo }}>Market</span>.
+        </p>
+      </div>
     </Slide>
   );
 }
@@ -1584,7 +1651,7 @@ function StatCard({ num, suffix, text, label, icon: Icon, color, active, bgLight
       >
         {text ?? `${count}${suffix ?? ""}`}
       </motion.span>
-      <span className="text-[8px] sm:text-[10px]" style={{ color: textMuted }}>{label}</span>
+      <span className="text-xs sm:text-xs" style={{ color: textMuted }}>{label}</span>
     </div>
   );
 }
@@ -1628,7 +1695,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
       <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
         Simple, transparent <span style={{ color: colors.green }}>pricing</span>.
       </h2>
-      <p className="text-[10px] sm:text-sm lg:text-base mb-3 sm:mb-5 max-w-2xl" style={{ color: colors.textMuted }}>
+      <p className="text-xs sm:text-sm lg:text-base mb-3 sm:mb-5 max-w-2xl" style={{ color: colors.textMuted }}>
         All plans include a 3-day free trial. No lock-in.
       </p>
       <div ref={statsRef} className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 mb-4 sm:mb-6">
@@ -1637,95 +1704,119 @@ function TractionSlide({ colors }: { colors: Colors }) {
         ))}
       </div>
 
-      {/* Pricing layout — mobile: stack (Scout first), desktop: Scout left dominant + free tiers right */}
-      <div className="flex flex-col lg:flex-row gap-3 lg:gap-4">
+      {/* Section divider — paid revenue engines */}
+      <div className="flex items-center gap-2 mb-2 sm:mb-3">
+        <div className="w-1.5 h-4 rounded-sm" style={{ background: colors.green }} />
+        <p className="text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: colors.green }}>Paid Revenue Engines · For Industry</p>
+        <div className="flex-1 h-px" style={{ background: colors.border }} />
+      </div>
 
-        {/* Left column — EdenScout dominant card (renders first on mobile too) */}
-        <div className="lg:flex-1 rounded-xl p-5 flex flex-col" style={{ background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`, border: `2px solid ${colors.green}88`, boxShadow: `0 0 32px ${colors.green}1a` }}>
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: colors.green }}>
-                <Search className="w-5 h-5 text-white" />
+      {/* Pricing — Scout + Market headline tiers, side-by-side */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
+
+        {/* EdenScout — paid SaaS */}
+        <div className="rounded-xl p-4 sm:p-5 flex flex-col" style={{ background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`, border: `2px solid ${colors.green}88`, boxShadow: `0 0 32px ${colors.green}1a` }}>
+          <div className="flex items-start justify-between mb-2.5 sm:mb-3">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center" style={{ background: colors.green }}>
+                <Search className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3</p>
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider" style={{ background: colors.green, color: "#fff" }}>Most Popular</span>
+                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.green }}>Industry SaaS</p>
+                  <span className="px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider" style={{ background: colors.green, color: "#fff" }}>Most Popular</span>
                 </div>
-                <h3 className="text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenScout</h3>
-                <p className="text-[10px]" style={{ color: colors.text }}>Full platform access for serious BD teams</p>
+                <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenScout</h3>
+                <p className="text-xs" style={{ color: colors.text }}>Subscription intelligence for BD teams</p>
               </div>
             </div>
             <div className="text-right shrink-0">
               <div className="flex items-baseline gap-0.5">
-                <span className="text-3xl font-extrabold tabular-nums" style={{ color: colors.green }}>$1,999</span>
+                <span className="text-2xl sm:text-3xl font-extrabold tabular-nums" style={{ color: colors.green }}>$1,999</span>
                 <span className="text-xs" style={{ color: colors.text }}>/mo</span>
               </div>
-              <p className="text-[9px] mt-0.5" style={{ color: colors.textMuted }}>starting at</p>
+              <p className="text-xs mt-0.5" style={{ color: colors.textMuted }}>starting at</p>
             </div>
           </div>
-
-          {/* Feature grid — 2 columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 mt-3">
-            {scoutFeatures.map((f) => (
-              <div key={f} className="flex items-start gap-1.5 text-xs" style={{ color: colors.text }}>
-                <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: colors.green }} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5 mt-1">
+            {scoutFeatures.slice(0, 6).map((f) => (
+              <div key={f} className="flex items-start gap-1.5 text-xs sm:text-xs" style={{ color: colors.text }}>
+                <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.green }} />
                 {f}
               </div>
             ))}
           </div>
         </div>
 
-        {/* Right column — two free tiers stacked */}
-        <div className="flex flex-col gap-3 lg:w-[38%]">
-          {/* EdenDiscovery */}
-          <div className="rounded-xl p-4 flex flex-col flex-1" style={{ background: colors.amberDim, border: `1px solid ${colors.amber}55` }}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: colors.amber }}>
-                  <Lightbulb className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-widest leading-none" style={{ color: colors.amber }}>Tier 1</p>
-                  <h3 className="text-sm font-bold leading-tight" style={{ color: colors.text }}>EdenDiscovery</h3>
-                </div>
+        {/* EdenMarket — transactional */}
+        <div className="rounded-xl p-4 sm:p-5 flex flex-col" style={{ background: `linear-gradient(135deg, ${colors.indigoDim} 0%, ${colors.bgLight} 100%)`, border: `2px solid ${colors.indigo}88`, boxShadow: `0 0 32px ${colors.indigo}1a` }}>
+          <div className="flex items-start justify-between mb-2.5 sm:mb-3">
+            <div className="flex items-center gap-2.5 sm:gap-3">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center" style={{ background: colors.indigo }}>
+                <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-              <span className="text-xl font-extrabold" style={{ color: colors.amber }}>Free</span>
+              <div>
+                <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.indigo }}>Transactional</p>
+                  <span className="px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider" style={{ background: colors.indigo, color: "#fff" }}>Deal-Driven</span>
+                </div>
+                <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenMarket</h3>
+                <p className="text-xs" style={{ color: colors.text }}>Listing &amp; deal-room access for buyers and sellers</p>
+              </div>
             </div>
-            <p className="text-[10px] mb-2 leading-snug" style={{ color: colors.text }}>Explore concepts. Validate ideas. Start free.</p>
-            <ul className="space-y-1">
-              {discoveryFeatures.map((f) => (
-                <li key={f} className="flex items-start gap-1.5 text-[10px]" style={{ color: colors.text }}>
-                  <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.amber }} />
-                  {f}
-                </li>
-              ))}
-            </ul>
+            <div className="text-right shrink-0">
+              <div className="flex items-baseline gap-0.5 justify-end">
+                <span className="text-base sm:text-lg font-extrabold" style={{ color: colors.indigo }}>Per-deal</span>
+              </div>
+              <p className="text-xs mt-0.5" style={{ color: colors.textMuted }}>listing &amp; access fees</p>
+            </div>
           </div>
-
-          {/* EdenLab */}
-          <div className="rounded-xl p-4 flex flex-col flex-1" style={{ background: colors.violetDim, border: `1px solid ${colors.violet}55` }}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: colors.violet }}>
-                  <FlaskConical className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-bold uppercase tracking-widest leading-none" style={{ color: colors.violet }}>Tier 2</p>
-                  <h3 className="text-sm font-bold leading-tight" style={{ color: colors.text }}>EdenLab</h3>
-                </div>
+          <div className="grid grid-cols-1 gap-y-1.5 mt-1">
+            {[
+              "Confidential, NDA-gated deal rooms",
+              "Blind listings for licensable assets",
+              "Buyer–seller EOI workflow",
+              "Closes the loop on Scout discoveries",
+              "Pay only when a deal is in motion",
+            ].map((f) => (
+              <div key={f} className="flex items-start gap-1.5 text-xs sm:text-xs" style={{ color: colors.text }}>
+                <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.indigo }} />
+                {f}
               </div>
-              <span className="text-xl font-extrabold" style={{ color: colors.violet }}>Free</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Supply-side context — Discovery + Lab as free researcher tools that fuel the engines */}
+      <div className="flex items-center gap-2 mb-2">
+        <div className="w-1.5 h-4 rounded-sm" style={{ background: colors.amber }} />
+        <p className="text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>Supply-Side Context · Free for Researchers</p>
+        <div className="flex-1 h-px" style={{ background: colors.border }} />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+        <div className="rounded-lg p-2.5 sm:p-3 flex items-center gap-2.5" style={{ background: colors.amberDim, border: `1px solid ${colors.amber}33` }}>
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: colors.amber }}>
+            <Lightbulb className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-1">
+              <h3 className="text-xs sm:text-sm font-bold leading-tight truncate" style={{ color: colors.text }}>EdenDiscovery</h3>
+              <span className="text-xs sm:text-xs font-extrabold" style={{ color: colors.amber }}>Free</span>
             </div>
-            <p className="text-[10px] mb-2 leading-snug" style={{ color: colors.text }}>Structure your research from concept to publication.</p>
-            <ul className="space-y-1">
-              {labFeatures.map((f) => (
-                <li key={f} className="flex items-start gap-1.5 text-[10px]" style={{ color: colors.text }}>
-                  <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.violet }} />
-                  {f}
-                </li>
-              ))}
-            </ul>
+            <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>Concept community → feeds Scout</p>
+          </div>
+        </div>
+        <div className="rounded-lg p-2.5 sm:p-3 flex items-center gap-2.5" style={{ background: colors.violetDim, border: `1px solid ${colors.violet}33` }}>
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: colors.violet }}>
+            <FlaskConical className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-1">
+              <h3 className="text-xs sm:text-sm font-bold leading-tight truncate" style={{ color: colors.text }}>EdenLab</h3>
+              <span className="text-xs sm:text-xs font-extrabold" style={{ color: colors.violet }}>Free</span>
+            </div>
+            <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>Research workspace → feeds Scout</p>
           </div>
         </div>
       </div>

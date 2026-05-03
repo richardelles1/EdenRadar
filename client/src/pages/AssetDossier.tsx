@@ -464,7 +464,7 @@ export default function AssetDossier() {
                 {marketListing && (
                   <a
                     href={`/market/listing/${marketListing.id}`}
-                    className="inline-flex items-center gap-1 text-xs text-violet-700 dark:text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-md px-2.5 py-1 font-semibold hover:bg-violet-500/20 transition-colors"
+                    className="inline-flex items-center gap-1 text-xs text-indigo-700 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 rounded-md px-2.5 py-1 font-semibold hover:bg-indigo-500/20 transition-colors"
                     data-testid="dossier-edenmarket-badge"
                   >
                     <ShoppingBag className="w-3 h-3" />

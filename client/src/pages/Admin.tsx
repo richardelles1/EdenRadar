@@ -10645,7 +10645,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
             <button
               onClick={() => setActiveTab("edenmarket")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "edenmarket" ? "bg-violet-500/10 text-violet-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "edenmarket" ? "bg-indigo-500/10 text-indigo-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-edenmarket"
             >
@@ -10819,7 +10819,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
-                  <Globe className="h-6 w-6 text-violet-500" />
+                  <Globe className="h-6 w-6 text-indigo-500" />
                   EdenMarket
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">Review and approve biopharma deal listings, monitor EOI submissions, and manage marketplace subscribers.</p>
