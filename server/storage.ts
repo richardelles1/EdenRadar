@@ -2576,59 +2576,16 @@ export class DatabaseStorage implements IStorage {
     // preserved — at least one of {query, structured filter} must be present.
     if (!trimmedQuery && !hasFilters) return [];
 
-    const filterConditions: ReturnType<typeof sql>[] = [sql`relevant = true`];
-    if (trimmedQuery) {
-      const orClauses: ReturnType<typeof sql>[] = [];
-      // FTS — handles stemming, "phrases", AND/OR, -negation. websearch parser
-      // never errors on user input; if the query is only stopwords the resulting
-      // tsquery is empty and the @@ test is simply false (trigram + exact-name
-      // clauses still apply).
-      orClauses.push(sql`search_tsv @@ websearch_to_tsquery('english', ${trimmedQuery})`);
-      // Exact-name clause carried over from #759 — never demoted by FTS rank.
-      if (normalizedQuery) {
-        const exactPat = `%${normalizedQuery}%`;
-        orClauses.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPat})`);
-      }
-      // Trigram fuzzy clause — `<%` (word_similarity) operator uses the GIN
-      // trgm index and the default `pg_trgm.word_similarity_threshold` (0.6),
-      // which catches single-character typos like "krass"→"kras" or
-      // "olapraib"→"olaparib". The plain `%` (set similarity) operator was
-      // tried first but its threshold (0.3) is computed across the entire
-      // long asset_name string, so a short typo query never clears it.
-      // Skipped for very short inputs where trigram noise outweighs signal.
-      if (trigramEnabled) {
-        orClauses.push(sql`${trigramText} <% LOWER(asset_name)`);
-      }
-      const textMatch = orClauses.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
-      filterConditions.push(sql`(${textMatch})`);
-    }
+    // Detect strict-intent operators in the query. websearch_to_tsquery treats
+    // `-word` as negation and `"…"` as phrase — both signal the user wants
+    // strict matching. Trigram fuzzy fallback is suppressed in those cases so
+    // it can't re-include rows that FTS deliberately excluded (e.g. searching
+    // `antibody -bispecific` must NOT bring back bispecific antibodies).
+    const hasNegation = /(^|\s)-\w/.test(trimmedQuery);
+    const hasPhrase = trimmedQuery.includes('"');
+    const strictIntent = hasNegation || hasPhrase;
 
-    if (modality) filterConditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
-    if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
-    if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
-    if (institution) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
-    // Multi-value lists use case-insensitive EXACT equality so the result
-    // sets reconcile with /api/alerts/* which uses Drizzle inArray() against
-    // the same canonical slug values stored on user_alerts.
-    const orEq = (col: ReturnType<typeof sql>, values: string[]) => {
-      const parts = values.map((v) => sql`${col} = ${v.toLowerCase()}`);
-      return parts.reduce((acc, c, i) => i === 0 ? c : sql`${acc} OR ${c}`);
-    };
-    if (modalities && modalities.length) {
-      filterConditions.push(sql`(${orEq(sql`LOWER(modality)`, modalities)})`);
-    }
-    if (stages && stages.length) {
-      filterConditions.push(sql`(${orEq(sql`LOWER(development_stage)`, stages)})`);
-    }
-    if (institutions && institutions.length) {
-      filterConditions.push(sql`(${orEq(sql`LOWER(institution)`, institutions)})`);
-    }
-    if (since) filterConditions.push(sql`first_seen_at >= ${since}`);
-    if (before) filterConditions.push(sql`first_seen_at < ${before}`);
-
-    const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
-
-    // SQL-side ranking signals — all computed in one query so they survive LIMIT.
+    // SQL-side ranking signals — computed in every phase so they survive LIMIT.
     const exactPattern = normalizedQuery ? `%${normalizedQuery}%` : "";
     const exactMatchExpr = normalizedQuery
       ? sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`
@@ -2637,34 +2594,94 @@ export class DatabaseStorage implements IStorage {
       ? sql`ts_rank_cd(search_tsv, websearch_to_tsquery('english', ${trimmedQuery}))`
       : sql`0::real`;
     // word_similarity(needle, haystack) — best-matching contiguous word in
-    // haystack against the needle. Mirrors the `<%` operator above and is
-    // used only as a tiebreaker for trigram-only hits (FTS hits dominate via
-    // ts_rank).
+    // haystack. Used only as a tiebreaker for trigram-only hits (FTS hits
+    // dominate via ts_rank).
     const trgmSimExpr = trigramEnabled
       ? sql`word_similarity(${trigramText}, LOWER(asset_name))`
       : sql`0::real`;
 
-    const result = await db.execute(sql`
-      SELECT
-        id, asset_name, target, modality, indication, development_stage, institution,
-        mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
-        completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories, technology_id, stage_changed_at, previous_stage,
-        data_sparse, category_confidence, asset_class,
-        ${exactMatchExpr} AS exact_name_match,
-        ${tsRankExpr}     AS ts_rank,
-        ${trgmSimExpr}    AS trgm_sim,
-        0 AS similarity
-      FROM ingested_assets
-      WHERE ${where}
-      ORDER BY
-        exact_name_match DESC,
-        ts_rank DESC,
-        trgm_sim DESC,
-        completeness_score DESC NULLS LAST,
-        last_seen_at DESC NULLS LAST
-      LIMIT ${limit}
-    `);
+    // Structured filters are identical across phases. Build them once.
+    const baseFilters: ReturnType<typeof sql>[] = [sql`relevant = true`];
+    if (modality) baseFilters.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
+    if (stage) baseFilters.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
+    if (indication) baseFilters.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
+    if (institution) baseFilters.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
+    // Multi-value lists use case-insensitive EXACT equality so the result
+    // sets reconcile with /api/alerts/* which uses Drizzle inArray() against
+    // the same canonical slug values stored on user_alerts.
+    const orEq = (col: ReturnType<typeof sql>, values: string[]) => {
+      const parts = values.map((v) => sql`${col} = ${v.toLowerCase()}`);
+      return parts.reduce((acc, c, i) => i === 0 ? c : sql`${acc} OR ${c}`);
+    };
+    if (modalities && modalities.length) baseFilters.push(sql`(${orEq(sql`LOWER(modality)`, modalities)})`);
+    if (stages && stages.length) baseFilters.push(sql`(${orEq(sql`LOWER(development_stage)`, stages)})`);
+    if (institutions && institutions.length) baseFilters.push(sql`(${orEq(sql`LOWER(institution)`, institutions)})`);
+    if (since) baseFilters.push(sql`first_seen_at >= ${since}`);
+    if (before) baseFilters.push(sql`first_seen_at < ${before}`);
+
+    // Run one search phase. `includeTrigram=false` is the strict primary phase
+    // (FTS + exact-name only). `includeTrigram=true` is the recall-recovery
+    // phase that ORs in fuzzy matches; only invoked when phase 1 had low recall
+    // AND the query has no strict-intent operators.
+    const runPhase = async (includeTrigram: boolean) => {
+      const conditions = [...baseFilters];
+      if (trimmedQuery) {
+        const orClauses: ReturnType<typeof sql>[] = [];
+        // FTS — stemming, "phrases", AND/OR, -negation. websearch parser
+        // never errors on user input; only-stopwords queries produce an empty
+        // tsquery whose @@ test is simply false.
+        orClauses.push(sql`search_tsv @@ websearch_to_tsquery('english', ${trimmedQuery})`);
+        // Exact-name clause carried over from #759 — never demoted.
+        if (normalizedQuery) {
+          orClauses.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`);
+        }
+        // Trigram fuzzy clause — `<%` (word_similarity, default threshold 0.6)
+        // uses the GIN trgm index and catches single-character typos like
+        // "krass"→"kras" or "olapraib"→"olaparib".
+        if (includeTrigram && trigramEnabled) {
+          orClauses.push(sql`${trigramText} <% LOWER(asset_name)`);
+        }
+        const textMatch = orClauses.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
+        conditions.push(sql`(${textMatch})`);
+      }
+      const where = conditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
+      return db.execute(sql`
+        SELECT
+          id, asset_name, target, modality, indication, development_stage, institution,
+          mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+          completeness_score, licensing_readiness, ip_type, source_url, source_name,
+          summary, categories, technology_id, stage_changed_at, previous_stage,
+          data_sparse, category_confidence, asset_class,
+          ${exactMatchExpr} AS exact_name_match,
+          ${tsRankExpr}     AS ts_rank,
+          ${trgmSimExpr}    AS trgm_sim,
+          0 AS similarity
+        FROM ingested_assets
+        WHERE ${where}
+        ORDER BY
+          exact_name_match DESC,
+          ts_rank DESC,
+          trgm_sim DESC,
+          completeness_score DESC NULLS LAST,
+          last_seen_at DESC NULLS LAST
+        LIMIT ${limit}
+      `);
+    };
+
+    // Two-phase execution per task #760 spec ("trigram fallback for low-recall
+    // queries"): always run the strict FTS+exact phase first; only widen with
+    // trigram when phase 1 returned few rows AND the user did not use
+    // negation/phrase operators (which signal strict intent).
+    const TRIGRAM_FALLBACK_MIN = 8;
+    let result = await runPhase(false);
+    const shouldFallback =
+      !!trimmedQuery &&
+      trigramEnabled &&
+      !strictIntent &&
+      result.rows.length < TRIGRAM_FALLBACK_MIN;
+    if (shouldFallback) {
+      result = await runPhase(true);
+    }
 
     return (result.rows as Record<string, unknown>[]).map((r) => ({
       id: Number(r.id),
