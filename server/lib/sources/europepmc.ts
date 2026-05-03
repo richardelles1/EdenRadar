@@ -1,19 +1,19 @@
 import type { RawSignal } from "../types";
+import { quoteQuery } from "./query-utils";
 
 const BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
 export async function searchEuropePmc(query: string, maxResults = 12): Promise<RawSignal[]> {
   try {
     const params = new URLSearchParams({
-      query,
+      query: quoteQuery(query),
       format: "json",
       resultType: "core",
       pageSize: String(maxResults),
-      sort: "RELEVANCE",
     });
 
     const res = await fetch(`${BASE}?${params}`, {
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(3500),
     });
 
     if (!res.ok) throw new Error(`Europe PMC API error: ${res.status}`);

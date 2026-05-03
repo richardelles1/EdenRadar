@@ -15,7 +15,7 @@ import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import multer from "multer";
-import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
+import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, withHardTimeout, type SourceKey } from "./lib/sources/index";
 import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
@@ -365,14 +365,45 @@ export async function registerRoutes(
 
       const [signals, patentSignals, trialSignals] = await Promise.all([
         collectAllSignals(enrichedQuery, nonDirectSources, maxPerSource),
-        patentInSources ? searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate) : Promise.resolve([]),
-        trialInSources ? searchClinicalTrials(enrichedQuery, maxPerSource) : Promise.resolve([]),
+        patentInSources
+          ? withHardTimeout(searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate), 4000, "patents").catch((e) => {
+              console.warn(`[search] patents dropped:`, e instanceof Error ? e.message : e);
+              return [];
+            })
+          : Promise.resolve([]),
+        trialInSources
+          ? withHardTimeout(searchClinicalTrials(enrichedQuery, maxPerSource), 4000, "clinicaltrials").catch((e) => {
+              console.warn(`[search] clinicaltrials dropped:`, e instanceof Error ? e.message : e);
+              return [];
+            })
+          : Promise.resolve([]),
       ]);
-      let combinedSignals = applySignalFilters(
-        [...signals, ...patentSignals, ...trialSignals],
-        { sourceType, dateRange, trialPhase, field, technologyType }
-      );
-      combinedSignals = combinedSignals.slice(0, 150);
+      const filteredOther = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
+      const filteredPatents = applySignalFilters(patentSignals, { sourceType, dateRange, trialPhase, field, technologyType });
+      const filteredTrials = applySignalFilters(trialSignals, { sourceType, dateRange, trialPhase, field, technologyType });
+
+      // Fair-share the 150-signal cap so that patents and clinical trials always
+      // get to contribute results, instead of being starved by a flood of TTO/article
+      // signals that come first in the concat order. Reserve 30 slots each for
+      // patents and trials, the rest goes to the other sources, then any unused
+      // reservation is given back.
+      const TOTAL_CAP = 80;
+      const PATENT_RESERVE = 20;
+      const TRIAL_RESERVE = 20;
+      const patentsKept = filteredPatents.slice(0, PATENT_RESERVE);
+      const trialsKept = filteredTrials.slice(0, TRIAL_RESERVE);
+      const otherBudget = TOTAL_CAP - patentsKept.length - trialsKept.length;
+      const otherKept = filteredOther.slice(0, otherBudget);
+      let combinedSignals = [...otherKept, ...patentsKept, ...trialsKept];
+      if (combinedSignals.length < TOTAL_CAP) {
+        const usedIds = new Set(combinedSignals.map((s) => s.id));
+        for (const extra of [...filteredPatents.slice(PATENT_RESERVE), ...filteredTrials.slice(TRIAL_RESERVE), ...filteredOther.slice(otherBudget)]) {
+          if (combinedSignals.length >= TOTAL_CAP) break;
+          if (usedIds.has(extra.id)) continue;
+          combinedSignals.push(extra);
+          usedIds.add(extra.id);
+        }
+      }
 
       if (combinedSignals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0, userId: searchUserId ?? null });
@@ -383,9 +414,9 @@ export async function registerRoutes(
 
       let normalized: Partial<import("./lib/types").ScoredAsset>[];
       try {
-        normalized = await normalizeSignals(combinedSignals);
+        normalized = await withHardTimeout(normalizeSignals(combinedSignals), 2000, "normalizeSignals");
       } catch (normErr) {
-        console.error("normalizeSignals failed, falling back to raw signals:", normErr);
+        console.error("normalizeSignals failed/timed out, falling back to raw signals:", normErr instanceof Error ? normErr.message : normErr);
         normalized = combinedSignals.map((s) => ({
           id: crypto.randomUUID().slice(0, 8),
           asset_name: s.title || "unknown",
@@ -478,9 +509,9 @@ export async function registerRoutes(
         const userOffsets = searchUserId
           ? await storage.getUserClassOffsets(searchUserId).catch(() => ({}))
           : undefined;
-        scored = await scoreAssets(clustered, profile, userOffsets);
+        scored = await withHardTimeout(scoreAssets(clustered, profile, userOffsets), 1500, "scoreAssets");
       } catch (scoreErr) {
-        console.error("scoreAssets failed, returning clustered results without scores:", scoreErr);
+        console.error("scoreAssets failed/timed out, returning clustered results without scores:", scoreErr instanceof Error ? scoreErr.message : scoreErr);
         scored = clustered.map((a) => ({
           id: a.id ?? crypto.randomUUID().slice(0, 8),
           asset_name: a.asset_name ?? "unknown",

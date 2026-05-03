@@ -387,35 +387,19 @@ export function getSource(key: string): DataSource {
   return dataSources.pubmed;
 }
 
-const SOURCE_TIMEOUT_MS = 3500;
+const SOURCE_TIMEOUT_MS = 4000;
 
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`Source "${label}" timed out after ${ms}ms`)), ms)
-    ),
-  ]);
+export function withHardTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`Source "${label}" timed out after ${ms}ms`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
 }
 
-async function withRetryOnTimeout<T>(
-  fn: () => Promise<T>,
-  ms: number,
-  label: string
-): Promise<T> {
-  try {
-    return await withTimeout(fn(), ms, label);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("timed out")) {
-      console.warn(`[search] ${label} timed out, retrying once...`);
-      return await withTimeout(fn(), ms, label);
-    }
-    throw err;
-  }
-}
-
-const CONCURRENCY_LIMIT = 8;
+const CONCURRENCY_LIMIT = 16;
 
 export async function collectAllSignals(
   query: string,
@@ -430,28 +414,30 @@ export async function collectAllSignals(
 
   for (let i = 0; i < selectedSources.length; i += CONCURRENCY_LIMIT) {
     const batch = selectedSources.slice(i, i + CONCURRENCY_LIMIT);
+    const startTimes = batch.map(() => Date.now());
     const results = await Promise.allSettled(
-      batch.map((s) =>
-        withRetryOnTimeout(() => s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id)
-      )
+      batch.map((s, idx) => {
+        startTimes[idx] = Date.now();
+        return withHardTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id);
+      })
     );
 
     results.forEach((r, j) => {
+      const elapsed = Date.now() - startTimes[j];
       if (r.status === "fulfilled") {
+        if (r.value.length === 0) {
+          console.warn(`[search] ${batch[j].id} returned 0 results in ${elapsed}ms`);
+        }
         signals.push(...r.value);
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
         if (msg.includes("timed out")) {
-          console.warn(`[search] ${batch[j].id} timed out after retry, skipping.`);
+          console.warn(`[search] ${batch[j].id} hit hard ${SOURCE_TIMEOUT_MS}ms budget, dropping.`);
         } else {
-          console.error(`[search] Source ${batch[j].id} failed:`, r.reason);
+          console.error(`[search] ${batch[j].id} failed in ${elapsed}ms:`, msg);
         }
       }
     });
-
-    if (i + CONCURRENCY_LIMIT < selectedSources.length) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
-    }
   }
 
   return signals;
