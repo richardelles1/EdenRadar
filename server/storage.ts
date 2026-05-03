@@ -2521,25 +2521,47 @@ export class DatabaseStorage implements IStorage {
     } = {}
   ): Promise<RetrievedAsset[]> {
     const { modality, stage, indication, institution, modalities, stages, institutions, since, before } = opts;
-    const tokens = query
+    // Tokenize with a 3-char floor for normal queries, but if the entire query
+    // is short or every token is short (e.g. "NX-1", "PD1"), keep all non-empty
+    // tokens so exact-text searches don't return zero results.
+    const allTokens = query
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, " ")
       .split(/\s+/)
-      .filter((t) => t.length >= 3)
-      .slice(0, 6);
+      .filter((t) => t.length > 0);
+    let tokens = allTokens.filter((t) => t.length >= 3).slice(0, 6);
+    if (tokens.length === 0 && allTokens.length > 0) {
+      tokens = allTokens.slice(0, 6);
+    }
+
+    // Normalized full-query string for exact-name matching (case + punctuation
+    // insensitive). Guarantees an exact text match on asset_name always
+    // surfaces, regardless of token-length filtering or confidence gates.
+    const normalizedQuery = query
+      .toLowerCase()
+      .replace(/[^a-z0-9\s-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
 
     const hasFilters = !!(modality || stage || indication || institution || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
     // Allow filter-only browsing (no text tokens) when at least one structured
     // filter is supplied — used by the Alerts "Explore matches" link.
-    if (tokens.length === 0 && !hasFilters) return [];
+    if (tokens.length === 0 && !normalizedQuery && !hasFilters) return [];
 
     const filterConditions: ReturnType<typeof sql>[] = [sql`relevant = true`];
-    if (tokens.length > 0) {
+    if (tokens.length > 0 || normalizedQuery) {
       const termConditions = tokens.map((t) => {
         const p = `%${t}%`;
         return sql`(LOWER(asset_name) LIKE ${p} OR LOWER(indication) LIKE ${p} OR LOWER(target) LIKE ${p} OR LOWER(COALESCE(summary,'')) LIKE ${p} OR LOWER(institution) LIKE ${p} OR LOWER(COALESCE(mechanism_of_action,'')) LIKE ${p})`;
       });
+      // Exact-name match clause — also matches when the normalized query
+      // appears anywhere inside the normalized asset_name (handles punctuation
+      // like parentheses or em-dashes that the tokenizer strips).
+      if (normalizedQuery) {
+        const exactPat = `%${normalizedQuery}%`;
+        termConditions.push(sql`(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g') LIKE ${exactPat})`);
+      }
       const textMatch = termConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
       filterConditions.push(sql`(${textMatch})`);
     }

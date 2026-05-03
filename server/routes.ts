@@ -636,6 +636,23 @@ export async function registerRoutes(
       };
       results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
 
+      // Exact-name guarantee: compute a normalized form of both the query and
+      // each result's asset_name so we can pin/boost rows whose name contains
+      // the full query string (case + punctuation insensitive). This protects
+      // against the confidence gate burying a real exact match.
+      const normalizeText = (s: string) =>
+        s.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
+      const normalizedQuery = normalizeText(query);
+      const exactNameIds = new Set<number>();
+      if (normalizedQuery) {
+        for (const r of results) {
+          const n = normalizeText(r.assetName ?? "");
+          if (n && (n === normalizedQuery || n.includes(normalizedQuery))) {
+            exactNameIds.add(r.id);
+          }
+        }
+      }
+
       // Default policy: ON in non-prod, OFF in prod unless flag explicitly set.
       const _flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
       const _isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
@@ -732,12 +749,23 @@ export async function registerRoutes(
       });
 
       // Re-sort by confidence-weighted score so demoted rows fall down the page.
-      assets.sort((a, b) => b.score - a.score);
+      // Exact-name matches (full query found inside asset_name, case + punct
+      // insensitive) are always pinned to the top regardless of score.
+      const isExact = (a: ScoredAsset) => exactNameIds.has(Number(a.id));
+      assets.sort((a, b) => {
+        const ax = isExact(a) ? 1 : 0;
+        const bx = isExact(b) ? 1 : 0;
+        if (ax !== bx) return bx - ax;
+        return b.score - a.score;
+      });
 
       // Top-5 confidence gate: push low-confidence assets out of the top 5
-      // when 5+ higher-confidence alternatives exist (flag-gated).
+      // when 5+ higher-confidence alternatives exist (flag-gated). Exact-name
+      // matches are exempt — they stay in the high bucket so a real text hit
+      // is never demoted below unrelated higher-confidence rows.
       if (CONFIDENCE_AWARE && assets.length > 5) {
-        const isLow = (a: ScoredAsset) => (a.score_breakdown?.confidence_factor ?? 1) < LOW_CONF;
+        const isLow = (a: ScoredAsset) =>
+          !isExact(a) && (a.score_breakdown?.confidence_factor ?? 1) < LOW_CONF;
         const highCount = assets.reduce((n, a) => n + (isLow(a) ? 0 : 1), 0);
         if (highCount >= 5) {
           const high: ScoredAsset[] = [];
