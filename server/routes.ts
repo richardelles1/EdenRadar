@@ -353,7 +353,7 @@ export async function registerRoutes(
     res.json({ sources });
   });
 
-  app.get("/api/sources/health", (_req, res) => {
+  app.get("/api/sources/health", requireAdmin, (_req, res) => {
     res.json({ entries: getSourceHealthEntries() });
   });
 
