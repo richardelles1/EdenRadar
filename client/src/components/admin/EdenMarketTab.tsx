@@ -872,7 +872,18 @@ export function EdenMarketTab() {
           (acc, { access }) => { acc[access.state]++; return acc; },
           { active: 0, grace: 0, expired: 0 } as Record<AccessState, number>,
         );
-        const filtered = accessFilter === "all" ? enriched : enriched.filter(e => e.access.state === accessFilter);
+        // Deterministic ordering by access urgency: grace first (most
+         // operationally interesting for support triage — these are the orgs
+         // about to lose access), then active, then expired. Within each
+         // bucket, fall back to most-recent first.
+        const stateRank: Record<AccessState, number> = { grace: 0, active: 1, expired: 2 };
+        const filtered = (accessFilter === "all" ? enriched : enriched.filter(e => e.access.state === accessFilter))
+          .slice()
+          .sort((a, b) => {
+            const r = stateRank[a.access.state] - stateRank[b.access.state];
+            if (r !== 0) return r;
+            return new Date(b.org.createdAt).getTime() - new Date(a.org.createdAt).getTime();
+          });
         return (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -954,25 +965,32 @@ export function EdenMarketTab() {
                             </span>
                             {(access.state !== "expired") && (
                               <div className="flex items-center gap-1">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-5 px-1.5 text-[10px]"
-                                  disabled={updatingAccess}
-                                  onClick={() => {
-                                    const raw = window.prompt(`Extend ${org.name} grace period by how many days?`, "30");
-                                    if (raw === null) return;
-                                    const days = parseInt(raw, 10);
-                                    if (!Number.isFinite(days) || days < 1 || days > 365) {
-                                      toast({ title: "Invalid", description: "Enter 1–365 days", variant: "destructive" });
-                                      return;
-                                    }
-                                    updateMarketAccess({ orgId: org.id, action: "extend", days });
-                                  }}
-                                  data-testid={`admin-market-extend-${org.id}`}
-                                >
-                                  Extend
-                                </Button>
+                                {/* "Extend" only makes sense for orgs whose
+                                    access already has an expiry (grace).
+                                    Setting an expiry on a fully active org
+                                    would silently downgrade them into
+                                    read-only grace mode. */}
+                                {access.state === "grace" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-5 px-1.5 text-[10px]"
+                                    disabled={updatingAccess}
+                                    onClick={() => {
+                                      const raw = window.prompt(`Extend ${org.name} grace period by how many days?`, "30");
+                                      if (raw === null) return;
+                                      const days = parseInt(raw, 10);
+                                      if (!Number.isFinite(days) || days < 1 || days > 365) {
+                                        toast({ title: "Invalid", description: "Enter 1–365 days", variant: "destructive" });
+                                        return;
+                                      }
+                                      updateMarketAccess({ orgId: org.id, action: "extend", days });
+                                    }}
+                                    data-testid={`admin-market-extend-${org.id}`}
+                                  >
+                                    Extend
+                                  </Button>
+                                )}
                                 <Button
                                   size="sm"
                                   variant="outline"
