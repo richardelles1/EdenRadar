@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EdenRadar — Ad Canvas</title>
+  <style>
+    :root {
+      --bg: #0b0f0d;
+      --surface: #11181a;
+      --ink: #e8efe9;
+      --muted: #8a9994;
+      --accent: #34d399;
+      --line: rgba(255,255,255,0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font-family: ui-sans-serif, -apple-system, "Inter", system-ui, sans-serif; }
+    .page { max-width: 1400px; margin: 0 auto; padding: 48px 32px 96px; }
+    h1 { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; margin: 0 0 8px; }
+    .lede { color: var(--muted); margin: 0 0 40px; max-width: 60ch; }
+    h2 { font-size: 20px; font-weight: 700; margin: 48px 0 4px; display: flex; align-items: baseline; gap: 12px; }
+    h2 .tag { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: rgba(52,211,153,0.12); color: var(--accent); letter-spacing: 0.04em; text-transform: uppercase; }
+    h2 .count { font-size: 13px; color: var(--muted); font-weight: 500; }
+    .round-note { color: var(--muted); margin: 0 0 16px; font-size: 14px; max-width: 70ch; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-top: 12px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.15s ease, transform 0.15s ease; }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .frame { aspect-ratio: 1200 / 1200; background: #000; border-bottom: 1px solid var(--line); position: relative; overflow: hidden; }
+    .frame iframe { position: absolute; inset: 0; width: 1200px; height: 1200px; transform: scale(calc(320 / 1200)); transform-origin: 0 0; border: 0; pointer-events: none; }
+    .meta { padding: 12px 14px 14px; }
+    .meta .file { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--muted); margin: 0 0 4px; word-break: break-all; }
+    .meta .title { font-size: 14px; font-weight: 600; margin: 0; }
+    .meta a { color: inherit; text-decoration: none; }
+    .meta a:hover { color: var(--accent); }
+    footer { margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <h1>EdenRadar — Ad Canvas</h1>
+    <p class="lede">Index of every campaign creative shipped under <code>artifacts/mockup-sandbox/public/ads/</code>. Each card embeds the live HTML at scaled-down 1200×1200. Open any card to see the full-resolution ad.</p>
+
+    <h2 id="r1">Round 1 <span class="tag">EdenScout launch</span> <span class="count">4 ads</span></h2>
+    <p class="round-note">Initial EdenScout awareness batch (dark hero photography, _shared.css).</p>
+    <div class="grid" data-testid="grid-round-1">
+      <article class="card"><a href="edenscout-angle1-lab.html" target="_blank"><div class="frame"><iframe src="edenscout-angle1-lab.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-angle1-lab.html</p><p class="title"><a href="edenscout-angle1-lab.html" target="_blank">EdenScout — Lab</a></p></div></article>
+      <article class="card"><a href="edenscout-angle2-signal.html" target="_blank"><div class="frame"><iframe src="edenscout-angle2-signal.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-angle2-signal.html</p><p class="title"><a href="edenscout-angle2-signal.html" target="_blank">EdenScout — Signal</a></p></div></article>
+      <article class="card"><a href="edenscout-angle3-architecture.html" target="_blank"><div class="frame"><iframe src="edenscout-angle3-architecture.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-angle3-architecture.html</p><p class="title"><a href="edenscout-angle3-architecture.html" target="_blank">EdenScout — Architecture</a></p></div></article>
+      <article class="card"><a href="edenscout-angle4-instrument.html" target="_blank"><div class="frame"><iframe src="edenscout-angle4-instrument.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-angle4-instrument.html</p><p class="title"><a href="edenscout-angle4-instrument.html" target="_blank">EdenScout — Instrument</a></p></div></article>
+    </div>
+
+    <h2 id="r2">Round 2 <span class="tag">EdenScout refresh</span> <span class="count">4 ads</span></h2>
+    <p class="round-note">Locked legibility recipe (_shared-r2.css): bottom scrim, weight-900 headline, dark vignette.</p>
+    <div class="grid" data-testid="grid-round-2">
+      <article class="card"><a href="edenscout-r2-angle1-lab.html" target="_blank"><div class="frame"><iframe src="edenscout-r2-angle1-lab.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r2-angle1-lab.html</p><p class="title"><a href="edenscout-r2-angle1-lab.html" target="_blank">EdenScout R2 — Lab</a></p></div></article>
+      <article class="card"><a href="edenscout-r2-angle2-signal.html" target="_blank"><div class="frame"><iframe src="edenscout-r2-angle2-signal.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r2-angle2-signal.html</p><p class="title"><a href="edenscout-r2-angle2-signal.html" target="_blank">EdenScout R2 — Signal</a></p></div></article>
+      <article class="card"><a href="edenscout-r2-angle3-architecture.html" target="_blank"><div class="frame"><iframe src="edenscout-r2-angle3-architecture.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r2-angle3-architecture.html</p><p class="title"><a href="edenscout-r2-angle3-architecture.html" target="_blank">EdenScout R2 — Architecture</a></p></div></article>
+      <article class="card"><a href="edenscout-r2-angle4-instrument.html" target="_blank"><div class="frame"><iframe src="edenscout-r2-angle4-instrument.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r2-angle4-instrument.html</p><p class="title"><a href="edenscout-r2-angle4-instrument.html" target="_blank">EdenScout R2 — Instrument</a></p></div></article>
+    </div>
+
+    <h2 id="edenmarket-launch">EdenMarket launch <span class="tag">launch day-one</span> <span class="count">4 ads</span></h2>
+    <div class="grid" data-testid="grid-edenmarket-launch">
+      <article class="card"><a href="edenmarket-launch-angle1-hero.html" target="_blank"><div class="frame"><iframe src="edenmarket-launch-angle1-hero.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenmarket-launch-angle1-hero.html</p><p class="title"><a href="edenmarket-launch-angle1-hero.html" target="_blank">EdenMarket — Hero</a></p></div></article>
+      <article class="card"><a href="edenmarket-launch-angle2-confidential.html" target="_blank"><div class="frame"><iframe src="edenmarket-launch-angle2-confidential.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenmarket-launch-angle2-confidential.html</p><p class="title"><a href="edenmarket-launch-angle2-confidential.html" target="_blank">EdenMarket — Confidential</a></p></div></article>
+      <article class="card"><a href="edenmarket-launch-angle3-buyers.html" target="_blank"><div class="frame"><iframe src="edenmarket-launch-angle3-buyers.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenmarket-launch-angle3-buyers.html</p><p class="title"><a href="edenmarket-launch-angle3-buyers.html" target="_blank">EdenMarket — Buyers</a></p></div></article>
+      <article class="card"><a href="edenmarket-launch-angle4-sellers.html" target="_blank"><div class="frame"><iframe src="edenmarket-launch-angle4-sellers.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenmarket-launch-angle4-sellers.html</p><p class="title"><a href="edenmarket-launch-angle4-sellers.html" target="_blank">EdenMarket — Sellers</a></p></div></article>
+    </div>
+
+    <h2 id="edennx-launch">EdenNX launch <span class="tag">launch day-one</span> <span class="count">4 ads</span></h2>
+    <div class="grid" data-testid="grid-edennx-launch">
+      <article class="card"><a href="edennx-launch-angle1-landscape.html" target="_blank"><div class="frame"><iframe src="edennx-launch-angle1-landscape.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edennx-launch-angle1-landscape.html</p><p class="title"><a href="edennx-launch-angle1-landscape.html" target="_blank">EdenNX — Landscape</a></p></div></article>
+      <article class="card"><a href="edennx-launch-angle2-microscopy.html" target="_blank"><div class="frame"><iframe src="edennx-launch-angle2-microscopy.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edennx-launch-angle2-microscopy.html</p><p class="title"><a href="edennx-launch-angle2-microscopy.html" target="_blank">EdenNX — Microscopy</a></p></div></article>
+      <article class="card"><a href="edennx-launch-angle3-triptych.html" target="_blank"><div class="frame"><iframe src="edennx-launch-angle3-triptych.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edennx-launch-angle3-triptych.html</p><p class="title"><a href="edennx-launch-angle3-triptych.html" target="_blank">EdenNX — Triptych</a></p></div></article>
+      <article class="card"><a href="edennx-launch-angle4-glass.html" target="_blank"><div class="frame"><iframe src="edennx-launch-angle4-glass.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edennx-launch-angle4-glass.html</p><p class="title"><a href="edennx-launch-angle4-glass.html" target="_blank">EdenNX — Glass</a></p></div></article>
+    </div>
+
+    <h2 id="r3">Round 3 <span class="tag">evergreen</span> <span class="count">6 ads</span></h2>
+    <p class="round-note">Always-on awareness for EdenMarket, EdenLab, and the EDEN engine (_shared-r3.css).</p>
+    <div class="grid" data-testid="grid-round-3">
+      <article class="card"><a href="r3-edenmarket-blind.html" target="_blank"><div class="frame"><iframe src="r3-edenmarket-blind.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r3-edenmarket-blind.html</p><p class="title"><a href="r3-edenmarket-blind.html" target="_blank">EdenMarket — Blind by design</a></p></div></article>
+      <article class="card"><a href="r3-edenmarket-success-fee.html" target="_blank"><div class="frame"><iframe src="r3-edenmarket-success-fee.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r3-edenmarket-success-fee.html</p><p class="title"><a href="r3-edenmarket-success-fee.html" target="_blank">EdenMarket — Success fee</a></p></div></article>
+      <article class="card"><a href="r3-edenlab-timestamp.html" target="_blank"><div class="frame"><iframe src="r3-edenlab-timestamp.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r3-edenlab-timestamp.html</p><p class="title"><a href="r3-edenlab-timestamp.html" target="_blank">EdenLab — Timestamp</a></p></div></article>
+      <article class="card"><a href="r3-edenlab-grants.html" target="_blank"><div class="frame"><iframe src="r3-edenlab-grants.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r3-edenlab-grants.html</p><p class="title"><a href="r3-edenlab-grants.html" target="_blank">EdenLab — Grants</a></p></div></article>
+      <article class="card"><a href="r3-edenengine-reads.html" target="_blank"><div class="frame"><iframe src="r3-edenengine-reads.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r3-edenengine-reads.html</p><p class="title"><a href="r3-edenengine-reads.html" target="_blank">EDEN engine — Reads the science</a></p></div></article>
+      <article class="card"><a href="r3-edenengine-scale.html" target="_blank"><div class="frame"><iframe src="r3-edenengine-scale.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r3-edenengine-scale.html</p><p class="title"><a href="r3-edenengine-scale.html" target="_blank">EDEN engine — Scale</a></p></div></article>
+    </div>
+
+    <h2 id="r4">Round 4 <span class="tag">EdenScout refresh</span> <span class="count">4 ads</span></h2>
+    <p class="round-note">Quarterly EdenScout creative refresh under the EdenRadar banner.</p>
+    <div class="grid" data-testid="grid-round-4">
+      <article class="card"><a href="edenscout-r4-angle1-atlas.html" target="_blank"><div class="frame"><iframe src="edenscout-r4-angle1-atlas.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r4-angle1-atlas.html</p><p class="title"><a href="edenscout-r4-angle1-atlas.html" target="_blank">EdenScout R4 — Atlas</a></p></div></article>
+      <article class="card"><a href="edenscout-r4-angle2-observatory.html" target="_blank"><div class="frame"><iframe src="edenscout-r4-angle2-observatory.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r4-angle2-observatory.html</p><p class="title"><a href="edenscout-r4-angle2-observatory.html" target="_blank">EdenScout R4 — Observatory</a></p></div></article>
+      <article class="card"><a href="edenscout-r4-angle3-vault.html" target="_blank"><div class="frame"><iframe src="edenscout-r4-angle3-vault.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r4-angle3-vault.html</p><p class="title"><a href="edenscout-r4-angle3-vault.html" target="_blank">EdenScout R4 — Vault</a></p></div></article>
+      <article class="card"><a href="edenscout-r4-angle4-firstlight.html" target="_blank"><div class="frame"><iframe src="edenscout-r4-angle4-firstlight.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">edenscout-r4-angle4-firstlight.html</p><p class="title"><a href="edenscout-r4-angle4-firstlight.html" target="_blank">EdenScout R4 — First light</a></p></div></article>
+    </div>
+
+    <h2 id="r5">Round 5 <span class="tag">green &amp; white</span> <span class="count">8 ads</span></h2>
+    <p class="round-note">New green-and-white palette, two layout families: block-text and light-hero (_shared-r5.css).</p>
+    <div class="grid" data-testid="grid-round-5">
+      <article class="card"><a href="r5-edenscout-block.html" target="_blank"><div class="frame"><iframe src="r5-edenscout-block.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenscout-block.html</p><p class="title"><a href="r5-edenscout-block.html" target="_blank">EdenScout — Block (green &amp; white)</a></p></div></article>
+      <article class="card"><a href="r5-edenlab-block-green.html" target="_blank"><div class="frame"><iframe src="r5-edenlab-block-green.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenlab-block-green.html</p><p class="title"><a href="r5-edenlab-block-green.html" target="_blank">EdenLab — Block (inverted green)</a></p></div></article>
+      <article class="card"><a href="r5-edenmarket-block.html" target="_blank"><div class="frame"><iframe src="r5-edenmarket-block.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenmarket-block.html</p><p class="title"><a href="r5-edenmarket-block.html" target="_blank">EdenMarket — Block (green &amp; white)</a></p></div></article>
+      <article class="card"><a href="r5-edenengine-block-green.html" target="_blank"><div class="frame"><iframe src="r5-edenengine-block-green.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenengine-block-green.html</p><p class="title"><a href="r5-edenengine-block-green.html" target="_blank">EDEN engine — Block (inverted green)</a></p></div></article>
+      <article class="card"><a href="r5-edenscout-light-hero.html" target="_blank"><div class="frame"><iframe src="r5-edenscout-light-hero.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenscout-light-hero.html</p><p class="title"><a href="r5-edenscout-light-hero.html" target="_blank">EdenScout — Light hero</a></p></div></article>
+      <article class="card"><a href="r5-edenlab-light-hero.html" target="_blank"><div class="frame"><iframe src="r5-edenlab-light-hero.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenlab-light-hero.html</p><p class="title"><a href="r5-edenlab-light-hero.html" target="_blank">EdenLab — Light hero</a></p></div></article>
+      <article class="card"><a href="r5-edennx-light-hero.html" target="_blank"><div class="frame"><iframe src="r5-edennx-light-hero.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edennx-light-hero.html</p><p class="title"><a href="r5-edennx-light-hero.html" target="_blank">EdenNX — Light hero</a></p></div></article>
+      <article class="card"><a href="r5-edenradar-light-hero.html" target="_blank"><div class="frame"><iframe src="r5-edenradar-light-hero.html" loading="lazy"></iframe></div></a><div class="meta"><p class="file">r5-edenradar-light-hero.html</p><p class="title"><a href="r5-edenradar-light-hero.html" target="_blank">EdenRadar — Light hero</a></p></div></article>
+    </div>
+
+    <footer>
+      Source: <code>artifacts/mockup-sandbox/public/ads/</code> · Total: 34 ads across 7 batches.
+    </footer>
+  </main>
+</body>
+</html>

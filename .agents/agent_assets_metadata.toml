@@ -162,6 +162,54 @@ uri = "file://artifacts/mockup-sandbox/public/images/r5-light-atlas.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "r5-edenscout-block-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenscout-block.html"
+type = "html"
+title = "r5 EdenScout — block-text (green & white)"
+
+[[generated]]
+id = "r5-edenlab-block-green-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenlab-block-green.html"
+type = "html"
+title = "r5 EdenLab — block-text (inverted green)"
+
+[[generated]]
+id = "r5-edenmarket-block-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenmarket-block.html"
+type = "html"
+title = "r5 EdenMarket — block-text (green & white)"
+
+[[generated]]
+id = "r5-edenengine-block-green-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenengine-block-green.html"
+type = "html"
+title = "r5 EDEN engine — block-text (inverted green)"
+
+[[generated]]
+id = "r5-edenscout-light-hero-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenscout-light-hero.html"
+type = "html"
+title = "r5 EdenScout — light hero (green & white)"
+
+[[generated]]
+id = "r5-edenlab-light-hero-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenlab-light-hero.html"
+type = "html"
+title = "r5 EdenLab — light hero (green & white)"
+
+[[generated]]
+id = "r5-edennx-light-hero-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edennx-light-hero.html"
+type = "html"
+title = "r5 EdenNX — light hero (green & white)"
+
+[[generated]]
+id = "r5-edenradar-light-hero-html"
+uri = "file://artifacts/mockup-sandbox/public/ads/r5-edenradar-light-hero.html"
+type = "html"
+title = "r5 EdenRadar — light hero (green & white)"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"
