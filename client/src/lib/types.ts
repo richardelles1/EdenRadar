@@ -30,6 +30,8 @@ export interface ScoreBreakdown {
   signal_coverage?: number;
   scored_dimensions?: string[];
   dimension_basis?: Record<string, string>;
+  confidence_factor?: number;
+  category_confidence?: number;
 }
 
 export interface ScoredAsset {
@@ -54,6 +56,8 @@ export interface ScoredAsset {
   score_breakdown: ScoreBreakdown;
   matching_tags: string[];
   confidence: "high" | "medium" | "low";
+  category_confidence?: number;
+  asset_class?: string | null;
   contact_office?: string;
   stage_changed_at?: string | null;
   previous_stage?: string | null;

@@ -454,6 +454,9 @@ export async function registerRoutes(
       const searchOpts = { modality, stage, indication, institution, since: sinceDate, before: beforeDate };
       results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
 
+      const CONFIDENCE_AWARE = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "true").toLowerCase() !== "false";
+      const CONF_FLOOR = 0.4;
+
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
           development_stage: r.developmentStage,
@@ -482,9 +485,20 @@ export async function registerRoutes(
           competition:  competitionResult,
         };
 
-        const { total, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults);
+        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults);
+
+        // ── Confidence-aware ranking (Task #693) — applied here too because the
+        // scout path scores inline without going through scoreAssets().
+        const catConf = typeof r.categoryConfidence === "number"
+          ? Math.max(0, Math.min(1, r.categoryConfidence))
+          : undefined;
+        const coverageNorm = signal_coverage / 100;
+        const confidenceFactor = catConf !== undefined ? Math.min(catConf, coverageNorm) : coverageNorm;
+        const total = CONFIDENCE_AWARE
+          ? Math.max(0, Math.min(100, Math.round(rawTotal * (CONF_FLOOR + (1 - CONF_FLOOR) * confidenceFactor))))
+          : rawTotal;
         const confidence: "high" | "medium" | "low" =
-          signal_coverage >= 75 ? "high" : signal_coverage >= 50 ? "medium" : "low";
+          confidenceFactor >= 0.75 ? "high" : confidenceFactor >= 0.5 ? "medium" : "low";
 
         return {
           id: String(r.id),
@@ -510,11 +524,15 @@ export async function registerRoutes(
             signal_coverage,
             scored_dimensions,
             dimension_basis,
+            confidence_factor: Math.round(confidenceFactor * 100) / 100,
+            ...(catConf !== undefined ? { category_confidence: catConf } : {}),
           },
           latest_signal_date: "",
           matching_tags: [],
           evidence_count: 1,
           confidence,
+          ...(catConf !== undefined ? { category_confidence: catConf } : {}),
+          asset_class: r.assetClass ?? null,
           signals: [],
           owner_name: r.institution,
           owner_type: "university" as const,
@@ -525,6 +543,9 @@ export async function registerRoutes(
           dataSparse: r.dataSparse ?? false,
         };
       });
+
+      // Re-sort by confidence-weighted score so demoted rows fall down the page.
+      assets.sort((a, b) => b.score - a.score);
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length, userId: scoutUserId ?? null }).catch(() => {});
 
@@ -2733,6 +2754,81 @@ export async function registerRoutes(
       res.end();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Export failed" });
+    }
+  });
+
+  // ── Confidence Distribution + Save-Rate by Confidence (Task #693) ─────────
+  // Surfaces (a) how the classifier's confidence is distributed across the
+  // corpus and (b) whether higher-confidence rows are actually saved more
+  // often by users — a feedback loop for tuning the confidence-aware ranker.
+  app.get("/api/admin/dataset-quality/confidence-distribution", async (_req, res) => {
+    try {
+      const histogram = await db.execute(sql`
+        SELECT
+          bucket,
+          COUNT(*)::int AS count,
+          ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness
+        FROM (
+          SELECT
+            completeness_score,
+            CASE
+              WHEN category_confidence IS NULL THEN 'unscored'
+              WHEN category_confidence < 0.2 THEN '0.0-0.2'
+              WHEN category_confidence < 0.4 THEN '0.2-0.4'
+              WHEN category_confidence < 0.6 THEN '0.4-0.6'
+              WHEN category_confidence < 0.8 THEN '0.6-0.8'
+              ELSE '0.8-1.0'
+            END AS bucket
+          FROM ingested_assets
+          WHERE relevant = true
+        ) b
+        GROUP BY bucket
+        ORDER BY
+          CASE bucket
+            WHEN '0.0-0.2' THEN 1 WHEN '0.2-0.4' THEN 2 WHEN '0.4-0.6' THEN 3
+            WHEN '0.6-0.8' THEN 4 WHEN '0.8-1.0' THEN 5 ELSE 6
+          END
+      `);
+
+      const saveRate = await db.execute(sql`
+        SELECT
+          bucket,
+          COUNT(DISTINCT ia.id)::int AS asset_count,
+          COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN ia.id END)::int AS saved_asset_count,
+          ROUND(
+            100.0 * COUNT(DISTINCT CASE WHEN s.id IS NOT NULL THEN ia.id END)
+              / NULLIF(COUNT(DISTINCT ia.id), 0),
+            1
+          ) AS save_rate_pct
+        FROM (
+          SELECT
+            id,
+            CASE
+              WHEN category_confidence IS NULL THEN 'unscored'
+              WHEN category_confidence < 0.2 THEN '0.0-0.2'
+              WHEN category_confidence < 0.4 THEN '0.2-0.4'
+              WHEN category_confidence < 0.6 THEN '0.4-0.6'
+              WHEN category_confidence < 0.8 THEN '0.6-0.8'
+              ELSE '0.8-1.0'
+            END AS bucket
+          FROM ingested_assets
+          WHERE relevant = true
+        ) ia
+        LEFT JOIN saved_assets s ON s.ingested_asset_id = ia.id
+        GROUP BY bucket
+        ORDER BY
+          CASE bucket
+            WHEN '0.0-0.2' THEN 1 WHEN '0.2-0.4' THEN 2 WHEN '0.4-0.6' THEN 3
+            WHEN '0.6-0.8' THEN 4 WHEN '0.8-1.0' THEN 5 ELSE 6
+          END
+      `);
+
+      res.json({
+        histogram: histogram.rows,
+        saveRate: saveRate.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch confidence distribution" });
     }
   });
 

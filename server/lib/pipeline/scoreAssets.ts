@@ -16,6 +16,14 @@ const WEIGHTS: Record<string, number> = {
   competition: 0.10,
 };
 
+// ─── Confidence-aware ranking (Task #693) ─────────────────────────────────────
+// Multiplies the final score by `(FLOOR + (1-FLOOR) * confidence_factor)` so
+// low-confidence rows are demoted but never zeroed out. Gated by env flag for
+// quick rollback.  confidence_factor = min(categoryConfidence, signalCoverage).
+const CONFIDENCE_FLOOR = 0.4;
+const CONFIDENCE_AWARE_RANKING_ENABLED =
+  (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "true").toLowerCase() !== "false";
+
 export type DimensionResult = {
   score: number;
   hasData: boolean;
@@ -356,10 +364,28 @@ export async function scoreAssets(
       competition: competitionResult,
     };
 
-    const { total, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(results);
+    const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(results);
 
+    // ── Confidence-aware ranking ─────────────────────────────────────────────
+    // Combine classifier confidence (how sure we are this row IS what we think)
+    // with signal coverage (how many scoring dimensions had real data) and
+    // demote rows where either is weak.
+    const categoryConfidence = typeof asset.category_confidence === "number"
+      ? Math.max(0, Math.min(1, asset.category_confidence))
+      : undefined;
+    const coverageNorm = signal_coverage / 100;
+    const confidenceFactor = categoryConfidence !== undefined
+      ? Math.min(categoryConfidence, coverageNorm)
+      : coverageNorm;
+
+    const total = CONFIDENCE_AWARE_RANKING_ENABLED
+      ? clamp(rawTotal * (CONFIDENCE_FLOOR + (1 - CONFIDENCE_FLOOR) * confidenceFactor))
+      : rawTotal;
+
+    // Confidence label now reflects the *combined* factor, not just coverage,
+    // so a high-coverage but mis-classified row no longer reads as "high".
     const confidence: "high" | "medium" | "low" =
-      signal_coverage >= 75 ? "high" : signal_coverage >= 50 ? "medium" : "low";
+      confidenceFactor >= 0.75 ? "high" : confidenceFactor >= 0.5 ? "medium" : "low";
 
     const score_breakdown: ScoreBreakdown = {
       freshness: freshnessResult.score,
@@ -372,6 +398,8 @@ export async function scoreAssets(
       signal_coverage,
       scored_dimensions,
       dimension_basis,
+      confidence_factor: Math.round(confidenceFactor * 100) / 100,
+      ...(categoryConfidence !== undefined ? { category_confidence: categoryConfidence } : {}),
     };
 
     return {
@@ -396,6 +424,7 @@ export async function scoreAssets(
       score_breakdown,
       matching_tags: asset.matching_tags ?? [],
       confidence,
+      ...(categoryConfidence !== undefined ? { category_confidence: categoryConfidence } : {}),
       signals: asset.signals ?? [],
     };
   });

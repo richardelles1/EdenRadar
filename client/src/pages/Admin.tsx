@@ -2674,6 +2674,22 @@ function Enrichment({ pw }: { pw: string }) {
     staleTime: 120_000,
   });
 
+  // ── Confidence Distribution (Task #693) ─────────────────────────────────────
+  const [showConfidence, setShowConfidence] = React.useState(false);
+  const { data: confidenceDist } = useQuery<{
+    histogram: Array<{ bucket: string; count: number; avg_completeness: number | null }>;
+    saveRate: Array<{ bucket: string; asset_count: number; saved_asset_count: number; save_rate_pct: number | null }>;
+  }>({
+    queryKey: ["/api/admin/dataset-quality/confidence-distribution", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/dataset-quality/confidence-distribution", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load confidence distribution");
+      return res.json();
+    },
+    enabled: showConfidence,
+    staleTime: 120_000,
+  });
+
   const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
     queryKey: ["/api/admin/enrichment/status", pw],
     queryFn: async () => {
@@ -3021,6 +3037,96 @@ function Enrichment({ pw }: { pw: string }) {
               ) : (
                 <div className="px-5 py-4 text-xs text-muted-foreground">No class data yet — run enrichment first to classify assets.</div>
               )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Confidence Distribution + Save-Rate (Task #693) ── */}
+      {quality && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
+          <button
+            className="w-full px-5 py-3 flex items-center justify-between bg-muted/20 hover:bg-muted/40 transition-colors text-left"
+            onClick={() => setShowConfidence(v => !v)}
+            data-testid="button-toggle-confidence"
+          >
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Classifier Confidence × Save Rate
+            </h3>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${showConfidence ? "rotate-180" : ""}`} />
+          </button>
+          {showConfidence && (
+            <div className="border-t border-border px-5 py-4 space-y-5">
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-2">
+                  Distribution of <code className="text-[10px]">category_confidence</code> across relevant assets
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2" data-testid="confidence-histogram">
+                  {(confidenceDist?.histogram ?? []).map(row => {
+                    const max = Math.max(1, ...(confidenceDist?.histogram ?? []).map(r => r.count));
+                    const pct = Math.round((row.count / max) * 100);
+                    return (
+                      <div key={row.bucket} className="rounded-lg border border-border bg-background p-2 text-center" data-testid={`hist-bucket-${row.bucket}`}>
+                        <div className="h-12 flex items-end justify-center mb-1">
+                          <div className="w-6 rounded-t bg-primary/60" style={{ height: `${pct}%` }} />
+                        </div>
+                        <div className="text-xs font-bold tabular-nums text-foreground">{row.count.toLocaleString()}</div>
+                        <div className="text-[10px] text-muted-foreground">{row.bucket}</div>
+                        {row.avg_completeness != null && (
+                          <div className="text-[10px] text-muted-foreground/70">avg {row.avg_completeness}</div>
+                        )}
+                      </div>
+                    );
+                  })}
+                  {(!confidenceDist || confidenceDist.histogram.length === 0) && (
+                    <div className="col-span-full text-xs text-muted-foreground">No confidence data — run classification first.</div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <div className="text-xs font-medium text-muted-foreground mb-2">
+                  Save rate by confidence bucket — does the classifier predict what users actually save?
+                </div>
+                <table className="w-full text-sm" data-testid="confidence-save-rate">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/10">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">Bucket</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Assets</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Saves</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">Save Rate</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">&nbsp;</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(confidenceDist?.saveRate ?? []).map(row => {
+                      const rate = row.save_rate_pct ?? 0;
+                      const barW = Math.min(100, rate * 4); // amplify 0-25% range to fill bar
+                      return (
+                        <tr key={row.bucket} className="border-b border-border last:border-0" data-testid={`save-rate-${row.bucket}`}>
+                          <td className="px-3 py-2 text-xs font-medium text-foreground">{row.bucket}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums text-right text-foreground">{row.asset_count.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums text-right text-foreground">{row.saved_asset_count.toLocaleString()}</td>
+                          <td className="px-3 py-2 text-xs tabular-nums text-right text-foreground">{rate}%</td>
+                          <td className="px-3 py-2 w-1/3">
+                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full bg-emerald-500/70" style={{ width: `${barW}%` }} />
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {(!confidenceDist || confidenceDist.saveRate.length === 0) && (
+                      <tr><td colSpan={5} className="px-3 py-3 text-xs text-muted-foreground">No save data yet.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+                <p className="text-[10px] text-muted-foreground mt-2">
+                  Higher save rate in higher-confidence buckets = the classifier is correctly identifying valuable assets.
+                  Flat or inverted = ranker tuning needed.
+                </p>
+              </div>
             </div>
           )}
         </div>

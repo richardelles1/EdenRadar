@@ -16,7 +16,7 @@ export interface DeepEnrichResult {
   unmetNeed: string;
   comparableDrugs: string;
   licensingReadiness: string;
-  completenessScore: number;
+  completenessScore: number | null;
   assetClass?: string | null;
   deviceAttributes?: Record<string, unknown> | null;
 }

@@ -32,6 +32,10 @@ export interface ScoreBreakdown {
   signal_coverage?: number;
   scored_dimensions?: string[];
   dimension_basis?: Record<string, string>;
+  /** 0-1, factor used to penalize the final score (1.0 = no penalty). */
+  confidence_factor?: number;
+  /** 0-1, classifier confidence forwarded for diagnostics. */
+  category_confidence?: number;
 }
 
 export interface ScoredAsset {
@@ -56,6 +60,8 @@ export interface ScoredAsset {
   score_breakdown: ScoreBreakdown;
   matching_tags: string[];
   confidence: "high" | "medium" | "low";
+  /** Raw 0-1 classifier confidence (when known). */
+  category_confidence?: number;
   contact_office?: string;
   signals: RawSignal[];
 }

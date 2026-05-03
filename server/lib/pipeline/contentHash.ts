@@ -44,8 +44,20 @@ function deviceAttr(attrs: Record<string, unknown> | null | undefined, key: stri
   return attrs?.[key] ?? null;
 }
 
-export function computeCompletenessScore(asset: CompletenessAsset): number {
+/**
+ * Returns a 0-100 completeness score for the asset, OR null when the asset
+ * class is unknown/"other". Returning null avoids surfacing a misleading
+ * Drug/Biologic-shaped score for assets the classifier could not place,
+ * which previously inflated trust in low-confidence rows.
+ */
+export function computeCompletenessScore(asset: CompletenessAsset): number | null {
   const cls = (asset.assetClass ?? "").toLowerCase();
+
+  // ── Unscored: classifier returned "other" or no class at all ───────────────
+  // (Legacy rows without assetClass are treated the same so we stop guessing.)
+  if (!cls || cls === "other" || cls === "unknown") {
+    return null;
+  }
 
   // ── Medical Device ─────────────────────────────────────────────────────────
   if (cls === "medical_device") {

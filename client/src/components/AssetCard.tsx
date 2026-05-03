@@ -104,6 +104,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const isResearcherPublished = asset.source_types?.includes("researcher");
   const tier = scoreTier(asset.score, isUnscored);
 
+  // Confidence factor (combined classifier + coverage); surfaced in the score
+  // tooltip so we don't clutter the card grid.
+  const confFactor = asset.score_breakdown?.confidence_factor;
+
   const rawScore = isUnscored ? null : Math.round(asset.score);
   const scoreDisplay = rawScore !== null ? Math.max(1, Math.round(rawScore / 10)) : null;
 
@@ -225,6 +229,13 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {asset.score_breakdown && !isUnscored && (
             <TooltipContent side="right" className="p-3 w-52 shadow-xl">
               <p className="text-xs font-semibold mb-2">Signal Profile</p>
+              {typeof confFactor === "number" && (
+                <p className="text-[10px] text-muted-foreground mb-2" data-testid={`text-confidence-${asset.id}`}>
+                  Confidence: <span className="font-semibold text-foreground">{Math.round(confFactor * 100)}%</span>
+                  {typeof asset.score_breakdown.category_confidence === "number" &&
+                    ` · class ${Math.round(asset.score_breakdown.category_confidence * 100)}%`}
+                </p>
+              )}
               <div className="space-y-1.5">
                 {SCORE_BREAKDOWN_KEYS.map((k) => {
                   const val: number = asset.score_breakdown[k as keyof ScoreBreakdown] as number;

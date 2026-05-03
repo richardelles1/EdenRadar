@@ -65,6 +65,8 @@ export type RetrievedAsset = {
   stageChangedAt?: Date | null;
   previousStage?: string | null;
   dataSparse?: boolean;
+  categoryConfidence?: number | null;
+  assetClass?: string | null;
 };
 
 export interface IStorage {
@@ -111,7 +113,7 @@ export interface IStorage {
   updateIngestedAssetEnrichment(id: number, data: {
     target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string | null;
-    ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number;
+    ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void>;
   wipeAllAssets(): Promise<void>;
@@ -194,13 +196,13 @@ export interface IStorage {
   updateIngestedAssetDeepEnrichment(id: number, data: {
     target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string | null;
-    ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number;
+    ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void>;
   bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
     id: number; target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
-    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }>, source?: "mini" | "gpt4o" | "deep" | string): Promise<number>;
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
@@ -311,7 +313,7 @@ export interface IStorage {
     target?: string; modality?: string; indication?: string; developmentStage?: string;
     categories?: string[]; mechanismOfAction?: string; innovationClaim?: string;
     unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string;
-    ipType?: string; completenessScore?: number;
+    ipType?: string; completenessScore?: number | null;
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
@@ -838,7 +840,7 @@ export class DatabaseStorage implements IStorage {
   async updateIngestedAssetEnrichment(id: number, data: {
     target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string | null;
-    ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number;
+    ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
     // Fetch existing humanVerified and enrichmentSources
@@ -1657,7 +1659,7 @@ export class DatabaseStorage implements IStorage {
   async updateIngestedAssetDeepEnrichment(id: number, data: {
     target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string | null;
-    ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number;
+    ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
     // Pre-fetch humanVerified, enrichmentSources, AND deepEnrichAttempts so we can
@@ -1703,7 +1705,7 @@ export class DatabaseStorage implements IStorage {
   async bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
     id: number; target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
-    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }>, source: string = "gpt4o"): Promise<number> {
     if (batch.length === 0) return 0;
@@ -1873,7 +1875,7 @@ export class DatabaseStorage implements IStorage {
 
     let updated = 0;
     let unchanged = 0;
-    const toUpdate: Array<{ id: number; score: number }> = [];
+    const toUpdate: Array<{ id: number; score: number | null }> = [];
 
     for (const row of rows) {
       const newScore = computeCompletenessScore({
@@ -2468,7 +2470,7 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
-        data_sparse,
+        data_sparse, category_confidence, asset_class,
         0 AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -2499,6 +2501,8 @@ export class DatabaseStorage implements IStorage {
       stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
       previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
       dataSparse: r.data_sparse === true,
+      categoryConfidence: r.category_confidence != null ? parseFloat(String(r.category_confidence)) : null,
+      assetClass: typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null,
       similarity: 0,
     }));
   }
@@ -2810,7 +2814,7 @@ export class DatabaseStorage implements IStorage {
     target?: string; modality?: string; indication?: string; developmentStage?: string;
     categories?: string[]; mechanismOfAction?: string; innovationClaim?: string;
     unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string;
-    ipType?: string; completenessScore?: number;
+    ipType?: string; completenessScore?: number | null;
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }> {
     let updated = 0;
     let skipped = 0;

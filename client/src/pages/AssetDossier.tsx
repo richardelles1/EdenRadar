@@ -424,6 +424,33 @@ export default function AssetDossier() {
                     {asset.development_stage}
                   </span>
                 )}
+                {typeof bd?.confidence_factor === "number" && (() => {
+                  const cf = bd.confidence_factor!;
+                  const tone = cf >= 0.75
+                    ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : cf >= 0.5
+                    ? "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/20"
+                    : "text-zinc-700 dark:text-zinc-300 bg-zinc-500/10 border-zinc-500/20";
+                  const label = cf >= 0.75 ? "High confidence" : cf >= 0.5 ? "Medium confidence" : "Low confidence";
+                  return (
+                    <span
+                      className={`inline-flex items-center gap-1 text-xs border rounded-md px-2.5 py-1 font-semibold ${tone}`}
+                      title={`Combined classifier + signal-coverage confidence: ${Math.round(cf * 100)}%`}
+                      data-testid="badge-confidence"
+                    >
+                      {label} · {Math.round(cf * 100)}%
+                    </span>
+                  );
+                })()}
+                {(!asset.asset_class || asset.asset_class === "other") && (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-500/10 border border-zinc-500/20 rounded-md px-2.5 py-1 font-semibold"
+                    title="Classifier could not place this asset in a known category — completeness score is intentionally blank."
+                    data-testid="badge-class-unknown"
+                  >
+                    Class unknown — partial data
+                  </span>
+                )}
                 {licensingAvailable && (
                   <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2.5 py-1 font-semibold">
                     <Key className="w-3 h-3" />
