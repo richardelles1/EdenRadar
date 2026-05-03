@@ -2573,13 +2573,13 @@ export class DatabaseStorage implements IStorage {
     // word_similarity). The flag is initialized to `false` at startup and
     // only flipped to `true` after a successful probe, so requests racing the
     // probe never emit trigram SQL that would error.
-    const trgmAvailable = (globalThis as any).__pgTrgmAvailable === true;
+    const trgmAvailable = globalThis.__pgTrgmAvailable === true;
     const trigramEnabled = trigramText.length >= 3 && trgmAvailable;
     // Same conservative gating for the FTS column. If the startup migration
     // hasn't (yet) created `search_tsv` — managed DB permission failure or
     // boot race — fall back silently and rely on the exact-name clause +
     // structured filters rather than emitting SQL that would 500 the route.
-    const tsvAvailable = (globalThis as any).__searchTsvAvailable === true;
+    const tsvAvailable = globalThis.__searchTsvAvailable === true;
 
     const hasFilters = !!(modality || stage || indication || institution || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
