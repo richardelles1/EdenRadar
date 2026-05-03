@@ -54,6 +54,30 @@ uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r2-4-instrument.p
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "UONwk4cWw13_WpNQOIg2q"
+uri = "file://artifacts/mockup-sandbox/public/images/edennx-1-landscape.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "QCW09bwDgJ93LI-xweVyv"
+uri = "file://artifacts/mockup-sandbox/public/images/edennx-2-microscopy.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "h5e_M2154Wnys0KoW7A8b"
+uri = "file://artifacts/mockup-sandbox/public/images/edennx-3-triptych.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "McmMGVQVScrmt-fXbcGXY"
+uri = "file://artifacts/mockup-sandbox/public/images/edennx-4-glass.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"

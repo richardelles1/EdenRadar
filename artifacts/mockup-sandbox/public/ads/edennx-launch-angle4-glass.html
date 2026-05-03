@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>EdenNX — One ecosystem (product-suite reveal, columns)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/ads/_shared-edennx.css">
+  <style>
+    /* Product-suite reveal as three vertical product columns, joined under a
+       shared headline. Cards keep the white-and-green calm of edennx.com. */
+    .content { padding-top: 16vh; gap: 3vh; }
+    .headline { font-size: 7.4vmin; max-width: 86%; }
+    .cols {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 2vw;
+      margin-top: 1vh;
+      max-width: 92%;
+    }
+    .card {
+      background: #ffffff;
+      border: 1px solid rgba(0, 95, 70, 0.22);
+      border-radius: 1.4vh;
+      padding: 2.2vh 2vw;
+      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 0.8vh;
+    }
+    .card .tag {
+      font-weight: 800;
+      font-size: 1.5vh;
+      text-transform: uppercase;
+      letter-spacing: 0.22em;
+      color: #005f46;
+    }
+    .card .name {
+      font-weight: 800;
+      font-size: 3.2vmin;
+      letter-spacing: -0.015em;
+      color: #0f172a;
+    }
+    .card .name .green { color: #005f46; }
+    .card .what {
+      font-weight: 500;
+      font-size: 2vmin;
+      color: #475569;
+    }
+    @media (orientation: portrait) {
+      .headline { font-size: 8.6vmin; }
+      .card .name { font-size: 4vmin; }
+      .card .what { font-size: 2.4vmin; }
+    }
+  </style>
+</head>
+<body>
+  <div class="ad">
+    <div class="grid-bg"></div>
+    <div class="bottom-fade"></div>
+    <div class="logo">
+      <img src="/images/edennx-logo-full.png" alt="EdenNX">
+    </div>
+    <div class="content">
+      <div class="eyebrow">The EdenNX suite</div>
+      <div class="headline"><span class="green">Three portals.</span> One ecosystem.</div>
+      <div class="cols">
+        <div class="card">
+          <div class="tag">Discovery</div>
+          <div class="name">Eden<span class="green">Radar</span></div>
+          <div class="what">Real-time biotech signal feed.</div>
+        </div>
+        <div class="card">
+          <div class="tag">Intelligence</div>
+          <div class="name">Eden<span class="green">Scout</span></div>
+          <div class="what">Pre-clinical asset enrichment.</div>
+        </div>
+        <div class="card">
+          <div class="tag">Marketplace</div>
+          <div class="name">Eden<span class="green">Market</span></div>
+          <div class="what">Where licensing deals happen.</div>
+        </div>
+      </div>
+    </div>
+    <div class="url">
+      edennx.com
+      <span class="sub">edenradar.com  ·  edenscout.com  ·  edenmarket.com</span>
+    </div>
+  </div>
+</body>
+</html>

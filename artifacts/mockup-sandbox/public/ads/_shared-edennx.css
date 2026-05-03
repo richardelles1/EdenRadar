@@ -1,0 +1,204 @@
+/* EdenNX day-one launch ad styles — round 2.
+   Light edennx.com aesthetic: white canvas, pale-emerald checker grid hero
+   background, deep-forest-green accents, Inter typography.
+   Multi-size: same HTML renders at 1200x627, 1200x1200, 1080x1350, 1200x675.
+   All sizing in vw/vh/vmin so the layout scales to every viewport.
+
+   Brand identity locked from the live edennx.com:
+     - Font: Inter (the only family the site loads).
+     - Primary green: #005f46 (matches the site's --primary CSS variable).
+     - Eden-leaf green: #0a5132 (the bolder hue used in the wordmark).
+     - Accent emerald 500: #10b981 (Tailwind emerald-500, used in CTAs).
+     - Pale grid tint: emerald at 4-8% alpha over white.
+     - Body text: #0f172a (slate-900); muted: #475569 (slate-600).
+
+   The logo file `edennx-logo-full.png` is the official site logo (leaf glyph
+   + EdenNX wordmark) so the artwork is consistent with edennx.com header. */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* Pale-emerald checker grid. Inline SVG that mirrors the edennx.com hero
+   pattern — quiet enough that headlines on top stay sharp. */
+.grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url("/images/edennx-grid.svg");
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+/* Soft white wash on the bottom so the checker fades to a clean canvas
+   under the URL footer regardless of which size we render at. */
+.bottom-fade {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 30vh;
+  background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.92) 70%, #ffffff 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Logo — top-left at consistent ~7vh height across every size. The site
+   logo image already contains the EdenNX wordmark, so no extra text. */
+.logo {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  z-index: 3;
+  height: 7vh;
+  display: flex;
+  align-items: center;
+}
+
+.logo img {
+  height: 100%;
+  width: auto;
+  display: block;
+}
+
+/* Main content — vertically centered for the headline-led angles, but each
+   angle can override the top/justify rules locally. */
+.content {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 18vh 6vw 12vh 6vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3vh;
+  box-sizing: border-box;
+}
+
+.eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 1.7vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: #005f46;
+}
+
+/* Headline — large, dark slate, mixed-weight where the angle wants to echo
+   the EdenNX wordmark treatment ("Eden" green, "NX" dark). */
+.headline {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 8.6vmin;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+  max-width: 92%;
+  text-wrap: balance;
+}
+
+.headline .green { color: #005f46; }
+.headline .accent { color: #10603b; }
+
+.subline {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 3.2vmin;
+  line-height: 1.4;
+  color: #475569;
+  max-width: 78%;
+}
+
+/* Footer URL — bottom-left, deep emerald to match the live site CTA color. */
+.url {
+  position: absolute;
+  bottom: 5vh;
+  left: 5vw;
+  z-index: 3;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 2.2vh;
+  letter-spacing: 0.04em;
+  color: #005f46;
+}
+
+.url .sub {
+  display: block;
+  margin-top: 0.6vh;
+  font-weight: 500;
+  font-size: 1.5vh;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+/* ── Product-suite layout helpers ───────────────────────────────────────── */
+
+/* Three product pill cards, used by the suite-reveal angles. */
+.suite {
+  display: flex;
+  flex-direction: column;
+  gap: 1.8vh;
+  margin-top: 1vh;
+}
+
+.suite .pill {
+  display: flex;
+  align-items: center;
+  gap: 1.4vh;
+  padding: 1.6vh 2.4vw;
+  background: #ffffff;
+  border: 1px solid rgba(0, 95, 70, 0.22);
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  width: max-content;
+  max-width: 88%;
+}
+
+.suite .pill .dot {
+  width: 1.6vh;
+  height: 1.6vh;
+  border-radius: 50%;
+  background: #005f46;
+  flex-shrink: 0;
+}
+
+.suite .pill .name {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 3.4vmin;
+  letter-spacing: -0.01em;
+  color: #0f172a;
+}
+
+.suite .pill .name .nx { color: #005f46; }
+
+.suite .pill .what {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 2.0vmin;
+  color: #475569;
+  margin-left: 0.6vw;
+}
+
+/* Portrait viewports (Meta 4:5) — give the headline more room and shift the
+   logo / footer slightly so the layout breathes. */
+@media (orientation: portrait) {
+  .headline { font-size: 9.6vmin; }
+  .subline  { font-size: 3.4vmin; }
+  .content  { padding-top: 22vh; padding-bottom: 16vh; }
+  .suite .pill .name { font-size: 4.2vmin; }
+  .suite .pill .what { font-size: 2.4vmin; }
+}
