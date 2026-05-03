@@ -37,7 +37,7 @@ import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, r
 import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -275,6 +275,11 @@ const aiRateLimit = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests — please wait a moment before trying again." },
 });
+
+// In-memory throttle for deal-room message notifications: at most one email
+// per (dealId, recipientId) per hour. Server restarts reset the window — an
+// acceptable trade-off given the alternative is a DB write on every send.
+const dealMessageEmailLastSent = new Map<string, number>();
 
 export async function registerRoutes(
   httpServer: Server,
@@ -10099,6 +10104,58 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     } catch (e) { console.warn("[market] deal event log failed", dealId, eventType, e); }
   }
 
+  // Returns a label (org name, falling back to "the seller"/"the buyer") and
+  // the org's billing email for the *other* party in a deal.
+  async function resolveDealRecipient(deal: { id: number; sellerId: string; buyerId: string; listingId: number }, actorId: string) {
+    const recipientId = deal.sellerId === actorId ? deal.buyerId : deal.sellerId;
+    const actorIsSeller = deal.sellerId === actorId;
+    const [recipientOrg, actorOrg, listing] = await Promise.all([
+      storage.getOrgForUser(recipientId).catch(() => null),
+      storage.getOrgForUser(actorId).catch(() => null),
+      storage.getMarketListing(deal.listingId).catch(() => null),
+    ]);
+    const assetLabel = listing?.blind
+      ? `a ${listing.therapeuticArea} ${listing.modality} opportunity`
+      : (listing?.assetName || `Listing #${deal.listingId}`);
+    return {
+      recipientId,
+      recipientEmail: recipientOrg?.billingEmail ?? null,
+      recipientName: recipientOrg?.name ?? "",
+      // We never reveal the counterparty's org name on a *blind* listing —
+      // identity stays generic until the seller un-blinds it.
+      actorLabel: listing?.blind
+        ? (actorIsSeller ? "The seller" : "A prospective buyer")
+        : (actorOrg?.name ?? (actorIsSeller ? "The seller" : "The buyer")),
+      assetLabel,
+      dealUrl: `${APP_URL}/market/deals/${deal.id}`,
+    };
+  }
+
+  async function notifyDealRoomDocument(deal: { id: number; sellerId: string; buyerId: string; listingId: number }, uploaderId: string, fileName: string) {
+    const r = await resolveDealRecipient(deal, uploaderId);
+    if (!r.recipientEmail) return; // no email on file → nothing to do
+    await sendDealRoomDocumentEmail(r.recipientEmail, r.recipientName, r.actorLabel, r.dealUrl, r.assetLabel, fileName);
+  }
+
+  async function notifyDealRoomMessage(deal: { id: number; sellerId: string; buyerId: string; listingId: number }, senderId: string, body: string) {
+    const r = await resolveDealRecipient(deal, senderId);
+    if (!r.recipientEmail) return;
+    // Throttle: at most one message email per (deal, recipient) per hour.
+    const now = Date.now();
+    const key = `${deal.id}:${r.recipientId}`;
+    const last = dealMessageEmailLastSent.get(key) ?? 0;
+    if (now - last < 60 * 60 * 1000) return;
+    dealMessageEmailLastSent.set(key, now);
+    try {
+      await sendDealRoomMessageEmail(r.recipientEmail, r.recipientName, r.actorLabel, r.dealUrl, r.assetLabel, body);
+    } catch (e) {
+      // Roll back the throttle stamp so a transient send failure doesn't
+      // silence the next legitimate notification for an hour.
+      dealMessageEmailLastSent.delete(key);
+      throw e;
+    }
+  }
+
   app.get("/api/admin/market/stats", async (req, res) => {
     try {
       const stats = await storage.getMarketAdminStats();
@@ -10720,6 +10777,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       });
 
       void logDealEvent(dealId, userId, "document_uploaded", file.originalname);
+      // Notify the *other* party. Fire-and-forget so a Resend hiccup never
+      // blocks the actual upload from succeeding.
+      void notifyDealRoomDocument(deal, userId, file.originalname).catch((e) =>
+        console.warn("[market] deal-room document email failed", e),
+      );
       res.json(doc);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10793,6 +10855,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
       const msg = await storage.createMarketDealMessage({ dealId, senderId: userId, body });
       void logDealEvent(dealId, userId, "message_sent");
+      // Throttled per (deal, recipient) inside notifyDealRoomMessage so
+      // a chatty back-and-forth doesn't spam either inbox.
+      void notifyDealRoomMessage(deal, userId, body).catch((e) =>
+        console.warn("[market] deal-room message email failed", e),
+      );
       res.json(msg);
     } catch (err: any) {
       res.status(400).json({ error: err.message });

@@ -567,6 +567,91 @@ export function sendMarketNdaSignedEmail(
   });
 }
 
+// Escapes user-supplied text for safe inclusion in our HTML email bodies.
+// We never want a buyer/seller to be able to inject markup into the
+// preview block of a deal-room notification.
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+export function sendDealRoomMessageEmail(
+  to: string,
+  recipientName: string,
+  senderLabel: string,
+  dealUrl: string,
+  assetLabel: string,
+  messagePreview: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const trimmed = messagePreview.length > 280
+    ? messagePreview.slice(0, 280).trimEnd() + "…"
+    : messagePreview;
+  const safePreview = escapeHtml(trimmed).replace(/\n/g, "<br />");
+  const safeSender = escapeHtml(senderLabel || "The other party");
+  const safeAsset = escapeHtml(assetLabel);
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">New message in your deal room</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} <strong>${safeSender}</strong> just sent you a message about <strong>${safeAsset}</strong>.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;border-left:3px solid #7c3aed;background:#faf5ff;border-radius:4px;">
+      <tr><td style="padding:14px 16px;font-size:14px;color:#374151;line-height:1.6;">${safePreview}</td></tr>
+    </table>
+    <a href="${dealUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Open Deal Room
+    </a>
+    <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
+      To avoid filling your inbox, we send at most one message notification per
+      hour per deal. Open the deal room to see all replies in real time.
+    </p>
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `New message — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
+export function sendDealRoomDocumentEmail(
+  to: string,
+  recipientName: string,
+  uploaderLabel: string,
+  dealUrl: string,
+  assetLabel: string,
+  fileName: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const safeUploader = escapeHtml(uploaderLabel || "The other party");
+  const safeAsset = escapeHtml(assetLabel);
+  const safeFile = escapeHtml(fileName);
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">A new document was shared with you</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} <strong>${safeUploader}</strong> uploaded a new document to your deal room
+      for <strong>${safeAsset}</strong>:
+    </p>
+    <p style="margin:0 0 24px;font-size:15px;color:#111827;font-weight:600;">
+      ${safeFile}
+    </p>
+    <a href="${dealUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Open Deal Room
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      Documents are stored securely in your deal room and only visible to you and the other party.
+    </p>
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `New document — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {
   const displayName = name?.trim() || "your account";
   const html = baseHtml(`
