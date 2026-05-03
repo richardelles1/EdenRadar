@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { MarketSidebar } from "@/components/MarketSidebar";
 import { AppSwitcher } from "@/components/AppSwitcher";
 import { useAuth } from "@/hooks/use-auth";
+import { useOrg } from "@/hooks/use-org";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
@@ -14,6 +15,8 @@ export function MarketLayout({ children }: MarketLayoutProps) {
   useDocumentMeta({ title: "EdenMarket | EdenRadar", noindex: true });
   const [, navigate] = useLocation();
   const { session, loading } = useAuth();
+  const { data: org } = useOrg();
+  const orgColor = org?.primaryColor ?? null;
 
   useEffect(() => {
     if (!loading && !session) {
@@ -32,7 +35,10 @@ export function MarketLayout({ children }: MarketLayoutProps) {
   if (!session) return null;
 
   return (
-    <div className="flex min-h-screen bg-background relative">
+    <div
+      className="flex min-h-screen bg-background relative"
+      style={orgColor ? ({ "--org-accent": orgColor } as React.CSSProperties) : {}}
+    >
       <MarketSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <div className="h-12 flex items-center justify-end px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">
