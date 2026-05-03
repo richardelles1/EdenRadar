@@ -78,6 +78,42 @@ uri = "file://artifacts/mockup-sandbox/public/images/edennx-4-glass.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "gy6jPH3TDSBKNnGiek9g_"
+uri = "file://artifacts/mockup-sandbox/public/images/r3-edenmarket-blind.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "WG-JCFjfFOo1N9gakWrZa"
+uri = "file://artifacts/mockup-sandbox/public/images/r3-edenmarket-success-fee.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "uTdV_NRieKwgwnvonwZmM"
+uri = "file://artifacts/mockup-sandbox/public/images/r3-edenlab-timestamp.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "HjupMJkVTGoQYXI9the2y"
+uri = "file://artifacts/mockup-sandbox/public/images/r3-edenlab-grants.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "HvUs43KzoGudK6Uqi1Z0O"
+uri = "file://artifacts/mockup-sandbox/public/images/r3-edenengine-reads.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "vH4LToouTOjr-SsIVqHOh"
+uri = "file://artifacts/mockup-sandbox/public/images/r3-edenengine-scale.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"

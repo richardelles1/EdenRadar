@@ -1,0 +1,185 @@
+/* Evergreen ads round 3 — EdenMarket, EdenLab, EDEN engine.
+   Reuses the round-2 legibility recipe verbatim:
+     - bottom scrim 60vh transparent -> rgba(0,0,0,0.92)
+     - headline weight 900, ~8vmin landscape / 9vmin portrait,
+       text-shadow 0 2px 8px rgba(0,0,0,0.55)
+     - subline weight 600, 3.4vmin, color rgba(255,255,255,0.92)
+     - white logo top-left at 5vh tall
+     - footer URL bottom-left at ~1.9vh
+   Per-surface palette and font are set on body via .surface-* classes so the
+   same shared sheet drives all 6 angles across all 4 sizes. */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  background: #05131a;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Per-surface font + accent */
+body.surface-edenmarket {
+  font-family: 'Inter', system-ui, sans-serif;
+  --accent: #34d399;       /* emerald, legible on dark */
+  --accent-deep: #10b981;
+}
+body.surface-edenlab {
+  font-family: 'Open Sans', system-ui, sans-serif;
+  --accent: #c4b5fd;       /* violet (EdenLab in-app accent), pulled toward white for dark legibility */
+  --accent-deep: #a78bfa;
+}
+body.surface-edenengine {
+  font-family: 'Open Sans', system-ui, sans-serif;
+  --accent: #34d399;
+  --accent-deep: #10b981;
+}
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.hero-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 30%;
+  z-index: 0;
+}
+
+/* Top wash darkens behind the white logo. */
+.top-wash {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 30vh;
+  background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Bottom scrim — locked round-2 recipe. */
+.scrim {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 60vh;
+  background: linear-gradient(180deg,
+    rgba(0,0,0,0) 0%,
+    rgba(0,0,0,0.35) 30%,
+    rgba(0,0,0,0.70) 60%,
+    rgba(0,0,0,0.85) 85%,
+    rgba(0,0,0,0.92) 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Logo — top-left, white, 5vh tall. */
+.logo {
+  position: absolute;
+  top: 4.5vh;
+  left: 5vw;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  color: #ffffff;
+  height: 5vh;
+}
+
+.logo .mark {
+  height: 5vh;
+  width: 5vh;
+  flex-shrink: 0;
+  color: #ffffff;
+  filter: drop-shadow(0 1px 4px rgba(0,0,0,0.55));
+}
+
+.logo .wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.logo .word {
+  font-weight: 800;
+  font-size: 3.2vh;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.55);
+}
+
+.logo .product {
+  margin-top: 0.6vh;
+  font-weight: 700;
+  font-size: 1.4vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: rgba(255,255,255,0.92);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.55);
+}
+
+/* Bottom-anchored content block. */
+.content {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  bottom: 9vh;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2vh;
+}
+
+.eyebrow {
+  font-weight: 800;
+  font-size: 1.6vh;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: var(--accent);
+  text-shadow: 0 2px 6px rgba(0,0,0,0.65);
+}
+
+.headline {
+  font-weight: 900;
+  font-size: 8vmin;
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+  max-width: 95%;
+  text-wrap: balance;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.55), 0 1px 2px rgba(0,0,0,0.55);
+}
+
+.headline .accent { color: var(--accent); }
+
+.subline {
+  font-weight: 600;
+  font-size: 3.4vmin;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.92);
+  max-width: 78%;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.55);
+}
+
+.url {
+  position: absolute;
+  bottom: 3.5vh;
+  left: 5vw;
+  z-index: 3;
+  font-weight: 700;
+  font-size: 1.9vh;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.88);
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+}
+
+@media (orientation: portrait) {
+  .headline { font-size: 9vmin; }
+  .subline { font-size: 3.6vmin; }
+  .content { bottom: 11vh; }
+}
