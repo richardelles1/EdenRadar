@@ -8175,6 +8175,25 @@ If multiple assets appear, return each as a separate array item.`;
     if (email) {
       try {
         await db.insert(emailUnsubscribes).values({ email }).onConflictDoNothing();
+        // Best-effort: if the address belongs to an Eden user, also flip their
+        // industry_profiles.subscribed_to_digest so the unsubscribe takes
+        // effect across both manual and automated digests.
+        try {
+          const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
+          const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+          if (sbUrl && sbKey) {
+            const { createClient } = await import("@supabase/supabase-js");
+            const sb = createClient(sbUrl, sbKey);
+            const { data } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
+            const matchedId = data?.users?.find(u => (u.email ?? "").toLowerCase() === email)?.id;
+            if (matchedId) {
+              await db.insert(industryProfiles).values({ userId: matchedId, subscribedToDigest: false })
+                .onConflictDoUpdate({ target: industryProfiles.userId, set: { subscribedToDigest: false } });
+            }
+          }
+        } catch (syncErr: any) {
+          console.warn("[unsubscribe] best-effort account sync failed:", syncErr?.message);
+        }
         console.log(`[unsubscribe] Email ${email} added to email_unsubscribes via token link`);
         return { ok: true };
       } catch (err: any) {
@@ -8360,8 +8379,12 @@ If multiple assets appear, return each as a separate array item.`;
       // Skip recipients who previously unsubscribed via an email-keyed token.
       // (Admin manual dispatch recipients have no Eden account, so they live in
       // the email_unsubscribes suppression list — not industry_profiles.)
-      const suppressedRows = await db.select({ email: emailUnsubscribes.email })
-        .from(emailUnsubscribes);
+      const normalizedRecipients = rawToList.map(a => a.trim().toLowerCase());
+      const suppressedRows = normalizedRecipients.length > 0
+        ? await db.select({ email: emailUnsubscribes.email })
+            .from(emailUnsubscribes)
+            .where(inArray(emailUnsubscribes.email, normalizedRecipients))
+        : [];
       const suppressed = new Set(suppressedRows.map(r => r.email.toLowerCase()));
       const toList = rawToList.filter(addr => !suppressed.has(addr.trim().toLowerCase()));
       if (toList.length === 0) {
@@ -8384,7 +8407,7 @@ If multiple assets appear, return each as a separate array item.`;
       if (!isTest) {
         await storage.createDispatchLog({
           subject: resolvedSubject,
-          recipients,
+          recipients: toList,
           assetIds,
           assetNames: selectedAssets.map((a) => a.assetName),
           assetSourceUrls: selectedAssets.map((a) => a.sourceUrl ?? ""),
