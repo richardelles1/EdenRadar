@@ -33,6 +33,7 @@ import {
   marketSubscriptions, type MarketSubscription, type InsertMarketSubscription,
   marketDeals, type MarketDeal, type InsertMarketDeal,
   marketDealDocuments, type MarketDealDocument, type InsertMarketDealDocument,
+  marketDealDocumentViews, type MarketDealDocumentView, type InsertMarketDealDocumentView,
   marketDealMessages, type MarketDealMessage, type InsertMarketDealMessage,
   exportLogs, type ExportLog, type InsertExportLog,
   userAssetFeedback, type UserAssetFeedback, type FeedbackAction, FEEDBACK_ACTIONS,
@@ -433,6 +434,8 @@ export interface IStorage {
   createMarketDealDocument(data: InsertMarketDealDocument): Promise<MarketDealDocument>;
   getMarketDealDocuments(dealId: number): Promise<MarketDealDocument[]>;
   deleteMarketDealDocument(id: number, uploaderId: string): Promise<void>;
+  recordMarketDealDocumentView(data: InsertMarketDealDocumentView): Promise<MarketDealDocumentView>;
+  getMarketDealDocumentViews(documentIds: number[]): Promise<MarketDealDocumentView[]>;
 
   // EdenMarket — Deal Messages
   createMarketDealMessage(data: InsertMarketDealMessage): Promise<MarketDealMessage>;
@@ -3531,6 +3534,18 @@ export class DatabaseStorage implements IStorage {
   async deleteMarketDealDocument(id: number, uploaderId: string): Promise<void> {
     await db.delete(marketDealDocuments)
       .where(and(eq(marketDealDocuments.id, id), eq(marketDealDocuments.uploaderId, uploaderId)));
+  }
+
+  async recordMarketDealDocumentView(data: InsertMarketDealDocumentView): Promise<MarketDealDocumentView> {
+    const [row] = await db.insert(marketDealDocumentViews).values(data).returning();
+    return row;
+  }
+
+  async getMarketDealDocumentViews(documentIds: number[]): Promise<MarketDealDocumentView[]> {
+    if (documentIds.length === 0) return [];
+    return db.select().from(marketDealDocumentViews)
+      .where(inArray(marketDealDocumentViews.documentId, documentIds))
+      .orderBy(desc(marketDealDocumentViews.viewedAt));
   }
 
   // ── EdenMarket — Deal Messages ────────────────────────────────────────────

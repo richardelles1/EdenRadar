@@ -103,6 +103,8 @@ type AdminDealDocument = {
   fileSize: number | null;
   fileUrl: string;
   uploadedAt: string;
+  views: { viewerId: string; viewedAt: string; viewerRole: "seller" | "buyer" | "other" }[];
+  viewCount: number;
 };
 
 type AdminDealEvent = { id: number; deal_id: number; actor_id: string; event_type: string; detail: string | null; created_at: string };
@@ -187,18 +189,36 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
             ) : (
               <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
                 {docs.map(d => (
-                  <a
+                  <div
                     key={d.id}
-                    href={d.fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 rounded-lg border border-border bg-card hover:bg-muted/40 px-2.5 py-2 transition-colors"
+                    className="rounded-lg border border-border bg-card px-2.5 py-2 space-y-1"
                     data-testid={`admin-deal-doc-${d.id}`}
                   >
-                    <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
-                    <span className="text-xs text-foreground truncate flex-1">{d.fileName}</span>
-                    <span className="text-[10px] text-muted-foreground/60 shrink-0">{uploaderLabel(d.uploaderId)}</span>
-                  </a>
+                    <a
+                      href={d.fileUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 hover:underline"
+                    >
+                      <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                      <span className="text-xs text-foreground truncate flex-1">{d.fileName}</span>
+                      <span className="text-[10px] text-muted-foreground/60 shrink-0">{uploaderLabel(d.uploaderId)}</span>
+                    </a>
+                    {d.viewCount > 0 ? (
+                      <div className="pl-5 space-y-0.5" data-testid={`admin-deal-doc-views-${d.id}`}>
+                        <p className="text-[10px] font-semibold text-muted-foreground/80 uppercase tracking-wide">
+                          Views ({d.viewCount})
+                        </p>
+                        {d.views.map((v, i) => (
+                          <p key={i} className="text-[10px] text-muted-foreground" data-testid={`admin-deal-doc-view-${d.id}-${i}`}>
+                            <span className="capitalize text-foreground">{v.viewerRole}</span> · {new Date(v.viewedAt).toLocaleString()}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="pl-5 text-[10px] text-muted-foreground/50 italic">No opens recorded</p>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

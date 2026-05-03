@@ -952,6 +952,22 @@ export const insertMarketDealDocumentSchema = createInsertSchema(marketDealDocum
 export type InsertMarketDealDocument = z.infer<typeof insertMarketDealDocumentSchema>;
 export type MarketDealDocument = typeof marketDealDocuments.$inferSelect;
 
+// Track each open / signed-URL issuance for a Deal Room document so each
+// counterparty can see when the other has actually engaged with the diligence
+// material (granularity = "opened the file", not page-level).
+export const marketDealDocumentViews = pgTable("market_deal_document_views", {
+  id: serial("id").primaryKey(),
+  documentId: integer("document_id").notNull().references(() => marketDealDocuments.id, { onDelete: "cascade" }),
+  viewerId: text("viewer_id").notNull(),
+  viewedAt: timestamp("viewed_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  byDocumentRecent: index("market_deal_document_views_doc_viewed_idx").on(t.documentId, t.viewedAt),
+}));
+
+export const insertMarketDealDocumentViewSchema = createInsertSchema(marketDealDocumentViews).omit({ id: true, viewedAt: true });
+export type InsertMarketDealDocumentView = z.infer<typeof insertMarketDealDocumentViewSchema>;
+export type MarketDealDocumentView = typeof marketDealDocumentViews.$inferSelect;
+
 export const marketDealMessages = pgTable("market_deal_messages", {
   id: serial("id").primaryKey(),
   dealId: integer("deal_id").notNull().references(() => marketDeals.id, { onDelete: "cascade" }),

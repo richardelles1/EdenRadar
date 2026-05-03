@@ -11264,6 +11264,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   // GET /api/market/deals/:id/documents — list documents
+  // Each row is enriched with view-tracking metadata derived from
+  // market_deal_document_views, scoped to "the other party's views" so each
+  // side sees engagement signal from the counterparty (plus their own opens
+  // as confirmation).
   app.get("/api/market/deals/:id/documents", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
@@ -11275,25 +11279,84 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before accessing documents" });
       const docs = await storage.getMarketDealDocuments(dealId);
 
+      // Compute view stats per document. Each side sees:
+      //   - lastViewedByCounterparty / viewCountByCounterparty: opens by the OTHER party only
+      //   - ownViews: their own opens (as confirmation)
+      const allViews = await storage.getMarketDealDocumentViews(docs.map(d => d.id));
+      const viewsByDoc = new Map<number, typeof allViews>();
+      for (const v of allViews) {
+        const arr = viewsByDoc.get(v.documentId) ?? [];
+        arr.push(v);
+        viewsByDoc.set(v.documentId, arr);
+      }
+
       // Generate short-lived signed URLs for each document
       const sbUrl = process.env.VITE_SUPABASE_URL;
       const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      let sbAdmin: ReturnType<typeof import("@supabase/supabase-js").createClient> | null = null;
       if (sbUrl && sbServiceKey && docs.length > 0) {
         try {
           const { createClient: createSbClient } = await import("@supabase/supabase-js");
-          const sbAdmin = createSbClient(sbUrl, sbServiceKey);
-          const docsWithUrls = await Promise.all(docs.map(async (doc) => {
-            // If fileUrl looks like a path (not a full URL), generate signed URL
-            if (!doc.fileUrl.startsWith("http")) {
-              const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(doc.fileUrl, 3600);
-              return { ...doc, fileUrl: data?.signedUrl ?? doc.fileUrl };
-            }
-            return doc;
-          }));
-          return res.json(docsWithUrls);
-        } catch (e) { console.warn("[market] signed URL generation failed for deal docs", e); }
+          sbAdmin = createSbClient(sbUrl, sbServiceKey);
+        } catch (e) { console.warn("[market] supabase client init failed for deal docs", e); }
       }
-      res.json(docs);
+
+      const enriched = await Promise.all(docs.map(async (doc) => {
+        let fileUrl = doc.fileUrl;
+        if (sbAdmin && !doc.fileUrl.startsWith("http")) {
+          try {
+            const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(doc.fileUrl, 3600);
+            fileUrl = data?.signedUrl ?? doc.fileUrl;
+          } catch (e) { console.warn("[market] signed URL generation failed for doc", doc.id, e); }
+        }
+
+        // Views by the *other* party only — each side already knows what they
+        // themselves opened, the value is seeing the counterparty engage.
+        const docViews = viewsByDoc.get(doc.id) ?? [];
+        const counterpartyViews = docViews.filter(v => v.viewerId !== userId);
+        const ownViews = docViews.filter(v => v.viewerId === userId);
+        const last = counterpartyViews[0] ?? null; // ordered desc
+
+        return {
+          ...doc,
+          fileUrl,
+          lastViewedByCounterparty: last
+            ? { viewerId: last.viewerId, viewedAt: last.viewedAt }
+            : null,
+          viewCountByCounterparty: counterpartyViews.length,
+          counterpartyViews: counterpartyViews.map(v => ({ viewerId: v.viewerId, viewedAt: v.viewedAt })),
+          ownViewCount: ownViews.length,
+        };
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/documents/:docId/track-view —
+  // Records a view row for a Deal Room document open. Called by the
+  // documents tab UI just before opening the signed URL. Validates the
+  // viewer is a deal participant and NDA is signed (mirrors the read gate).
+  app.post("/api/market/deals/:dealId/documents/:docId/track-view", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const dealId = parseInt(String(req.params.dealId), 10);
+      const docId = parseInt(String(req.params.docId), 10);
+      if (isNaN(dealId) || isNaN(docId)) return res.status(400).json({ error: "Invalid id" });
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before accessing documents" });
+      const docs = await storage.getMarketDealDocuments(dealId);
+      const doc = docs.find(d => d.id === docId);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+
+      const view = await storage.recordMarketDealDocumentView({ documentId: docId, viewerId: userId });
+      // Notify the counterparty in real-time so their UI refetches and the
+      // "Last viewed by …" subline updates without a page reload.
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_document", { dealId });
+      res.json({ ok: true, viewedAt: view.viewedAt });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -11522,6 +11585,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   // GET /api/admin/market/deals/:id/documents — read-only deal document list
+  // Admins see the FULL view log (both parties' opens) for compliance and
+  // dispute resolution.
   app.get("/api/admin/market/deals/:id/documents", async (req, res) => {
     try {
       const dealId = parseInt(String(req.params.id), 10);
@@ -11529,25 +11594,46 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
       const docs = await storage.getMarketDealDocuments(dealId);
+      const allViews = await storage.getMarketDealDocumentViews(docs.map(d => d.id));
+      const viewsByDoc = new Map<number, typeof allViews>();
+      for (const v of allViews) {
+        const arr = viewsByDoc.get(v.documentId) ?? [];
+        arr.push(v);
+        viewsByDoc.set(v.documentId, arr);
+      }
 
       // Generate signed URLs for admin visibility
       const sbUrl = process.env.VITE_SUPABASE_URL;
       const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      let sbAdmin: ReturnType<typeof import("@supabase/supabase-js").createClient> | null = null;
       if (sbUrl && sbServiceKey && docs.length > 0) {
         try {
           const { createClient: createSbClient } = await import("@supabase/supabase-js");
-          const sbAdmin = createSbClient(sbUrl, sbServiceKey);
-          const docsWithUrls = await Promise.all(docs.map(async (doc) => {
-            if (!doc.fileUrl.startsWith("http")) {
-              const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(doc.fileUrl, 3600);
-              return { ...doc, fileUrl: data?.signedUrl ?? doc.fileUrl };
-            }
-            return doc;
-          }));
-          return res.json(docsWithUrls);
-        } catch (e) { console.warn("[market] admin signed URL generation failed for deal docs", e); }
+          sbAdmin = createSbClient(sbUrl, sbServiceKey);
+        } catch (e) { console.warn("[market] admin supabase client init failed", e); }
       }
-      res.json(docs);
+
+      const enriched = await Promise.all(docs.map(async (doc) => {
+        let fileUrl = doc.fileUrl;
+        if (sbAdmin && !doc.fileUrl.startsWith("http")) {
+          try {
+            const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(doc.fileUrl, 3600);
+            fileUrl = data?.signedUrl ?? doc.fileUrl;
+          } catch (e) { console.warn("[market] admin signed URL failed for doc", doc.id, e); }
+        }
+        const docViews = viewsByDoc.get(doc.id) ?? [];
+        return {
+          ...doc,
+          fileUrl,
+          views: docViews.map(v => ({
+            viewerId: v.viewerId,
+            viewedAt: v.viewedAt,
+            viewerRole: v.viewerId === deal.sellerId ? "seller" : v.viewerId === deal.buyerId ? "buyer" : "other",
+          })),
+          viewCount: docViews.length,
+        };
+      }));
+      res.json(enriched);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

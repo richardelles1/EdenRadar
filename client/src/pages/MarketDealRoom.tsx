@@ -13,8 +13,29 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Lock, Unlock, FileSignature, Upload, File, Trash2,
   Send, CheckCircle2, Clock, AlertCircle, Shield, Building2, Download, History,
+  Eye, ChevronDown, ChevronRight,
 } from "lucide-react";
 import type { MarketDeal, MarketDealDocument, MarketDealMessage, DealStatusHistoryEntry } from "@shared/schema";
+
+type DealDocumentWithViews = MarketDealDocument & {
+  lastViewedByCounterparty: { viewerId: string; viewedAt: string } | null;
+  viewCountByCounterparty: number;
+  counterpartyViews: { viewerId: string; viewedAt: string }[];
+  ownViewCount: number;
+};
+
+function relativeTime(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diff = Date.now() - then;
+  if (diff < 60_000) return "just now";
+  const m = Math.floor(diff / 60_000);
+  if (m < 60) return `${m} minute${m === 1 ? "" : "s"} ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hour${h === 1 ? "" : "s"} ago`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d} day${d === 1 ? "" : "s"} ago`;
+  return new Date(iso).toLocaleDateString();
+}
 
 type PartialListing = {
   id: number;
@@ -109,6 +130,7 @@ export default function MarketDealRoom() {
   const [uploading, setUploading] = useState(false);
   const [closeModalOpen, setCloseModalOpen] = useState(false);
   const [closeDealSizeM, setCloseDealSizeM] = useState<string>("");
+  const [expandedViewHistory, setExpandedViewHistory] = useState<Record<number, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -126,7 +148,7 @@ export default function MarketDealRoom() {
     },
   });
 
-  const { data: documents = [] } = useQuery<MarketDealDocument[]>({
+  const { data: documents = [] } = useQuery<DealDocumentWithViews[]>({
     queryKey: ["/api/market/deals", dealId, "documents"],
     queryFn: async () => {
       const res = await fetch(`/api/market/deals/${dealId}/documents`, { headers: authHeaders });
@@ -279,6 +301,18 @@ export default function MarketDealRoom() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId, "documents"] }),
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  async function openDocument(doc: DealDocumentWithViews) {
+    // Fire-and-forget tracking — never block the open if it fails. The
+    // counterparty receives a real-time SSE so their UI updates immediately.
+    fetch(`/api/market/deals/${dealId}/documents/${doc.id}/track-view`, {
+      method: "POST",
+      headers: authHeaders,
+    }).then(() => {
+      qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId, "documents"] });
+    }).catch(() => {});
+    window.open(doc.fileUrl, "_blank", "noopener,noreferrer");
+  }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -620,40 +654,102 @@ export default function MarketDealRoom() {
             <p className="text-xs text-muted-foreground text-center py-4">No documents uploaded yet.</p>
           ) : (
             <div className="space-y-2">
-              {documents.map(doc => (
-                <div
-                  key={doc.id}
-                  className="flex items-center gap-3 rounded-lg border border-border px-3 py-2.5"
-                  data-testid={`doc-row-${doc.id}`}
-                >
-                  <File className="w-4 h-4 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <a
-                      href={doc.fileUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs font-medium text-foreground hover:underline truncate block"
-                    >
-                      {doc.fileName}
-                    </a>
-                    <p className="text-[10px] text-muted-foreground">
-                      {doc.uploaderId === userId ? "You" : (isSeller ? "Buyer" : "Seller")}
-                      {" · "}
-                      {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(0)} KB · ` : ""}
-                      {new Date(doc.uploadedAt).toLocaleDateString()}
-                    </p>
+              {documents.map(doc => {
+                const counterpartyLabel = isSeller ? "Buyer" : "Seller";
+                const expanded = !!expandedViewHistory[doc.id];
+                return (
+                  <div
+                    key={doc.id}
+                    className="rounded-lg border border-border px-3 py-2.5"
+                    data-testid={`doc-row-${doc.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <File className="w-4 h-4 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openDocument(doc)}
+                          className="text-xs font-medium text-foreground hover:underline truncate block text-left w-full"
+                          data-testid={`doc-open-${doc.id}`}
+                        >
+                          {doc.fileName}
+                        </button>
+                        <p className="text-[10px] text-muted-foreground">
+                          {doc.uploaderId === userId ? "You" : counterpartyLabel}
+                          {" · "}
+                          {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(0)} KB · ` : ""}
+                          {new Date(doc.uploadedAt).toLocaleDateString()}
+                        </p>
+                        {/* Engagement signal — counterparty's most recent open. */}
+                        {doc.lastViewedByCounterparty ? (
+                          <p
+                            className="text-[10px] text-emerald-700 dark:text-emerald-400 flex items-center gap-1 mt-1"
+                            data-testid={`doc-last-viewed-${doc.id}`}
+                          >
+                            <Eye className="w-2.5 h-2.5" />
+                            Last viewed by {counterpartyLabel} · {relativeTime(doc.lastViewedByCounterparty.viewedAt)}
+                            {doc.viewCountByCounterparty > 1 && (
+                              <span className="text-muted-foreground/70"> · {doc.viewCountByCounterparty} opens</span>
+                            )}
+                          </p>
+                        ) : (
+                          <p
+                            className="text-[10px] text-muted-foreground/60 italic flex items-center gap-1 mt-1"
+                            data-testid={`doc-not-viewed-${doc.id}`}
+                          >
+                            <Eye className="w-2.5 h-2.5" />
+                            Not yet viewed by {counterpartyLabel}
+                          </p>
+                        )}
+                      </div>
+                      {doc.viewCountByCounterparty > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setExpandedViewHistory(prev => ({ ...prev, [doc.id]: !prev[doc.id] }))}
+                          className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                          data-testid={`doc-view-history-toggle-${doc.id}`}
+                          aria-label={expanded ? "Collapse view history" : "Expand view history"}
+                        >
+                          {expanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
+                      {doc.uploaderId === userId && (
+                        <button
+                          onClick={() => { if (confirm("Delete this document?")) deleteDoc(doc.id); }}
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          data-testid={`doc-delete-${doc.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                    {expanded && doc.counterpartyViews.length > 0 && (
+                      <div
+                        className="mt-2 ml-7 pl-3 border-l border-border space-y-1"
+                        data-testid={`doc-view-history-${doc.id}`}
+                      >
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          View history ({doc.counterpartyViews.length})
+                        </p>
+                        {doc.counterpartyViews.map((v, i) => (
+                          <p
+                            key={i}
+                            className="text-[10px] text-muted-foreground"
+                            data-testid={`doc-view-entry-${doc.id}-${i}`}
+                          >
+                            <span className="text-foreground">{counterpartyLabel}</span> · {new Date(v.viewedAt).toLocaleString()} ({relativeTime(v.viewedAt)})
+                          </p>
+                        ))}
+                        {doc.ownViewCount > 0 && (
+                          <p className="text-[10px] text-muted-foreground/60 italic pt-1 border-t border-border/40">
+                            You opened this {doc.ownViewCount} time{doc.ownViewCount === 1 ? "" : "s"}.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  {doc.uploaderId === userId && (
-                    <button
-                      onClick={() => { if (confirm("Delete this document?")) deleteDoc(doc.id); }}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                      data-testid={`doc-delete-${doc.id}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
