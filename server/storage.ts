@@ -2546,19 +2546,21 @@ export class DatabaseStorage implements IStorage {
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institution) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
-    // Multi-value lists: build (col LIKE %v1% OR col LIKE %v2% OR ...) groups.
-    const orLike = (col: ReturnType<typeof sql>, values: string[]) => {
-      const parts = values.map((v) => sql`${col} LIKE ${"%" + v.toLowerCase() + "%"}`);
+    // Multi-value lists use case-insensitive EXACT equality so the result
+    // sets reconcile with /api/alerts/* which uses Drizzle inArray() against
+    // the same canonical slug values stored on user_alerts.
+    const orEq = (col: ReturnType<typeof sql>, values: string[]) => {
+      const parts = values.map((v) => sql`${col} = ${v.toLowerCase()}`);
       return parts.reduce((acc, c, i) => i === 0 ? c : sql`${acc} OR ${c}`);
     };
     if (modalities && modalities.length) {
-      filterConditions.push(sql`(${orLike(sql`LOWER(modality)`, modalities)})`);
+      filterConditions.push(sql`(${orEq(sql`LOWER(modality)`, modalities)})`);
     }
     if (stages && stages.length) {
-      filterConditions.push(sql`(${orLike(sql`LOWER(development_stage)`, stages)})`);
+      filterConditions.push(sql`(${orEq(sql`LOWER(development_stage)`, stages)})`);
     }
     if (institutions && institutions.length) {
-      filterConditions.push(sql`(${orLike(sql`LOWER(institution)`, institutions)})`);
+      filterConditions.push(sql`(${orEq(sql`LOWER(institution)`, institutions)})`);
     }
     if (since) filterConditions.push(sql`first_seen_at >= ${since}`);
     if (before) filterConditions.push(sql`first_seen_at < ${before}`);

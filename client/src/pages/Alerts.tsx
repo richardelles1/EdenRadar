@@ -1157,24 +1157,36 @@ export default function Alerts() {
 
   const { data: alerts = [] } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
-  // On the FIRST mount of the Alerts page in this tab session:
-  //   1. Snapshot the DB-side last-viewed timestamp into sinceParam (and cache
-  //      it in sessionStorage) so the page shows deltas relative to the
-  //      *previous* visit.
-  //   2. Then call mark-read to advance the DB timestamp — this clears the
-  //      sidebar badge promptly while the page keeps using the snapshot.
-  // On subsequent mounts within the same session (refresh / navigate away and
-  // back), reuse the cached sinceParam so the "+N" counts stay stable; do NOT
-  // call mark-read again or the badge would rewind. The session cache clears
-  // when the tab closes — the next session will then re-snapshot the new
-  // (now-advanced) DB timestamp, which is exactly "since last visit".
+  // Lifecycle on every mount:
+  //   1. ALWAYS POST /api/alerts/mark-read so the sidebar badge clears
+  //      promptly (whether this is the first visit, a refresh, or a back-nav).
+  //   2. The snapshot used for "since last visit" deltas is captured ONCE
+  //      per tab session (sessionStorage["edenAlertsSessionSince"]). On the
+  //      first mount we read DB lastViewedAlertsAt BEFORE issuing mark-read
+  //      so the snapshot reflects the *previous* visit, and pin it in
+  //      sessionStorage. Subsequent mounts in the same tab reuse this pinned
+  //      value so refreshes/back-navs don't rewind the counts to 0 even
+  //      though mark-read keeps advancing the DB timestamp.
+  //   3. When the tab is closed, sessionStorage clears. The next visit then
+  //      snapshots the DB value the previous session left behind — which is
+  //      exactly "since last visit".
   useEffect(() => {
-    const cached = sessionStorage.getItem(SESSION_SINCE_KEY);
-    if (cached) {
-      // Already initialised this session; don't touch the DB or refetch.
-      return;
-    }
     let cancelled = false;
+    const cached = sessionStorage.getItem(SESSION_SINCE_KEY);
+
+    const fireMarkRead = () => {
+      apiRequest("POST", "/api/alerts/mark-read").then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
+      }).catch(() => {});
+    };
+
+    if (cached) {
+      // Snapshot already pinned for this session. Just clear the badge.
+      fireMarkRead();
+      return () => { cancelled = true; };
+    }
+
+    // First mount of the session: snapshot DB viewed-since BEFORE mark-read.
     getAuthHeaders().then(async (authHeaders) => {
       let captured: string | null = null;
       try {
@@ -1185,21 +1197,13 @@ export default function Alerts() {
         }
       } catch { /* ignore */ }
       if (cancelled) return;
-      // Lock the snapshot in sessionStorage BEFORE calling mark-read so any
-      // re-render during this turn (or a quick remount) reads the captured
-      // value, not the about-to-be-advanced DB value.
       const lockedSince = captured ?? sinceParam;
       sessionStorage.setItem(SESSION_SINCE_KEY, lockedSince);
       if (captured) {
         setSinceParam(captured);
         localStorage.setItem(STORAGE_KEY, captured);
       }
-      // Now advance the DB timestamp so the sidebar badge clears. The page
-      // continues to render deltas against `lockedSince` because sinceParam
-      // is locked above and we don't refetch viewed-since again this session.
-      apiRequest("POST", "/api/alerts/mark-read").then(() => {
-        queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
-      }).catch(() => {});
+      fireMarkRead();
     });
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
