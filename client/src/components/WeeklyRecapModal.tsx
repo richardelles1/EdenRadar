@@ -305,19 +305,15 @@ export function WeeklyRecapModal({
                           <span className="font-medium text-foreground">{a.assetName}</span>
                         </>
                       );
+                      // Always link the activity row — `assetHref` falls back
+                      // to /scout?q=... when there's no resolvable id, so the
+                      // entry is never rendered as dead text.
                       const liClass = "text-sm text-muted-foreground rounded-md px-3 py-2 hover:bg-primary/[0.04] transition-colors";
-                      if (a.assetId) {
-                        return (
-                          <li key={i} data-testid={`recap-activity-${i}`}>
-                            <Link href={assetHref(a.assetId, a.assetName)}>
-                              <a className={`block ${liClass}`}>{content}</a>
-                            </Link>
-                          </li>
-                        );
-                      }
                       return (
-                        <li key={i} className={liClass} data-testid={`recap-activity-${i}`}>
-                          {content}
+                        <li key={i} data-testid={`recap-activity-${i}`}>
+                          <Link href={assetHref(a.assetId, a.assetName)}>
+                            <a className={`block ${liClass}`}>{content}</a>
+                          </Link>
                         </li>
                       );
                     })}
