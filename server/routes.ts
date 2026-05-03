@@ -11240,76 +11240,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
-  // ── DOCUMENTS: check integration status ─────────────────────────────────────
-  app.get("/api/admin/documents/status", async (req, res) => {
-    try {
-      const { isGoogleDriveConnected } = await import("./lib/googleDriveClient");
-      const driveConnected = await isGoogleDriveConnected();
-      res.json({ oneDriveConnected: true, googleDriveConnected: driveConnected });
-    } catch (err: any) {
-      res.json({ oneDriveConnected: true, googleDriveConnected: false });
-    }
-  });
-
-  // ── DOCUMENTS: generate & upload outbound email templates to OneDrive (+Drive) ─
-  app.post("/api/admin/documents/generate-templates", async (req, res) => {
-    try {
-      const { generateTemplateDocx } = await import("./lib/generateDocx");
-      const { uploadToOneDrive } = await import("./lib/oneDriveClient");
-      const { uploadToGoogleDrive, isGoogleDriveConnected } = await import("./lib/googleDriveClient");
-      const { EMAIL_TEMPLATES } = await import("./lib/emailTemplates");
-
-      const driveConnected = await isGoogleDriveConnected();
-      // Use the new hierarchical folder convention shared with /api/export/*.
-      const TEMPLATE_FOLDER = "EdenRadar/Templates";
-
-      const results: Array<{
-        filename: string;
-        title: string;
-        oneDrive: { status: "done" | "failed"; webUrl?: string; error?: string };
-        googleDrive: { status: "done" | "skipped" | "failed"; editUrl?: string; error?: string };
-      }> = [];
-
-      for (const template of EMAIL_TEMPLATES) {
-        const buffer = await generateTemplateDocx(template);
-
-        // OneDrive upload
-        let oneDriveResult: (typeof results)[0]["oneDrive"];
-        try {
-          const uploaded = await uploadToOneDrive(template.filename, buffer, TEMPLATE_FOLDER);
-          oneDriveResult = { status: "done", webUrl: uploaded.webUrl };
-        } catch (err: any) {
-          oneDriveResult = { status: "failed", error: err.message };
-        }
-
-        // Google Drive upload (conditional)
-        let driveResult: (typeof results)[0]["googleDrive"];
-        if (driveConnected) {
-          try {
-            const uploaded = await uploadToGoogleDrive(template.filename, buffer, TEMPLATE_FOLDER);
-            driveResult = uploaded
-              ? { status: "done", editUrl: uploaded.editUrl }
-              : { status: "skipped" };
-          } catch (err: any) {
-            driveResult = { status: "failed", error: err.message };
-          }
-        } else {
-          driveResult = { status: "skipped" };
-        }
-
-        results.push({
-          filename: template.filename,
-          title: template.title,
-          oneDrive: oneDriveResult,
-          googleDrive: driveResult,
-        });
-      }
-
-      res.json({ results, googleDriveConnected: driveConnected });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
+  // The admin "Documents" tab used to also generate .docx outbound BD email
+  // templates (BD Outreach, TTO Partner Invite, EdenMarket Lister Invite) and
+  // upload them to OneDrive / Google Drive. That generator was removed because
+  // the canonical copies now live in Gmail templates — keeping a second source
+  // of truth in code was just drift waiting to happen. The /api/admin/export-log
+  // route above is intentionally retained: it powers the audit trail for
+  // pitch-deck / one-pager / dossier exports triggered elsewhere in the app.
 
   return httpServer;
 }

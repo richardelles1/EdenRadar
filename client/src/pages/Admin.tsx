@@ -9839,244 +9839,31 @@ function AnalyticsTab({ pw }: { pw: string }) {
   );
 }
 
-// ── Documents Tab ────────────────────────────────────────────────────────────
-type DriveSlot = { status: "done" | "skipped" | "failed"; webUrl?: string; editUrl?: string; error?: string };
-type TemplateResult = {
-  filename: string;
-  title: string;
-  oneDrive: DriveSlot;
-  googleDrive: DriveSlot;
-};
-
-const TEMPLATE_DEFS = [
-  {
-    id: "eden-scout-bd",
-    filename: "EdenScout_BD_Outreach_Template.docx",
-    title: "EdenScout BD Outreach",
-    audience: "VP BD / Head of S&E at pharma/biotech",
-    description: "Cold outreach pitching EdenScout. Includes value prop, social proof, CTA, and P.S. line.",
-  },
-  {
-    id: "tto-partner-invite",
-    filename: "EdenRadar_TTO_Partner_Invite.docx",
-    title: "TTO Data Partner Invite",
-    audience: "Technology Transfer Office directors",
-    description: "Relationship-building email positioning EdenRadar as a visibility amplifier for TTO listings.",
-  },
-  {
-    id: "edenmarket-lister-invite",
-    filename: "EdenMarket_Lister_Invite.docx",
-    title: "EdenMarket Lister Invite",
-    audience: "Biotech founders / BD leads",
-    description: "Invites asset holders to list on EdenMarket. Covers curated buyers, confidential listing, and success-fee model.",
-  },
-];
-
-type FileStatus = "idle" | "queued" | "uploading" | "done" | "failed";
-
+// ── Export Log Tab ───────────────────────────────────────────────────────────
+// Previously this tab also generated .docx outbound BD email templates, but
+// the canonical copies now live in Gmail templates — we removed the generator
+// to avoid keeping a second source of truth in code. What remains is the
+// cloud-export audit trail (pitch decks, one-pagers, dossiers, CSVs).
 function DocumentsTab({ pw }: { pw: string }) {
-  const [results, setResults] = React.useState<TemplateResult[]>([]);
-  const [fileStatuses, setFileStatuses] = React.useState<Record<string, FileStatus>>({});
-  const [uploading, setUploading] = React.useState(false);
-  const [uploadError, setUploadError] = React.useState<string | null>(null);
-  const [googleDriveConnected, setGoogleDriveConnected] = React.useState<boolean | null>(null);
-
-  // Check integration status on mount
-  React.useEffect(() => {
-    fetch("/api/admin/documents/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } })
-      .then(r => r.json())
-      .then(d => setGoogleDriveConnected(!!d.googleDriveConnected))
-      .catch(() => setGoogleDriveConnected(false));
-  }, [pw]);
-
-  const handleGenerate = async () => {
-    setUploading(true);
-    setUploadError(null);
-    setResults([]);
-    // Mark all files as queued immediately to give per-file visual feedback
-    const initialStatuses: Record<string, FileStatus> = {};
-    TEMPLATE_DEFS.forEach((t, i) => {
-      initialStatuses[t.filename] = i === 0 ? "uploading" : "queued";
-    });
-    setFileStatuses(initialStatuses);
-
-    try {
-      const res = await fetch("/api/admin/documents/generate-templates", {
-        method: "POST",
-        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Upload failed");
-
-      const finalStatuses: Record<string, FileStatus> = {};
-      const allResults: TemplateResult[] = data.results ?? [];
-      allResults.forEach(r => {
-        finalStatuses[r.filename] = r.oneDrive.status === "done" ? "done" : "failed";
-      });
-      setFileStatuses(finalStatuses);
-      setResults(allResults);
-      if (typeof data.googleDriveConnected === "boolean") {
-        setGoogleDriveConnected(data.googleDriveConnected);
-      }
-    } catch (err: any) {
-      const failedStatuses: Record<string, FileStatus> = {};
-      TEMPLATE_DEFS.forEach(t => { failedStatuses[t.filename] = "failed"; });
-      setFileStatuses(failedStatuses);
-      setUploadError(err.message);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const resultMap = Object.fromEntries(results.map(r => [r.filename, r]));
-
   return (
-    <div className="space-y-6 max-w-3xl" data-testid="documents-tab">
+    <div className="space-y-6 max-w-4xl" data-testid="documents-tab">
       <div className="mb-6">
         <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
-          <BookOpen className="h-6 w-6 text-primary" />
-          Outbound Documents
+          <ClipboardList className="h-6 w-6 text-primary" />
+          Cloud Export Log
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Generate polished .docx email templates and upload them to OneDrive (Word Online){googleDriveConnected ? " and Google Drive" : ""}. Each template includes two opening hook variants (A/B) — amber-highlighted fields are placeholders to replace before sending.
+          Audit trail for every Pitch Deck, One-Pager, Dossier, and CSV exported to OneDrive or Google Drive from anywhere in the app. Outbound email templates are no longer generated here — manage them in Gmail templates instead.
         </p>
       </div>
-
-      {/* Template cards with per-file status */}
-      <div className="space-y-3">
-        {TEMPLATE_DEFS.map((t) => {
-          const result = resultMap[t.filename];
-          const od = result?.oneDrive;
-          const gd = result?.googleDrive;
-          const fileStatus = fileStatuses[t.filename] ?? "idle";
-          return (
-            <div
-              key={t.id}
-              className={`border rounded-xl bg-card p-4 flex items-start gap-4 transition-colors ${
-                fileStatus === "done" ? "border-emerald-300 dark:border-emerald-700" :
-                fileStatus === "failed" ? "border-destructive/40" :
-                fileStatus === "uploading" ? "border-primary/40" :
-                fileStatus === "queued" ? "border-border/60" :
-                "border-border"
-              }`}
-              data-testid={`card-template-${t.id}`}
-            >
-              <div className={`mt-0.5 p-2 rounded-lg shrink-0 ${
-                fileStatus === "done" ? "bg-emerald-500/10" :
-                fileStatus === "failed" ? "bg-destructive/10" :
-                "bg-primary/10"
-              }`}>
-                <FileText className={`h-4 w-4 ${
-                  fileStatus === "done" ? "text-emerald-500" :
-                  fileStatus === "failed" ? "text-destructive" :
-                  "text-primary"
-                }`} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-sm font-semibold text-foreground" data-testid={`text-template-title-${t.id}`}>{t.title}</p>
-                  <span className="text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">{t.audience}</span>
-                  {fileStatus === "queued" && (
-                    <span className="text-[10px] bg-muted/80 text-muted-foreground rounded px-1.5 py-0.5 italic" data-testid={`status-label-queued-${t.id}`}>queued</span>
-                  )}
-                  {fileStatus === "uploading" && (
-                    <span className="text-[10px] bg-primary/10 text-primary rounded px-1.5 py-0.5" data-testid={`status-label-uploading-${t.id}`}>uploading…</span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
-                <p className="text-[10px] text-muted-foreground/60 font-mono mt-1">{t.filename}</p>
-                {result && (
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                    {od?.status === "done" && od.webUrl ? (
-                      <a href={od.webUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
-                        data-testid={`link-onedrive-${t.id}`}>
-                        <ExternalLink className="h-3 w-3" /> Word Online
-                      </a>
-                    ) : od?.status === "failed" ? (
-                      <p className="text-xs text-destructive" data-testid={`text-onedrive-error-${t.id}`}>
-                        <AlertTriangle className="h-3 w-3 inline mr-1" />OneDrive: {od.error ?? "failed"}
-                      </p>
-                    ) : null}
-                    {gd?.status === "done" && gd.editUrl ? (
-                      <a href={gd.editUrl} target="_blank" rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:underline font-medium"
-                        data-testid={`link-gdrive-${t.id}`}>
-                        <ExternalLink className="h-3 w-3" /> Google Docs
-                      </a>
-                    ) : gd?.status === "failed" ? (
-                      <p className="text-xs text-destructive" data-testid={`text-gdrive-error-${t.id}`}>
-                        <AlertTriangle className="h-3 w-3 inline mr-1" />Drive: {gd.error ?? "failed"}
-                      </p>
-                    ) : null}
-                  </div>
-                )}
-              </div>
-              <div className="shrink-0 mt-1">
-                {fileStatus === "uploading" || (uploading && fileStatus === "queued") ? (
-                  <Loader2 className={`h-4 w-4 animate-spin ${fileStatus === "uploading" ? "text-primary" : "text-muted-foreground/40"}`} data-testid={`status-icon-${t.id}`} />
-                ) : fileStatus === "done" ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid={`status-icon-${t.id}`} />
-                ) : fileStatus === "failed" ? (
-                  <XCircle className="h-4 w-4 text-destructive" data-testid={`status-icon-${t.id}`} />
-                ) : null}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Google Drive banner — dynamic based on connection state */}
-      {googleDriveConnected === false && (
-        <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4" data-testid="banner-gdrive-not-connected">
-          <div className="flex items-start gap-3">
-            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Google Drive not connected</p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 mb-2">
-                Connect Google Drive to also upload templates there. Once authorized, generation will upload to an "EdenRadar Templates" folder in both OneDrive and Drive automatically.
-              </p>
-              <div className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
-                <p className="font-medium">To connect:</p>
-                <p>1. Open your Replit workspace tools → Integrations</p>
-                <p>2. Search for "Google Drive" and complete the OAuth flow</p>
-                <p>3. Return here and click Generate — Drive upload will be included</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-      {googleDriveConnected === true && (
-        <div className="border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 flex items-center gap-3" data-testid="banner-gdrive-connected">
-          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Google Drive connected — templates will also be uploaded to an "EdenRadar Templates" folder in Google Drive.</p>
-        </div>
-      )}
-
-      {uploadError && (
-        <div className="border border-destructive/30 bg-destructive/10 rounded-xl p-3 text-sm text-destructive flex items-center gap-2" data-testid="text-upload-error">
-          <AlertTriangle className="h-4 w-4 shrink-0" />
-          {uploadError}
-        </div>
-      )}
-
-      <Button
-        onClick={handleGenerate}
-        disabled={uploading}
-        className="gap-2"
-        data-testid="button-generate-templates"
-      >
-        {uploading ? (
-          <><Loader2 className="h-4 w-4 animate-spin" /> Generating & uploading…</>
-        ) : (
-          <><Upload className="h-4 w-4" /> Generate & Upload Templates</>
-        )}
-      </Button>
-
       <ExportLogTable pw={pw} />
     </div>
   );
 }
+
+// (removed) The old DocumentsTab body below this comment generated .docx
+// outbound BD email templates and uploaded them to OneDrive / Google Drive.
+// Replaced by the lightweight wrapper above. Keeping this stub eliminator so
 
 type ExportLogRow = {
   id: number;
@@ -10455,8 +10242,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
               }`}
               data-testid="nav-documents"
             >
-              <BookOpen className="h-4 w-4" />
-              Documents
+              <ClipboardList className="h-4 w-4" />
+              Export Log
             </button>
           </nav>
         </aside>
