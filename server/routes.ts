@@ -8375,7 +8375,6 @@ If multiple assets appear, return each as a separate array item.`;
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
       const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
-      const htmlBody = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode, settingsUrl: "https://edenradar.com/industry/settings" });
 
       const apiKey = process.env.RESEND_API_KEY;
       if (!apiKey) {
@@ -8400,14 +8399,28 @@ If multiple assets appear, return each as a separate array item.`;
         return res.json({ ok: true, sentTo: 0, isTest, skipped: rawToList.length, reason: "all recipients unsubscribed" });
       }
 
-      // Manual admin dispatch: send per-recipient so each gets a token-signed
-      // one-click HTTPS unsubscribe URL keyed to their address (RFC 8058).
+      // Manual admin dispatch: render + send per-recipient so each email
+      // carries a recipient-specific unsubscribe URL — both as the RFC 8058
+      // one-click List-Unsubscribe header AND as the visible footer link
+      // baked into the rendered template.
       try {
-        await Promise.all(toList.map(addr => sendEmail(addr, finalSubject, htmlBody, {
-          from: FROM_DIGEST,
-          replyTo: "support@edenradar.com",
-          unsubscribeUrl: unsubscribeUrlForEmail(addr),
-        })));
+        await Promise.all(toList.map(addr => {
+          const unsubscribeUrl = unsubscribeUrlForEmail(addr);
+          const perRecipientHtml = renderDispatchEmail({
+            subject: resolvedSubject,
+            assets: selectedAssets,
+            windowLabel,
+            isTest,
+            colorMode,
+            settingsUrl: "https://edenradar.com/industry/settings",
+            unsubscribeUrl,
+          });
+          return sendEmail(addr, finalSubject, perRecipientHtml, {
+            from: FROM_DIGEST,
+            replyTo: "support@edenradar.com",
+            unsubscribeUrl,
+          });
+        }));
       } catch (sendErr: any) {
         console.error("[dispatch/send] Resend error:", sendErr);
         return res.status(502).json({ error: `Email provider error: ${sendErr?.message ?? "send failed"}` });
