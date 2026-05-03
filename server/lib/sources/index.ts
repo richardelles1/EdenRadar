@@ -413,9 +413,16 @@ const KNOWN_FLAKY_SOURCES: ReadonlyArray<{ id: SourceKey; reason: string }> = [
 
 export type SourceHealthEntry = {
   id: SourceKey;
-  status: "ok" | "missing_key" | "flaky";
+  status: "ok" | "missing_key" | "invalid_key" | "rate_limited" | "flaky";
   detail?: string;
+  checkedAt?: string;
 };
+
+const runtimeHealth = new Map<SourceKey, SourceHealthEntry>();
+
+export function recordSourceHealth(entry: SourceHealthEntry): void {
+  runtimeHealth.set(entry.id, { ...entry, checkedAt: new Date().toISOString() });
+}
 
 const KEY_GATED_SOURCES: ReadonlyArray<{ id: SourceKey; envVar: string }> = [
   { id: "patents", envVar: "USPTO_ODP_API_KEY" },
@@ -426,6 +433,11 @@ const KEY_GATED_SOURCES: ReadonlyArray<{ id: SourceKey; envVar: string }> = [
 export function getSourceHealthEntries(): SourceHealthEntry[] {
   const entries: SourceHealthEntry[] = [];
   for (const gated of KEY_GATED_SOURCES) {
+    const runtime = runtimeHealth.get(gated.id);
+    if (runtime) {
+      entries.push(runtime);
+      continue;
+    }
     if (!process.env[gated.envVar]) {
       entries.push({ id: gated.id, status: "missing_key", detail: `${gated.envVar} not set — source returns empty silently` });
     }
@@ -436,7 +448,45 @@ export function getSourceHealthEntries(): SourceHealthEntry[] {
   return entries;
 }
 
+/**
+ * Lightweight startup probe for the USPTO ODP key. Issues one minimal request
+ * and classifies the response so admin diagnostics flag invalid/throttled keys
+ * without waiting for a user search to fail. Non-blocking: runs in background.
+ */
+export async function probeUsptoKey(): Promise<void> {
+  const key = process.env.USPTO_ODP_API_KEY;
+  if (!key) {
+    recordSourceHealth({ id: "patents", status: "missing_key", detail: "USPTO_ODP_API_KEY not set" });
+    return;
+  }
+  try {
+    const res = await fetch("https://api.uspto.gov/api/v1/patent/applications/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-KEY": key },
+      body: JSON.stringify({ q: "*", pagination: { offset: 0, limit: 1 } }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      recordSourceHealth({ id: "patents", status: "ok", detail: "USPTO ODP probe succeeded" });
+    } else if (res.status === 401 || res.status === 403) {
+      recordSourceHealth({ id: "patents", status: "invalid_key", detail: `USPTO ODP rejected key (HTTP ${res.status}) — rotate USPTO_ODP_API_KEY` });
+      console.warn(`[search/sources] USPTO probe: invalid key (HTTP ${res.status})`);
+    } else if (res.status === 429) {
+      recordSourceHealth({ id: "patents", status: "rate_limited", detail: "USPTO ODP rate-limited at startup — headroom low" });
+      console.warn("[search/sources] USPTO probe: rate-limited (HTTP 429)");
+    } else {
+      recordSourceHealth({ id: "patents", status: "flaky", detail: `USPTO ODP probe HTTP ${res.status}` });
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    recordSourceHealth({ id: "patents", status: "flaky", detail: `USPTO ODP probe failed: ${msg.slice(0, 120)}` });
+  }
+}
+
 export function logSourceHealthSummary(): void {
+  // Kick off the USPTO key validity probe in the background; results are
+  // surfaced via /api/sources/health (admin) and logged when problematic.
+  probeUsptoKey().catch(() => {});
   console.log(`[search/sources] ${ALL_SOURCE_KEYS.length} sources registered; per-source hard timeout = ${SOURCE_TIMEOUT_MS}ms; concurrency = ${CONCURRENCY_LIMIT}`);
   for (const gated of KEY_GATED_SOURCES) {
     if (process.env[gated.envVar]) {

@@ -45,7 +45,8 @@ export async function searchEuropePmc(query: string, maxResults = 12): Promise<R
       };
     });
   } catch (err) {
-    console.error("Europe PMC search error:", err);
-    return [];
+    // Re-throw so collectAllSignalsWithDiag can label timeout vs error in
+    // sourceDiagnostics — returning [] silently masked real upstream failures.
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }

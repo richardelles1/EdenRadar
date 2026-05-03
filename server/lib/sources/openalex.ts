@@ -81,7 +81,6 @@ export async function searchOpenAlex(query: string, maxResults = 12): Promise<Ra
     const results: any[] = data?.results ?? [];
     return results.filter((r) => r.title).map(toRawSignal);
   } catch (err) {
-    console.error("OpenAlex search error:", err);
-    return [];
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }

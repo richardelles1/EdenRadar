@@ -467,7 +467,14 @@ export async function registerRoutes(
 
       if (combinedSignals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0, userId: searchUserId ?? null });
-        const emptySearchResponse = { assets: [], query, sources: effectiveSources, signalsFound: 0 };
+        const emptySearchResponse = {
+          assets: [],
+          query,
+          sources: effectiveSources,
+          signalsFound: 0,
+          assetsFound: 0,
+          sourceDiagnostics,
+        };
         cacheSet(searchCacheKey, emptySearchResponse, 5 * 60 * 1000);
         return res.json(emptySearchResponse);
       }

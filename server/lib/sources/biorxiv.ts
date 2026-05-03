@@ -44,7 +44,6 @@ export async function searchBiorxiv(query: string, maxResults = 10): Promise<Raw
     const finalResults = biorxivResults.length > 0 ? biorxivResults : results;
     return finalResults.slice(0, maxResults).map(toRawSignal);
   } catch (err) {
-    console.error("bioRxiv (Europe PMC) search error:", err);
-    return [];
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }
