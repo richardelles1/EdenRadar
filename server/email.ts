@@ -70,6 +70,10 @@ function unsubscribeSecret(): string {
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Conservative email validator — defence-in-depth for token payloads (the actual
+// address validation happened when the admin entered it on the dispatch panel).
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_TOKEN_PREFIX = "e:";
 
 function b64url(buf: Buffer | string): string {
   return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -112,6 +116,45 @@ export function verifyUnsubscribeToken(token: string): string | null {
 
 export function unsubscribeUrlFor(userId: string): string {
   return `${APP_URL}/unsubscribe?t=${signUnsubscribeToken(userId)}`;
+}
+
+// Email-keyed unsubscribe token — used when the recipient is a free-form
+// address from the admin manual dispatch panel and has no userId. The token
+// resolves to an `email_unsubscribes` row (or to a matching user account if
+// one exists). Format: `e:<b64url(email)>.<b64url(hmac)>`.
+export function signUnsubscribeTokenForEmail(email: string): string {
+  const norm = email.trim().toLowerCase();
+  const sig = crypto.createHmac("sha256", unsubscribeSecret()).update(`email:${norm}`).digest();
+  return `${EMAIL_TOKEN_PREFIX}${b64url(norm)}.${b64url(sig)}`;
+}
+
+export function verifyUnsubscribeTokenForEmail(token: string): string | null {
+  if (!token || typeof token !== "string" || !token.startsWith(EMAIL_TOKEN_PREFIX)) return null;
+  const body = token.slice(EMAIL_TOKEN_PREFIX.length);
+  if (!body.includes(".")) return null;
+  const [emailPart, sigPart] = body.split(".");
+  let email: string;
+  let providedSig: Buffer;
+  try {
+    email = b64urlDecode(emailPart).toString("utf8").trim().toLowerCase();
+    providedSig = b64urlDecode(sigPart);
+  } catch {
+    return null;
+  }
+  if (!EMAIL_RE.test(email)) return null;
+  let expectedSig: Buffer;
+  try {
+    expectedSig = crypto.createHmac("sha256", unsubscribeSecret()).update(`email:${email}`).digest();
+  } catch {
+    return null;
+  }
+  if (providedSig.length !== expectedSig.length) return null;
+  if (!crypto.timingSafeEqual(providedSig, expectedSig)) return null;
+  return email;
+}
+
+export function unsubscribeUrlForEmail(email: string): string {
+  return `${APP_URL}/unsubscribe?t=${signUnsubscribeTokenForEmail(email)}`;
 }
 
 // ── HTML wrapper ─────────────────────────────────────────────────────────────

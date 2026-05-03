@@ -1304,6 +1304,14 @@ async function createMarketDealsTables() {
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS man_user_unread ON market_availability_notifications(user_id) WHERE read_at IS NULL`);
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS man_user_listing_unique ON market_availability_notifications(user_id, listing_id)`);
+    // Free-form email-address opt-outs for admin manual dispatch recipients
+    // who have no Eden account (token-keyed unsubscribe).
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS email_unsubscribes (
+        email            TEXT PRIMARY KEY,
+        unsubscribed_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     // Saved searches — EdenMarket Browse alerts (Task #713)
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_saved_searches (

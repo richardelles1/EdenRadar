@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -39,7 +39,7 @@ import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import { registerClient, unregisterClient, broadcastToOrg, registerUserClient, unregisterUserClient, broadcastToUsers } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, verifyUnsubscribeTokenForEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -8170,6 +8170,18 @@ If multiple assets appear, return each as a separate array item.`;
   // Used by the List-Unsubscribe header (one-click POST per RFC 8058) and by the
   // visible footer link (GET → page → POST). Flips industry_profiles.subscribed_to_digest = false.
   async function handleUnsubscribe(token: string): Promise<{ ok: boolean; alreadyUnsubscribed?: boolean; error?: string }> {
+    // Email-keyed token (admin manual dispatch recipients with no Eden account)
+    const email = verifyUnsubscribeTokenForEmail(token);
+    if (email) {
+      try {
+        await db.insert(emailUnsubscribes).values({ email }).onConflictDoNothing();
+        console.log(`[unsubscribe] Email ${email} added to email_unsubscribes via token link`);
+        return { ok: true };
+      } catch (err: any) {
+        console.error("[unsubscribe] email-token error:", err?.message);
+        return { ok: false, error: "Could not process unsubscribe" };
+      }
+    }
     const userId = verifyUnsubscribeToken(token);
     if (!userId) return { ok: false, error: "Invalid or expired unsubscribe link" };
     try {
@@ -8342,17 +8354,28 @@ If multiple assets appear, return each as a separate array item.`;
         return res.status(503).json({ error: "RESEND_API_KEY is not configured. Add it to your environment secrets to enable email dispatch." });
       }
 
-      const toList = isTest ? [testAddress ?? recipients[0]] : recipients;
+      const rawToList = isTest ? [testAddress ?? recipients[0]] : recipients;
       const finalSubject = isTest ? `[TEST] ${resolvedSubject}` : resolvedSubject;
 
-      // Manual admin dispatch: recipients may be free-form addresses not tied
-      // to a userId, so we use a mailto-only List-Unsubscribe (no token URL).
+      // Skip recipients who previously unsubscribed via an email-keyed token.
+      // (Admin manual dispatch recipients have no Eden account, so they live in
+      // the email_unsubscribes suppression list — not industry_profiles.)
+      const suppressedRows = await db.select({ email: emailUnsubscribes.email })
+        .from(emailUnsubscribes);
+      const suppressed = new Set(suppressedRows.map(r => r.email.toLowerCase()));
+      const toList = rawToList.filter(addr => !suppressed.has(addr.trim().toLowerCase()));
+      if (toList.length === 0) {
+        return res.json({ ok: true, sentTo: 0, isTest, skipped: rawToList.length, reason: "all recipients unsubscribed" });
+      }
+
+      // Manual admin dispatch: send per-recipient so each gets a token-signed
+      // one-click HTTPS unsubscribe URL keyed to their address (RFC 8058).
       try {
-        await sendEmail(toList, finalSubject, htmlBody, {
+        await Promise.all(toList.map(addr => sendEmail(addr, finalSubject, htmlBody, {
           from: FROM_DIGEST,
           replyTo: "support@edenradar.com",
-          unsubscribeMailto: "support@edenradar.com",
-        });
+          unsubscribeUrl: unsubscribeUrlForEmail(addr),
+        })));
       } catch (sendErr: any) {
         console.error("[dispatch/send] Resend error:", sendErr);
         return res.status(502).json({ error: `Email provider error: ${sendErr?.message ?? "send failed"}` });

@@ -1038,6 +1038,16 @@ export const marketAvailabilityNotifications = pgTable("market_availability_noti
 }));
 export type MarketAvailabilityNotification = typeof marketAvailabilityNotifications.$inferSelect;
 
+// Free-form email-address opt-outs (admin manual dispatch recipients with no
+// Eden account). Token-signed unsubscribe links resolve to a row here when
+// the recipient has no userId. Future digest sends to addresses present in
+// this table are skipped at the dispatch layer.
+export const emailUnsubscribes = pgTable("email_unsubscribes", {
+  email: text("email").primaryKey(),
+  unsubscribedAt: timestamp("unsubscribed_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type EmailUnsubscribe = typeof emailUnsubscribes.$inferSelect;
+
 // ── Saved Searches — EdenMarket Browse alerts (Task #713) ────────────────────
 // A buyer can save the current EdenMarket browse filter set + keyword as a
 // named saved search. When a listing flips to `active`, every saved search
