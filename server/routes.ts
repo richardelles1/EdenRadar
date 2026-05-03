@@ -454,8 +454,13 @@ export async function registerRoutes(
       const searchOpts = { modality, stage, indication, institution, since: sinceDate, before: beforeDate };
       results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
 
-      const CONFIDENCE_AWARE = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "true").toLowerCase() !== "false";
+      // Default policy: ON in non-prod, OFF in prod unless flag explicitly set.
+      const _flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
+      const _isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+      const CONFIDENCE_AWARE =
+        _flagRaw === "true" ? true : _flagRaw === "false" ? false : !_isProd;
       const CONF_FLOOR = 0.4;
+      const LOW_CONF = 0.5;
 
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
@@ -546,6 +551,20 @@ export async function registerRoutes(
 
       // Re-sort by confidence-weighted score so demoted rows fall down the page.
       assets.sort((a, b) => b.score - a.score);
+
+      // Top-5 confidence gate: push low-confidence assets out of the top 5
+      // when 5+ higher-confidence alternatives exist (flag-gated).
+      if (CONFIDENCE_AWARE && assets.length > 5) {
+        const isLow = (a: ScoredAsset) => (a.score_breakdown?.confidence_factor ?? 1) < LOW_CONF;
+        const highCount = assets.reduce((n, a) => n + (isLow(a) ? 0 : 1), 0);
+        if (highCount >= 5) {
+          const high: ScoredAsset[] = [];
+          const low: ScoredAsset[] = [];
+          for (const a of assets) (isLow(a) ? low : high).push(a);
+          assets.length = 0;
+          assets.push(...high, ...low);
+        }
+      }
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length, userId: scoutUserId ?? null }).catch(() => {});
 

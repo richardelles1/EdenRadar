@@ -20,9 +20,36 @@ const WEIGHTS: Record<string, number> = {
 // Multiplies the final score by `(FLOOR + (1-FLOOR) * confidence_factor)` so
 // low-confidence rows are demoted but never zeroed out. Gated by env flag for
 // quick rollback.  confidence_factor = min(categoryConfidence, signalCoverage).
-const CONFIDENCE_FLOOR = 0.4;
-const CONFIDENCE_AWARE_RANKING_ENABLED =
-  (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "true").toLowerCase() !== "false";
+//
+// Default policy: ON in non-prod, OFF in prod unless `EDEN_CONFIDENCE_AWARE_RANKING`
+// is explicitly set to "true". Lets us validate in dev/preview before production.
+// `LOW_CONFIDENCE_THRESHOLD` is the cutoff below which an asset is demoted out
+// of the top 5 when at least 5 higher-confidence alternatives exist.
+export const CONFIDENCE_FLOOR = 0.4;
+export const LOW_CONFIDENCE_THRESHOLD = 0.5;
+const isProdEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+const flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
+export const CONFIDENCE_AWARE_RANKING_ENABLED = flagRaw === "true"
+  ? true
+  : flagRaw === "false"
+    ? false
+    : !isProdEnv;
+
+/** Stable re-order: keep score order, but push assets with confidence_factor
+ *  below `LOW_CONFIDENCE_THRESHOLD` out of the top 5 whenever 5+ higher-
+ *  confidence alternatives exist. No-op if flag disabled. */
+export function applyTopKConfidenceGate<
+  T extends { score_breakdown?: { confidence_factor?: number } },
+>(sortedByScore: T[], k = 5): T[] {
+  if (!CONFIDENCE_AWARE_RANKING_ENABLED || sortedByScore.length <= k) return sortedByScore;
+  const isLow = (a: T) => (a.score_breakdown?.confidence_factor ?? 1) < LOW_CONFIDENCE_THRESHOLD;
+  const highCount = sortedByScore.reduce((n, a) => n + (isLow(a) ? 0 : 1), 0);
+  if (highCount < k) return sortedByScore;
+  const high: T[] = [];
+  const low: T[] = [];
+  for (const a of sortedByScore) (isLow(a) ? low : high).push(a);
+  return [...high, ...low];
+}
 
 export type DimensionResult = {
   score: number;
@@ -430,8 +457,9 @@ export async function scoreAssets(
   });
 
   scored.sort((a, b) => b.score - a.score);
+  const ranked = applyTopKConfidenceGate(scored, 5);
 
-  const top10 = scored.slice(0, 10);
+  const top10 = ranked.slice(0, 10);
   const tasks = top10.map((asset) => async () => {
     try {
       asset.why_it_matters = await generateWhyItMatters(asset, buyerProfile);
@@ -442,5 +470,5 @@ export async function scoreAssets(
 
   await runWithConcurrency(tasks, 3);
 
-  return scored;
+  return ranked;
 }

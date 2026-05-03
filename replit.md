@@ -398,19 +398,26 @@ Programmatic end-to-end test executed against the live Stripe **test-mode** API 
 - `RESEND_API_KEY`: Resend transactional email API key
 - `SENTRY_DSN` *(optional)*: Sentry DSN for server-side error tracking — if set, Sentry is initialized
 - `VITE_SENTRY_DSN` *(optional)*: Sentry DSN for frontend error tracking — if set, Sentry is initialized
-- `EDEN_CONFIDENCE_AWARE_RANKING` *(optional, default `true`)*: Feature flag for Task #693
-  confidence-aware ranking. When enabled, the final asset score is multiplied by
-  `0.4 + 0.6 * min(categoryConfidence, signal_coverage/100)` so low-confidence rows are
-  demoted but never zeroed out. The "high/medium/low" confidence label on cards and the
-  dossier is also derived from this combined factor (≥0.75 / ≥0.5 / <0.5). Set to
-  `"false"` to roll back to pure-coverage ranking. Applied in `server/lib/pipeline/scoreAssets.ts`
-  (signal-clustered path) and inline in the `POST /api/scout/search` handler (DB path).
-  Diagnostics live in Admin → Dataset Quality → "Classifier Confidence × Save Rate"
-  (`GET /api/admin/dataset-quality/confidence-distribution`). Note that
-  `computeCompletenessScore` in `server/lib/pipeline/contentHash.ts` now returns `null`
-  for `assetClass = "other"` / unknown rows instead of falling through to the
-  Drug/Biologic formula — the dossier surfaces this with a "Class unknown — partial
-  data" pill rather than a misleading score.
+- `EDEN_CONFIDENCE_AWARE_RANKING` *(optional)*: Feature flag for Task #693
+  confidence-aware ranking. **Default policy:** ON in non-prod (dev / preview) and
+  OFF in prod (`NODE_ENV=production`) unless the var is explicitly set. Set to
+  `"true"` in production to enable, `"false"` in any env to force-disable.
+  When enabled, the final asset score is multiplied by
+  `0.4 + 0.6 * min(categoryConfidence, signal_coverage/100)` so low-confidence rows
+  are demoted but never zeroed out. After re-sort, a top-5 confidence gate moves
+  any asset whose combined `confidence_factor < 0.5` out of the top 5 whenever 5+
+  higher-confidence alternatives exist. The "high/medium/low" confidence label on
+  cards and the dossier is derived from the same factor (≥0.75 / ≥0.5 / <0.5).
+  Applied in `server/lib/pipeline/scoreAssets.ts` (signal-clustered path,
+  `applyTopKConfidenceGate`) and inline in the `POST /api/scout/search` handler
+  (DB path). Diagnostics live in Admin → Dataset Quality → "Classifier Confidence ×
+  Save Rate" (`GET /api/admin/dataset-quality/confidence-distribution`,
+  asset-level distinct counts). `computeCompletenessScore` in
+  `server/lib/pipeline/contentHash.ts` returns `null` for
+  `assetClass = "" / "other" / "unknown"` instead of falling through to the
+  Drug/Biologic formula — the card and dossier surface this with a "Class
+  unknown" pill rather than a misleading score. Rollback: unset the var in prod
+  (already off by default) or set `EDEN_CONFIDENCE_AWARE_RANKING=false` anywhere.
 - `IEDISON_API_KEY` *(optional)*: NIH iEdison REST API key. When set, the iEdison scraper
   uses authenticated JSON API requests (Bearer token + X-API-Key header) enabling full
   date-range access and higher rate limits. Obtain from https://iedison.nih.gov/iEdison/api/v1/publicInventions.
