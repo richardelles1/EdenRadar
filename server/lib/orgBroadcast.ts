@@ -27,3 +27,36 @@ export function broadcastToOrg(orgId: number, event: string, data: unknown): voi
     }
   }
 }
+
+const userClients = new Map<string, Set<Response>>();
+
+export function registerUserClient(userId: string, res: Response): void {
+  if (!userClients.has(userId)) userClients.set(userId, new Set());
+  userClients.get(userId)!.add(res);
+}
+
+export function unregisterUserClient(userId: string, res: Response): void {
+  const set = userClients.get(userId);
+  if (set) {
+    set.delete(res);
+    if (set.size === 0) userClients.delete(userId);
+  }
+}
+
+export function broadcastToUsers(userIds: Iterable<string>, event: string, data: unknown): void {
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  const seen = new Set<string>();
+  for (const userId of userIds) {
+    if (!userId || seen.has(userId)) continue;
+    seen.add(userId);
+    const set = userClients.get(userId);
+    if (!set || set.size === 0) continue;
+    for (const res of set) {
+      try {
+        res.write(payload);
+      } catch {
+        set.delete(res);
+      }
+    }
+  }
+}

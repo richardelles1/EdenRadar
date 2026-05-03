@@ -34,7 +34,7 @@ import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
-import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
+import { registerClient, unregisterClient, broadcastToOrg, registerUserClient, unregisterUserClient, broadcastToUsers } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
 import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
@@ -10527,6 +10527,34 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
+  // GET /api/market/deals/events — SSE stream for deal-room real-time updates
+  app.get("/api/market/deals/events", async (req, res) => {
+    const token = (req.headers.authorization?.replace("Bearer ", "") || req.query.token) as string | undefined;
+    let userId: string | undefined;
+    if (token) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const adminSupabase = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        );
+        const { data } = await adminSupabase.auth.getUser(token);
+        userId = data.user?.id;
+      } catch {}
+    }
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    res.write("event: connected\ndata: {}\n\n");
+
+    registerUserClient(userId, res);
+    req.on("close", () => unregisterUserClient(userId!, res));
+  });
+
   // GET /api/market/deals — list deals for current user
   app.get("/api/market/deals", verifyAnyAuth, async (req, res) => {
     try {
@@ -10771,6 +10799,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       void logDealEvent(dealId, userId, "nda_signed", `${isSeller ? "seller" : "buyer"} signed as "${signedName}"`);
       if (updatedDeal?.ndaSignedAt) void logDealEvent(dealId, userId, "nda_executed", "NDA fully executed by both parties");
 
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_updated", { dealId });
+
       res.json({ deal: updatedDeal, alreadySigned: false });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -10813,6 +10843,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       });
 
       void logDealEvent(dealId, userId, "status_changed", `→ ${status}`);
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_updated", { dealId });
 
       // Alert admin on LOI or Closed
       if (status === "loi" || status === "closed") {
@@ -10937,6 +10968,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       });
 
       void logDealEvent(dealId, userId, "document_uploaded", file.originalname);
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_document", { dealId });
       // Notify the *other* party. Fire-and-forget so a Resend hiccup never
       // blocks the actual upload from succeeding.
       void notifyDealRoomDocument(deal, userId, file.originalname).catch((e) =>
@@ -10978,6 +11010,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       await storage.deleteMarketDealDocument(docId, userId);
       void logDealEvent(dealId, userId, "document_deleted", doc.fileName);
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_document", { dealId });
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -11015,6 +11048,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
       const msg = await storage.createMarketDealMessage({ dealId, senderId: userId, body });
       void logDealEvent(dealId, userId, "message_sent");
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_message", { dealId });
       // Throttled per (deal, recipient) inside notifyDealRoomMessage so
       // a chatty back-and-forth doesn't spam either inbox.
       void notifyDealRoomMessage(deal, userId, body).catch((e) =>

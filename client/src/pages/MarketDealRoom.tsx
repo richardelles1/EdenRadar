@@ -121,7 +121,6 @@ export default function MarketDealRoom() {
       if (!res.ok) throw new Error("Failed to load deal room");
       return res.json();
     },
-    refetchInterval: 30000,
   });
 
   const { data: documents = [] } = useQuery<MarketDealDocument[]>({
@@ -142,12 +141,42 @@ export default function MarketDealRoom() {
       return res.json();
     },
     enabled: !!roomData?.deal?.ndaSignedAt,
-    refetchInterval: 30000,
   });
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token || !dealId) return;
+    const es = new EventSource(`/api/market/deals/events?token=${encodeURIComponent(token)}`);
+    const onMessage = (e: MessageEvent) => {
+      try {
+        const { dealId: evtDealId } = JSON.parse(e.data);
+        if (evtDealId !== dealId) return;
+        qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId, "messages"] });
+      } catch {}
+    };
+    const onDocument = (e: MessageEvent) => {
+      try {
+        const { dealId: evtDealId } = JSON.parse(e.data);
+        if (evtDealId !== dealId) return;
+        qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId, "documents"] });
+      } catch {}
+    };
+    const onUpdated = (e: MessageEvent) => {
+      try {
+        const { dealId: evtDealId } = JSON.parse(e.data);
+        if (evtDealId !== dealId) return;
+        qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId] });
+      } catch {}
+    };
+    es.addEventListener("deal_message", onMessage);
+    es.addEventListener("deal_document", onDocument);
+    es.addEventListener("deal_updated", onUpdated);
+    return () => { es.close(); };
+  }, [session?.access_token, dealId, qc]);
 
   const { mutate: signNda, isPending: signing } = useMutation({
     mutationFn: async () => {
