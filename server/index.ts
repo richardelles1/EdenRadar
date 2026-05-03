@@ -14,6 +14,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler, flushSchedulerState } from "./lib/scheduler";
+import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAccess";
 import { sendTrialEndingEmail } from "./email";
 import { checkAndSendAlerts } from "./lib/alertMailer";
 import pg from "pg";
@@ -802,6 +803,26 @@ async function runPostStartupTasks(): Promise<void> {
     }
   } catch (err: any) {
     log(`[startup] Scheduler restore failed: ${err?.message}`, "startup");
+  }
+
+  // ── EdenMarket access reaper (Task #732) ─────────────────────────────────
+  // One-time backfill at boot for any orgs that drifted (their grace period
+  // expired but the boolean is still true), then start a 24h interval so any
+  // org whose grace lapses going forward gets cleaned up within a day.
+  // Backfill and recurring start are decoupled — a backfill failure must
+  // never prevent the periodic reaper from running.
+  try {
+    const revoked = await reapExpiredMarketAccess("startup");
+    if (revoked > 0) {
+      log(`[startup] EdenMarket reaper revoked ${revoked} expired org(s) at boot`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] EdenMarket reaper backfill failed: ${err?.message}`, "startup");
+  }
+  try {
+    startMarketAccessReaper();
+  } catch (err: any) {
+    log(`[startup] EdenMarket reaper interval failed to start: ${err?.message}`, "startup");
   }
 
   // ── Clear orphaned ingestion runs ─────────────────────────────────────────

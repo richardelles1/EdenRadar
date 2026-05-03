@@ -11,7 +11,9 @@
 // reaper / next webhook can flip the flag off.
 
 import type { Request, Response, NextFunction } from "express";
-import type { Organization } from "@shared/schema";
+import { and, eq, lt } from "drizzle-orm";
+import { organizations, appEvents, type Organization } from "@shared/schema";
+import { db } from "../db";
 import { storage } from "../storage";
 
 export type MarketAccessState = {
@@ -46,6 +48,87 @@ export function hasMarketRead(org: Pick<Organization, "edenMarketAccess" | "mark
 
 export function hasMarketFullAccess(org: Pick<Organization, "edenMarketAccess" | "marketAccessExpiresAt"> | null | undefined): boolean {
   return getMarketAccessState(org).hasFullAccess;
+}
+
+// Reaper — finds orgs whose marketAccessExpiresAt has passed but whose
+// edenMarketAccess flag is still true, flips the flag off, clears the
+// timestamps, and writes one appEvents row per revocation. Returns the
+// number of organizations revoked. Safe to call repeatedly: a no-op when
+// no expired orgs are present.
+export async function reapExpiredMarketAccess(reason: "startup" | "scheduled" = "scheduled"): Promise<number> {
+  const now = new Date();
+  // Atomic conditional update: re-evaluates `eden_market_access = true`
+  // and `market_access_expires_at < now()` at write time, so a concurrent
+  // reactivation (e.g. Stripe webhook clearing the grace timestamp) won't
+  // be clobbered. RETURNING gives us only the rows actually revoked, which
+  // we then audit in app_events.
+  let revokedRows: { id: number; name: string; edenMarketStripeSubId: string | null }[] = [];
+  try {
+    revokedRows = await db
+      .update(organizations)
+      .set({
+        edenMarketAccess: false,
+        marketAccessExpiresAt: null,
+        marketGraceEmailSentAt: null,
+        updatedAt: now,
+      })
+      .where(and(eq(organizations.edenMarketAccess, true), lt(organizations.marketAccessExpiresAt, now)))
+      .returning({
+        id: organizations.id,
+        name: organizations.name,
+        edenMarketStripeSubId: organizations.edenMarketStripeSubId,
+      });
+  } catch (err: any) {
+    console.warn(`[market-reaper] Update failed: ${err?.message}`);
+    return 0;
+  }
+
+  if (revokedRows.length === 0) return 0;
+
+  // RETURNING reflects post-update values, so marketAccessExpiresAt comes
+  // back null. We log just the org id/name and the reason — the original
+  // expiry timestamp is no longer available, which is acceptable for an
+  // audit row (the timestamp had already lapsed).
+  for (const org of revokedRows) {
+    try {
+      await db.insert(appEvents).values({
+        event: "market_access_revoked",
+        metadata: {
+          orgId: org.id,
+          orgName: org.name,
+          reason,
+          edenMarketStripeSubId: org.edenMarketStripeSubId ?? null,
+          revokedAt: now.toISOString(),
+        },
+      });
+      console.log(`[market-reaper] Revoked EdenMarket access for org #${org.id} (${org.name})`);
+    } catch (err: any) {
+      console.warn(`[market-reaper] Failed to log appEvent for org #${org.id}: ${err?.message}`);
+    }
+  }
+  return revokedRows.length;
+}
+
+// Long-running interval handle so callers can stop the timer (tests, shutdown).
+let reaperTimer: ReturnType<typeof setInterval> | null = null;
+
+/** Start a 24-hour interval that calls reapExpiredMarketAccess(). Idempotent. */
+export function startMarketAccessReaper(intervalMs: number = 24 * 60 * 60 * 1000): void {
+  if (reaperTimer !== null) return;
+  reaperTimer = setInterval(() => {
+    reapExpiredMarketAccess("scheduled").catch((err: any) => {
+      console.warn(`[market-reaper] Scheduled run failed: ${err?.message}`);
+    });
+  }, intervalMs);
+  // Don't keep the event loop alive solely for the reaper.
+  if (typeof reaperTimer.unref === "function") reaperTimer.unref();
+}
+
+export function stopMarketAccessReaper(): void {
+  if (reaperTimer !== null) {
+    clearInterval(reaperTimer);
+    reaperTimer = null;
+  }
 }
 
 // Express middleware — chained AFTER verifyAnyAuth so x-user-id is set.
