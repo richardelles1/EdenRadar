@@ -2568,7 +2568,12 @@ export class DatabaseStorage implements IStorage {
       .replace(/(^|\s)-+/g, "$1")
       .replace(/\s+/g, " ")
       .trim();
-    const trigramEnabled = trigramText.length >= 3;
+    // Gate trigram on (a) min input length to avoid noisy 1-2 char queries,
+    // and (b) startup-probed availability of pg_trgm operators (`<%`,
+    // word_similarity). On managed DBs that disallow the extension this stays
+    // false and the storage layer never emits trigram SQL that would error.
+    const trgmAvailable = (globalThis as any).__pgTrgmAvailable !== false;
+    const trigramEnabled = trigramText.length >= 3 && trgmAvailable;
 
     const hasFilters = !!(modality || stage || indication || institution || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
@@ -2672,7 +2677,9 @@ export class DatabaseStorage implements IStorage {
     // queries"): always run the strict FTS+exact phase first; only widen with
     // trigram when phase 1 returned few rows AND the user did not use
     // negation/phrase operators (which signal strict intent).
-    const TRIGRAM_FALLBACK_MIN = 8;
+    // Clamp the recall floor against the caller's limit so a request for the
+    // top-3 doesn't always burn a second query just because 3 < 8.
+    const TRIGRAM_FALLBACK_MIN = Math.min(8, limit);
     let result = await runPhase(false);
     const shouldFallback =
       !!trimmedQuery &&

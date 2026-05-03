@@ -1291,6 +1291,17 @@ async function ensureScoutSearchIndexes() {
   } catch (err: any) {
     log(`[startup] pg_trgm extension skipped: ${err?.message}`, "startup");
   }
+  // Probe trigram availability so storage layer can suppress `<%` /
+  // word_similarity SQL when running against a managed DB that disallows
+  // pg_trgm. Sets a process-level flag consumed by keywordSearchIngestedAssets.
+  try {
+    await db.execute(sql`SELECT 'a' <% 'abc'`);
+    (globalThis as any).__pgTrgmAvailable = true;
+    log("[startup] pg_trgm operators available", "startup");
+  } catch (err: any) {
+    (globalThis as any).__pgTrgmAvailable = false;
+    log(`[startup] pg_trgm operators unavailable — fuzzy fallback disabled: ${err?.message}`, "startup");
+  }
   try {
     await db.execute(sql`
       ALTER TABLE ingested_assets
