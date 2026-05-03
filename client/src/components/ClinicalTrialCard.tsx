@@ -4,6 +4,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Button } from "@/components/ui/button";
 import { PipelinePicker } from "@/components/PipelinePicker";
 import type { ScoredAsset } from "@/lib/types";
+import { SCOUT_CARD_TINTS } from "@/lib/scoutCardTints";
 
 type ClinicalTrialCardProps = {
   asset: ScoredAsset;
@@ -96,7 +97,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
     ? conditions.slice(0, 2).join(", ") + (conditions.length > 2 ? ` +${conditions.length - 2}` : "")
     : asset.indication && asset.indication !== "unknown" ? asset.indication : null;
 
-  const stripColor = "#0d9488";
+  const stripColor = SCOUT_CARD_TINTS.trial.stripColor;
   const bloomColor = "rgba(13, 148, 136, 0.55)";
 
   function handleCopyId(e: React.MouseEvent) {
@@ -116,7 +117,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
         onClick={() => setOpen(true)}
       >
         <div
-          className="relative w-full h-full rounded-[17px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+          className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.trial.containerBg} border border-white/90 dark:border-white/10`}
           style={{
             willChange: "transform",
             transform: pressed ? "scale(0.97)" : hovered ? "scale(1.01)" : "scale(1)",

@@ -7,6 +7,7 @@ import { PipelinePicker } from "./PipelinePicker";
 import type { ScoredAsset, ScoreBreakdown } from "@/lib/types";
 import type { SavedAsset } from "@shared/schema";
 import { useLocation } from "wouter";
+import { SCOUT_CARD_TINTS } from "@/lib/scoutCardTints";
 
 type TierKey = "high" | "mid" | "low" | "none";
 
@@ -29,13 +30,6 @@ const TIER_BORDER_BOTTOM_RIGHT: Record<TierKey, string> = {
   mid: "border-amber-500/50 dark:border-amber-500/30",
   low: "border-zinc-300/60 dark:border-zinc-600/40",
   none: "border-zinc-200/60 dark:border-zinc-700/40",
-};
-
-const TIER_STRIP_BG: Record<TierKey, string> = {
-  high: "#22c55e",
-  mid: "#f59e0b",
-  low: "#a1a1aa",
-  none: "#71717a",
 };
 
 const SCORE_BREAKDOWN_KEYS = ["fit", "novelty", "readiness", "licensability"] as const;
@@ -161,7 +155,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
     >
       <div
         ref={cardRef}
-        className="relative w-full h-full rounded-[17px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.tto.containerBg} border border-white/90 dark:border-white/10`}
         style={{
           willChange: "transform",
           transformStyle: "preserve-3d",
@@ -207,7 +201,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         {/* Left accent strip — z-[3], sibling of badge at z-[5] */}
         <div
           className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]"
-          style={{ background: TIER_STRIP_BG[tier] }}
+          style={{ background: SCOUT_CARD_TINTS.tto.stripColor }}
         />
 
         {/* Score badge — flush top-left, NO backdrop-filter (causes z-index break) */}

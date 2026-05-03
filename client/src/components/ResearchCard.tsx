@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { ExternalLink, BookOpen, FlaskConical, Calendar } from "lucide-react";
 import type { ScoredAsset, SourceType } from "@/lib/types";
+import { SCOUT_CARD_TINTS } from "@/lib/scoutCardTints";
 
 type SourceConfig = {
   label: string;
@@ -115,7 +116,7 @@ export function ResearchCard({ asset }: ResearchCardProps) {
       data-testid={`research-card-wrapper-${asset.id}`}
     >
       <div
-        className="relative w-full h-full rounded-[17px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.research.containerBg} border border-white/90 dark:border-white/10`}
         style={{
           willChange: "transform",
           transform: pressed ? "scale(0.97)" : hovered ? "scale(1.01)" : "scale(1)",
@@ -153,7 +154,7 @@ export function ResearchCard({ asset }: ResearchCardProps) {
         {/* Source-type left accent strip */}
         <div
           className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]"
-          style={{ background: config.stripColor }}
+          style={{ background: SCOUT_CARD_TINTS.research.stripColor }}
         />
 
         {/* Content */}
