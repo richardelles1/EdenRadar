@@ -62,6 +62,9 @@ export interface ScoredAsset {
   confidence: "high" | "medium" | "low";
   /** Raw 0-1 classifier confidence (when known). */
   category_confidence?: number;
+  /** Classifier asset_class (drug/device/biologic/other/unknown). Surfaced
+   *  in UI for the "Class unknown" badge and to gate completeness scoring. */
+  asset_class?: string | null;
   contact_office?: string;
   signals: RawSignal[];
 }

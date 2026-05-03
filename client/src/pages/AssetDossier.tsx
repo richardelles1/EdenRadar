@@ -88,6 +88,8 @@ type IntelligenceData = {
     licensingStatus: string | null;
     inventors: string[] | null;
     contactEmail: string | null;
+    categoryConfidence?: number | null;
+    assetClass?: string | null;
   } | null;
   competingAssets: Array<{
     fingerprint: string;
@@ -257,6 +259,8 @@ export default function AssetDossier() {
         score_breakdown: base?.score_breakdown ?? { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0, signal_coverage: 0, scored_dimensions: [], dimension_basis: {} },
         matching_tags: base?.matching_tags ?? [],
         confidence: base?.confidence ?? "low",
+        category_confidence: enr?.categoryConfidence ?? base?.category_confidence,
+        asset_class: enr?.assetClass ?? base?.asset_class ?? null,
         signals: base?.signals ?? [],
       };
       setAsset(dbAsset);

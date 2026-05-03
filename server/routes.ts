@@ -1045,6 +1045,8 @@ export async function registerRoutes(
               licensingStatus: enrichedRecord.licensingStatus,
               inventors: enrichedRecord.inventors,
               contactEmail: enrichedRecord.contactEmail,
+              categoryConfidence: enrichedRecord.categoryConfidence,
+              assetClass: enrichedRecord.assetClass,
             }
           : null,
         competingAssets: competingAssets.map((a) => ({

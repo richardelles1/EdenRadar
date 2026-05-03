@@ -452,6 +452,7 @@ export async function scoreAssets(
       matching_tags: asset.matching_tags ?? [],
       confidence,
       ...(categoryConfidence !== undefined ? { category_confidence: categoryConfidence } : {}),
+      asset_class: asset.asset_class ?? null,
       signals: asset.signals ?? [],
     };
   });
