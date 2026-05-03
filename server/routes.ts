@@ -1425,7 +1425,7 @@ export async function registerRoutes(
         sourceUrl: body.source_url,
         pmid: body.pmid,
       }, userId);
-      logTeamActivity(userId ?? null, "saved_asset", asset.ingestedAssetId ?? null, asset.assetName).catch(() => {});
+      logTeamActivity(userId ?? null, "saved_asset", asset.ingestedAssetId ?? null, null, asset.assetName).catch(() => {});
       // Append save event to the relevance feedback log (Task #694). The log is
       // append-only — earlier dismiss events are kept; getUserClassOffsets
       // resolves preference using the latest event per (user, asset).
@@ -1495,28 +1495,42 @@ export async function registerRoutes(
     return "Team Member";
   }
 
-  // ── Log a team activity (fire-and-forget; no-op for non-org users) ─────────
+  // ── Log a team activity (fire-and-forget) ──────────────────────────────────
+  // Logs to team_activities for both org members and individual-account users.
+  // For individual users we still need a non-null orgId because of the schema's
+  // FK; we look up (or fall back to) the user's own record. Practically, the
+  // /api/team/activity endpoint scopes by user for the no-org branch, so the
+  // orgId on the row is not load-bearing for individual feeds.
   async function logTeamActivity(
     userId: string | null,
     action: string,
     assetId: number | null,
+    assetFingerprint: string | null,
     assetName: string,
     metadata?: Record<string, unknown>,
   ): Promise<void> {
     if (!userId) return;
     try {
       const org = await storage.getOrgForUser(userId);
-      if (!org) return;
-      // Prefer org_members.member_name (set at invite time), fall back to profile name
-      const member = await storage.getOrgMemberByUserId(org.id, userId);
+      const member = org ? await storage.getOrgMemberByUserId(org.id, userId) : undefined;
       const actorName =
         (member?.memberName?.trim() || null) ?? (await resolveAuthorName(userId));
+      // Resolve fingerprint from ingestedAssetId when caller didn't supply one.
+      let fp = assetFingerprint;
+      if (!fp && assetId != null) {
+        try {
+          const rows = await db.execute(sql`SELECT fingerprint FROM ingested_assets WHERE id = ${assetId} LIMIT 1`);
+          const row = rows.rows[0] as { fingerprint?: string } | undefined;
+          fp = row?.fingerprint ?? null;
+        } catch { /* ignore */ }
+      }
       await storage.createTeamActivity({
-        orgId: org.id,
+        orgId: org?.id ?? null,
         userId,
         actorName,
         action,
         assetId: assetId ?? null,
+        assetFingerprint: fp ?? null,
         assetName,
         metadata: metadata ?? null,
       });
@@ -1603,7 +1617,7 @@ export async function registerRoutes(
           content,
           isSystemEvent: true,
         }).catch((e) => console.error(`[system-event-note] Failed for asset ${id}:`, e));
-        logTeamActivity(userId ?? null, "moved_asset", before.ingestedAssetId ?? null, before.assetName, {
+        logTeamActivity(userId ?? null, "moved_asset", before.ingestedAssetId ?? null, null, before.assetName, {
           fromStage: prevLabel,
           toStage: nextLabel,
         }).catch(() => {});
@@ -1659,7 +1673,7 @@ export async function registerRoutes(
         content,
         isSystemEvent: false,
       });
-      logTeamActivity(userId ?? null, "added_note", asset.ingestedAssetId ?? null, asset.assetName).catch(() => {});
+      logTeamActivity(userId ?? null, "added_note", asset.ingestedAssetId ?? null, null, asset.assetName).catch(() => {});
       const noteOrg = await storage.getOrgForUser(userId ?? "").catch(() => null);
       if (noteOrg) broadcastToOrg(noteOrg.id, "note_added", { savedAssetId: id });
       res.status(201).json({ note });
@@ -1716,7 +1730,7 @@ export async function registerRoutes(
       if (!assetBefore) return res.status(404).json({ error: "Asset not found" });
       if (!await canAccessSavedAsset(assetBefore, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       await storage.deleteSavedAsset(id);
-      logTeamActivity(userId ?? null, "removed_asset", null, assetBefore.assetName).catch(() => {});
+      logTeamActivity(userId ?? null, "removed_asset", assetBefore.ingestedAssetId ?? null, null, assetBefore.assetName).catch(() => {});
       // Unsave records a dismiss event (Task #694). The prior save event is
       // preserved in the append-only log; latest-event-wins makes this user's
       // current preference "dismiss" for the asset class.
@@ -1729,15 +1743,25 @@ export async function registerRoutes(
     }
   });
 
-  // ── Team Activity Feed ─────────────────────────────────────────────────────
+  // ── Team / Recent Activity Feed ────────────────────────────────────────────
+  // Returns activity rows for the requester. Org members get the org-wide feed
+  // (all members' actions); individual / single-seat users get just their own
+  // actions. Response also includes `memberCount` so the client can pick the
+  // appropriate headline ("Team Activity" vs "Recent Activity").
   app.get("/api/team/activity", verifyAnyAuth, async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
       if (!userId) return res.status(401).json({ error: "Authentication required" });
       const org = await storage.getOrgForUser(userId);
-      if (!org) return res.status(403).json({ error: "Team plan required" });
-      const activities = await storage.getTeamActivities(org.id, 20);
-      res.json({ activities });
+      let activities;
+      let memberCount = 1;
+      if (org) {
+        activities = await storage.getTeamActivities(org.id, 20);
+        memberCount = await storage.getOrgMemberCount(org.id).catch(() => 1);
+      } else {
+        activities = await storage.getUserActivities(userId, 20);
+      }
+      res.json({ activities, memberCount });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch team activity" });
     }

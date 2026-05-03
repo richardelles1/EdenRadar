@@ -393,6 +393,7 @@ export interface IStorage {
   getOrgMemberByUserId(orgId: number, userId: string): Promise<OrgMember | undefined>;
   createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity>;
   getTeamActivities(orgId: number, limit?: number): Promise<TeamActivity[]>;
+  getUserActivities(userId: string, limit?: number): Promise<TeamActivity[]>;
 
   // Saved Reports
   createSavedReport(data: InsertSavedReport): Promise<SavedReport>;
@@ -3384,6 +3385,17 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(teamActivities)
       .where(eq(teamActivities.orgId, orgId))
+      .orderBy(desc(teamActivities.createdAt))
+      .limit(limit);
+  }
+
+  // Per-user activity feed for individual / non-org accounts. Mirrors
+  // getTeamActivities but scopes by userId rather than orgId.
+  async getUserActivities(userId: string, limit = 20): Promise<TeamActivity[]> {
+    return db
+      .select()
+      .from(teamActivities)
+      .where(eq(teamActivities.userId, userId))
       .orderBy(desc(teamActivities.createdAt))
       .limit(limit);
   }

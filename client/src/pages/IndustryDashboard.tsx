@@ -110,6 +110,7 @@ type TeamActivityItem = {
   actorName: string;
   action: string;
   assetId: number | null;
+  assetFingerprint: string | null;
   assetName: string;
   metadata: Record<string, unknown> | null;
   createdAt: string;
@@ -117,6 +118,7 @@ type TeamActivityItem = {
 
 type TeamActivityResponse = {
   activities: TeamActivityItem[];
+  memberCount?: number;
 };
 
 const STATUS_CYCLE: Array<string | null> = [null, "viewing", "evaluating", "contacted"];
@@ -513,8 +515,9 @@ export default function IndustryDashboard() {
     staleTime: 60 * 1000,
     refetchInterval: 60 * 1000,
     retry: false,
-    enabled: isOrgMember,
   });
+
+  const activityHeadline = (teamActivityData?.memberCount ?? 1) > 1 ? "Team Activity" : "Recent Activity";
 
   const statusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string | null }) => {
@@ -1062,8 +1065,8 @@ export default function IndustryDashboard() {
         {/* ── EDENMARKET TEASER (grouped with Team Activity as ambient cards) ── */}
         <EdenMarketTeaser />
 
-        {/* ── SECTION 4: TEAM ACTIVITY FEED (org members only) ── */}
-        {isOrgMember && (
+        {/* ── SECTION 4: TEAM / RECENT ACTIVITY FEED ── */}
+        {(
           <div
             className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
             style={{
@@ -1072,7 +1075,7 @@ export default function IndustryDashboard() {
             }}
             data-testid="dashboard-team-activity"
           >
-            <SectionHeader title="Team Activity" icon={Users} />
+            <SectionHeader title={activityHeadline} icon={Users} />
 
             {teamActivityLoading ? (
               <div className="space-y-2">
@@ -1081,8 +1084,12 @@ export default function IndustryDashboard() {
             ) : !teamActivityData?.activities.length ? (
               <div className="py-6 text-center">
                 <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">No team activity yet.</p>
-                <p className="text-[11px] text-muted-foreground/60 mt-1">Actions by org members will appear here.</p>
+                <p className="text-xs text-muted-foreground">No activity yet.</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-1">
+                  {activityHeadline === "Team Activity"
+                    ? "Actions by org members will appear here."
+                    : "Save, move, or note an asset and it will show up here."}
+                </p>
               </div>
             ) : (
               <div className="space-y-1.5" data-testid="team-activity-list">
@@ -1124,14 +1131,14 @@ export default function IndustryDashboard() {
                           {" "}
                           <span className="text-muted-foreground">{actionDescription}</span>
                           {" "}
-                          {item.assetId ? (
-                            <Link href={`/asset/${item.assetId}`}>
+                          {item.assetFingerprint ? (
+                            <Link href={`/asset/${encodeURIComponent(item.assetFingerprint)}`}>
                               <span className="font-medium text-primary hover:underline cursor-pointer" data-testid={`team-activity-asset-link-${item.id}`}>
                                 {item.assetName}
                               </span>
                             </Link>
                           ) : (
-                            <span className="font-medium">{item.assetName}</span>
+                            <span className="font-medium" data-testid={`team-activity-asset-text-${item.id}`}>{item.assetName}</span>
                           )}
                         </p>
                       </div>

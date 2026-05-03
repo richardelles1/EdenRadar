@@ -762,13 +762,19 @@ export type DispatchLog = typeof dispatchLogs.$inferSelect;
 export const TEAM_ACTIVITY_ACTIONS = ["saved_asset", "moved_asset", "added_note", "removed_asset"] as const;
 export type TeamActivityAction = typeof TEAM_ACTIVITY_ACTIONS[number];
 
+// Note: orgId is nullable so individual / no-org users still get rows; the
+// /api/team/activity endpoint scopes by userId for the no-org branch.
 export const teamActivities = pgTable("team_activities", {
   id: serial("id").primaryKey(),
-  orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  orgId: integer("org_id").references(() => organizations.id, { onDelete: "cascade" }),
   userId: text("user_id").notNull(),
   actorName: text("actor_name").notNull(),
   action: text("action").notNull(),
   assetId: integer("asset_id"),
+  // Fingerprint of the underlying ingested_asset, captured at write time so
+  // the activity feed can link to /asset/<fingerprint> reliably even after
+  // the numeric assetId vocabulary changes (saved_assets vs ingested_assets).
+  assetFingerprint: text("asset_fingerprint"),
   assetName: text("asset_name").notNull(),
   metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

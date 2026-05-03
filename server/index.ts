@@ -1263,6 +1263,42 @@ async function addTrialReminderSentAtColumn() {
   }
 }
 
+// ── Ensure team_activities.asset_fingerprint column exists + backfill ────────
+async function addTeamActivityFingerprintColumn() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE team_activities
+        ADD COLUMN IF NOT EXISTS asset_fingerprint TEXT
+    `);
+    // Drop NOT NULL on org_id so individual / no-org users get logged too.
+    await db.execute(sql`
+      ALTER TABLE team_activities
+        ALTER COLUMN org_id DROP NOT NULL
+    `);
+    log("[startup] team_activities.asset_fingerprint column ensured (org_id nullable)", "startup");
+    // Backfill via direct ingested_assets join (asset_id may already point at
+    // the ingested asset). Bounded UPDATE; safe to re-run.
+    await db.execute(sql`
+      UPDATE team_activities ta
+      SET asset_fingerprint = ia.fingerprint
+      FROM ingested_assets ia
+      WHERE ta.asset_fingerprint IS NULL
+        AND ta.asset_id = ia.id
+    `);
+    // Fallback path: legacy rows where asset_id pointed at saved_assets.id.
+    await db.execute(sql`
+      UPDATE team_activities ta
+      SET asset_fingerprint = ia.fingerprint
+      FROM saved_assets sa
+      JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
+      WHERE ta.asset_fingerprint IS NULL
+        AND ta.asset_id = sa.id
+    `);
+  } catch (err: any) {
+    log(`[startup] team_activities.asset_fingerprint check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure saved_reports table exists ─────────────────────────────────────────
 async function createSavedReportsTable() {
   try {
@@ -1593,6 +1629,8 @@ async function migrateAssetStatusValues() {
       createUserAlertsTable().catch(() => {});
       // ── Add trial_reminder_sent_at to organizations (idempotent) ────────
       addTrialReminderSentAtColumn().catch(() => {});
+      // ── Add asset_fingerprint to team_activities + backfill (idempotent) ─
+      addTeamActivityFingerprintColumn().catch(() => {});
       // ── Ensure saved_reports table exists (idempotent) ──────────────────
       createSavedReportsTable().catch(() => {});
       // ── Ensure market_deals tables exist (idempotent) ────────────────────
