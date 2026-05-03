@@ -65,6 +65,9 @@ test.describe("Unsubscribe flow (RFC 8058 + UI)", () => {
     // doesn't intercept the route.
     await page.goto(`/admin/reset-password`);
     await expect(page.getByTestId("site-gate-form")).toHaveCount(0);
+    // Also assert the reset-password page itself rendered, so the test
+    // doesn't pass if the route is silently broken for unrelated reasons.
+    await expect(page.getByTestId("card-admin-reset-password")).toBeVisible({ timeout: 10_000 });
   });
 
   test("tampered token shows error UI", async ({ page }) => {
