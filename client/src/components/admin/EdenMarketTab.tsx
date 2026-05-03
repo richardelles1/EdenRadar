@@ -58,12 +58,28 @@ type SubscriberOrg = {
   id: number;
   name: string;
   billingEmail: string | null;
+  edenMarketAccess: boolean;
   edenMarketStripeSubId: string | null;
+  marketAccessExpiresAt: string | null;
   createdAt: string;
   marketSellerVerifiedAt: string | null;
   marketSellerVerifiedBy: string | null;
   marketSellerVerificationNote: string | null;
 };
+
+type AccessState = "active" | "grace" | "expired";
+
+// Mirrors server/lib/marketAccess.ts:getMarketAccessState — kept here to
+// avoid pulling server code into the client bundle. The server is the
+// source of truth; this is purely for display.
+function getAccessState(org: Pick<SubscriberOrg, "edenMarketAccess" | "marketAccessExpiresAt">): { state: AccessState; daysLeft: number | null } {
+  if (!org.edenMarketAccess) return { state: "expired", daysLeft: null };
+  if (!org.marketAccessExpiresAt) return { state: "active", daysLeft: null };
+  const expiresMs = new Date(org.marketAccessExpiresAt).getTime();
+  const diffMs = expiresMs - Date.now();
+  if (diffMs <= 0) return { state: "expired", daysLeft: 0 };
+  return { state: "grace", daysLeft: Math.max(1, Math.ceil(diffMs / (24 * 60 * 60 * 1000))) };
+}
 
 type AdminDeal = {
   id: number;
@@ -376,6 +392,7 @@ export function EdenMarketTab() {
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeSection, setActiveSection] = useState<"listings" | "eois" | "subscribers" | "deals">("listings");
+  const [accessFilter, setAccessFilter] = useState<"all" | AccessState>("all");
   const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
   const [invoiceDeal, setInvoiceDeal] = useState<AdminDeal | null>(null);
   const [expandedDealId, setExpandedDealId] = useState<number | null>(null);
@@ -475,6 +492,25 @@ export function EdenMarketTab() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["/api/admin/market/subscribers"] });
       toast({ title: vars.verified ? "Seller verified" : "Verification revoked" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // Task #733 — admin grace-period controls (extend by N days, or revoke now).
+  const { mutate: updateMarketAccess, isPending: updatingAccess } = useMutation({
+    mutationFn: async ({ orgId, action, days }: { orgId: number; action: "extend" | "revoke"; days?: number }) => {
+      const res = await fetch(`/api/admin/orgs/${orgId}/market-access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(await adminHeaders()) },
+        body: JSON.stringify({ action, ...(days ? { days } : {}) }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed"); }
+      return res.json();
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/market/subscribers"] });
+      qc.invalidateQueries({ queryKey: ["/api/admin/market/stats"] });
+      toast({ title: vars.action === "extend" ? "Grace period extended" : "Market access revoked" });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -830,17 +866,48 @@ export function EdenMarketTab() {
         </div>
       )}
 
-      {activeSection === "subscribers" && (
+      {activeSection === "subscribers" && (() => {
+        const enriched = subscribers.map(o => ({ org: o, access: getAccessState(o) }));
+        const counts = enriched.reduce(
+          (acc, { access }) => { acc[access.state]++; return acc; },
+          { active: 0, grace: 0, expired: 0 } as Record<AccessState, number>,
+        );
+        const filtered = accessFilter === "all" ? enriched : enriched.filter(e => e.access.state === accessFilter);
+        return (
         <div className="space-y-4">
-          <span className="text-xs text-muted-foreground">{subscribers.length} active subscriber{subscribers.length !== 1 ? "s" : ""}</span>
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <span className="text-xs text-muted-foreground">
+              {subscribers.length} subscriber{subscribers.length !== 1 ? "s" : ""}
+              {" · "}
+              <span className="text-emerald-600 dark:text-emerald-400">{counts.active} active</span>
+              {" · "}
+              <span className="text-amber-600 dark:text-amber-400">{counts.grace} in grace</span>
+              {" · "}
+              <span className="text-rose-600 dark:text-rose-400">{counts.expired} expired</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-muted-foreground">Access:</span>
+              <Select value={accessFilter} onValueChange={(v) => setAccessFilter(v as "all" | AccessState)}>
+                <SelectTrigger className="h-7 w-32 text-xs" data-testid="select-access-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="grace">Grace</SelectItem>
+                  <SelectItem value="expired">Expired</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
           {subscribersLoading ? (
             <div className="flex items-center justify-center py-12">
               <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : subscribers.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              <p className="text-sm">No active subscribers</p>
+              <p className="text-sm">{subscribers.length === 0 ? "No active subscribers" : "No subscribers match this filter"}</p>
             </div>
           ) : (
             <div className="rounded-xl border border-border bg-card overflow-hidden">
@@ -849,6 +916,7 @@ export function EdenMarketTab() {
                   <tr className="border-b border-border bg-muted/30">
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Org</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Billing Email</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Access</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Stripe Sub ID</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Since</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Verified Seller</th>
@@ -856,12 +924,72 @@ export function EdenMarketTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {subscribers.map(org => {
+                  {filtered.map(({ org, access }) => {
                     const isVerified = !!org.marketSellerVerifiedAt;
+                    const accessLabel = access.state === "active"
+                      ? "Active"
+                      : access.state === "grace"
+                        ? `Grace — ${access.daysLeft}d left`
+                        : "Expired";
+                    const accessClass = access.state === "active"
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                      : access.state === "grace"
+                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                        : "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30";
                     return (
                       <tr key={org.id} data-testid={`admin-market-subscriber-${org.id}`} className="hover:bg-muted/20 transition-colors">
                         <td className="px-4 py-2.5 font-medium text-foreground">{org.name}</td>
                         <td className="px-4 py-2.5 text-muted-foreground">{org.billingEmail ?? "—"}</td>
+                        <td className="px-4 py-2.5 align-top">
+                          <div className="space-y-1">
+                            <span
+                              className={cn("inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-semibold", accessClass)}
+                              data-testid={`admin-market-access-${access.state}-${org.id}`}
+                              title={org.marketAccessExpiresAt ? `Expires ${new Date(org.marketAccessExpiresAt).toLocaleString()}` : undefined}
+                            >
+                              {access.state === "grace" && <Clock className="w-3 h-3" />}
+                              {access.state === "expired" && <AlertTriangle className="w-3 h-3" />}
+                              {access.state === "active" && <CheckCircle2 className="w-3 h-3" />}
+                              {accessLabel}
+                            </span>
+                            {(access.state !== "expired") && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1.5 text-[10px]"
+                                  disabled={updatingAccess}
+                                  onClick={() => {
+                                    const raw = window.prompt(`Extend ${org.name} grace period by how many days?`, "30");
+                                    if (raw === null) return;
+                                    const days = parseInt(raw, 10);
+                                    if (!Number.isFinite(days) || days < 1 || days > 365) {
+                                      toast({ title: "Invalid", description: "Enter 1–365 days", variant: "destructive" });
+                                      return;
+                                    }
+                                    updateMarketAccess({ orgId: org.id, action: "extend", days });
+                                  }}
+                                  data-testid={`admin-market-extend-${org.id}`}
+                                >
+                                  Extend
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-5 px-1.5 text-[10px] text-destructive hover:text-destructive"
+                                  disabled={updatingAccess}
+                                  onClick={() => {
+                                    if (!window.confirm(`Revoke EdenMarket access for ${org.name} immediately? This cannot be undone from the UI.`)) return;
+                                    updateMarketAccess({ orgId: org.id, action: "revoke" });
+                                  }}
+                                  data-testid={`admin-market-revoke-${org.id}`}
+                                >
+                                  Revoke
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
                         <td className="px-4 py-2.5 text-muted-foreground font-mono">
                           {org.edenMarketStripeSubId ? org.edenMarketStripeSubId.slice(0, 14) + "…" : "—"}
                         </td>
@@ -923,7 +1051,8 @@ export function EdenMarketTab() {
             </div>
           )}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

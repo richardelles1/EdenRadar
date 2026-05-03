@@ -11084,6 +11084,73 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
+  // PATCH /api/admin/orgs/:id/market-access — admin grace-period controls
+  // Task #733. Two operations:
+  //   action="extend" + days=N (default 30) → push marketAccessExpiresAt forward
+  //     by N days from the current expiry (or from now if no expiry set).
+  //     edenMarketAccess remains true. Useful for support extensions.
+  //   action="revoke" → immediately set edenMarketAccess=false and clear
+  //     marketAccessExpiresAt. Use for fraud / compliance / hard-cancel.
+  // All transitions emit a logAppEvent for audit.
+  app.patch("/api/admin/orgs/:id/market-access", async (req, res) => {
+    try {
+      const orgId = parseInt(String(req.params.id), 10);
+      if (isNaN(orgId)) return res.status(400).json({ error: "Invalid org id" });
+
+      const schema = z.object({
+        action: z.enum(["extend", "revoke"]),
+        days: z.number().int().min(1).max(365).optional(),
+      });
+      const { action, days } = schema.parse(req.body);
+
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const adminUser = await getAdminUser(req);
+      const adminUserId = adminUser?.id ?? "admin";
+      const adminEmail = adminUser?.email ?? null;
+
+      let updated;
+      if (action === "extend") {
+        const addDays = days ?? 30;
+        const base = org.marketAccessExpiresAt
+          ? new Date(org.marketAccessExpiresAt).getTime()
+          : Date.now();
+        // Never extend backwards: if the stored expiry is already in the past,
+        // start from "now" so the extension always lands in the future.
+        const start = Math.max(base, Date.now());
+        const newExpiry = new Date(start + addDays * 24 * 60 * 60 * 1000);
+        updated = await storage.updateOrganization(orgId, {
+          edenMarketAccess: true,
+          marketAccessExpiresAt: newExpiry,
+        });
+        logAppEvent("market_access_extended", {
+          orgId, orgName: org.name,
+          actorId: adminUserId, actorEmail: adminEmail,
+          previousExpiresAt: org.marketAccessExpiresAt ?? null,
+          newExpiresAt: newExpiry.toISOString(),
+          addedDays: addDays,
+        });
+      } else {
+        updated = await storage.updateOrganization(orgId, {
+          edenMarketAccess: false,
+          marketAccessExpiresAt: null,
+        });
+        logAppEvent("market_access_revoked", {
+          orgId, orgName: org.name,
+          actorId: adminUserId, actorEmail: adminEmail,
+          previouslyHadAccess: !!org.edenMarketAccess,
+          previousExpiresAt: org.marketAccessExpiresAt ?? null,
+        });
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid payload", details: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // PATCH /api/admin/orgs/:id/market-seller-verification — admin marks an org
   // as a verified EdenMarket seller (or revokes verification).
   // Mounted under /api/admin → already gated by requireAdmin middleware.
