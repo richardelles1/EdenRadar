@@ -66,6 +66,23 @@ async function deleteIfExists(drive, name, parentId) {
   }
 }
 
+async function listFolder(drive, parentId) {
+  const out = [];
+  let pageToken = undefined;
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and trashed=false`,
+      fields: "nextPageToken, files(id,name,size)",
+      spaces: "drive",
+      pageSize: 200,
+      pageToken,
+    });
+    for (const f of res.data.files ?? []) out.push(f);
+    pageToken = res.data.nextPageToken ?? undefined;
+  } while (pageToken);
+  return out;
+}
+
 async function main() {
   const names = (await readdir(SRC)).filter((n) => !n.startsWith(".")).sort();
   if (!names.length) throw new Error(`No files in ${SRC}`);
@@ -88,6 +105,22 @@ async function main() {
       fields: "id,name,webViewLink",
     });
     console.log(`  uploaded ${name}  ${res.data.webViewLink ?? res.data.id}`);
+  }
+
+  // Verify — strict: count must match exactly, no missing files, no extras.
+  const remote = await listFolder(drive, parent);
+  const remoteNames = new Set(remote.map((f) => f.name));
+  const localSet = new Set(names);
+  const missing = names.filter((n) => !remoteNames.has(n));
+  const extras = [...remoteNames].filter((n) => !localSet.has(n));
+  console.log(`\nVerification: ${remote.length} files in Drive folder (expected ${names.length}).`);
+  if (missing.length) console.error(`  MISSING from Drive: ${missing.join(", ")}`);
+  if (extras.length) console.error(`  UNEXPECTED EXTRAS in Drive: ${extras.join(", ")}`);
+  if (remote.length !== names.length || missing.length || extras.length) {
+    throw new Error(
+      `Drive verification failed — remote=${remote.length}, expected=${names.length}, ` +
+      `missing=${missing.length}, extras=${extras.length}`,
+    );
   }
 
   const folderUrl = `https://drive.google.com/drive/folders/${parent}`;

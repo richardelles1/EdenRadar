@@ -113,14 +113,20 @@ async function main() {
     console.log(`  uploaded ${name}  ${res.data.webViewLink ?? res.data.id}`);
   }
 
-  // Verify
+  // Verify — strict: count must match exactly, no missing files, no extras.
   const remote = await listFolder(drive, parent);
   const remoteNames = new Set(remote.map((f) => f.name));
+  const localSet = new Set(localNames);
   const missing = localNames.filter((n) => !remoteNames.has(n));
+  const extras = [...remoteNames].filter((n) => !localSet.has(n));
   console.log(`\nVerification: ${remote.length} files in Drive folder (expected ${expectedTotal}).`);
-  if (missing.length) {
-    console.error(`  MISSING from Drive: ${missing.join(", ")}`);
-    throw new Error(`Drive verification failed — ${missing.length} file(s) missing`);
+  if (missing.length) console.error(`  MISSING from Drive: ${missing.join(", ")}`);
+  if (extras.length) console.error(`  UNEXPECTED EXTRAS in Drive: ${extras.join(", ")}`);
+  if (remote.length !== expectedTotal || missing.length || extras.length) {
+    throw new Error(
+      `Drive verification failed — remote=${remote.length}, expected=${expectedTotal}, ` +
+      `missing=${missing.length}, extras=${extras.length}`,
+    );
   }
 
   const folderUrl = `https://drive.google.com/drive/folders/${parent}`;

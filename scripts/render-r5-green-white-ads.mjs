@@ -20,17 +20,155 @@ const OUT_DIR = path.join(ROOT, "build/ads", SLUG);
 // All 8 r5-* HTML files under artifacts/mockup-sandbox/public/ads/.
 // Block-text variants: solid white or inverted green panels, oversized type.
 // Light-hero variants:  bright/airy hero photo with soft white wash.
+// Each angle carries platform-specific post copy used in manifest.md so the
+// folder is upload-ready for LinkedIn / Meta / X without a separate copy doc.
 const ANGLES = [
   // Block-text variants (4)
-  { id: "edenscout-block",         surface: "EdenScout",   variant: "block-text",  file: "r5-edenscout-block.html",         url: "edenradar.com"     },
-  { id: "edenlab-block-green",     surface: "EdenLab",     variant: "block-text",  file: "r5-edenlab-block-green.html",     url: "edenradar.com/lab" },
-  { id: "edenmarket-block",        surface: "EdenMarket",  variant: "block-text",  file: "r5-edenmarket-block.html",        url: "edenradar.com"     },
-  { id: "edenengine-block-green",  surface: "EDEN engine", variant: "block-text",  file: "r5-edenengine-block-green.html",  url: "edenradar.com"     },
+  {
+    id: "edenscout-block", surface: "EdenScout", variant: "block-text",
+    file: "r5-edenscout-block.html", url: "edenradar.com",
+    platforms: ["LinkedIn", "Meta", "X"],
+    linkedin: {
+      intro: "Stop chasing 300+ tech transfer portals one by one. EdenScout indexes them daily into one searchable canvas.",
+      headline: "Every TTO. One canvas.",
+    },
+    meta: {
+      primary: "Search, score, and shortlist licensable science across every major university — in one place.",
+      headline: "300+ TTOs, indexed daily",
+      description: "One workspace for biotech BD",
+    },
+    x: {
+      tweet: "EdenScout indexes 300+ tech transfer offices daily so biotech BD teams can search and shortlist in one place.",
+      card: "Every TTO. One canvas.",
+    },
+  },
+  {
+    id: "edenlab-block-green", surface: "EdenLab", variant: "block-text",
+    file: "r5-edenlab-block-green.html", url: "edenradar.com/lab",
+    platforms: ["LinkedIn", "Meta"],
+    linkedin: {
+      intro: "PIs and lab leaders: stop missing grants. EdenLab matches NIH, NSF, DOE, foundation, and EU funding to your project the day it opens.",
+      headline: "Every grant that fits your lab, the day it opens",
+    },
+    meta: {
+      primary: "Funding from NIH, NSF, DOE, foundations, and the EU — matched to your project, delivered fresh.",
+      headline: "Grants that fit your lab",
+      description: "Delivered the day they open",
+    },
+    x: {
+      tweet: "EdenLab matches NIH, NSF, DOE, foundation, and EU grants to your project — delivered fresh.",
+      card: "Every grant that fits your lab",
+    },
+  },
+  {
+    id: "edenmarket-block", surface: "EdenMarket", variant: "block-text",
+    file: "r5-edenmarket-block.html", url: "edenradar.com",
+    platforms: ["LinkedIn", "Meta", "X"],
+    linkedin: {
+      intro: "EdenMarket is a success-fee marketplace for licensable science. Free to list. You only pay when an asset finds its buyer.",
+      headline: "Free to list. Pay when you close.",
+    },
+    meta: {
+      primary: "No upfront cost. A success fee only when a licensable asset finds its buyer.",
+      headline: "Free to list",
+      description: "Pay only on close",
+    },
+    x: {
+      tweet: "EdenMarket: free to list, pay when you close. A success-fee marketplace for licensable science.",
+      card: "Free to list. Pay when you close.",
+    },
+  },
+  {
+    id: "edenengine-block-green", surface: "EDEN engine", variant: "block-text",
+    file: "r5-edenengine-block-green.html", url: "edenradar.com",
+    platforms: ["LinkedIn", "X"],
+    linkedin: {
+      intro: "The AI layer behind EdenRadar reads tech transfer pages, papers, and grants — then scores them into a single signal so your team does not have to.",
+      headline: "Reads the science so you don't have to",
+    },
+    meta: {
+      primary: "Tech transfer pages, papers, and grants — parsed and scored into one signal.",
+      headline: "The AI layer for science",
+      description: "One signal, not ten tabs",
+    },
+    x: {
+      tweet: "EDEN engine reads tech transfer pages, papers, and grants — then scores them into one signal.",
+      card: "Reads the science so you don't have to",
+    },
+  },
   // Light-hero variants (4)
-  { id: "edenscout-light-hero",    surface: "EdenScout",   variant: "light-hero",  file: "r5-edenscout-light-hero.html",    url: "edenradar.com"     },
-  { id: "edenlab-light-hero",      surface: "EdenLab",     variant: "light-hero",  file: "r5-edenlab-light-hero.html",      url: "edenradar.com/lab" },
-  { id: "edennx-light-hero",       surface: "EdenNX",      variant: "light-hero",  file: "r5-edennx-light-hero.html",       url: "edenradar.com"     },
-  { id: "edenradar-light-hero",    surface: "EdenRadar",   variant: "light-hero",  file: "r5-edenradar-light-hero.html",    url: "edenradar.com"     },
+  {
+    id: "edenscout-light-hero", surface: "EdenScout", variant: "light-hero",
+    file: "r5-edenscout-light-hero.html", url: "edenradar.com",
+    platforms: ["LinkedIn", "Meta"],
+    linkedin: {
+      intro: "An atlas of licensable pre-clinical science. EdenScout maps 300+ tech transfer offices into one searchable, scored canvas for biotech BD.",
+      headline: "One canvas for every TTO",
+    },
+    meta: {
+      primary: "Map every pre-clinical asset onto one searchable canvas — scored and enriched.",
+      headline: "An atlas of licensable science",
+      description: "300+ TTOs, one canvas",
+    },
+    x: {
+      tweet: "EdenScout: an atlas of licensable pre-clinical science across 300+ TTOs.",
+      card: "One canvas for every TTO",
+    },
+  },
+  {
+    id: "edenlab-light-hero", surface: "EdenLab", variant: "light-hero",
+    file: "r5-edenlab-light-hero.html", url: "edenradar.com/lab",
+    platforms: ["LinkedIn", "Meta"],
+    linkedin: {
+      intro: "Funding that fits your lab — matched to your project from NIH, NSF, DOE, foundations, and the EU. EdenLab delivers it fresh.",
+      headline: "Funding that fits, delivered fresh",
+    },
+    meta: {
+      primary: "Match your project to live grants from NIH, NSF, DOE, foundations, and the EU.",
+      headline: "Funding that fits",
+      description: "Delivered fresh, daily",
+    },
+    x: {
+      tweet: "EdenLab: live grants from NIH, NSF, DOE, foundations, and the EU — matched to your project.",
+      card: "Funding that fits, delivered fresh",
+    },
+  },
+  {
+    id: "edennx-light-hero", surface: "EdenNX", variant: "light-hero",
+    file: "r5-edennx-light-hero.html", url: "edenradar.com",
+    platforms: ["LinkedIn", "Meta"],
+    linkedin: {
+      intro: "EdenNX is the scout-to-deal workflow on top of EdenRadar — turn discovery into pipeline without leaving the canvas.",
+      headline: "From signal to pipeline",
+    },
+    meta: {
+      primary: "Turn EdenScout discovery into licensable pipeline — without leaving the canvas.",
+      headline: "Scout to deal",
+      description: "One workflow, one place",
+    },
+    x: {
+      tweet: "EdenNX: scout to deal in one workflow on top of EdenRadar.",
+      card: "From signal to pipeline",
+    },
+  },
+  {
+    id: "edenradar-light-hero", surface: "EdenRadar", variant: "light-hero",
+    file: "r5-edenradar-light-hero.html", url: "edenradar.com",
+    platforms: ["LinkedIn", "Meta", "X"],
+    linkedin: {
+      intro: "EdenRadar is the platform behind EdenScout, EdenLab, EdenMarket, and EdenNX — biotech intelligence on one canvas.",
+      headline: "Biotech intelligence on one canvas",
+    },
+    meta: {
+      primary: "Discovery, grants, marketplace, and pipeline — one canvas across the EdenRadar product family.",
+      headline: "One canvas for biotech",
+      description: "Scout, fund, list, close",
+    },
+    x: {
+      tweet: "EdenRadar: discovery, grants, marketplace, and pipeline on one canvas.",
+      card: "Biotech intelligence on one canvas",
+    },
+  },
 ];
 
 const SIZES = [
@@ -139,12 +277,30 @@ function buildManifest() {
     L.push("");
     L.push(`**Surface:** ${a.surface}  |  **Variant:** ${a.variant}  |  **Footer URL:** ${a.url}`);
     L.push("");
+    L.push(`**Suggested platforms:** ${a.platforms.join(", ")}`);
+    L.push("");
     L.push(`**Source:** \`artifacts/mockup-sandbox/public/ads/${a.file}\``);
     L.push("");
     L.push("**Files:**");
     for (const s of SIZES) {
       L.push(`- \`r5-${a.id}-${s.name}.png\` (${s.w}x${s.h})`);
     }
+    L.push("");
+    L.push("### LinkedIn");
+    L.push("");
+    L.push(`- **Intro text** (${a.linkedin.intro.length}/150 char rec): ${a.linkedin.intro}`);
+    L.push(`- **Headline** (${a.linkedin.headline.length}/70 char rec): ${a.linkedin.headline}`);
+    L.push("");
+    L.push("### Meta (Facebook / Instagram)");
+    L.push("");
+    L.push(`- **Primary text** (${a.meta.primary.length}/72 char visible): ${a.meta.primary}`);
+    L.push(`- **Headline** (${a.meta.headline.length}/40 char rec): ${a.meta.headline}`);
+    L.push(`- **Description** (${a.meta.description.length}/30 char rec): ${a.meta.description}`);
+    L.push("");
+    L.push("### X");
+    L.push("");
+    L.push(`- **Tweet text** (${a.x.tweet.length}/100 char visible): ${a.x.tweet}`);
+    L.push(`- **Card headline** (${a.x.card.length}/70 char): ${a.x.card}`);
     L.push("");
     L.push("---");
     L.push("");
