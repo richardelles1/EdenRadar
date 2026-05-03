@@ -13109,5 +13109,33 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     });
   }
 
+  // ── Expired pending invite cleanup ──────────────────────────────────────────
+  // Runs once on startup and then every hour. Removes org_members rows where
+  // inviteStatus = 'pending' and joinedAt is older than 48 hours.
+  async function runExpiredInviteCleanup() {
+    try {
+      const removed = await storage.purgeExpiredPendingInvites(48);
+      if (removed > 0) {
+        console.log(`[invite-cleanup] Removed ${removed} expired pending invite(s)`);
+      }
+    } catch (err: any) {
+      console.error("[invite-cleanup] Failed:", err?.message ?? err);
+    }
+  }
+
+  // Run immediately on startup, then every hour
+  runExpiredInviteCleanup();
+  setInterval(runExpiredInviteCleanup, 60 * 60 * 1000);
+
+  // Admin endpoint — manual trigger for testing/ops
+  app.post("/api/admin/invites/purge-expired", requireAdmin, async (req, res) => {
+    try {
+      const removed = await storage.purgeExpiredPendingInvites(48);
+      res.json({ ok: true, removed });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? "Purge failed" });
+    }
+  });
+
   return httpServer;
 }

@@ -415,6 +415,7 @@ export interface IStorage {
   deleteUserAccount(userId: string): Promise<void>;
   updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
   updateOrgMemberInviteStatus(orgId: number, userId: string, status: string): Promise<void>;
+  purgeExpiredPendingInvites(olderThanHours?: number): Promise<number>;
   getOrgForUser(userId: string): Promise<Organization | undefined>;
   getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string; stripeStatus: string | null; stripeCurrentPeriodEnd: Date | null } | null>;
 
@@ -3521,6 +3522,37 @@ export class DatabaseStorage implements IStorage {
       .update(orgMembers)
       .set({ inviteStatus: status })
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
+  }
+
+  async purgeExpiredPendingInvites(olderThanHours = 48): Promise<number> {
+    const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
+    // Fetch the rows first so we can clean up industry_profiles.org_id for each,
+    // mirroring the full side-effects of removeOrgMember().
+    const expired = await db
+      .select({ orgId: orgMembers.orgId, userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(
+        eq(orgMembers.inviteStatus, "pending"),
+        sql`${orgMembers.joinedAt} < ${cutoff}`,
+      ));
+
+    if (expired.length === 0) return 0;
+
+    // Clear org linkage from industry_profiles for each expired invite so the
+    // user cannot regain org access via the profile fallback path.
+    for (const { userId } of expired) {
+      await this.setIndustryProfileOrg(userId, null);
+    }
+
+    // Now delete the membership rows.
+    await db
+      .delete(orgMembers)
+      .where(and(
+        eq(orgMembers.inviteStatus, "pending"),
+        sql`${orgMembers.joinedAt} < ${cutoff}`,
+      ));
+
+    return expired.length;
   }
 
   async getOrgForUser(userId: string): Promise<Organization | undefined> {
