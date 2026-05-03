@@ -1,0 +1,200 @@
+/* Round 6 — extends round 5's green & white block system with a large,
+   subtle EdenNX mark watermark anchored behind the foreground content.
+   Two layouts shipped this round:
+     body.layout-block       — white surface, emerald accent slab, dark ink
+     body.layout-block-green — emerald surface, white type, white accent slab
+   The watermark sits at z-index 0 (behind everything else); foreground:
+     .accent-slab z-1, .content z-4, .logo z-5, .url z-6.
+*/
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  color: #052e1a;
+  background: #ffffff;
+}
+
+:root {
+  --emerald: #10b981;
+  --emerald-bright: #34d399;
+  --emerald-deep: #047857;
+  --ink: #052e1a;
+  --ink-muted: #1f5141;
+}
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+/* =====================================================================
+   WATERMARK — large EdenNX mark, anchored bottom-right, behind content
+   ===================================================================== */
+.watermark {
+  position: absolute;
+  right: -10vmin;
+  bottom: -8vmin;
+  height: 80vmin;
+  width: auto;
+  z-index: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+body.layout-block .watermark { opacity: 0.085; }
+body.layout-block-green .watermark {
+  opacity: 0.14;
+  filter: brightness(0) invert(1);
+}
+
+/* =====================================================================
+   LAYOUT: BLOCK TEXT (white surface, emerald accent)
+   ===================================================================== */
+body.layout-block { background: #ffffff; color: var(--ink); }
+
+body.layout-block .accent-slab {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 100%; height: 14vh;
+  background: var(--emerald);
+  z-index: 1;
+}
+
+/* =====================================================================
+   LAYOUT: BLOCK TEXT INVERTED (emerald surface, white type)
+   ===================================================================== */
+body.layout-block-green { background: var(--emerald); color: #ffffff; }
+
+body.layout-block-green .accent-slab {
+  position: absolute;
+  left: 0; bottom: 0;
+  width: 100%; height: 14vh;
+  background: #ffffff;
+  z-index: 1;
+}
+
+/* =====================================================================
+   LOGO
+   ===================================================================== */
+.logo {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 2.4vh;
+  height: 9.5vh;
+}
+
+.logo .mark {
+  height: 9.5vh;
+  width: 9.5vh;
+  flex-shrink: 0;
+  color: var(--emerald-deep);
+}
+
+body.layout-block-green .logo .mark { color: #ffffff; }
+
+.logo .wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+
+.logo .word {
+  font-weight: 800;
+  font-size: 5.4vh;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+body.layout-block-green .logo .word { color: #ffffff; }
+
+.logo .product {
+  margin-top: 1vh;
+  font-weight: 700;
+  font-size: 1.7vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: var(--ink-muted);
+}
+body.layout-block-green .logo .product { color: rgba(255,255,255,0.92); }
+
+/* =====================================================================
+   CONTENT
+   ===================================================================== */
+.content {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  bottom: 11vh;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2.4vh;
+}
+
+.eyebrow {
+  font-weight: 800;
+  font-size: 1.7vh;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: var(--emerald-deep);
+}
+body.layout-block-green .eyebrow { color: #ffffff; }
+
+.headline {
+  font-weight: 900;
+  font-size: 9.5vmin;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  max-width: 95%;
+  text-wrap: balance;
+}
+body.layout-block-green .headline { color: #ffffff; }
+
+.headline .accent { color: var(--emerald); }
+body.layout-block-green .headline .accent {
+  color: #ffffff;
+  text-decoration: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.14em;
+}
+
+.subline {
+  font-weight: 600;
+  font-size: 3.1vmin;
+  line-height: 1.4;
+  color: var(--ink-muted);
+  max-width: 78%;
+}
+body.layout-block-green .subline { color: rgba(255,255,255,0.94); }
+
+/* =====================================================================
+   URL FOOTER
+   ===================================================================== */
+.url {
+  position: absolute;
+  bottom: 4vh;
+  left: 5vw;
+  z-index: 6;
+  font-weight: 700;
+  font-size: 2vh;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+}
+body.layout-block-green .url { color: var(--emerald-deep); }
+
+@media (orientation: portrait) {
+  .headline { font-size: 11vmin; }
+  .subline { font-size: 3.4vmin; }
+  .content { bottom: 13vh; }
+  .logo { top: 6vh; }
+}
