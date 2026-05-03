@@ -71,6 +71,7 @@ import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
+import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { ScoutGate } from "@/components/ScoutGate";
 import Login from "@/pages/Login";
 import Unsubscribe from "@/pages/Unsubscribe";
@@ -429,6 +430,7 @@ function App() {
           <ThemeInit />
           <Toaster />
           <SiteGate>
+            <ImpersonationBanner />
             <Router />
             <EdenWidget />
           </SiteGate>

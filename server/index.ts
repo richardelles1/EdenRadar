@@ -325,6 +325,48 @@ async function runStartupMigrations() {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Impersonation tables (Task #736) ──────────────────────────────────────
+  try {
+    await mdb.execute(sql`
+      CREATE TABLE IF NOT EXISTS impersonation_sessions (
+        id              SERIAL PRIMARY KEY,
+        admin_id        TEXT NOT NULL,
+        admin_email     TEXT NOT NULL,
+        target_user_id  TEXT NOT NULL,
+        target_email    TEXT NOT NULL,
+        target_role     TEXT,
+        read_only       BOOLEAN NOT NULL DEFAULT TRUE,
+        started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL,
+        ended_at        TIMESTAMP,
+        ended_reason    TEXT,
+        action_count    INTEGER NOT NULL DEFAULT 0,
+        last_activity_at TIMESTAMP
+      )
+    `);
+    await mdb.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_impersonation_sessions_active
+      ON impersonation_sessions (admin_id) WHERE ended_at IS NULL
+    `);
+    await mdb.execute(sql`
+      CREATE TABLE IF NOT EXISTS impersonation_audit_events (
+        id           SERIAL PRIMARY KEY,
+        session_id   INTEGER NOT NULL,
+        method       TEXT NOT NULL,
+        route        TEXT NOT NULL,
+        status_code  INTEGER NOT NULL,
+        blocked      BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    await mdb.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_impersonation_audit_session
+      ON impersonation_audit_events (session_id, created_at DESC)
+    `);
+    log("[startup] impersonation tables ready", "startup");
+  } catch (err: any) {
+    log(`[startup] impersonation table migration failed: ${err?.message}`, "startup");
+  }
+
   // ── saved_assets status column ────────────────────────────────────────────
   try {
     await mdb.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);

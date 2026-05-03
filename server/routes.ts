@@ -312,6 +312,31 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Admin "Act as user" impersonation (Task #736):
+  //  1. impersonationReadOnlyGate — global write-block for read-only sessions
+  //     (catches every non-GET request including those that don't go through
+  //     verifyAnyAuth, e.g. routes using tryGetUserId for identity).
+  //  2. impersonationAuditMiddleware — per-request audit log writer; no-op
+  //     unless x-impersonation-session-id is set.
+  {
+    const {
+      stripSpoofableHeaders,
+      impersonationContext,
+      impersonationAuditMiddleware,
+    } = await import("./lib/impersonation");
+    // Order matters:
+    //  1. stripSpoofableHeaders removes any client-supplied identity headers
+    //     (x-user-*, x-impersonation-session-id, x-admin-*, etc.) so only
+    //     trusted server middleware can populate them.
+    //  2. impersonationContext resolves the session and stamps both the
+    //     server-internal marker (Symbol) and the identity headers.
+    //  3. impersonationAuditMiddleware records every /api/* request that has
+    //     the trusted marker.
+    app.use(stripSpoofableHeaders);
+    app.use(impersonationContext);
+    app.use(impersonationAuditMiddleware);
+  }
+
   app.get("/api/sources", (_req, res) => {
     const sources = Object.values(dataSources).map((s) => ({
       id: s.id,
@@ -2143,6 +2168,133 @@ export async function registerRoutes(
   // ── Admin auth: every /api/admin/* route requires a Supabase Bearer token
   // for a user whose email is in the ADMIN_EMAILS allowlist.
   app.use("/api/admin", requireAdmin);
+
+  // ── Admin "Act as user" impersonation (Task #736) ─────────────────────────
+  // Lives under /api/admin/* so requireAdmin gates everything. The startSession/
+  // endSession routes use the verified admin id from x-admin-id; downstream
+  // identity swap happens in the auth middleware via x-impersonation-token.
+  {
+    const imp = await import("./lib/impersonation");
+    const { z } = await import("zod");
+
+    app.post("/api/admin/impersonation/start", async (req, res) => {
+      try {
+        const adminId = String(req.headers["x-admin-id"] ?? "");
+        const adminEmail = String(req.headers["x-admin-email"] ?? "");
+        if (!adminId) return res.status(401).json({ error: "Admin auth required" });
+        const schema = z.object({
+          targetUserId: z.string().min(1),
+          readOnly: z.boolean().default(true),
+        });
+        const body = schema.parse(req.body);
+        const result = await imp.startSession({
+          adminId,
+          adminEmail,
+          targetUserId: body.targetUserId,
+          readOnly: body.readOnly,
+        });
+        if ("error" in result) return res.status(result.status).json({ error: result.error });
+        res.json({
+          token: result.token,
+          session: {
+            id: result.session.id,
+            targetUserId: result.session.targetUserId,
+            targetEmail: result.session.targetEmail,
+            targetRole: result.session.targetRole,
+            readOnly: result.session.readOnly,
+            startedAt: result.session.startedAt,
+          },
+        });
+      } catch (err: any) {
+        if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid input" });
+        res.status(500).json({ error: err?.message ?? "Failed to start impersonation" });
+      }
+    });
+
+    app.post("/api/admin/impersonation/end", async (req, res) => {
+      try {
+        const adminId = String(req.headers["x-admin-id"] ?? "");
+        const schema = z.object({ sessionId: z.number().int().positive() });
+        const { sessionId } = schema.parse(req.body);
+        const ok = await imp.endSession(sessionId, adminId);
+        if (!ok) {
+          // Either the session belongs to a different admin, is already
+          // ended, or doesn't exist. Surface as 404 so the client mutation
+          // is treated as a failure (avoids silently clearing the local
+          // token when nothing was actually ended).
+          return res.status(404).json({ error: "Session not found or not yours to end", ended: false });
+        }
+        res.json({ ended: true });
+      } catch (err: any) {
+        if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid input" });
+        res.status(500).json({ error: err?.message ?? "Failed to end impersonation" });
+      }
+    });
+
+    // List impersonation sessions. Default is scoped to the calling admin so
+    // one admin's active session can never block or be ended by another. Pass
+    // ?scope=all to include other admins (useful for organization-wide audit).
+    app.get("/api/admin/impersonation/sessions", async (req, res) => {
+      try {
+        const adminId = String(req.headers["x-admin-id"] ?? "");
+        const scope = String(req.query.scope ?? "mine");
+        const sessions = scope === "all"
+          ? await imp.listRecentSessions(100)
+          : await imp.listSessionsForAdmin(adminId, 100);
+        res.json({ sessions });
+      } catch (err: any) {
+        res.status(500).json({ error: err?.message ?? "Failed to list sessions" });
+      }
+    });
+
+    app.get("/api/admin/impersonation/sessions/:id/events", async (req, res) => {
+      try {
+        const sessionId = Number(req.params.id);
+        if (!Number.isFinite(sessionId)) return res.status(400).json({ error: "Invalid id" });
+        // Scope: an admin can only read the events for their own sessions.
+        const adminId = String(req.headers["x-admin-id"] ?? "");
+        const ownerId = await imp.getSessionAdminId(sessionId);
+        if (!ownerId) return res.status(404).json({ error: "Session not found" });
+        if (ownerId !== adminId) return res.status(403).json({ error: "Not your session" });
+        const events = await imp.listSessionEvents(sessionId, 200);
+        res.json({ events });
+      } catch (err: any) {
+        res.status(500).json({ error: err?.message ?? "Failed to list events" });
+      }
+    });
+  }
+
+  // Read the current impersonation session (if any) for the calling admin.
+  // Mounted on /api so it can be read without an admin token swap, but it
+  // requires a valid bearer that matches the session's admin_id.
+  app.get("/api/me/impersonation", async (req, res) => {
+    try {
+      const token = req.headers["x-impersonation-token"];
+      if (typeof token !== "string" || !token) return res.json({ active: null });
+      const bearer = req.headers.authorization?.replace("Bearer ", "");
+      if (!bearer) return res.json({ active: null });
+      const { createClient } = await import("@supabase/supabase-js");
+      const sb = createClient(process.env.VITE_SUPABASE_URL || "", process.env.VITE_SUPABASE_ANON_KEY || "");
+      const { data, error } = await sb.auth.getUser(bearer);
+      if (error || !data.user) return res.json({ active: null });
+      const imp = await import("./lib/impersonation");
+      const session = await imp.loadActiveSessionByToken(token, data.user.id);
+      if (!session) return res.json({ active: null });
+      res.json({
+        active: {
+          id: session.id,
+          targetUserId: session.targetUserId,
+          targetEmail: session.targetEmail,
+          targetRole: session.targetRole,
+          readOnly: session.readOnly,
+          startedAt: session.startedAt,
+          actionCount: session.actionCount,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message ?? "Failed to load impersonation state" });
+    }
+  });
 
   // ── Admin Relevance panel (Task #694) ─────────────────────────────────────
   app.post("/api/admin/relevance/holdout/build", async (_req, res) => {
@@ -6262,15 +6414,25 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
       if (error) return res.status(500).json({ error: error.message });
-      const users = (data?.users ?? []).map((u) => ({
-        id: u.id,
-        email: u.email ?? "",
-        contactEmail: u.user_metadata?.contactEmail ?? null,
-        role: u.user_metadata?.role ?? null,
-        subscribedToDigest: u.user_metadata?.subscribedToDigest === true,
-        createdAt: u.created_at,
-        lastSignInAt: u.last_sign_in_at ?? null,
-      }));
+      const users = (data?.users ?? []).map((u) => {
+        const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
+        const name =
+          (typeof meta.name === "string" && meta.name) ||
+          (typeof meta.full_name === "string" && meta.full_name) ||
+          (typeof meta.fullName === "string" && meta.fullName) ||
+          (typeof meta.display_name === "string" && meta.display_name) ||
+          null;
+        return {
+          id: u.id,
+          email: u.email ?? "",
+          name,
+          contactEmail: (typeof meta.contactEmail === "string" ? meta.contactEmail : null),
+          role: (typeof meta.role === "string" ? meta.role : null),
+          subscribedToDigest: meta.subscribedToDigest === true,
+          createdAt: u.created_at,
+          lastSignInAt: u.last_sign_in_at ?? null,
+        };
+      });
       res.json({ users });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

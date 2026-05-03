@@ -1201,3 +1201,36 @@ export const exportLogs = pgTable("export_logs", {
 export const insertExportLogSchema = createInsertSchema(exportLogs).omit({ id: true, exportedAt: true });
 export type InsertExportLog = z.infer<typeof insertExportLogSchema>;
 export type ExportLog = typeof exportLogs.$inferSelect;
+
+// ── Admin "Act as user" impersonation (Task #736) ─────────────────────────────
+// Records each impersonation session started by an admin. The session id is
+// embedded in an HMAC-signed token sent on every API request via the
+// `x-impersonation-token` header. Server middleware verifies the token, swaps
+// the effective user identity headers (x-user-id/email/role), and writes one
+// row to `impersonationAuditEvents` per request.
+export const impersonationSessions = pgTable("impersonation_sessions", {
+  id: serial("id").primaryKey(),
+  adminId: text("admin_id").notNull(),
+  adminEmail: text("admin_email").notNull(),
+  targetUserId: text("target_user_id").notNull(),
+  targetEmail: text("target_email").notNull(),
+  targetRole: text("target_role"),
+  readOnly: boolean("read_only").notNull().default(true),
+  startedAt: timestamp("started_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  endedAt: timestamp("ended_at"),
+  endedReason: text("ended_reason"), // "manual" | "superseded"
+  actionCount: integer("action_count").notNull().default(0),
+  lastActivityAt: timestamp("last_activity_at"),
+});
+export type ImpersonationSession = typeof impersonationSessions.$inferSelect;
+
+export const impersonationAuditEvents = pgTable("impersonation_audit_events", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull(),
+  method: text("method").notNull(),
+  route: text("route").notNull(),
+  statusCode: integer("status_code").notNull(),
+  blocked: boolean("blocked").notNull().default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type ImpersonationAuditEvent = typeof impersonationAuditEvents.$inferSelect;

@@ -1,14 +1,28 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { getImpersonationToken } from "@/lib/queryClient";
 
 type UserRole = "industry" | "researcher" | "concept" | undefined;
+
+interface ImpersonationState {
+  sessionId: number;
+  targetUserId: string;
+  targetEmail: string;
+  targetRole: UserRole;
+  readOnly: boolean;
+}
 
 interface AuthContextValue {
   user: User | null;
   session: Session | null;
   loading: boolean;
   role: UserRole;
+  /** Original (non-impersonated) role of the signed-in user. */
+  realRole: UserRole;
+  /** True iff an impersonation session is active for the signed-in admin. */
+  isImpersonating: boolean;
+  impersonation: ImpersonationState | null;
   isPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
@@ -62,7 +76,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  const role: UserRole = (user?.user_metadata?.role as UserRole) ?? undefined;
+  const realRole: UserRole = (user?.user_metadata?.role as UserRole) ?? undefined;
+
+  // ── Impersonation effective identity (Task #736) ──────────────────────────
+  // When an admin starts an impersonation session, we polled /api/me/impersonation
+  // to learn the target's role/email and override the values exposed by useAuth
+  // so role-gated layouts/routes behave as if the admin were the target user.
+  const [impersonation, setImpersonation] = useState<ImpersonationState | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    async function refresh() {
+      const token = getImpersonationToken();
+      if (!token || !session) {
+        if (!cancelled) setImpersonation(null);
+        return;
+      }
+      try {
+        const res = await fetch("/api/me/impersonation", {
+          headers: { Authorization: `Bearer ${session.access_token}`, "x-impersonation-token": token },
+        });
+        if (!res.ok) {
+          if (!cancelled) setImpersonation(null);
+          return;
+        }
+        const data = await res.json();
+        if (cancelled) return;
+        const a = data?.active;
+        if (!a) {
+          setImpersonation(null);
+        } else {
+          setImpersonation({
+            sessionId: a.id,
+            targetUserId: a.targetUserId,
+            targetEmail: a.targetEmail,
+            targetRole: (a.targetRole as UserRole) ?? undefined,
+            readOnly: !!a.readOnly,
+          });
+        }
+      } catch {
+        if (!cancelled) setImpersonation(null);
+      }
+    }
+
+    refresh();
+    timer = setInterval(refresh, 30_000);
+    function onChange() { refresh(); }
+    window.addEventListener("eden-impersonation-changed", onChange);
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      window.removeEventListener("eden-impersonation-changed", onChange);
+    };
+  }, [session]);
+
+  const role: UserRole = impersonation?.targetRole ?? realRole;
+  // Synthesize a User-shaped object so consumers reading user.id/email get the
+  // target's identity. Spread the real user so other fields (avatar, etc.) are
+  // preserved as a fallback — they're admin-side and not security-sensitive.
+  const effectiveUser: User | null = impersonation && user
+    ? {
+        ...user,
+        id: impersonation.targetUserId,
+        email: impersonation.targetEmail,
+        user_metadata: { ...(user.user_metadata ?? {}), role: impersonation.targetRole },
+      }
+    : user;
 
   function clearPasswordRecovery() {
     setIsPasswordRecovery(false);
@@ -133,7 +214,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, session, loading, role,
+      user: effectiveUser, session, loading, role,
+      realRole, isImpersonating: !!impersonation, impersonation,
       isPasswordRecovery, clearPasswordRecovery,
       signIn, signUp, signInWithGoogle, signOut, sendPasswordReset, updatePassword, updateRole,
     }}>
