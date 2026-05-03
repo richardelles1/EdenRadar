@@ -2,9 +2,10 @@ import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
-import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake } from "lucide-react";
+import { Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake } from "lucide-react";
 import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 import { Button } from "@/components/ui/button";
+import { Nav } from "@/components/Nav";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import type { OrgContext } from "@/hooks/use-org";
@@ -454,24 +455,11 @@ export default function Pricing() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Nav />
       <div className="max-w-5xl mx-auto px-6 py-12 space-y-16">
 
         {/* Header */}
         <div className="space-y-4">
-          <Link href="/">
-            <div className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground cursor-pointer transition-colors mb-2" data-testid="link-back-pricing">
-              <ArrowLeft className="w-3.5 h-3.5" />
-              Back to EdenRadar
-            </div>
-          </Link>
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-emerald-600 flex items-center justify-center">
-              <Sprout className="w-4 h-4 text-white" />
-            </div>
-            <span className="font-bold text-lg text-foreground">
-              Eden<span className="text-emerald-600">Radar</span>
-            </span>
-          </div>
           <div className="space-y-2">
             <p className="text-xs font-semibold text-emerald-600 uppercase tracking-widest">EdenScout Intelligence Platform</p>
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground" data-testid="text-pricing-title">
