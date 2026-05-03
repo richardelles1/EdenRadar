@@ -7029,7 +7029,7 @@ If a field cannot be determined, use "N/A".`
         const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
           type: "recovery",
           email,
-          options: { redirectTo: `${APP_URL}/admin/reset-password` },
+          options: { redirectTo: `${APP_URL}/set-password` },
         });
         if (linkError) {
           console.warn("[email] Could not generate password-set link:", linkError.message);
@@ -7092,7 +7092,7 @@ If a field cannot be determined, use "N/A".`
       const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
         type: "recovery",
         email: member.email,
-        options: { redirectTo: `${APP_URL}/admin/reset-password` },
+        options: { redirectTo: `${APP_URL}/set-password` },
       });
       if (linkError) return res.status(500).json({ error: linkError.message });
       const setPasswordLink = linkData?.properties?.action_link ?? undefined;
@@ -7227,6 +7227,25 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // Activate invite — called by /set-password page after the user sets their password.
+  // Flips the caller's org_members.invite_status from "pending" → "active" immediately
+  // so they have full access when they land on the dashboard.
+  app.post("/api/industry/activate-invite", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org) return res.json({ ok: true, note: "no org found" });
+      const members = await storage.getOrgMembers(org.id);
+      const self = members.find((m) => m.userId === userId);
+      if (self && self.inviteStatus === "pending") {
+        await storage.updateOrgMemberInviteStatus(org.id, userId, "active");
+      }
+      return res.json({ ok: true });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Self-service team invite routes (owner-only, no admin password required) ──
 
   async function requireOrgOwner(req: any, res: any): Promise<{ org: any; userId: string } | null> {
@@ -7278,7 +7297,7 @@ If a field cannot be determined, use "N/A".`
 
       let setPasswordLink: string | undefined;
       try {
-        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${APP_URL}/admin/reset-password` } });
+        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${APP_URL}/set-password` } });
         if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
       } catch {}
 
@@ -7338,7 +7357,7 @@ If a field cannot be determined, use "N/A".`
 
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: `${APP_URL}/admin/reset-password` } });
+      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: `${APP_URL}/set-password` } });
       if (linkError) return res.status(500).json({ error: linkError.message });
       const setPasswordLink = linkData?.properties?.action_link ?? undefined;
 

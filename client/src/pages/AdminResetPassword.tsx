@@ -10,8 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function AdminResetPassword() {
-  useDocumentMeta({ title: "Set Your Password | EdenRadar", noindex: true });
-  const { session, loading, updatePassword, role } = useAuth();
+  useDocumentMeta({ title: "Admin Password Reset | EdenRadar", noindex: true });
+  const { session, loading, updatePassword } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -55,21 +55,17 @@ export default function AdminResetPassword() {
       toast({ title: "Could not update password", description: error, variant: "destructive" });
       return;
     }
-    toast({ title: "Password updated", description: "Welcome to EdenRadar!" });
-    const dest = isAdmin ? "/admin"
-      : role === "industry" ? "/industry/dashboard"
-      : role === "researcher" ? "/research"
-      : "/discovery";
-    navigate(dest, { replace: true });
+    toast({ title: "Password updated", description: "You can now sign in with your new password." });
+    navigate(isAdmin ? "/admin" : "/login", { replace: true });
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-background">
       <Card className="w-full max-w-md" data-testid="card-admin-reset-password">
         <CardHeader>
-          <CardTitle>Set your password</CardTitle>
+          <CardTitle>Set a new admin password</CardTitle>
           <CardDescription>
-            Choose a password to activate your EdenRadar account.
+            Enter a new password for your EdenRadar admin account.
           </CardDescription>
         </CardHeader>
         <CardContent>

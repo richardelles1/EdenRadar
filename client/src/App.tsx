@@ -29,6 +29,7 @@ import Sources from "@/pages/Sources";
 import Admin from "@/pages/Admin";
 import AdminMobile from "@/pages/AdminMobile";
 import AdminResetPassword from "@/pages/AdminResetPassword";
+import SetPassword from "@/pages/SetPassword";
 import ResearchDashboard from "@/pages/ResearchDashboard";
 import CreateDiscovery from "@/pages/CreateDiscovery";
 import MyDiscoveries from "@/pages/MyDiscoveries";
@@ -262,6 +263,7 @@ function Router() {
 
       <Route path="/unsubscribe" component={Unsubscribe} />
 
+      <Route path="/set-password" component={SetPassword} />
       <Route path="/admin" component={Admin} />
       <Route path="/admin/mobile" component={AdminMobile} />
       <Route path="/admin/reset-password" component={AdminResetPassword} />

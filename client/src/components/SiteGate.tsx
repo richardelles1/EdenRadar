@@ -14,6 +14,7 @@ export function SiteGate({ children }: { children: React.ReactNode }) {
     // Supabase password-recovery links for real recipients.
     "/unsubscribe",
     "/admin/reset-password",
+    "/set-password",
   ];
   // /admin/mobile has its own separate password gate ("eden") and does not
   // need the site-wide beta code — it should be bookmarkable on mobile.

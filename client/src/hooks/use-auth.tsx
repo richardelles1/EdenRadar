@@ -65,6 +65,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === "PASSWORD_RECOVERY") {
         setIsPasswordRecovery(true);
+        // Route to the correct password-set page regardless of what redirect_to
+        // Supabase resolved to (it strips path components unless explicitly allowed).
+        const isAdmin = s?.user?.user_metadata?.is_admin === true;
+        const dest = isAdmin ? "/admin/reset-password" : "/set-password";
+        if (!window.location.pathname.startsWith(dest)) {
+          window.location.replace(dest);
+        }
       }
       setSession(s);
       setUser(s?.user ?? null);
