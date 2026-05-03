@@ -32,6 +32,9 @@ import {
   MessageSquare,
   Send,
   Clock,
+  Activity,
+  BookOpen,
+  Lightbulb,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -81,6 +84,68 @@ const STATUS_CONFIG: Record<string, { label: string; pill: string; select: strin
   on_hold:       { label: "On Hold",       pill: "bg-amber-500/15 text-amber-400 border-amber-500/30",        select: "text-amber-400" },
   passed:        { label: "Passed",        pill: "bg-red-500/15 text-red-400 border-red-500/30",              select: "text-red-400" },
 };
+
+type SourceTypeKey = "tto" | "patent" | "trial" | "literature";
+
+const SOURCE_TYPE_CONFIG: Record<SourceTypeKey, {
+  label: string;
+  shortLabel: string;
+  icon: typeof FlaskConical;
+  iconColor: string;
+  stripColor: string;
+  borderHover: string;
+  pillClass: string;
+  filterActiveClass: string;
+}> = {
+  tto: {
+    label: "TTO Assets",
+    shortLabel: "TTO",
+    icon: FlaskConical,
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+    stripColor: "#22c55e",
+    borderHover: "hover:border-emerald-500/40",
+    pillClass: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/30",
+    filterActiveClass: "border-emerald-500/50 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  },
+  patent: {
+    label: "Patents",
+    shortLabel: "Patent",
+    icon: Lightbulb,
+    iconColor: "text-amber-600 dark:text-amber-400",
+    stripColor: "#d97706",
+    borderHover: "hover:border-amber-500/40",
+    pillClass: "bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    filterActiveClass: "border-amber-500/50 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  },
+  trial: {
+    label: "Clinical Trials",
+    shortLabel: "Trial",
+    icon: Activity,
+    iconColor: "text-teal-600 dark:text-teal-400",
+    stripColor: "#0d9488",
+    borderHover: "hover:border-teal-500/40",
+    pillClass: "bg-teal-500/10 text-teal-700 dark:text-teal-300 border-teal-500/30",
+    filterActiveClass: "border-teal-500/50 bg-teal-500/10 text-teal-700 dark:text-teal-300",
+  },
+  literature: {
+    label: "Literature",
+    shortLabel: "Literature",
+    icon: BookOpen,
+    iconColor: "text-violet-600 dark:text-violet-400",
+    stripColor: "#8b5cf6",
+    borderHover: "hover:border-violet-500/40",
+    pillClass: "bg-violet-500/10 text-violet-700 dark:text-violet-300 border-violet-500/30",
+    filterActiveClass: "border-violet-500/50 bg-violet-500/10 text-violet-700 dark:text-violet-300",
+  },
+};
+
+function getSourceTypeKey(sourceName: string | null | undefined): SourceTypeKey {
+  const sn = (sourceName ?? "").toLowerCase();
+  if (sn === "patent" || sn === "patents") return "patent";
+  if (sn === "clinical_trial" || sn === "clinicaltrials" || sn === "trial") return "trial";
+  if (sn === "literature" || sn === "pubmed" || sn === "biorxiv" || sn === "medrxiv" || sn === "preprint") return "literature";
+  return "tto";
+}
 
 function getBadgeClass(value: string) {
   if (!value) return "bg-muted text-muted-foreground border-border";
@@ -218,16 +283,25 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUs
   };
 
   const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
+  const sourceTypeKey = getSourceTypeKey(asset.sourceName);
+  const sourceMeta = SOURCE_TYPE_CONFIG[sourceTypeKey];
+  const SourceIcon = sourceMeta.icon;
 
   return (
     <div
-      className="group rounded-md border border-card-border bg-card hover:border-primary/30 transition-all duration-200 flex flex-col"
+      className={`group relative rounded-md border border-card-border bg-card transition-all duration-200 flex flex-col overflow-hidden ${sourceMeta.borderHover}`}
       data-testid={`pipeline-card-${asset.id}`}
+      data-source-type={sourceTypeKey}
     >
-      <div className="p-3.5 flex flex-col gap-2.5">
+      <div
+        className="absolute left-0 top-0 bottom-0 w-[3px] z-[1]"
+        style={{ background: sourceMeta.stripColor }}
+        aria-hidden="true"
+      />
+      <div className="p-3.5 pl-4 flex flex-col gap-2.5">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-1.5 min-w-0">
-            <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
+            <SourceIcon className={`w-3.5 h-3.5 shrink-0 ${sourceMeta.iconColor}`} />
             <span className="font-semibold text-sm text-foreground truncate leading-tight">
               {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
             </span>
@@ -259,6 +333,12 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUs
         </div>
 
         <div className="flex flex-wrap gap-1">
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${sourceMeta.pillClass}`}
+            data-testid={`pill-source-type-${asset.id}`}
+          >
+            {sourceMeta.shortLabel}
+          </span>
           {asset.modality && asset.modality !== "unknown" && (
             <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${getBadgeClass(asset.modality)}`}>
               {asset.modality}
@@ -768,6 +848,7 @@ export default function Assets() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedPipeline, setSelectedPipeline] = useState<number | null | "all">("all");
+  const [sourceTypeFilter, setSourceTypeFilter] = useState<"all" | SourceTypeKey>("all");
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
   const [briefLoading, setBriefLoading] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
@@ -941,10 +1022,17 @@ export default function Assets() {
 
   const pipelines = pipelinesData?.pipelines ?? [];
   const uncategorisedCount = pipelinesData?.uncategorisedCount ?? 0;
-  const displayedAssets = data?.assets ?? [];
+  const allAssets = data?.assets ?? [];
+
+  const sourceTypeCounts: Record<SourceTypeKey, number> = { tto: 0, patent: 0, trial: 0, literature: 0 };
+  for (const a of allAssets) sourceTypeCounts[getSourceTypeKey(a.sourceName)]++;
+
+  const displayedAssets = sourceTypeFilter === "all"
+    ? allAssets
+    : allAssets.filter((a) => getSourceTypeKey(a.sourceName) === sourceTypeFilter);
 
   const isLoading = pipelinesLoading || assetsLoading;
-  const totalAssets = displayedAssets.length;
+  const totalAssets = allAssets.length;
 
   const selectedPipelineName = selectedPipeline === "all"
     ? "All Assets"
@@ -1126,7 +1214,9 @@ export default function Assets() {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {displayedAssets.length} asset{displayedAssets.length !== 1 ? "s" : ""}
+                    {sourceTypeFilter === "all"
+                      ? `${displayedAssets.length} asset${displayedAssets.length !== 1 ? "s" : ""}`
+                      : `${displayedAssets.length} of ${totalAssets} asset${totalAssets !== 1 ? "s" : ""}`}
                     {teamScope && ` across ${org?.members.length ?? 0} team member${(org?.members.length ?? 0) !== 1 ? "s" : ""}`}
                   </p>
                 </div>
@@ -1173,13 +1263,54 @@ export default function Assets() {
                 </div>
               )}
 
+              {totalAssets > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-4" data-testid="source-type-filter-pills">
+                  {([
+                    { key: "all" as const, label: "All", count: totalAssets },
+                    { key: "tto" as const, label: SOURCE_TYPE_CONFIG.tto.shortLabel, count: sourceTypeCounts.tto },
+                    { key: "patent" as const, label: SOURCE_TYPE_CONFIG.patent.shortLabel, count: sourceTypeCounts.patent },
+                    { key: "trial" as const, label: SOURCE_TYPE_CONFIG.trial.shortLabel, count: sourceTypeCounts.trial },
+                    { key: "literature" as const, label: SOURCE_TYPE_CONFIG.literature.shortLabel, count: sourceTypeCounts.literature },
+                  ]).map(({ key, label, count }) => {
+                    const active = sourceTypeFilter === key;
+                    const meta = key !== "all" ? SOURCE_TYPE_CONFIG[key] : null;
+                    const Icon = meta?.icon;
+                    const activeClass = key === "all"
+                      ? "border-primary/50 bg-primary/10 text-primary"
+                      : meta!.filterActiveClass;
+                    return (
+                      <button
+                        key={key}
+                        onClick={() => setSourceTypeFilter(key)}
+                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${active ? `${activeClass} font-medium` : "border-border text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
+                        data-testid={`filter-source-type-${key}`}
+                      >
+                        {Icon && <Icon className="w-3 h-3" />}
+                        {label}
+                        <span className="text-[10px] tabular-nums opacity-70">{count}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
               {displayedAssets.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
                   <Layers className="w-8 h-8 text-muted-foreground/40" />
                   <p className="text-sm">
-                    {teamScope ? "No team assets saved yet." : "No assets in this pipeline yet."}
+                    {sourceTypeFilter !== "all" && totalAssets > 0
+                      ? `No ${SOURCE_TYPE_CONFIG[sourceTypeFilter as SourceTypeKey].shortLabel.toLowerCase()} assets in this pipeline.`
+                      : teamScope ? "No team assets saved yet." : "No assets in this pipeline yet."}
                   </p>
-                  {!teamScope && (
+                  {sourceTypeFilter !== "all" && totalAssets > 0 ? (
+                    <button
+                      onClick={() => setSourceTypeFilter("all")}
+                      className="text-xs text-primary hover:underline"
+                      data-testid="button-clear-source-filter"
+                    >
+                      Show all assets
+                    </button>
+                  ) : !teamScope && (
                     <Link href="/scout">
                       <Button variant="outline" size="sm" className="gap-1.5 mt-1" data-testid="button-discover-assets">
                         <ArrowRight className="w-3.5 h-3.5" />

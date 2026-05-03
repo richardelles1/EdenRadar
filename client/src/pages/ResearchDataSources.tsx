@@ -15,6 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
+import { PipelinePicker } from "@/components/PipelinePicker";
 import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject, SavedReference } from "@shared/schema";
 
@@ -1140,11 +1141,25 @@ function SignalCard({
           <Badge variant="secondary" className="text-[10px]">
             {SOURCE_TYPE_LABELS[signal.source_type] ?? signal.source_type}
           </Badge>
+          <PipelinePicker
+            payload={{
+              asset_name: signal.title,
+              source_title: signal.title,
+              source_journal: signal.institution_or_sponsor ?? "Unknown",
+              publication_year: signal.date?.slice(0, 4) ?? "Unknown",
+              source_name: "literature",
+              source_url: signal.url ?? null,
+              pmid: signal.url ?? null,
+              summary: signal.text ?? "",
+            }}
+            iconClassName="w-7 h-7 rounded"
+          />
           <Popover open={bookmarkOpen} onOpenChange={setBookmarkOpen}>
             <PopoverTrigger asChild>
               <button
                 className={`p-1 rounded transition-colors ${isSaved ? "text-violet-500" : "text-muted-foreground hover:text-foreground"}`}
                 data-testid={`button-bookmark-${index}`}
+                title="Save to research project"
               >
                 {isSaved ? <BookmarkCheck className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
               </button>
