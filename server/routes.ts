@@ -48,6 +48,25 @@ import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
 import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, verifyUnsubscribeTokenForEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "./email";
 
+/**
+ * Supabase's generateLink() builds action_link using the Site URL configured
+ * in the Supabase Dashboard — which may be localhost in dev/staging projects.
+ * This rewrites the origin to APP_URL so invite emails always link to
+ * production, regardless of what the Supabase project's Site URL is set to.
+ */
+function rewriteActionLinkOrigin(link: string | undefined): string | undefined {
+  if (!link) return undefined;
+  try {
+    const u = new URL(link);
+    const base = new URL(APP_URL);
+    u.protocol = base.protocol;
+    u.host = base.host;
+    return u.toString();
+  } catch {
+    return link;
+  }
+}
+
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
   preprint: ["preprint"],
@@ -7033,7 +7052,7 @@ If a field cannot be determined, use "N/A".`
         if (linkError) {
           console.warn("[email] Could not generate password-set link:", linkError.message);
         } else {
-          setPasswordLink = linkData?.properties?.action_link ?? undefined;
+          setPasswordLink = rewriteActionLinkOrigin(linkData?.properties?.action_link);
         }
       } catch (linkErr) {
         console.warn("[email] generateLink threw:", linkErr);
@@ -7094,7 +7113,7 @@ If a field cannot be determined, use "N/A".`
         options: { redirectTo: APP_URL },
       });
       if (linkError) return res.status(500).json({ error: linkError.message });
-      const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+      const setPasswordLink = rewriteActionLinkOrigin(linkData?.properties?.action_link);
 
       await sendTeamInviteEmail(
         member.email,
@@ -7278,7 +7297,7 @@ If a field cannot be determined, use "N/A".`
       let setPasswordLink: string | undefined;
       try {
         const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: APP_URL } });
-        if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
+        if (!linkError) setPasswordLink = rewriteActionLinkOrigin(linkData?.properties?.action_link);
       } catch {}
 
       const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "pending" });
@@ -7339,7 +7358,7 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: APP_URL } });
       if (linkError) return res.status(500).json({ error: linkError.message });
-      const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+      const setPasswordLink = rewriteActionLinkOrigin(linkData?.properties?.action_link);
 
       await sendTeamInviteEmail(member.email, member.memberName ?? "", org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
         console.error("[email] Resend self-service invite failed:", err)
