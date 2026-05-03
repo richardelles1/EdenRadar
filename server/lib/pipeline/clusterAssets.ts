@@ -9,7 +9,16 @@ function stringSimilarity(a: string, b: string): number {
   const na = normalize(a);
   const nb = normalize(b);
   if (na === nb) return 1;
-  if (na.includes(nb) || nb.includes(na)) return 0.8;
+  if (na.includes(nb) || nb.includes(na)) {
+    // Proportion guard: only count as similar when the shorter string covers
+    // ≥ 50% of the longer one. Without this, a short query word like "liver"
+    // (5 chars) is a substring of "livercirrhosis" (13 chars) and every pair
+    // of liver-related trials scores 0.8, collapsing all 25 distinct signals
+    // into one cluster. "sorafenib" vs "sorafenibtosylate" (86%) still merges.
+    const shorter = Math.min(na.length, nb.length);
+    const longer  = Math.max(na.length, nb.length);
+    if (shorter / longer >= 0.5) return 0.8;
+  }
   return 0;
 }
 
