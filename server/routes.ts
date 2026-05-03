@@ -10067,12 +10067,20 @@ If multiple assets appear, return each as a separate array item.`;
       const myEois = await storage.getMarketEoisByBuyer(userId);
       const myEoiMap = new Map(myEois.map(e => [e.listingId, e.status]));
 
+      // Batch resolve seller-verification status. We expose only a boolean —
+      // never leak the seller's org name or other identifying info (esp. for blind listings).
+      const sellerIds = [...new Set(listings.map(l => l.sellerId))];
+      const sellerOrgs = await Promise.all(sellerIds.map(sid => storage.getOrgForUser(sid).catch(() => null)));
+      const sellerVerifiedMap = new Map<string, boolean>();
+      sellerIds.forEach((sid, i) => sellerVerifiedMap.set(sid, !!sellerOrgs[i]?.marketSellerVerifiedAt));
+
       const result = listings.map((l, i) => ({
         ...l,
         assetName: l.blind ? null : l.assetName,
         eoiCount: eoiCounts[i],
         myEoiStatus: myEoiMap.get(l.id) ?? null,
         edenSignalScore: edenSignalScore(l, l.ingestedAssetId ? linkedMap.get(l.ingestedAssetId) ?? null : null),
+        sellerVerified: sellerVerifiedMap.get(l.sellerId) ?? false,
       }));
 
       res.json(result);
@@ -10215,12 +10223,14 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       const eoiCount = await storage.getMarketEoiCount(id);
       const myEoi = await storage.getBuyerEoiForListing(id, userId);
+      const sellerOrg = await storage.getOrgForUser(listing.sellerId).catch(() => null);
 
       res.json({
         ...listing,
         assetName: listing.blind && !isSeller ? null : listing.assetName,
         eoiCount,
         myEoi: myEoi ?? null,
+        sellerVerified: !!sellerOrg?.marketSellerVerifiedAt,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10690,6 +10700,46 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const orgs = await storage.getMarketSubscriberOrgs();
       res.json(orgs);
     } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/admin/orgs/:id/market-seller-verification — admin marks an org
+  // as a verified EdenMarket seller (or revokes verification).
+  // Mounted under /api/admin → already gated by requireAdmin middleware.
+  app.patch("/api/admin/orgs/:id/market-seller-verification", async (req, res) => {
+    try {
+      const orgId = parseInt(String(req.params.id), 10);
+      if (isNaN(orgId)) return res.status(400).json({ error: "Invalid org id" });
+
+      const schema = z.object({
+        verified: z.boolean(),
+        note: z.string().max(500).optional().nullable(),
+      });
+      const { verified, note } = schema.parse(req.body);
+
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const adminUser = await getAdminUser(req);
+      const adminLabel = adminUser?.email ?? adminUser?.id ?? "admin";
+
+      const updated = await storage.updateOrganization(orgId, verified
+        ? {
+            marketSellerVerifiedAt: new Date(),
+            marketSellerVerifiedBy: adminLabel,
+            marketSellerVerificationNote: note ?? null,
+          }
+        : {
+            marketSellerVerifiedAt: null,
+            marketSellerVerifiedBy: null,
+            marketSellerVerificationNote: null,
+          });
+
+      console.log(`[admin/market-seller-verification] org=${orgId} verified=${verified} by=${adminLabel}`);
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid payload", details: err.errors });
       res.status(500).json({ error: err.message });
     }
   });

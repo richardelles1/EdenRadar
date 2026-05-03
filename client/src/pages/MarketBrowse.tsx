@@ -6,11 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag, Zap } from "lucide-react";
+import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag, Zap, BadgeCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketListing } from "@shared/schema";
 
-type ListingWithMeta = MarketListing & { eoiCount: number; myEoiStatus: string | null; edenSignalScore?: number };
+type ListingWithMeta = MarketListing & { eoiCount: number; myEoiStatus: string | null; edenSignalScore?: number; sellerVerified?: boolean };
 
 const ACCENT = "hsl(271 81% 55%)";
 
@@ -109,9 +109,20 @@ function ListingCard({
             <Badge variant="outline" className="text-[10px] border-border">{listing.stage}</Badge>
           </div>
         </div>
-        <Badge variant="outline" className={cn("text-[10px] shrink-0", ENGAGEMENT_COLORS[listing.engagementStatus])}>
-          {ENGAGEMENT_LABELS[listing.engagementStatus] ?? listing.engagementStatus}
-        </Badge>
+        <div className="flex flex-col items-end gap-1 shrink-0">
+          {listing.sellerVerified && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400"
+              title="EdenMarket verified seller"
+              data-testid={`market-listing-verified-seller-${listing.id}`}
+            >
+              <BadgeCheck className="w-2.5 h-2.5" /> Verified Seller
+            </span>
+          )}
+          <Badge variant="outline" className={cn("text-[10px]", ENGAGEMENT_COLORS[listing.engagementStatus])}>
+            {ENGAGEMENT_LABELS[listing.engagementStatus] ?? listing.engagementStatus}
+          </Badge>
+        </div>
       </div>
 
       {listing.aiSummary && (

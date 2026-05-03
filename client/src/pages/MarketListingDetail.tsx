@@ -16,12 +16,12 @@ import {
   EyeOff, ChevronLeft, Send, Lock, Check,
   Building2, Beaker, Activity, DollarSign, FileText, Shield,
   Sparkles, ChevronDown, ChevronUp, FlaskConical, BookOpen, ExternalLink,
-  Microscope, Lightbulb, TrendingUp, Zap,
+  Microscope, Lightbulb, TrendingUp, Zap, BadgeCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketListing, MarketEoi } from "@shared/schema";
 
-type ListingDetail = MarketListing & { eoiCount: number; myEoi: MarketEoi | null };
+type ListingDetail = MarketListing & { eoiCount: number; myEoi: MarketEoi | null; sellerVerified?: boolean };
 
 type IntelligenceData = {
   relatedTtoAssets: Array<{
@@ -520,6 +520,15 @@ export default function MarketListingDetail() {
                 >
                   {ENGAGEMENT_LABELS[listing.engagementStatus] ?? listing.engagementStatus}
                 </Badge>
+                {listing.sellerVerified && (
+                  <span
+                    className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400"
+                    title="EdenMarket verified seller — admin-confirmed institution or company"
+                    data-testid="market-listing-detail-verified-seller"
+                  >
+                    <BadgeCheck className="w-3 h-3" /> Verified Seller
+                  </span>
+                )}
               </div>
             </div>
             <div className="text-right shrink-0">

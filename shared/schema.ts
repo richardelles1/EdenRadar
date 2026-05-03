@@ -684,6 +684,11 @@ export const organizations = pgTable("organizations", {
   // EdenMarket access — granted when org completes EdenMarket Stripe checkout
   edenMarketAccess: boolean("eden_market_access").notNull().default(false),
   edenMarketStripeSubId: text("eden_market_stripe_sub_id"),
+  // EdenMarket seller verification — granted by admin (ADMIN_EMAILS allowlist).
+  // When set, the org's listings show a "Verified Seller" badge on browse + detail.
+  marketSellerVerifiedAt: timestamp("market_seller_verified_at"),
+  marketSellerVerifiedBy: text("market_seller_verified_by"), // admin user id
+  marketSellerVerificationNote: text("market_seller_verification_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

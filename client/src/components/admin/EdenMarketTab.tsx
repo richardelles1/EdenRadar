@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, EyeOff,
   MessageSquare, Building2, Shield, DollarSign, AlertTriangle, ChevronDown, ChevronUp, Paperclip,
-  History as HistoryIcon,
+  History as HistoryIcon, BadgeCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { getAuthHeaders } from "@/lib/queryClient";
@@ -60,6 +60,9 @@ type SubscriberOrg = {
   billingEmail: string | null;
   edenMarketStripeSubId: string | null;
   createdAt: string;
+  marketSellerVerifiedAt: string | null;
+  marketSellerVerifiedBy: string | null;
+  marketSellerVerificationNote: string | null;
 };
 
 type AdminDeal = {
@@ -439,6 +442,23 @@ export function EdenMarketTab() {
     updateListing({ id, status: "paused", adminNote: noteInputs[id] ?? undefined });
   }
 
+  const { mutate: setSellerVerified, isPending: verifying } = useMutation({
+    mutationFn: async ({ orgId, verified, note }: { orgId: number; verified: boolean; note?: string }) => {
+      const res = await fetch(`/api/admin/orgs/${orgId}/market-seller-verification`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(await adminHeaders()) },
+        body: JSON.stringify({ verified, note }),
+      });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed"); }
+      return res.json();
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/market/subscribers"] });
+      toast({ title: vars.verified ? "Seller verified" : "Verification revoked" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
   const closedDeals = deals.filter(d => d.status === "closed");
   const loiDeals = deals.filter(d => d.status === "loi");
 
@@ -811,19 +831,62 @@ export function EdenMarketTab() {
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Billing Email</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Stripe Sub ID</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Since</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Verified Seller</th>
+                    <th className="text-right px-4 py-2.5 text-muted-foreground font-medium">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {subscribers.map(org => (
-                    <tr key={org.id} data-testid={`admin-market-subscriber-${org.id}`} className="hover:bg-muted/20 transition-colors">
-                      <td className="px-4 py-2.5 font-medium text-foreground">{org.name}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{org.billingEmail ?? "—"}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground font-mono">
-                        {org.edenMarketStripeSubId ? org.edenMarketStripeSubId.slice(0, 14) + "…" : "—"}
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{new Date(org.createdAt).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
+                  {subscribers.map(org => {
+                    const isVerified = !!org.marketSellerVerifiedAt;
+                    return (
+                      <tr key={org.id} data-testid={`admin-market-subscriber-${org.id}`} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-4 py-2.5 font-medium text-foreground">{org.name}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{org.billingEmail ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-muted-foreground font-mono">
+                          {org.edenMarketStripeSubId ? org.edenMarketStripeSubId.slice(0, 14) + "…" : "—"}
+                        </td>
+                        <td className="px-4 py-2.5 text-muted-foreground">{new Date(org.createdAt).toLocaleDateString()}</td>
+                        <td className="px-4 py-2.5">
+                          {isVerified ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-400" data-testid={`admin-seller-verified-${org.id}`}>
+                              <BadgeCheck className="w-3 h-3" /> {new Date(org.marketSellerVerifiedAt!).toLocaleDateString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60 text-[11px]">Not verified</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right">
+                          {isVerified ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[10px] px-2 text-destructive hover:text-destructive"
+                              onClick={() => setSellerVerified({ orgId: org.id, verified: false })}
+                              disabled={verifying}
+                              data-testid={`admin-seller-unverify-${org.id}`}
+                            >
+                              Revoke
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 text-[10px] gap-1 px-2 text-violet-600 border-violet-500/30"
+                              onClick={() => {
+                                const note = window.prompt(`Verify ${org.name} as an EdenMarket seller?\n\nOptional internal note (e.g., due-diligence reference):`) ?? undefined;
+                                if (note === undefined) return;
+                                setSellerVerified({ orgId: org.id, verified: true, note: note || undefined });
+                              }}
+                              disabled={verifying}
+                              data-testid={`admin-seller-verify-${org.id}`}
+                            >
+                              <BadgeCheck className="w-3 h-3" /> Verify
+                            </Button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
