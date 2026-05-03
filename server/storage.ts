@@ -3720,14 +3720,20 @@ export class DatabaseStorage implements IStorage {
         SUM(CASE WHEN label THEN 1 ELSE 0 END)::int AS positives
       FROM relevance_holdout GROUP BY label_source
     `);
+    type CountRow = { c: number };
+    type SourceRow = { label_source: string; count: number; positives: number };
+    const totalRows = (total as unknown as { rows?: CountRow[] }).rows ?? [];
+    const posRows = (pos as unknown as { rows?: CountRow[] }).rows ?? [];
+    const negRows = (neg as unknown as { rows?: CountRow[] }).rows ?? [];
+    const sourceRows = (bySource as unknown as { rows?: SourceRow[] }).rows ?? [];
     return {
-      total: ((total as any).rows?.[0]?.c ?? 0) as number,
-      positives: ((pos as any).rows?.[0]?.c ?? 0) as number,
-      negatives: ((neg as any).rows?.[0]?.c ?? 0) as number,
-      bySource: ((bySource as any).rows ?? []).map((r: any) => ({
-        labelSource: r.label_source as string,
-        count: r.count as number,
-        positives: r.positives as number,
+      total: totalRows[0]?.c ?? 0,
+      positives: posRows[0]?.c ?? 0,
+      negatives: negRows[0]?.c ?? 0,
+      bySource: sourceRows.map((r) => ({
+        labelSource: r.label_source,
+        count: r.count,
+        positives: r.positives,
       })),
     };
   }
@@ -3749,7 +3755,9 @@ export class DatabaseStorage implements IStorage {
       FROM user_asset_feedback
       WHERE created_at >= ${since}
     `);
-    const o = ((overall as any).rows?.[0] ?? {}) as { saves: number; dismisses: number; views: number };
+    type OverallRow = { saves: number; dismisses: number; views: number };
+    const overallRows = (overall as unknown as { rows?: OverallRow[] }).rows ?? [];
+    const o: OverallRow = overallRows[0] ?? { saves: 0, dismisses: 0, views: 0 };
     const oTotal = (o.saves ?? 0) + (o.dismisses ?? 0);
 
     // Per source
@@ -3844,7 +3852,9 @@ export class DatabaseStorage implements IStorage {
 
   async getLastRelevanceMetricsAt(): Promise<Date | null> {
     const r = await db.execute(sql`SELECT MAX(computed_at) AS t FROM relevance_metrics`);
-    const t = (r as any).rows?.[0]?.t;
+    type MaxRow = { t: Date | string | null };
+    const rows = (r as unknown as { rows?: MaxRow[] }).rows ?? [];
+    const t = rows[0]?.t;
     return t ? new Date(t) : null;
   }
 

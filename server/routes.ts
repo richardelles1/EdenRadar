@@ -1995,7 +1995,7 @@ export async function registerRoutes(
       const preFilterMod = await import("./lib/pipeline/relevancePreFilter");
       const classifierMod = await import("./lib/pipeline/relevanceClassifier");
       const { preFilterRelevance } = preFilterMod;
-      const { scoreText, CLASSIFIER_THRESHOLD, CLASSIFIER_V2_ENABLED, getActiveThreshold } = classifierMod;
+      const { preFilterRelevanceV2, CLASSIFIER_THRESHOLD, CLASSIFIER_V2_ENABLED, getActiveThreshold } = classifierMod;
       // Eval split only — train/eval partitioning is enforced by buildRelevanceHoldout.
       const rows = await storage.listRelevanceHoldout(20000, "eval");
       const activeThreshold = await getActiveThreshold();
@@ -2013,19 +2013,27 @@ export async function registerRoutes(
         });
       }
 
+      // We replay the *exact* production decision functions on each holdout
+      // row — preFilterRelevance for v1, preFilterRelevanceV2 for v2 — so
+      // the reported P/R/F1 reflects what ingestion actually does, including
+      // the "ambiguous → kept" routing rule.
       type Listing = Parameters<typeof preFilterRelevance>[0];
-      const scored = rows.map((r) => {
-        const text = r.text || "";
-        const probV2 = scoreText(text).prob;
-        const listing: Listing = {
-          title: text,
-          description: "",
-          url: "",
-          institution: r.sourceName || "unknown",
-        };
-        const v1 = preFilterRelevance(listing);
-        return { label: !!r.label, probV2, v1Pass: v1 !== "reject" };
+      const buildListing = (r: typeof rows[number]): Listing => ({
+        title: r.text || "",
+        description: "",
+        url: "",
+        institution: r.sourceName || "unknown",
       });
+      // Production pipeline keeps anything that isn't an explicit reject:
+      // both `pass` and `ambiguous` flow forward into the rest of ingestion.
+      const decisionToKept = (d: "pass" | "reject" | "ambiguous") => d !== "reject";
+
+      type Scored = { label: boolean; v1Kept: boolean; listing: Listing };
+      const scored: Scored[] = rows.map((r) => ({
+        label: !!r.label,
+        v1Kept: decisionToKept(preFilterRelevance(buildListing(r))),
+        listing: buildListing(r),
+      }));
 
       const tally = (preds: Array<{ label: boolean; pred: boolean }>) => {
         let tp = 0, fp = 0, tn = 0, fn = 0;
@@ -2041,16 +2049,19 @@ export async function registerRoutes(
         return { tp, fp, tn, fn, precision, recall, f1 };
       };
 
-      const v1Stats = tally(scored.map((s) => ({ label: s.label, pred: s.v1Pass })));
-      const evalAt = (t: number) => tally(scored.map((s) => ({ label: s.label, pred: s.probV2 >= t })));
-      const v2Stats = evalAt(CLASSIFIER_THRESHOLD);
+      const v1Stats = tally(scored.map((s) => ({ label: s.label, pred: s.v1Kept })));
+      const evalV2At = (t: number) => tally(scored.map((s) => ({
+        label: s.label,
+        pred: decisionToKept(preFilterRelevanceV2(s.listing, t)),
+      })));
+      const v2Stats = evalV2At(CLASSIFIER_THRESHOLD);
       const sweep = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7].map((t) => ({
         threshold: t,
-        ...evalAt(t),
+        ...evalV2At(t),
       }));
       // currentPipeline = whichever pre-filter actually runs in production
       // right now (v1 keyword OR v2 classifier at the active threshold).
-      const currentStats = CLASSIFIER_V2_ENABLED ? evalAt(activeThreshold) : v1Stats;
+      const currentStats = CLASSIFIER_V2_ENABLED ? evalV2At(activeThreshold) : v1Stats;
       // bestThreshold = sweep entry with the highest F1 — used by
       // POST /api/admin/relevance/threshold/tune to persist the choice.
       const best = sweep.reduce((acc, s) => (s.f1 > acc.f1 ? s : acc), sweep[0]);
@@ -2078,15 +2089,23 @@ export async function registerRoutes(
   app.post("/api/admin/relevance/threshold/tune", async (_req, res) => {
     try {
       const classifierMod = await import("./lib/pipeline/relevanceClassifier");
-      const { scoreText, invalidateThresholdCache } = classifierMod;
+      const { preFilterRelevanceV2, invalidateThresholdCache } = classifierMod;
       const rows = await storage.listRelevanceHoldout(20000, "eval");
       if (rows.length === 0) return res.status(400).json({ error: "Holdout is empty — build it first" });
-      const probs = rows.map((r) => ({ label: !!r.label, prob: scoreText(r.text || "").prob }));
+      // Tune against the *real* v2 decision function (preFilterRelevanceV2),
+      // so the chosen threshold optimizes the same pass/ambiguous/reject
+      // routing that ingestion uses — not a proxy probability cutoff.
+      type Listing = Parameters<typeof preFilterRelevanceV2>[0];
+      const listings: Array<{ label: boolean; listing: Listing }> = rows.map((r) => ({
+        label: !!r.label,
+        listing: { title: r.text || "", description: "", url: "", institution: r.sourceName || "unknown" },
+      }));
       let best = { threshold: 0.5, f1: -1 };
       for (const t of [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]) {
         let tp = 0, fp = 0, fn = 0;
-        for (const p of probs) {
-          const pred = p.prob >= t;
+        for (const p of listings) {
+          const decision = preFilterRelevanceV2(p.listing, t);
+          const pred = decision !== "reject"; // pass + ambiguous both flow forward
           if (pred && p.label) tp++;
           else if (pred && !p.label) fp++;
           else if (!pred && p.label) fn++;
