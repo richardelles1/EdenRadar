@@ -1110,7 +1110,15 @@ export const texasTechScraper = createFlintboxScraper(
   "Texas Tech University"
 );
 export const untScraper = createStubScraper("University of North Texas");
-export const baylorScraper = createInPartScraper("bcm", "Baylor College of Medicine");
+// Baylor University (Waco, Texas) — Flintbox portal at baylor.flintbox.com.
+// Re-investigated 2026-05-03 (Task #717): credentials orgId=201 discovered from page source,
+// API returns 42 technologies (matches the 42 orphan rows previously misattributed when
+// baylorScraper was aliased to the In-Part "bcm" subdomain — that "bcm" subdomain is
+// Baylor College of Medicine in Houston, a separate institution covered by bcmScraper).
+export const baylorScraper = createFlintboxScraper(
+  { slug: "baylor", orgId: 201, accessKey: "613499ba-c868-4819-9b2d-d7744d83bebc" },
+  "Baylor University"
+);
 export const portlandStateScraper = createInPartScraper("pdx", "Portland State University");
 export const umontanaScraper = createStubScraper("University of Montana");
 export const montanaStateScraper = createMontanaStateScraper();
@@ -4267,86 +4275,17 @@ export const tuDelftScraper: InstitutionScraper = createStubScraper(
   "No public technology licensing catalog found — tudelft.nl innovation pages are informational only"
 );
 
-// ── NUS Enterprise (National University of Singapore) ────────────────────────
-// enterprise.nus.edu.sg is protected by Imperva/Incapsula anti-bot (SWUDNSAI challenge).
-// Playwright fallback — Incapsula may still block headless browsers.
-export const nusScraper: InstitutionScraper = {
-  institution: "NUS Enterprise",
-  scraperType: "playwright",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "NUS Enterprise";
-    const LIST_URL = "https://enterprise.nus.edu.sg/technologies/";
-    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
-    // Try direct fetch first
-    try {
-      const res = await fetch(LIST_URL, {
-        headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (res.ok) {
-        const html = await res.text();
-        if (!html.includes("Incapsula") && !html.includes("SWUDNSAI")) {
-          const techRe = /href="(https?:\/\/enterprise\.nus\.edu\.sg\/(?:technologies?|tech)[^"]+)"/gi;
-          const results: ScrapedListing[] = [];
-          const seen = new Set<string>();
-          let m: RegExpExecArray | null;
-          while ((m = techRe.exec(html)) !== null) {
-            if (seen.has(m[1])) continue;
-            seen.add(m[1]);
-            results.push({ title: m[1].split("/").filter(Boolean).pop() ?? m[1], description: "", url: m[1], institution: INST });
-          }
-          if (results.length > 0) {
-            console.log(`[scraper] ${INST}: ${results.length} listings (direct fetch)`);
-            return results;
-          }
-        }
-      }
-    } catch {
-      // Fall through to Playwright
-    }
-
-    // Playwright fallback (Incapsula detection may still block)
-    try {
-      const { chromium } = await import("playwright");
-      const browser = await chromium.launch({
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      });
-      const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({ "User-Agent": UA });
-      await page.goto(LIST_URL, { waitUntil: "networkidle", timeout: 40_000 });
-
-      // Check for Incapsula challenge
-      const bodyText = await page.textContent("body") ?? "";
-      if (bodyText.includes("Incapsula") || bodyText.includes("Request unsuccessful")) {
-        await browser.close();
-        console.warn(`[scraper] ${INST}: blocked by Incapsula anti-bot`);
-        return [];
-      }
-
-      await page.waitForSelector("a[href*='/tech']", { timeout: 8_000 }).catch(() => null);
-      const links = await page.evaluate(() => {
-        const anchors = Array.from(document.querySelectorAll("a"));
-        return anchors.map(a => ({ href: (a as HTMLAnchorElement).href, text: (a as HTMLElement).innerText.trim() }));
-      });
-      await browser.close();
-
-      const results: ScrapedListing[] = [];
-      const seen = new Set<string>();
-      for (const { href, text } of links) {
-        if (!href.includes("enterprise.nus.edu.sg/tech") || seen.has(href)) continue;
-        if (!text || text.length < 4) continue;
-        seen.add(href);
-        results.push({ title: text, description: "", url: href, institution: INST });
-      }
-      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright)`);
-      return results;
-    } catch (err: any) {
-      console.warn(`[scraper] ${INST}: Playwright failed — ${err?.message}`);
-      return [];
-    }
-  },
-};
+// ── National University of Singapore — Flintbox ──────────────────────────────
+// Re-investigated 2026-05-03 (Task #717): enterprise.nus.edu.sg remains blocked by
+// Imperva/Incapsula. The functional public IP catalog is nus.flintbox.com (orgId=67,
+// accessKey discovered from page source). Portfolio is small — API returns 1 technology
+// today, which matches the single orphan row previously written under this institution
+// name. Canonical institution string "National University of Singapore" matches the
+// historical orphan attribution.
+export const nusScraper: InstitutionScraper = createFlintboxScraper(
+  { slug: "nus", orgId: 67, accessKey: "54cd9616-abe5-4e1f-b7d9-a518525f9f69" },
+  "National University of Singapore"
+);
 
 // University of Nottingham — implemented via TechPublisher factory below (Task #113)
 
@@ -7363,9 +7302,22 @@ export const brockScraper = createInPartScraper("brock", "Brock University");
 // confirming "nova" In-Part subdomain belongs to Nova Southeastern University (NSU),
 // not NOVA University Lisbon (which has a separate In-Part presence under a different subdomain).
 export const novaSeScraper = createInPartScraper("nova", "Nova Southeastern University");
-// Backward-compat alias kept so other code referencing novaLisbonScraper still compiles;
-// the institution was previously mis-attributed — correct name is Nova Southeastern University.
-export const novaLisbonScraper = novaSeScraper;
+
+// ── in-part: NOVA University Lisbon ──────────────────────────────────────────
+// Re-investigated 2026-05-03 (Task #717): app.in-part.com portalSubdomain=unl is the
+// official "Universidade Nova de Lisboa" portal — confirmed 48 technologies including
+// "NOVASkin® 3D Human Skin Models" and other NOVA-branded inventions. The legacy
+// novaLisbonScraper was previously aliased to the "nova" subdomain (Nova Southeastern,
+// US) which produced misattribution; this restores the correct portal under the canonical
+// institution name "NOVA University Lisbon" matching the 12 historical orphan rows.
+export const novaLisbonScraper = createInPartScraper("unl", "NOVA University Lisbon");
+
+// kyotoIcemsScraper (Task #717): existing Flintbox scraper at icems.flintbox.com is
+// defined earlier in this file (orgId=120). Re-confirmed 2026-05-03: 3 technologies
+// returned via the Flintbox API. Registered in ALL_SCRAPERS under canonical name
+// "Kyoto University (ICEMS)" — distinct from Kyoto University TLO (kyotoTloScraper)
+// which scrapes tlo-kyoto.co.jp. The 2 historical orphan rows under this institution
+// name will now flow through this scraper and merge cleanly on next sync.
 
 // ── in-part: Worcester Polytechnic Institute ──────────────────────────────────
 // app.in-part.com portalSubdomain=wpi confirmed 2026-05-01: 45 tech listings.

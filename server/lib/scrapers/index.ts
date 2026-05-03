@@ -416,6 +416,10 @@ import {
   researchLuxembourgScraper,
   auaScraper,
   cuhkOrktsScraper,
+  // Task #717 — Restored scrapers for orphaned institutions
+  novaLisbonScraper,
+  nusScraper,
+  kyotoIcemsScraper,
 } from "./new-institutions";
 
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
@@ -868,6 +872,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   brockScraper,
   // novaLisbonScraper removed — was mis-attributed; "nova" In-Part portal is Nova Southeastern University.
   // The novaSeScraper below (Task #617) replaces it under the correct institution name.
+  // novaLisbonScraper restored under Task #717 below — uses in-part "unl" portal under canonical
+  // institution string "NOVA University Lisbon".
   // ── Task #617 — Stub overhaul + 6 new institutions ────────────────────────
   novaSeScraper,                 // Nova Southeastern University — in-part "nova" ~18
   wpiScraper,                    // Worcester Polytechnic Institute — in-part "wpi" ~45
@@ -875,6 +881,11 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   researchLuxembourgScraper,    // Research Luxembourg — in-part "researchluxembourg" ~77
   auaScraper,                    // American University of Armenia — in-part "aua" ~4
   cuhkOrktsScraper,              // Chinese University of Hong Kong (ORKTS) — TechPublisher "cuhk-orkts"
+  // ── Task #717 — Restored scrapers for orphaned institutions ───────────────
+  baylorScraper,                 // Baylor University (Waco) — Flintbox "baylor" — 42 techs confirmed 2026-05-03
+  novaLisbonScraper,             // NOVA University Lisbon — in-part "unl" — 48 techs confirmed 2026-05-03
+  nusScraper,                    // National University of Singapore — Flintbox "nus" — 1 tech confirmed 2026-05-03
+  kyotoIcemsScraper,             // Kyoto University (ICEMS) — stub; tech transfer flows through Kyoto TLO
   // ── Bespoke scrapers batch 2A (Task #104) + 2B (Task #105, March 2026) ────
   csusScraper,
   loyolaChicagoScraper,
