@@ -855,8 +855,10 @@ async function ensureInstitutionMetadataTable() {
         access_restricted boolean NOT NULL DEFAULT false
       )
     `);
-    const existing = await db.execute(sql`SELECT count(*)::int AS n FROM institution_metadata`);
-    const existingCount = ((existing as any).rows?.[0] as any)?.n ?? 0;
+    const existing = await db.execute<{ n: number }>(
+      sql`SELECT count(*)::int AS n FROM institution_metadata`,
+    );
+    const existingCount = existing.rows[0]?.n ?? 0;
     if (existingCount === 0) {
       const { INSTITUTIONS, BLOCKED_SLUGS } = await import("./lib/institutionSeed");
       for (const inst of INSTITUTIONS) {

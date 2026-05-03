@@ -1941,8 +1941,17 @@ export async function registerRoutes(
   // University" from a scraper merges into the "stanford" metadata row.
   // Used by Institutions.tsx for the badge/grid, by Sources.tsx for the TTO
   // index table, and by Scout.tsx + Discover.tsx for coverage tooltips.
+  // Canonical membership = ALL_SCRAPERS ∪ DISTINCT ingested_assets.institution.
+  // institution_metadata is an *overlay* (display name, city, TTO, website,
+  // specialties, continent, restriction flags) — it never adds members on its
+  // own, so the badge cannot drift toward the legacy "marketing shelf".
+  const INSTITUTIONS_CACHE_KEY = "institutions:all:v2";
+  const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
   app.get("/api/institutions", async (_req, res) => {
     try {
+      const cached = cacheGet<object>(INSTITUTIONS_CACHE_KEY);
+      if (cached) return res.json(cached);
+
       const [metadataRows, counts] = await Promise.all([
         db.select().from(institutionMetadata),
         storage.getInstitutionAssetCounts(),
@@ -1950,8 +1959,8 @@ export async function registerRoutes(
 
       const metaBySlug = new Map(metadataRows.map((m) => [m.slug, m]));
 
-      // Aggregate counts from ingested_assets (keyed by raw institution name)
-      // into our canonical slug space so that name variants fold together.
+      // Fold ingested counts (keyed by raw name) into canonical slug space so
+      // name variants ("MIT" vs "Massachusetts Institute of Technology") merge.
       const countBySlug = new Map<string, number>();
       const nameBySlug = new Map<string, string>();
       for (const [rawName, n] of Object.entries(counts)) {
@@ -1960,10 +1969,9 @@ export async function registerRoutes(
         if (!nameBySlug.has(slug)) nameBySlug.set(slug, rawName);
       }
 
-      // Seed the slug universe with metadata + every active scraper. Scraper
-      // institution strings supply a fallback display name for any slug that
-      // isn't in the curated metadata table yet.
-      const slugSet = new Set<string>(metadataRows.map((m) => m.slug));
+      // Membership comes ONLY from scrapers + ingested data. Metadata
+      // contributes display fields, not slugs.
+      const slugSet = new Set<string>();
       for (const s of ALL_SCRAPERS) {
         const slug = slugifyInstitutionName(s.institution);
         slugSet.add(slug);
@@ -1989,7 +1997,9 @@ export async function registerRoutes(
       });
 
       institutions.sort((a, b) => a.name.localeCompare(b.name));
-      res.json({ institutions, total: institutions.length });
+      const payload = { institutions, total: institutions.length };
+      cacheSet(INSTITUTIONS_CACHE_KEY, payload, INSTITUTIONS_CACHE_TTL_MS);
+      res.json(payload);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch institutions" });
     }
@@ -1997,217 +2007,25 @@ export async function registerRoutes(
 
   app.get("/api/institutions/:slug/assets", async (req, res) => {
     try {
-      const SLUG_TO_NAME: Record<string, string> = {
-        stanford: "Stanford University",
-        mit: "MIT",
-        harvard: "Harvard University",
-        jhu: "Johns Hopkins University",
-        ucsf: "UC San Francisco",
-        duke: "Duke University",
-        columbia: "Columbia University",
-        upenn: "University of Pennsylvania",
-        northwestern: "Northwestern University",
-        cornell: "Cornell University",
-        ucberkeley: "UC Berkeley",
-        uwashington: "University of Washington",
-        wustl: "Washington University in St. Louis",
-        umich: "University of Michigan",
-        mayo: "Mayo Clinic",
-        scripps: "Scripps Research",
-        salk: "Salk Institute for Biological Studies",
-        mdanderson: "MD Anderson Cancer Center",
-        upitt: "University of Pittsburgh",
-        uchicago: "University of Chicago",
-        vanderbilt: "Vanderbilt University",
-        emory: "Emory University",
-        bu: "Boston University",
-        georgetown: "Georgetown University",
-        utexas: "University of Texas",
-        cwru: "Case Western Reserve University",
-        ucolorado: "University of Colorado",
-        princeton: "Princeton University",
-        ucla: "UCLA",
-        brown: "Brown University",
-        rochester: "University of Rochester",
-        tufts: "Tufts University",
-        uthealth: "UT Health",
-        coloradostate: "Colorado State University",
-        virginiatech: "Virginia Tech",
-        usf: "University of South Florida",
-        waynestate: "Wayne State University",
-        utdallas: "UT Dallas",
-        msstate: "Mississippi State University",
-        utoledo: "University of Toledo",
-        njit: "New Jersey Institute of Technology",
-        calpoly: "Cal Poly San Luis Obispo",
-        slu: "Saint Louis University",
-        ucdavis: "UC Davis",
-        utah: "University of Utah",
-        uva: "University of Virginia",
-        uoregon: "University of Oregon",
-        gwu: "George Washington University",
-        czbiohub: "CZ Biohub",
-        musc: "Medical University of South Carolina",
-        southcarolina: "University of South Carolina",
-        lehigh: "Lehigh University",
-        clemson: "Clemson University",
-        iowastate: "Iowa State University",
-        tgen: "Translational Genomics Research Institute",
-        wsu: "Washington State University",
-        arizona: "University of Arizona",
-        pennstate: "Penn State University",
-        rutgers: "Rutgers University",
-        stevens: "Stevens Institute of Technology",
-        rpi: "Rensselaer Polytechnic Institute",
-        stonybrook: "Stony Brook University",
-        cincinnati: "University of Cincinnati",
-        buffalo: "University at Buffalo",
-        rowan: "Rowan University",
-        georgemason: "George Mason University",
-        umaine: "University of Maine",
-        binghamton: "Binghamton University",
-        usc: "University of Southern California",
-        oregonstate: "Oregon State University",
-        gsu: "Georgia State University",
-        northeastern: "Northeastern University",
-        uvm: "University of Vermont",
-        usd: "University of South Dakota",
-        txstate: "Texas State University",
-        yale: "Yale University",
-        purdue: "Purdue University",
-        umn: "University of Minnesota",
-        miami: "University of Miami",
-        upstate: "SUNY Upstate Medical University",
-        suny: "SUNY System",
-        alabama: "University of Alabama",
-        wyoming: "University of Wyoming",
-        idaho: "University of Idaho",
-        gatech: "Georgia Institute of Technology",
-        fsu: "Florida State University",
-        ucf: "University of Central Florida",
-        fiu: "Florida International University",
-        tamu: "Texas A&M University",
-        rice: "Rice University",
-        uhouston: "University of Houston",
-        texastech: "Texas Tech University",
-        unt: "University of North Texas",
-        baylor: "Baylor University",
-        portlandstate: "Portland State University",
-        umontana: "University of Montana",
-        montanastate: "Montana State University",
-        unm: "University of New Mexico",
-        nmsu: "New Mexico State University",
-        unr: "University of Nevada, Reno",
-        unlv: "University of Nevada, Las Vegas",
-        usu: "Utah State University",
-        byu: "Brigham Young University",
-        uaf: "University of Alaska Fairbanks",
-        uaa: "University of Alaska Anchorage",
-        und: "University of North Dakota",
-        ndsu: "North Dakota State University",
-        sdstate: "South Dakota State University",
-        indiana: "Indiana University",
-        notredame: "University of Notre Dame",
-        warf: "University of Wisconsin",
-        auburn: "Auburn University",
-        uga: "University of Georgia",
-        uarkansas: "University of Arkansas",
-        uams: "University of Arkansas for Medical Sciences",
-        olemiss: "University of Mississippi",
-        udel: "University of Delaware",
-        temple: "Temple University",
-        drexel: "Drexel University",
-        bucknell: "Bucknell University",
-        sunyalbany: "SUNY Albany",
-        uconn: "University of Connecticut",
-        dartmouth: "Dartmouth College",
-        brandeis: "Brandeis University",
-        unh: "University of New Hampshire",
-        uri: "University of Rhode Island",
-        mountsinai: "Icahn School of Medicine at Mount Sinai",
-        caltech: "California Institute of Technology",
-        asu: "Arizona State University",
-        uillinois: "University of Illinois",
-        oxford: "University of Oxford",
-        cambridge: "University of Cambridge",
-        imperial: "Imperial College London",
-        ucl: "University College London",
-        manchester: "University of Manchester",
-        edinburgh: "University of Edinburgh",
-        bristol: "University of Bristol",
-        glasgow: "University of Glasgow",
-        birmingham: "University of Birmingham",
-        nottingham: "University of Nottingham",
-        leeds: "University of Leeds",
-        sheffield: "University of Sheffield",
-        southampton: "University of Southampton",
-        warwick: "University of Warwick",
-        kcl: "King's College London",
-        ethzurich: "ETH Zurich",
-        epfl: "EPFL",
-        ubasel: "University of Basel",
-        ulausanne: "University of Lausanne",
-        ugeneva: "University of Geneva",
-        uzurich: "University of Zurich",
-        kuleuven: "KU Leuven",
-        ugent: "Ghent University",
-        groningen: "University of Groningen",
-        uamsterdam: "University of Amsterdam",
-        vuamsterdam: "Vrije Universiteit Amsterdam",
-        leiden: "Leiden University",
-        karolinska: "Karolinska Institutet",
-        inven2: "University of Oslo",
-        vis: "University of Bergen",
-        ntnu: "NTNU",
-        ucph: "University of Copenhagen",
-        aarhus: "Aarhus University",
-        dtu: "Technical University of Denmark",
-        lund: "Lund University",
-        chalmers: "Chalmers University of Technology",
-        gothenburg: "University of Gothenburg",
-        helsinki: "University of Helsinki",
-        aalto: "Aalto University",
-        tum: "Technical University of Munich",
-        lmu: "Ludwig Maximilian University of Munich",
-        rwth: "RWTH Aachen University",
-        ufreiburg: "University of Freiburg",
-        ubonn: "University of Bonn",
-        ucologne: "University of Cologne",
-        utubingen: "University of Tübingen",
-        heidelberg: "University of Heidelberg",
-        weizmann: "Weizmann Institute of Science",
-        technion: "Technion – Israel Institute of Technology",
-        utoronto: "University of Toronto",
-        mcgill: "McGill University",
-        ubc: "University of British Columbia",
-        ucalgary: "University of Calgary",
-        usask: "University of Saskatchewan",
-        umanitoba: "University of Manitoba",
-        uvic: "University of Victoria",
-        sfu: "Simon Fraser University",
-        umelbourne: "University of Melbourne",
-        monash: "Monash University",
-        usydney: "University of Sydney",
-        uniquest: "University of Queensland",
-        nus: "National University of Singapore",
-        hkust: "Hong Kong University of Science and Technology",
-        hku: "University of Hong Kong",
-        ucm: "Universidad Complutense de Madrid",
-      };
-      // Resolution order for the slug → canonical institution name:
-      //   1. institution_metadata table (preferred — kept in sync with seed)
-      //   2. legacy SLUG_TO_NAME hardcoded map (kept as a fallback for any
-      //      slugs not yet migrated into the metadata table)
-      //   3. distinct ingested_assets.institution values (catches scraped
-      //      institutions whose name slugifies to this slug)
-      //   4. title-case derivation from the slug itself
+      // Resolution order for slug → canonical institution name (no hardcoded
+      // map — everything is derived from live data via slugifyInstitutionName):
+      //   1. institution_metadata table (curated overlay, kept in sync via seed)
+      //   2. ALL_SCRAPERS reverse lookup (slug of scraper.institution matches)
+      //   3. distinct ingested_assets.institution reverse lookup
+      //   4. title-case derivation from the slug itself (last-resort)
       const slug = req.params.slug;
       const meta = await db
         .select({ name: institutionMetadata.name })
         .from(institutionMetadata)
         .where(eq(institutionMetadata.slug, slug))
         .limit(1);
-      let name = meta[0]?.name ?? SLUG_TO_NAME[slug];
+      let name: string | undefined = meta[0]?.name;
+      if (!name) {
+        const scraperHit = ALL_SCRAPERS.find(
+          (s) => slugifyInstitutionName(s.institution) === slug,
+        );
+        if (scraperHit) name = scraperHit.institution;
+      }
       if (!name) {
         const counts = await storage.getInstitutionAssetCounts();
         for (const rawName of Object.keys(counts)) {
