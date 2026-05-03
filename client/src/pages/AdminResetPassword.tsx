@@ -11,7 +11,7 @@ import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function AdminResetPassword() {
   useDocumentMeta({ title: "Admin Password Reset | EdenRadar", noindex: true });
-  const { session, loading, updatePassword } = useAuth();
+  const { session, loading, updatePassword, isPasswordRecovery } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -20,14 +20,26 @@ export default function AdminResetPassword() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (!loading && !session) {
+    if (loading || isAdmin === null) return;
+    if (!session) {
       toast({
         title: "Reset link expired",
         description: "Open the password-reset email again to start over.",
         variant: "destructive",
       });
+      return;
     }
-  }, [loading, session, toast]);
+    if (!isAdmin) {
+      // Non-admin with a live session hit this admin-only page.
+      // Industry users arriving via a recovery email are routed to /set-password
+      // by the auth hook; this is a hard fallback for any that slip through.
+      if (isPasswordRecovery) {
+        navigate("/set-password", { replace: true });
+      } else {
+        navigate("/login", { replace: true });
+      }
+    }
+  }, [loading, isAdmin, session, isPasswordRecovery, toast, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

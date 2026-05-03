@@ -59,15 +59,18 @@ export default function SetPassword() {
       return;
     }
 
+    // Eagerly flip invite_status → active so ScoutGate passes immediately.
+    // Non-fatal: /api/industry/org also auto-activates on first dashboard load
+    // as a safety net if this call fails transiently.
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
       const activateRes = await fetch("/api/industry/activate-invite", { method: "POST", headers });
       if (!activateRes.ok) {
-        console.warn("[set-password] activate-invite responded", activateRes.status);
+        console.warn("[set-password] activate-invite responded", activateRes.status, "– fallback activation will run on /api/industry/org");
       }
     } catch (activateErr) {
-      console.warn("[set-password] activate-invite network error:", activateErr);
+      console.warn("[set-password] activate-invite network error:", activateErr, "– fallback activation will run on /api/industry/org");
     }
 
     setSubmitting(false);
