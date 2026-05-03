@@ -180,7 +180,7 @@ function EdenMarketTeaser() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const VIOLET = "hsl(271 81% 55%)";
+  const VIOLET = "hsl(234 80% 58%)";
   const newListings7d = data?.newListings7d ?? 0;
   const matchingFilters = data?.matchingFilters ?? 0;
   const hasAccess = data?.hasAccess ?? false;
@@ -191,8 +191,8 @@ function EdenMarketTeaser() {
       <div
         className="rounded-xl p-5 transition-all duration-200 hover:-translate-y-0.5"
         style={{
-          background: "linear-gradient(135deg, hsl(271 81% 55% / 0.06), hsl(271 81% 55% / 0.01))",
-          border: "1px solid hsl(271 81% 55% / 0.20)",
+          background: "linear-gradient(135deg, hsl(234 80% 58% / 0.06), hsl(234 80% 58% / 0.01))",
+          border: "1px solid hsl(234 80% 58% / 0.20)",
           animation: "dash-fade-up 400ms ease 70ms both",
         }}
         data-testid="dashboard-edenmarket-upsell"
@@ -200,13 +200,13 @@ function EdenMarketTeaser() {
         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
           <div className="flex-1 space-y-2">
             <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(271 81% 55% / 0.15)" }}>
+              <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
                 <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
               </div>
               <p className="text-sm font-bold text-foreground">EdenMarket activity</p>
               <span
                 className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                style={{ background: "hsl(271 81% 55% / 0.15)", color: VIOLET }}
+                style={{ background: "hsl(234 80% 58% / 0.15)", color: VIOLET }}
               >
                 Marketplace
               </span>
@@ -241,8 +241,8 @@ function EdenMarketTeaser() {
     <div
       className="rounded-xl p-5 transition-all duration-200 hover:-translate-y-0.5"
       style={{
-        background: "linear-gradient(135deg, hsl(271 81% 55% / 0.06), hsl(271 81% 55% / 0.01))",
-        border: "1px solid hsl(271 81% 55% / 0.20)",
+        background: "linear-gradient(135deg, hsl(234 80% 58% / 0.06), hsl(234 80% 58% / 0.01))",
+        border: "1px solid hsl(234 80% 58% / 0.20)",
         animation: "dash-fade-up 400ms ease 70ms both",
       }}
       data-testid="dashboard-edenmarket-teaser"
@@ -250,13 +250,13 @@ function EdenMarketTeaser() {
       <div className="flex flex-col lg:flex-row lg:items-center gap-4">
         <div className="flex-1 space-y-2">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(271 81% 55% / 0.15)" }}>
+            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
               <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
             </div>
             <p className="text-sm font-bold text-foreground">EdenMarket activity</p>
             <span
               className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-              style={{ background: "hsl(271 81% 55% / 0.15)", color: VIOLET }}
+              style={{ background: "hsl(234 80% 58% / 0.15)", color: VIOLET }}
             >
               Marketplace
             </span>
@@ -270,16 +270,16 @@ function EdenMarketTeaser() {
           {isLoading ? (
             [1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)
           ) : isError ? (
-            <div className="col-span-2 rounded-lg p-3 text-center" style={{ background: "hsl(var(--background))", border: "1px dashed hsl(271 81% 55% / 0.25)" }} data-testid="market-stat-error">
+            <div className="col-span-2 rounded-lg p-3 text-center" style={{ background: "hsl(var(--background))", border: "1px dashed hsl(234 80% 58% / 0.25)" }} data-testid="market-stat-error">
               <p className="text-[10px] text-muted-foreground">Marketplace stats unavailable right now.</p>
             </div>
           ) : (
             <>
-              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-new7d">
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(234 80% 58% / 0.15)" }} data-testid="market-stat-new7d">
                 <p className="text-lg font-black tabular-nums text-foreground">{newListings7d.toLocaleString()}</p>
                 <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">New (7d)</p>
               </div>
-              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-matching">
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(234 80% 58% / 0.15)" }} data-testid="market-stat-matching">
                 <p className="text-lg font-black tabular-nums text-foreground">{matchingFilters.toLocaleString()}</p>
                 <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Match your filters</p>
               </div>
@@ -305,7 +305,7 @@ function EdenMarketTeaser() {
               size="sm"
               variant="outline"
               className="w-full h-8 text-xs gap-1.5"
-              style={{ borderColor: "hsl(271 81% 55% / 0.4)", color: VIOLET }}
+              style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: VIOLET }}
               data-testid="button-dashboard-edenmarket-list"
             >
               <Lock className="w-3 h-3" />

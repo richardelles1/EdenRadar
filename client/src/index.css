@@ -20,6 +20,15 @@
   --opaque-button-border-intensity: -8;
   --elevate-1: rgba(0,0,0, .03);
   --elevate-2: rgba(0,0,0, .08);
+
+  /* Portal accent tokens (HSL components, no hsl() wrapper).
+     Use as: hsl(var(--portal-market)) or hsl(var(--portal-market) / 0.5) */
+  --portal-radar: 142 52% 36%;     /* EdenRadar / Scout — emerald */
+  --portal-scout: 142 52% 36%;     /* alias for Scout */
+  --portal-lab: 262 80% 60%;       /* EdenLab — violet */
+  --portal-discovery: 38 92% 50%;  /* EdenDiscovery — amber */
+  --portal-market: 234 80% 58%;    /* EdenMarket — indigo */
+
   --background: 210 25% 97%;
   --foreground: 220 30% 12%;
   --border: 210 15% 86%;

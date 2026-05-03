@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const SAMPLE_LISTINGS = [
   {
@@ -150,15 +150,15 @@ export default function MarketPreview() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-12 space-y-16">
         {/* Hero */}
         <section className="text-center space-y-5" data-testid="market-preview-hero">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20">
-            <ShoppingBag className="w-3.5 h-3.5 text-violet-500" />
-            <span className="text-xs font-semibold text-violet-600 dark:text-violet-400 tracking-wide uppercase">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+            <ShoppingBag className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase">
               EdenMarket — Live Preview
             </span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-bold text-foreground tracking-tight">
             The confidential biopharma<br />
-            <span className="text-violet-600 dark:text-violet-400">deal marketplace</span>
+            <span className="text-indigo-600 dark:text-indigo-400">deal marketplace</span>
           </h1>
           <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
             EdenMarket connects BD/licensing teams with sellers of deprioritized programs, TTO spin-outs, and non-core
@@ -180,7 +180,7 @@ export default function MarketPreview() {
                 </>
               ) : (
                 <>
-                  Subscribe — $1,000/mo
+                  Subscribe to EdenMarket
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -202,7 +202,7 @@ export default function MarketPreview() {
                 A taste of what subscribers see — real listings are curated and admin-reviewed.
               </p>
             </div>
-            <Badge variant="outline" className="border-violet-500/30 text-violet-600 dark:text-violet-400 bg-violet-500/5">
+            <Badge variant="outline" className="border-indigo-500/30 text-indigo-600 dark:text-indigo-400 bg-indigo-500/5">
               Demo data
             </Badge>
           </div>
@@ -212,10 +212,10 @@ export default function MarketPreview() {
         </section>
 
         {/* Comparison teaser */}
-        <section className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-6 sm:p-8 space-y-5" data-testid="market-preview-compare">
+        <section className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-6 sm:p-8 space-y-5" data-testid="market-preview-compare">
           <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-lg bg-violet-500/15 flex items-center justify-center shrink-0">
-              <GitCompareArrows className="w-5 h-5 text-violet-500" />
+            <div className="w-10 h-10 rounded-lg bg-indigo-500/15 flex items-center justify-center shrink-0">
+              <GitCompareArrows className="w-5 h-5 text-indigo-500" />
             </div>
             <div className="flex-1">
               <h2 className="text-xl font-bold text-foreground">Compare up to 3 listings side-by-side</h2>
@@ -266,8 +266,8 @@ export default function MarketPreview() {
           <div className="grid sm:grid-cols-3 gap-3">
             {HOW_IT_WORKS.map((s) => (
               <div key={s.title} className="rounded-xl border border-border bg-background p-4 space-y-2">
-                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                  <s.icon className="w-4 h-4 text-violet-500" />
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                  <s.icon className="w-4 h-4 text-indigo-500" />
                 </div>
                 <p className="text-sm font-semibold text-foreground">{s.title}</p>
                 <p className="text-xs text-muted-foreground leading-relaxed">{s.body}</p>
@@ -276,35 +276,29 @@ export default function MarketPreview() {
           </div>
         </section>
 
-        {/* Pricing */}
-        <section className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-6 sm:p-8 space-y-6" data-testid="market-preview-pricing">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20 mb-2">
-                <Lock className="w-3 h-3 text-violet-500" />
-                <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 tracking-wide uppercase">
-                  Subscription
-                </span>
-              </div>
-              <h2 className="text-xl font-bold text-foreground">EdenMarket Access</h2>
-              <p className="text-sm text-muted-foreground mt-1">Full buy-side and sell-side access</p>
+        {/* Subscription CTA — pricing details live on /pricing */}
+        <section className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-6 sm:p-8 space-y-6" data-testid="market-preview-pricing">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+              <Lock className="w-3 h-3 text-indigo-500" />
+              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase">
+                Subscription
+              </span>
             </div>
-            <div className="text-right">
-              <p className="text-3xl font-bold text-foreground tabular-nums">$1,000</p>
-              <p className="text-xs text-muted-foreground">per month</p>
-            </div>
+            <h2 className="text-xl font-bold text-foreground">EdenMarket Access</h2>
+            <p className="text-sm text-muted-foreground">Full buy-side and sell-side access. Success-fee aligned — pay only when a deal closes.</p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-4">
             <ul className="space-y-2.5">
               {[
                 "Unlimited listing browsing",
-                "Submit up to 10 EOIs / month",
-                "Side-by-side comparison (up to 3)",
+                "Submit EOIs and side-by-side comparison",
                 "NDA-gated deal rooms",
+                "Eden Signal Score on every listing",
               ].map((f) => (
                 <li key={f} className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                   <span className="text-sm text-muted-foreground">{f}</span>
                 </li>
               ))}
@@ -312,34 +306,24 @@ export default function MarketPreview() {
             <ul className="space-y-2.5">
               {[
                 "Create and manage your own listings",
-                "Blind/confidential listing option",
+                "Blind / confidential listing option",
                 "Admin-reviewed listing quality",
-                "Eden Signal Score on every listing",
+                "Audit trail on documents and messages",
               ].map((f) => (
                 <li key={f} className="flex items-start gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+                  <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                   <span className="text-sm text-muted-foreground">{f}</span>
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="rounded-xl border border-border bg-card p-4 space-y-2">
-            <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Success fees on closed deals</p>
-            <div className="grid sm:grid-cols-3 gap-3 text-xs">
-              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
-                <span className="text-muted-foreground">Deal &lt; $10M</span>
-                <span className="font-semibold text-foreground tabular-nums">$10,000</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
-                <span className="text-muted-foreground">$10M – $50M</span>
-                <span className="font-semibold text-foreground tabular-nums">$30,000</span>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-border/60 px-3 py-2">
-                <span className="text-muted-foreground">Deal &gt; $50M</span>
-                <span className="font-semibold text-foreground tabular-nums">$50,000</span>
-              </div>
-            </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <Link href="/pricing">
+              <a className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline" data-testid="market-preview-see-pricing">
+                See full pricing →
+              </a>
+            </Link>
           </div>
 
           <div className="flex items-center justify-center gap-3 flex-wrap pt-2">

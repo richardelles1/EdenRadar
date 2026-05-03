@@ -16,7 +16,7 @@ import type { MarketListing } from "@shared/schema";
 
 type ListingWithMeta = MarketListing & { eoiCount: number; myEoiStatus: string | null; edenSignalScore?: number; sellerVerified?: boolean };
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const ENGAGEMENT_LABELS: Record<string, string> = {
   actively_seeking: "Actively Seeking",
@@ -89,8 +89,8 @@ function ListingCard({
   return (
     <div
       className={cn(
-        "rounded-xl border bg-card p-5 flex flex-col gap-3 transition-all cursor-pointer hover:border-violet-500/30",
-        selected ? "border-violet-500/50 ring-1 ring-violet-500/30" : "border-card-border"
+        "rounded-xl border bg-card p-5 flex flex-col gap-3 transition-all cursor-pointer hover:border-indigo-500/30",
+        selected ? "border-indigo-500/50 ring-1 ring-indigo-500/30" : "border-card-border"
       )}
       onClick={() => navigate(`/market/listing/${listing.id}`)}
       data-testid={`market-listing-card-${listing.id}`}
@@ -116,7 +116,7 @@ function ListingCard({
         <div className="flex flex-col items-end gap-1 shrink-0">
           {listing.sellerVerified && (
             <span
-              className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400"
+              className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
               title="Eden ops has confirmed this seller's organization and authority to list this asset."
               data-testid={`market-listing-verified-seller-${listing.id}`}
             >
@@ -147,8 +147,8 @@ function ListingCard({
             className={cn(
               "p-1.5 rounded-md text-xs transition-colors border",
               selected
-                ? "border-violet-500/40 bg-violet-500/10 text-violet-600"
-                : canCompare || selected ? "border-border bg-background text-muted-foreground hover:border-violet-500/30" : "border-border bg-background text-muted-foreground/40 cursor-not-allowed"
+                ? "border-indigo-500/40 bg-indigo-500/10 text-indigo-600"
+                : canCompare || selected ? "border-border bg-background text-muted-foreground hover:border-indigo-500/30" : "border-border bg-background text-muted-foreground/40 cursor-not-allowed"
             )}
             disabled={!selected && !canCompare}
             title={selected ? "Remove from comparison" : "Add to comparison"}
@@ -511,7 +511,7 @@ export default function MarketBrowse() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">

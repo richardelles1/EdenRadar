@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { ChevronLeft, Save } from "lucide-react";
 import type { MarketListing } from "@shared/schema";
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const THERAPEUTIC_AREAS = [
   "Oncology", "Immunology", "Neurology", "Cardiology", "Rare Diseases",
@@ -177,7 +177,7 @@ export default function MarketEditListing() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -370,8 +370,8 @@ export default function MarketEditListing() {
                 ))}
               </div>
             </div>
-            <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-4 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Buyer-facing preview</p>
+            <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Buyer-facing preview</p>
               {anyBlind ? (
                 <p className="text-xs text-muted-foreground italic">Confidential Listing</p>
               ) : (

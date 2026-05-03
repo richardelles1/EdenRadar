@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { MarketSidebar } from "@/components/MarketSidebar";
 import { AppSwitcher } from "@/components/AppSwitcher";
+import { PortalBackground } from "@/components/PortalBackground";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -57,7 +58,7 @@ function MarketGraceBanner() {
       <Button
         size="sm"
         className="text-white shrink-0"
-        style={{ background: "hsl(271 81% 55%)" }}
+        style={{ background: "hsl(234 80% 58%)" }}
         onClick={() => subscribe()}
         disabled={subLoading}
         data-testid="button-market-grace-reactivate"
@@ -88,7 +89,7 @@ export function MarketLayout({ children }: MarketLayoutProps) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -100,6 +101,7 @@ export function MarketLayout({ children }: MarketLayoutProps) {
       className="flex min-h-screen bg-background relative"
       style={orgColor ? ({ "--org-accent": orgColor } as React.CSSProperties) : {}}
     >
+      <PortalBackground variant="market" />
       <MarketSidebar />
       <div className="flex-1 flex flex-col min-w-0">
         <div className="h-12 flex items-center justify-end px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">

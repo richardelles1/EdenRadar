@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-type Variant = "radar" | "lab" | "discovery";
+type Variant = "radar" | "lab" | "discovery" | "market";
 
 interface Props {
   variant: Variant;
@@ -191,6 +191,73 @@ function LabPortalBg({ reduced }: { reduced: boolean }) {
   );
 }
 
+const MARKET_PARTICLES = [
+  { x: "10%", y: "18%", size: 3.5, delay: "0s",    dur: "9s" },
+  { x: "78%", y: "10%", size: 3,   delay: "1.8s",  dur: "11s" },
+  { x: "92%", y: "50%", size: 4,   delay: "1.0s",  dur: "8s" },
+  { x: "60%", y: "78%", size: 3,   delay: "3.5s",  dur: "10s" },
+  { x: "22%", y: "62%", size: 4.5, delay: "3.0s",  dur: "7s" },
+  { x: "45%", y: "10%", size: 3,   delay: "1.5s",  dur: "12s" },
+  { x: "70%", y: "48%", size: 5,   delay: "4.8s",  dur: "9s" },
+  { x: "30%", y: "82%", size: 3.5, delay: "0.6s",  dur: "10s" },
+  { x: "85%", y: "30%", size: 3,   delay: "5.5s",  dur: "8s" },
+  { x: "18%", y: "40%", size: 6,   delay: "2.2s",  dur: "13s" },
+];
+
+function MarketPortalBg({ reduced }: { reduced: boolean }) {
+  const color = "234 80% 62%";
+  return (
+    <>
+      <DotGrid color={color} opacity={0.08} />
+      {!reduced && [0, 3, 6].map((delay, i) => (
+        <div
+          key={i}
+          className="absolute portal-bg-anim"
+          style={{
+            left: "40%",
+            top: "30%",
+            width: 220,
+            height: 220,
+            marginLeft: -110,
+            marginTop: -110,
+            borderRadius: "50%",
+            border: `1.5px solid hsl(${color} / 0.20)`,
+            animation: `lab-ring-expand 9s ease-out ${delay}s infinite`,
+          }}
+        />
+      ))}
+      {[300, 480, 660].map((r, i) => (
+        <div
+          key={r}
+          className="absolute rounded-full border"
+          style={{
+            left: "40%",
+            top: "30%",
+            width: r,
+            height: r,
+            transform: "translate(-50%, -50%)",
+            borderColor: `hsl(${color} / ${0.13 - i * 0.03})`,
+          }}
+        />
+      ))}
+      {!reduced && MARKET_PARTICLES.map((p, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full portal-bg-anim"
+          style={{
+            left: p.x,
+            top: p.y,
+            width: p.size * 2,
+            height: p.size * 2,
+            background: `hsl(${color})`,
+            animation: `portal-particle-drift ${p.dur} ease-in-out ${p.delay} infinite`,
+          }}
+        />
+      ))}
+    </>
+  );
+}
+
 function DiscoveryPortalBg({ reduced }: { reduced: boolean }) {
   const color = "38 95% 55%";
   return (
@@ -247,6 +314,7 @@ export function PortalBackground({ variant }: Props) {
       {variant === "radar"     && <RadarPortalBg     reduced={reduced} />}
       {variant === "lab"       && <LabPortalBg       reduced={reduced} />}
       {variant === "discovery" && <DiscoveryPortalBg reduced={reduced} />}
+      {variant === "market"    && <MarketPortalBg    reduced={reduced} />}
     </div>
   );
 }

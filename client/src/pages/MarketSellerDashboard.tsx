@@ -28,7 +28,7 @@ type SellerEoiGroup = {
   eois: EoiEntry[];
 };
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const STATUS_BADGE: Record<string, string> = {
   draft: "bg-muted text-muted-foreground border-border",
@@ -181,7 +181,7 @@ export default function MarketSellerDashboard() {
         {[
           { label: "Active", value: active.length, color: "text-emerald-600" },
           { label: "Pending Review", value: pending.length, color: "text-amber-600" },
-          { label: "Total EOIs", value: listings.reduce((s, l) => s + l.eoiCount, 0), color: "text-violet-600" },
+          { label: "Total EOIs", value: listings.reduce((s, l) => s + l.eoiCount, 0), color: "text-indigo-600" },
         ].map(s => (
           <div key={s.label} className="rounded-xl border border-card-border bg-card p-4 text-center">
             <p className={cn("text-2xl font-bold", s.color)}>{s.value}</p>
@@ -192,7 +192,7 @@ export default function MarketSellerDashboard() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : listings.length === 0 ? (
         <div className="text-center py-16 space-y-4">
@@ -280,7 +280,7 @@ export default function MarketSellerDashboard() {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="h-7 text-xs gap-1 text-violet-600 border-violet-500/30"
+                        className="h-7 text-xs gap-1 text-indigo-600 border-indigo-500/30"
                         onClick={() => updateStatus({ id: l.id, status: "pending" })}
                         disabled={updatingId}
                         data-testid={`seller-listing-submit-${l.id}`}
@@ -388,7 +388,7 @@ export default function MarketSellerDashboard() {
                             {eoi.status === "accepted" && (
                               <div className="pt-1">
                                 <button
-                                  className="flex items-center gap-1 text-[10px] text-violet-600 hover:underline"
+                                  className="flex items-center gap-1 text-[10px] text-indigo-600 hover:underline"
                                   onClick={() => navigate("/market/deals")}
                                   data-testid={`seller-eoi-view-deal-${eoi.id}`}
                                 >

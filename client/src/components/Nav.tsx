@@ -1,9 +1,17 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Bookmark, Moon, Sun, Sprout, Radar, Menu, X } from "lucide-react";
+import {
+  Bookmark, Moon, Sun, Sprout, Radar, Menu, X, ChevronDown,
+  FlaskConical, Lightbulb, ShoppingBag,
+} from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { SavedAsset } from "@shared/schema";
 
 type NavProps = {
@@ -17,6 +25,144 @@ function normalizePath(path: string) {
   return stripped.length > 1 ? stripped.replace(/\/+$/, "") : stripped;
 }
 
+type PortalEntry = {
+  name: string;
+  blurb: string;
+  href: string;
+  Icon: typeof FlaskConical;
+  accent: string;
+};
+
+const RESEARCHER_PORTALS: PortalEntry[] = [
+  {
+    name: "EdenLab",
+    blurb: "Structured project workspace, literature, and grants for academic researchers.",
+    href: "/research",
+    Icon: FlaskConical,
+    accent: "262 80% 60%",
+  },
+  {
+    name: "EdenDiscovery",
+    blurb: "Submit early-stage concepts and get scored visibility before formal research begins.",
+    href: "/discovery",
+    Icon: Lightbulb,
+    accent: "38 92% 50%",
+  },
+];
+
+const INDUSTRY_PORTALS: PortalEntry[] = [
+  {
+    name: "EdenScout",
+    blurb: "AI-enriched signals from 300+ TTOs, patent filings, and academic publications.",
+    href: "/scout",
+    Icon: Radar,
+    accent: "142 52% 36%",
+  },
+  {
+    name: "EdenMarket",
+    blurb: "The blind marketplace for licensable biotech assets, with NDA-gated deal rooms.",
+    href: "/market/preview",
+    Icon: ShoppingBag,
+    accent: "234 80% 58%",
+  },
+];
+
+type PortalContext = "scout" | "market" | "lab" | "discovery" | null;
+
+function detectPortal(path: string): PortalContext {
+  if (path.startsWith("/research")) return "lab";
+  if (path.startsWith("/discovery")) return "discovery";
+  if (path.startsWith("/market")) return "market";
+  if (
+    path.startsWith("/scout") || path.startsWith("/industry") ||
+    path.startsWith("/assets") || path.startsWith("/asset/") ||
+    path.startsWith("/reports") || path.startsWith("/report") ||
+    path.startsWith("/alerts") || path.startsWith("/institutions") ||
+    path.startsWith("/sources") || path.startsWith("/dashboard") ||
+    path.startsWith("/discover") || path.startsWith("/pipeline")
+  ) return "scout";
+  return null;
+}
+
+const PORTAL_NAV: Record<NonNullable<PortalContext>, { label: string; href: string }[]> = {
+  scout: [
+    { label: "Dashboard", href: "/industry/dashboard" },
+    { label: "Scout", href: "/scout" },
+    { label: "Assets", href: "/assets" },
+    { label: "Reports", href: "/reports" },
+    { label: "Alerts", href: "/alerts" },
+  ],
+  market: [
+    { label: "Browse", href: "/market" },
+    { label: "Deals", href: "/market/deals" },
+    { label: "My EOIs", href: "/market/my-eois" },
+    { label: "Seller", href: "/market/seller" },
+  ],
+  lab: [
+    { label: "Dashboard", href: "/research" },
+    { label: "Projects", href: "/research/projects" },
+    { label: "Library", href: "/research/library" },
+    { label: "Grants", href: "/research/grants" },
+    { label: "Alerts", href: "/research/alerts" },
+  ],
+  discovery: [
+    { label: "Feed", href: "/discovery" },
+    { label: "My Concepts", href: "/discovery/my-concepts" },
+    { label: "Submit", href: "/discovery/submit" },
+  ],
+};
+
+function PortalDropdown({
+  label,
+  entries,
+  testId,
+}: { label: string; entries: PortalEntry[]; testId: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          className="px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-150 inline-flex items-center gap-1"
+          data-testid={testId}
+        >
+          {label}
+          <ChevronDown className="w-3.5 h-3.5 opacity-70" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-[320px] p-2">
+        {entries.map((e) => (
+          <Link key={e.href} href={e.href}>
+            <a
+              className="flex items-start gap-3 p-2.5 rounded-md hover:bg-accent transition-colors"
+              data-testid={`link-portal-${e.name.toLowerCase()}`}
+            >
+              <div
+                className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+                style={{ background: `hsl(${e.accent} / 0.12)`, color: `hsl(${e.accent})` }}
+              >
+                <e.Icon className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-foreground" style={{ color: `hsl(${e.accent})` }}>
+                  {e.name}
+                </div>
+                <div className="text-xs text-muted-foreground leading-snug">{e.blurb}</div>
+              </div>
+            </a>
+          </Link>
+        ))}
+        <Link href="/pricing">
+          <a
+            className="block mt-1 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            data-testid={`link-portal-pricing-${testId}`}
+          >
+            See pricing →
+          </a>
+        </Link>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
 export function Nav({ onOpenSaved }: NavProps) {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
@@ -24,6 +170,7 @@ export function Nav({ onOpenSaved }: NavProps) {
 
   const normalizedLocation = normalizePath(location);
   const isPublic = PUBLIC_PATHS.includes(normalizedLocation);
+  const portal = isPublic ? null : detectPortal(normalizedLocation);
 
   const { data } = useQuery<{ assets: SavedAsset[] }>({
     queryKey: ["/api/saved-assets"],
@@ -31,21 +178,7 @@ export function Nav({ onOpenSaved }: NavProps) {
   });
   const savedCount = data?.assets?.length ?? 0;
 
-  const appNavLinks = [
-    { href: "/", label: "Home" },
-    { href: "/scout", label: "Scout" },
-    { href: "/assets", label: "Assets" },
-  ];
-
-  const publicNavLinks = [
-    { href: "/about", label: "About" },
-    { href: "/what-we-do", label: "What We Do" },
-    { href: "/how-it-works", label: "How It Works" },
-    { href: "/market/preview", label: "EdenMarket" },
-    { href: "/pricing", label: "Pricing" },
-  ];
-
-  const navLinks = isPublic ? publicNavLinks : appNavLinks;
+  const portalLinks = portal ? PORTAL_NAV[portal] : [];
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
@@ -66,29 +199,80 @@ export function Nav({ onOpenSaved }: NavProps) {
 
           {/* Desktop nav links */}
           <nav className="hidden sm:flex items-center gap-1">
-            {navLinks.map((link) => {
-              const isActive = normalizedLocation === link.href;
-              return (
-                <Link key={link.href} href={link.href}>
+            {isPublic ? (
+              <>
+                <Link href="/about">
                   <button
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
-                      isActive
+                      normalizedLocation === "/about"
                         ? "bg-accent text-foreground"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
                     }`}
-                    data-testid={`link-nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    data-testid="link-nav-about"
                   >
-                    {link.label}
+                    About
                   </button>
                 </Link>
-              );
-            })}
+                <PortalDropdown
+                  label="For Researchers"
+                  entries={RESEARCHER_PORTALS}
+                  testId="link-nav-for-researchers"
+                />
+                <PortalDropdown
+                  label="For Industry"
+                  entries={INDUSTRY_PORTALS}
+                  testId="link-nav-for-industry"
+                />
+                <Link href="/how-it-works">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/how-it-works"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-how-it-works"
+                  >
+                    How It Works
+                  </button>
+                </Link>
+                <Link href="/pricing">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/pricing"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-pricing"
+                  >
+                    Pricing
+                  </button>
+                </Link>
+              </>
+            ) : (
+              portalLinks.map((link) => {
+                const isActive = normalizedLocation === link.href;
+                return (
+                  <Link key={link.href} href={link.href}>
+                    <button
+                      className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                        isActive
+                          ? "bg-accent text-foreground"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                      }`}
+                      data-testid={`link-nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {link.label}
+                    </button>
+                  </Link>
+                );
+              })
+            )}
           </nav>
         </div>
 
         {/* Right side */}
         <div className="flex items-center gap-2">
-          {!isPublic && (
+          {!isPublic && portal === "scout" && (
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
               <Radar className="w-3 h-3 text-primary" />
               <span className="text-xs font-medium text-primary">AI Discovery Engine</span>
@@ -135,7 +319,7 @@ export function Nav({ onOpenSaved }: NavProps) {
                     </span>
                   )}
                 </Button>
-              ) : (
+              ) : portal === "scout" ? (
                 <Link href="/assets">
                   <Button
                     variant="outline"
@@ -152,7 +336,7 @@ export function Nav({ onOpenSaved }: NavProps) {
                     )}
                   </Button>
                 </Link>
-              )}
+              ) : null}
             </>
           )}
 
@@ -174,24 +358,63 @@ export function Nav({ onOpenSaved }: NavProps) {
       {/* Mobile dropdown for public pages */}
       {isPublic && mobileOpen && (
         <div className="sm:hidden border-t border-border bg-background/95 backdrop-blur-md px-4 py-3 flex flex-col gap-1">
-          {publicNavLinks.map((link) => {
-            const isActive = normalizedLocation === link.href;
-            return (
-              <Link key={link.href} href={link.href}>
-                <button
-                  className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium transition-all duration-150 ${
-                    isActive
-                      ? "bg-accent text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                  }`}
-                  onClick={() => setMobileOpen(false)}
-                  data-testid={`link-nav-mobile-${link.label.toLowerCase().replace(/\s+/g, "-")}`}
-                >
-                  {link.label}
-                </button>
-              </Link>
-            );
-          })}
+          <Link href="/about">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-about"
+            >
+              About
+            </button>
+          </Link>
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            For Researchers
+          </div>
+          {RESEARCHER_PORTALS.map((e) => (
+            <Link key={e.href} href={e.href}>
+              <button
+                className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                onClick={() => setMobileOpen(false)}
+                data-testid={`link-nav-mobile-${e.name.toLowerCase()}`}
+              >
+                <span style={{ color: `hsl(${e.accent})` }}>{e.name}</span>
+                <span className="block text-[11px] text-muted-foreground/80 leading-snug mt-0.5">{e.blurb}</span>
+              </button>
+            </Link>
+          ))}
+          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            For Industry
+          </div>
+          {INDUSTRY_PORTALS.map((e) => (
+            <Link key={e.href} href={e.href}>
+              <button
+                className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                onClick={() => setMobileOpen(false)}
+                data-testid={`link-nav-mobile-${e.name.toLowerCase()}`}
+              >
+                <span style={{ color: `hsl(${e.accent})` }}>{e.name}</span>
+                <span className="block text-[11px] text-muted-foreground/80 leading-snug mt-0.5">{e.blurb}</span>
+              </button>
+            </Link>
+          ))}
+          <Link href="/how-it-works">
+            <button
+              className="w-full text-left mt-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-how-it-works"
+            >
+              How It Works
+            </button>
+          </Link>
+          <Link href="/pricing">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-pricing"
+            >
+              Pricing
+            </button>
+          </Link>
           <Link href="/login">
             <Button
               size="sm"

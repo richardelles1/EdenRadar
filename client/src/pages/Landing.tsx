@@ -592,37 +592,37 @@ export default function Landing() {
           <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
               <div className="space-y-5">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "hsl(271 81% 55% / 0.10)", border: "1px solid hsl(271 81% 55% / 0.25)" }}>
-                  <ShoppingBag className="w-3.5 h-3.5" style={{ color: "hsl(271 81% 55%)" }} />
-                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "hsl(271 81% 55%)" }}>EdenMarket</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "hsl(234 80% 58% / 0.10)", border: "1px solid hsl(234 80% 58% / 0.25)" }}>
+                  <ShoppingBag className="w-3.5 h-3.5" style={{ color: "hsl(234 80% 58%)" }} />
+                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "hsl(234 80% 58%)" }}>EdenMarket</span>
                 </div>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
                   The blind marketplace for{" "}
-                  <span style={{ color: "hsl(271 81% 55%)" }}>licensable biotech assets</span>
+                  <span style={{ color: "hsl(234 80% 58%)" }}>licensable biotech assets</span>
                 </h2>
                 <p className="text-base text-muted-foreground leading-relaxed">
                   Buyers see structured listings — therapeutic area, modality, stage, IP profile — without seller identities. Engage anonymously, sign an NDA inside the deal room, and unlock the full asset only when both sides agree.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                   <div className="flex items-start gap-2.5">
-                    <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(234 80% 58%)" }} />
                     <div>
                       <p className="text-xs font-semibold text-foreground">Blind by default</p>
                       <p className="text-[11px] text-muted-foreground leading-snug">Identity hidden until NDA signed.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(234 80% 58%)" }} />
                     <div>
                       <p className="text-xs font-semibold text-foreground">NDA-gated deal room</p>
                       <p className="text-[11px] text-muted-foreground leading-snug">Documents, messages, audit trail.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(234 80% 58%)" }} />
                     <div>
                       <p className="text-xs font-semibold text-foreground">Success-fee aligned</p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">$1k/mo + only if you close.</p>
+                      <p className="text-[11px] text-muted-foreground leading-snug">Pay only when a deal closes — see pricing.</p>
                     </div>
                   </div>
                 </div>
@@ -630,7 +630,7 @@ export default function Landing() {
                   <Link href="/market/preview">
                     <Button
                       className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                      style={{ background: "hsl(271 81% 55%)", color: "white", border: "none" }}
+                      style={{ background: "hsl(234 80% 58%)", color: "white", border: "none" }}
                       data-testid="button-landing-edenmarket-buyer"
                     >
                       <ShoppingBag className="w-4 h-4" />
@@ -642,7 +642,7 @@ export default function Landing() {
                     <Button
                       variant="outline"
                       className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                      style={{ borderColor: "hsl(271 81% 55% / 0.4)", color: "hsl(271 81% 55%)" }}
+                      style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: "hsl(234 80% 58%)" }}
                       data-testid="button-landing-edenmarket-seller"
                     >
                       List your assets
@@ -652,10 +652,10 @@ export default function Landing() {
                 </div>
               </div>
 
-              <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(271 81% 55% / 0.08), hsl(271 81% 55% / 0.02))", border: "1px solid hsl(271 81% 55% / 0.20)" }}>
+              <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(234 80% 58% / 0.08), hsl(234 80% 58% / 0.02))", border: "1px solid hsl(234 80% 58% / 0.20)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sample listing</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "hsl(271 81% 55% / 0.15)", color: "hsl(271 81% 55%)" }}>BLIND</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "hsl(234 80% 58% / 0.15)", color: "hsl(234 80% 58%)" }}>BLIND</span>
                 </div>
                 <div className="space-y-3">
                   <div>
@@ -678,7 +678,7 @@ export default function Landing() {
                   </div>
                   <div className="pt-3 border-t border-border/50 flex items-center justify-between">
                     <span className="text-[11px] text-muted-foreground">Seller identity revealed after NDA</span>
-                    <Lock className="w-3.5 h-3.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <Lock className="w-3.5 h-3.5" style={{ color: "hsl(234 80% 58%)" }} />
                   </div>
                 </div>
               </div>
@@ -690,60 +690,99 @@ export default function Landing() {
         <BottomCTA onLogin={handleLogin} />
       </main>
 
-      <footer className="border-t border-border py-6 bg-background">
-        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-bold text-foreground text-sm">
-              Eden<span className="text-primary">Radar</span>
-            </span>
-            <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
-            <span className="text-muted-foreground text-xs">· © {new Date().getFullYear()}</span>
+      <footer className="border-t border-border py-10 bg-background">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-6">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-8 mb-8">
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">For Researchers</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/research" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edenlab">
+                    EdenLab
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/discovery" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edendiscovery">
+                    EdenDiscovery
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">For Industry</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/scout" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edenscout">
+                    EdenScout
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/market/preview" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edenmarket">
+                    EdenMarket
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Company</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/about" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-about">
+                    About
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/how-it-works" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-how-it-works">
+                    How It Works
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/pricing" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-pricing">
+                    Pricing
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/one-pager" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-one-pager">
+                    EdenScout One-Pager
+                  </Link>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">Legal</h4>
+              <ul className="space-y-2">
+                <li>
+                  <Link href="/privacy" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-privacy">
+                    Privacy Policy
+                  </Link>
+                </li>
+                <li>
+                  <Link href="/tos" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-tos">
+                    Terms of Service
+                  </Link>
+                </li>
+                <li>
+                  <button
+                    onClick={handleLogin}
+                    className="text-xs text-foreground hover:text-primary transition-colors text-left"
+                    data-testid="footer-link-login"
+                  >
+                    Log In
+                  </button>
+                </li>
+              </ul>
+            </div>
           </div>
-          <nav className="flex items-center gap-4">
-            <Link
-              href="/pricing"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-pricing"
-            >
-              Pricing
-            </Link>
-            <Link
-              href="/privacy"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-privacy"
-            >
-              Privacy Policy
-            </Link>
-            <Link
-              href="/tos"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-tos"
-            >
-              Terms of Service
-            </Link>
-            <Link
-              href="/one-pager"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-one-pager"
-            >
-              EdenScout One-Pager
-            </Link>
-            <Link
-              href="/market/preview"
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-edenmarket"
-            >
-              EdenMarket
-            </Link>
+          <div className="pt-6 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-foreground text-sm">
+                Eden<span className="text-primary">Radar</span>
+              </span>
+              <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
+              <span className="text-muted-foreground text-xs">· © {new Date().getFullYear()}</span>
+            </div>
             <EdenNXBadge />
-            <button
-              onClick={handleLogin}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-login"
-            >
-              Log In
-            </button>
-          </nav>
+          </div>
         </div>
       </footer>
     </div>

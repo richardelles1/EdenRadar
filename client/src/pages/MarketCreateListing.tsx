@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { ChevronLeft, ChevronRight, Check, Sparkles, Building2, Link2, X, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const THERAPEUTIC_AREAS = [
   "Oncology", "Immunology", "Neurology", "Cardiology", "Rare Diseases",
@@ -106,14 +106,14 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
           <div
             className={cn(
               "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold border transition-all",
-              i < current ? "text-white border-transparent" : i === current ? "border-violet-500 text-violet-600 dark:text-violet-400" : "border-border text-muted-foreground"
+              i < current ? "text-white border-transparent" : i === current ? "border-indigo-500 text-indigo-600 dark:text-indigo-400" : "border-border text-muted-foreground"
             )}
             style={i < current ? { background: ACCENT, borderColor: ACCENT } : i === current ? { borderColor: ACCENT } : {}}
           >
             {i < current ? <Check className="w-3 h-3" /> : i + 1}
           </div>
           {i < total - 1 && (
-            <div className={cn("h-px w-6 transition-all", i < current ? "bg-violet-500" : "bg-border")} />
+            <div className={cn("h-px w-6 transition-all", i < current ? "bg-indigo-500" : "bg-border")} />
           )}
         </div>
       ))}
@@ -166,14 +166,14 @@ function IntelligenceAssist({
 
   if (linkedAsset) {
     return (
-      <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3" data-testid="intel-assist-linked">
+      <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3" data-testid="intel-assist-linked">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-start gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-violet-500 shrink-0 mt-0.5" />
+            <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
             <div>
               <p className="text-xs font-semibold text-foreground">{linkedAsset.assetName}</p>
               {linkedAsset.institution && <p className="text-[10px] text-muted-foreground">{linkedAsset.institution}</p>}
-              <p className="text-[10px] text-violet-500/80 mt-0.5">Linked to EdenScout record — intelligence enabled</p>
+              <p className="text-[10px] text-indigo-500/80 mt-0.5">Linked to EdenScout record — intelligence enabled</p>
             </div>
           </div>
           <button onClick={onClear} className="p-1 rounded text-muted-foreground hover:text-foreground" data-testid="intel-assist-unlink">
@@ -182,8 +182,8 @@ function IntelligenceAssist({
         </div>
         {linkedAsset.completenessScore != null && (
           <div className="flex items-center gap-2 mt-2">
-            <div className="flex-1 h-1 rounded-full bg-violet-500/20 overflow-hidden">
-              <div className="h-full rounded-full bg-violet-500" style={{ width: `${linkedAsset.completenessScore}%` }} />
+            <div className="flex-1 h-1 rounded-full bg-indigo-500/20 overflow-hidden">
+              <div className="h-full rounded-full bg-indigo-500" style={{ width: `${linkedAsset.completenessScore}%` }} />
             </div>
             <span className="text-[10px] text-muted-foreground shrink-0">{linkedAsset.completenessScore}% data complete</span>
           </div>
@@ -195,7 +195,7 @@ function IntelligenceAssist({
   return (
     <div className="space-y-2" data-testid="intel-assist-panel">
       <div className="flex items-center gap-2">
-        <Sparkles className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+        <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
         <p className="text-xs font-semibold text-foreground">Link to EdenScout</p>
         <span className="text-[10px] text-muted-foreground">(optional — unlocks Eden Intelligence for buyers)</span>
       </div>
@@ -219,7 +219,7 @@ function IntelligenceAssist({
               className="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-accent/50 transition-colors"
               data-testid={`intel-assist-result-${a.id}`}
             >
-              <Building2 className="w-3.5 h-3.5 text-violet-500 shrink-0 mt-0.5" />
+              <Building2 className="w-3.5 h-3.5 text-indigo-500 shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-foreground truncate">{a.assetName}</p>
                 <p className="text-[10px] text-muted-foreground truncate">
@@ -228,7 +228,7 @@ function IntelligenceAssist({
                 {a.indication && <p className="text-[10px] text-muted-foreground/70 truncate">{a.indication}</p>}
               </div>
               {a.completenessScore != null && (
-                <span className="text-[10px] text-violet-500 font-semibold shrink-0">{a.completenessScore}%</span>
+                <span className="text-[10px] text-indigo-500 font-semibold shrink-0">{a.completenessScore}%</span>
               )}
             </button>
           ))}
@@ -475,13 +475,13 @@ export default function MarketCreateListing() {
             <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
               <h2 className="text-sm font-bold text-foreground">{STEPS[1].title}</h2>
               {linkedAsset && (
-                <div className="rounded-md border border-violet-500/20 bg-violet-500/5 px-3 py-2 space-y-1">
+                <div className="rounded-md border border-indigo-500/20 bg-indigo-500/5 px-3 py-2 space-y-1">
                   <div className="flex items-center gap-1.5">
-                    <Link2 className="w-3 h-3 text-violet-500 shrink-0" />
+                    <Link2 className="w-3 h-3 text-indigo-500 shrink-0" />
                     <span className="text-[10px] text-muted-foreground">Linked to EdenScout: <strong className="text-foreground">{linkedAsset.assetName}</strong></span>
                   </div>
                   {prefilledFields.length > 0 && (
-                    <p className="text-[10px] text-violet-600 dark:text-violet-400 pl-4.5">
+                    <p className="text-[10px] text-indigo-600 dark:text-indigo-400 pl-4.5">
                       {stillPrefilled.length > 0 && <>Pre-filled: {stillPrefilled.join(", ")}</>}
                       {editedFields.length > 0 && <span className="text-amber-600 dark:text-amber-400"> · Edited: {editedFields.join(", ")}</span>}
                     </p>
@@ -617,10 +617,10 @@ export default function MarketCreateListing() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-4 space-y-2">
+              <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-2">
                 <div className="flex items-center gap-1.5">
-                  <EyeOff className="w-3.5 h-3.5 text-violet-500" />
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Buyer-facing preview</p>
+                  <EyeOff className="w-3.5 h-3.5 text-indigo-500" />
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-indigo-600 dark:text-indigo-400">Buyer-facing preview</p>
                 </div>
                 {anyBlind ? (
                   <p className="text-xs text-muted-foreground italic">Confidential Listing</p>
@@ -638,8 +638,8 @@ export default function MarketCreateListing() {
                   )}
                 </div>
               </div>
-              <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-4 flex items-start gap-3">
-                <Sparkles className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+              <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/15 p-4 flex items-start gap-3">
+                <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   An AI-generated one-paragraph summary will be created from your listing details and shown to buyers in the feed. It focuses on strategic value and deal fit.
                   {linkedAsset && " Because you've linked an EdenScout record, buyers will also see an Eden Intelligence panel with market signals, related trials, and comparable deals."}

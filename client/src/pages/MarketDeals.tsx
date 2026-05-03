@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { Shield, ArrowRight, Lock, Unlock } from "lucide-react";
 import type { MarketDeal } from "@shared/schema";
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const STATUS_LABELS: Record<string, string> = {
   nda_pending: "NDA Pending",
@@ -22,7 +22,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   nda_pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
   nda_signed: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  due_diligence: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20",
+  due_diligence: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
   term_sheet: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
   loi: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   closed: "bg-emerald-600/10 text-emerald-800 dark:text-emerald-300 border-emerald-600/20",
@@ -58,7 +58,7 @@ export default function MarketDeals() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : deals.length === 0 ? (
         <div className="text-center py-16 space-y-3">

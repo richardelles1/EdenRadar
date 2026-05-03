@@ -129,7 +129,7 @@ export default function MarketMyEOIs() {
       {/* Saved searches panel — Task #713 */}
       <section className="rounded-xl border border-card-border bg-card p-5 space-y-3" data-testid="saved-searches-panel">
         <div className="flex items-center gap-2">
-          <Bell className="w-4 h-4 text-violet-500" />
+          <Bell className="w-4 h-4 text-indigo-500" />
           <h2 className="text-sm font-semibold text-foreground">My saved searches</h2>
           <span className="text-xs text-muted-foreground">— alerts you when matching listings go live</span>
         </div>
@@ -229,7 +229,7 @@ export default function MarketMyEOIs() {
 
       {isLoading ? (
         <div className="flex items-center justify-center py-16">
-          <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : eois.length === 0 ? (
         <div className="text-center py-16 space-y-3">

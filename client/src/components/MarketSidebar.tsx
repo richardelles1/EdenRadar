@@ -42,8 +42,8 @@ const NAV_GROUPS = [
   },
 ];
 
-const ACCENT = "hsl(271 81% 55%)";
-const ACCENT_MIX = "color-mix(in srgb, hsl(271 81% 55%) 12%, transparent)";
+const ACCENT = "hsl(234 80% 58%)";
+const ACCENT_MIX = "color-mix(in srgb, hsl(234 80% 58%) 12%, transparent)";
 const SCOUT_ACCENT = "var(--org-accent, hsl(142 52% 36%))";
 const SCOUT_ACCENT_MIX = "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 10%, transparent)";
 
@@ -129,19 +129,19 @@ function NotificationBell() {
   if (unread === 0) return null;
   return (
     <div
-      className="mx-2 mb-1 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 cursor-pointer hover:bg-violet-500/10 transition-colors"
+      className="mx-2 mb-1 rounded-lg border border-indigo-500/20 bg-indigo-500/5 px-3 py-2 cursor-pointer hover:bg-indigo-500/10 transition-colors"
       onClick={() => markRead.mutate()}
       data-testid="market-notifications-bell"
     >
       <div className="flex items-center gap-2">
         <div className="relative shrink-0">
-          <Bell className="w-4 h-4 text-violet-500" />
-          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-violet-500 flex items-center justify-center text-[7px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>
+          <Bell className="w-4 h-4 text-indigo-500" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-indigo-500 flex items-center justify-center text-[7px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>
         </div>
         <motion.span
           animate={{ opacity: animate ? (open ? 1 : 0) : 1, width: animate ? (open ? "auto" : 0) : "auto" }}
           transition={{ duration: 0.15, ease: "easeOut" }}
-          className="whitespace-pre overflow-hidden text-xs text-violet-600 dark:text-violet-400 font-medium"
+          className="whitespace-pre overflow-hidden text-xs text-indigo-600 dark:text-indigo-400 font-medium"
         >
           {unread} new alert{unread !== 1 ? "s" : ""}
         </motion.span>

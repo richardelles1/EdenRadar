@@ -71,7 +71,7 @@ type PartialEoi = {
 type StatusHistoryEntry = DealStatusHistoryEntry;
 type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null; ndaDocumentUrl?: string | null; sellerOrgName?: string | null; buyerOrgName?: string | null };
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const STATUS_LABELS: Record<string, string> = {
   nda_pending: "NDA Pending",
@@ -86,7 +86,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_COLORS: Record<string, string> = {
   nda_pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
   nda_signed: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  due_diligence: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20",
+  due_diligence: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
   term_sheet: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
   loi: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   closed: "bg-emerald-600/10 text-emerald-800 dark:text-emerald-300 border-emerald-600/20",
@@ -344,7 +344,7 @@ export default function MarketDealRoom() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="w-6 h-6 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        <div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
@@ -440,8 +440,8 @@ export default function MarketDealRoom() {
                     <p><span className="font-medium text-foreground">Price Range:</span> ${listing.priceRangeMin}M – ${listing.priceRangeMax}M</p>
                   )}
                   {listing.aiSummary && (
-                    <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3 mt-2">
-                      <p className="text-xs font-semibold text-violet-600 mb-1">AI Summary</p>
+                    <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/15 p-3 mt-2">
+                      <p className="text-xs font-semibold text-indigo-600 mb-1">AI Summary</p>
                       <p className="text-xs text-muted-foreground">{listing.aiSummary}</p>
                     </div>
                   )}
@@ -460,7 +460,7 @@ export default function MarketDealRoom() {
               <div className="flex items-center gap-1.5 mb-1">
                 <Building2 className="w-3 h-3 text-muted-foreground" />
                 <span className="font-medium text-foreground">Counterparty Identity</span>
-                <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-700 dark:text-violet-400">Revealed</Badge>
+                <Badge variant="outline" className="text-[10px] border-indigo-500/30 text-indigo-700 dark:text-indigo-400">Revealed</Badge>
               </div>
               {/* Buyer sees seller org; seller sees buyer org */}
               {isBuyer && sellerOrgName && (
@@ -514,7 +514,7 @@ export default function MarketDealRoom() {
                   href={ndaDocumentUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline mt-1"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-indigo-700 dark:text-indigo-400 hover:underline mt-1"
                   data-testid="nda-download-link"
                 >
                   <Download className="w-3 h-3" />
@@ -601,7 +601,7 @@ export default function MarketDealRoom() {
               <div className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
               {deal.statusHistory.map((entry, i) => (
                 <div key={i} className="relative flex items-start gap-3" data-testid={`status-history-${i}`}>
-                  <div className="absolute -left-3 top-1 w-2 h-2 rounded-full border-2 border-violet-500 bg-background" />
+                  <div className="absolute -left-3 top-1 w-2 h-2 rounded-full border-2 border-indigo-500 bg-background" />
                   <div className="min-w-0">
                     <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full border", STATUS_COLORS[entry.status] ?? "border-border text-muted-foreground")}>
                       {STATUS_LABELS[entry.status] ?? entry.status}

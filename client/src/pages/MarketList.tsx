@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,7 @@ import {
   Handshake,
 } from "lucide-react";
 
-const ACCENT = "hsl(271 81% 55%)";
+const ACCENT = "hsl(234 80% 58%)";
 
 const START_LISTING_HREF = "/login?redirect=/market/create-listing";
 
@@ -71,15 +72,15 @@ export default function MarketList() {
       <main className="max-w-6xl mx-auto px-4 sm:px-6 py-12 space-y-16">
         {/* Hero */}
         <section className="text-center space-y-5" data-testid="market-list-hero">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-violet-500/10 border border-violet-500/20">
-            <Tag className="w-3.5 h-3.5 text-violet-500" />
-            <span className="text-xs font-semibold text-violet-600 dark:text-violet-400 tracking-wide uppercase">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+            <Tag className="w-3.5 h-3.5 text-indigo-500" />
+            <span className="text-xs font-semibold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase">
               For Sellers
             </span>
           </div>
           <h1 className="text-3xl sm:text-5xl font-bold text-foreground tracking-tight">
             List your assets where<br />
-            <span className="text-violet-600 dark:text-violet-400">qualified buyers actually look</span>
+            <span className="text-indigo-600 dark:text-indigo-400">qualified buyers actually look</span>
           </h1>
           <p className="text-muted-foreground text-base sm:text-lg max-w-2xl mx-auto">
             EdenMarket gives TTOs, biotechs, and inventors a curated, confidential channel to reach BD/licensing teams.
@@ -112,8 +113,8 @@ export default function MarketList() {
           <div className="grid sm:grid-cols-3 gap-4">
             {SELLER_AUDIENCE.map((a) => (
               <div key={a.title} className="rounded-xl border border-border bg-card p-5 space-y-3">
-                <div className="w-10 h-10 rounded-lg bg-violet-500/10 flex items-center justify-center">
-                  <a.icon className="w-5 h-5 text-violet-500" />
+                <div className="w-10 h-10 rounded-lg bg-indigo-500/10 flex items-center justify-center">
+                  <a.icon className="w-5 h-5 text-indigo-500" />
                 </div>
                 <h3 className="text-sm font-bold text-foreground">{a.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{a.body}</p>
@@ -123,10 +124,10 @@ export default function MarketList() {
         </section>
 
         {/* Blind listing explainer */}
-        <section className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-6 sm:p-8" data-testid="market-list-blind">
+        <section className="rounded-2xl border border-indigo-500/20 bg-indigo-500/5 p-6 sm:p-8" data-testid="market-list-blind">
           <div className="grid sm:grid-cols-[auto_1fr] gap-5">
-            <div className="w-12 h-12 rounded-xl bg-violet-500/15 flex items-center justify-center">
-              <EyeOff className="w-6 h-6 text-violet-500" />
+            <div className="w-12 h-12 rounded-xl bg-indigo-500/15 flex items-center justify-center">
+              <EyeOff className="w-6 h-6 text-indigo-500" />
             </div>
             <div className="space-y-3">
               <h2 className="text-xl font-bold text-foreground">Blind listings keep you anonymous</h2>
@@ -143,7 +144,7 @@ export default function MarketList() {
                   "Toggle between blind and open at any time",
                 ].map((f) => (
                   <li key={f} className="flex items-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                     <span className="text-sm text-muted-foreground">{f}</span>
                   </li>
                 ))}
@@ -163,7 +164,7 @@ export default function MarketList() {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {HOW_LISTING_WORKS.map((s) => (
               <div key={s.step} className="rounded-xl border border-border bg-card p-5 space-y-3">
-                <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center text-sm font-bold text-violet-500">
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-sm font-bold text-indigo-500">
                   {s.step}
                 </div>
                 <h3 className="text-sm font-bold text-foreground">{s.title}</h3>
@@ -173,43 +174,25 @@ export default function MarketList() {
           </div>
         </section>
 
-        {/* Pricing — success fee tiers */}
-        <section className="rounded-2xl border border-violet-500/30 bg-violet-500/5 p-6 sm:p-8 space-y-6" data-testid="market-list-pricing">
+        {/* Success-fee aligned CTA — full pricing lives on /pricing */}
+        <section className="rounded-2xl border border-indigo-500/30 bg-indigo-500/5 p-6 sm:p-8 space-y-6" data-testid="market-list-pricing">
           <div className="text-center space-y-2">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-violet-500/10 border border-violet-500/20">
-              <ShieldCheck className="w-3 h-3 text-violet-500" />
-              <span className="text-[10px] font-semibold text-violet-600 dark:text-violet-400 tracking-wide uppercase">
-                Transparent pricing
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20">
+              <ShieldCheck className="w-3 h-3 text-indigo-500" />
+              <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400 tracking-wide uppercase">
+                Success-fee aligned
               </span>
             </div>
             <h2 className="text-2xl font-bold text-foreground">Pay only when you close</h2>
             <p className="text-sm text-muted-foreground max-w-xl mx-auto">
-              EdenMarket subscription is $1,000/month and grants both buy-side and sell-side access. Success fees apply
-              only to closed deals.
+              EdenMarket grants both buy-side and sell-side access, with success fees that apply only to closed deals.
             </p>
-          </div>
-
-          <div className="grid sm:grid-cols-3 gap-3">
-            <div className="rounded-xl border border-border bg-card p-5 space-y-2 text-center">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Deal value</p>
-              <p className="text-base font-bold text-foreground">Less than $10M</p>
-              <p className="text-3xl font-bold text-violet-600 dark:text-violet-400 tabular-nums">$10k</p>
-              <p className="text-[11px] text-muted-foreground">success fee</p>
-            </div>
-            <div className="rounded-xl border-2 border-violet-500/40 bg-card p-5 space-y-2 text-center relative">
-              <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-violet-500 text-white text-[10px] font-bold uppercase tracking-wide">
-                Most common
-              </div>
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Deal value</p>
-              <p className="text-base font-bold text-foreground">$10M – $50M</p>
-              <p className="text-3xl font-bold text-violet-600 dark:text-violet-400 tabular-nums">$30k</p>
-              <p className="text-[11px] text-muted-foreground">success fee</p>
-            </div>
-            <div className="rounded-xl border border-border bg-card p-5 space-y-2 text-center">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Deal value</p>
-              <p className="text-base font-bold text-foreground">More than $50M</p>
-              <p className="text-3xl font-bold text-violet-600 dark:text-violet-400 tabular-nums">$50k</p>
-              <p className="text-[11px] text-muted-foreground">success fee</p>
+            <div className="pt-2">
+              <Link href="/pricing">
+                <a className="text-sm font-semibold text-indigo-600 dark:text-indigo-400 hover:underline" data-testid="market-list-see-pricing">
+                  See full pricing →
+                </a>
+              </Link>
             </div>
           </div>
 

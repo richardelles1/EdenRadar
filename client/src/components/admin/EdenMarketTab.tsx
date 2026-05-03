@@ -168,7 +168,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
   return (
     <tr>
       <td colSpan={10} className="px-0 pb-0">
-        <div className="bg-muted/20 border-t border-violet-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-muted/20 border-t border-indigo-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Messages */}
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
@@ -176,7 +176,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
             </p>
             {loading ? (
               <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                <div className="w-3 h-3 border border-violet-500 border-t-transparent rounded-full animate-spin" /> Loading…
+                <div className="w-3 h-3 border border-indigo-500 border-t-transparent rounded-full animate-spin" /> Loading…
               </div>
             ) : messages.length === 0 ? (
               <p className="text-xs text-muted-foreground/60 italic">No messages yet</p>
@@ -247,7 +247,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
             </p>
             {eventsLoading ? (
               <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
-                <div className="w-3 h-3 border border-violet-500 border-t-transparent rounded-full animate-spin" /> Loading…
+                <div className="w-3 h-3 border border-indigo-500 border-t-transparent rounded-full animate-spin" /> Loading…
               </div>
             ) : events.length === 0 ? (
               <p className="text-xs text-muted-foreground/60 italic">No activity yet</p>
@@ -290,7 +290,7 @@ const DEAL_STATUS_LABELS: Record<string, string> = {
 const DEAL_STATUS_COLORS: Record<string, string> = {
   nda_pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
   nda_signed: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
-  due_diligence: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20",
+  due_diligence: "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20",
   term_sheet: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
   loi: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   closed: "bg-emerald-600/10 text-emerald-800 dark:text-emerald-300 border-emerald-600/20",
@@ -362,8 +362,8 @@ function SuccessFeeModal({ deal, onClose }: { deal: AdminDeal; onClose: () => vo
           />
         </div>
         {!isNaN(sizeM) && sizeM > 0 && (
-          <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 p-3 text-xs space-y-1">
-            <p className="font-semibold text-foreground">Fee tier: <span className="text-violet-600">${(feeAmount / 1000).toFixed(0)}k</span></p>
+          <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/20 p-3 text-xs space-y-1">
+            <p className="font-semibold text-foreground">Fee tier: <span className="text-indigo-600">${(feeAmount / 1000).toFixed(0)}k</span></p>
             <p className="text-muted-foreground">
               {sizeM <= 5 ? "≤ $5M deal → $10k fee" : sizeM <= 50 ? "$5M–$50M deal → $30k fee" : "> $50M deal → $50k fee"}
             </p>
@@ -374,7 +374,7 @@ function SuccessFeeModal({ deal, onClose }: { deal: AdminDeal; onClose: () => vo
           <Button
             size="sm"
             className="flex-1 text-xs text-white"
-            style={{ background: "hsl(271 81% 55%)" }}
+            style={{ background: "hsl(234 80% 58%)" }}
             disabled={isPending || isNaN(sizeM) || sizeM <= 0}
             onClick={() => generateInvoice()}
             data-testid="invoice-generate-button"
@@ -525,7 +525,7 @@ export function EdenMarketTab() {
       {/* Stats */}
       {statsLoading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+          <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -533,7 +533,7 @@ export function EdenMarketTab() {
           <StatCard icon={Clock} label="Pending Review" value={stats?.pendingListings ?? 0} color="text-amber-600" />
           <StatCard icon={CheckCircle2} label="Active" value={stats?.activeListings ?? 0} color="text-emerald-600" />
           <StatCard icon={MessageSquare} label="Total EOIs" value={stats?.totalEois ?? 0} color="text-blue-600" />
-          <StatCard icon={Users} label="Subscribers" value={stats?.marketSubscribers ?? 0} color="text-violet-600" />
+          <StatCard icon={Users} label="Subscribers" value={stats?.marketSubscribers ?? 0} color="text-indigo-600" />
         </div>
       )}
 
@@ -553,7 +553,7 @@ export function EdenMarketTab() {
               onClick={() => setActiveSection(section)}
               className={cn(
                 "px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0",
-                activeSection === section ? "border-violet-500 text-violet-600" : "border-transparent text-muted-foreground hover:text-foreground"
+                activeSection === section ? "border-indigo-500 text-indigo-600" : "border-transparent text-muted-foreground hover:text-foreground"
               )}
               data-testid={`admin-market-${section}-tab`}
             >
@@ -586,7 +586,7 @@ export function EdenMarketTab() {
 
           {listingsLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : listings.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -629,8 +629,8 @@ export function EdenMarketTab() {
                   </div>
 
                   {l.aiSummary && (
-                    <div className="rounded-lg bg-violet-500/5 border border-violet-500/15 p-3">
-                      <p className="text-xs font-semibold text-violet-600 mb-1">AI Summary</p>
+                    <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/15 p-3">
+                      <p className="text-xs font-semibold text-indigo-600 mb-1">AI Summary</p>
                       <p className="text-xs text-muted-foreground leading-relaxed">{l.aiSummary}</p>
                     </div>
                   )}
@@ -700,7 +700,7 @@ export function EdenMarketTab() {
         <div className="space-y-4">
           {eoisLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : eoiGroups.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -760,7 +760,7 @@ export function EdenMarketTab() {
 
           {dealsLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : deals.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -796,7 +796,7 @@ export function EdenMarketTab() {
                         >
                           <td className="px-4 py-2.5 font-mono text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              {isExpanded ? <ChevronUp className="w-3 h-3 text-violet-500" /> : <ChevronDown className="w-3 h-3 text-muted-foreground/40" />}
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-indigo-500" /> : <ChevronDown className="w-3 h-3 text-muted-foreground/40" />}
                               #{deal.id}
                             </span>
                           </td>
@@ -843,7 +843,7 @@ export function EdenMarketTab() {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-6 text-[10px] gap-1 text-violet-600 border-violet-500/30 px-2"
+                                className="h-6 text-[10px] gap-1 text-indigo-600 border-indigo-500/30 px-2"
                                 onClick={() => setInvoiceDeal(deal)}
                                 data-testid={`admin-deal-invoice-${deal.id}`}
                               >
@@ -913,7 +913,7 @@ export function EdenMarketTab() {
           </div>
           {subscribersLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -1015,7 +1015,7 @@ export function EdenMarketTab() {
                         <td className="px-4 py-2.5 align-top">
                           {isVerified ? (
                             <div className="space-y-0.5" data-testid={`admin-seller-verified-${org.id}`}>
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-400">
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-indigo-700 dark:text-indigo-400">
                                 <BadgeCheck className="w-3 h-3" />
                                 Verified by {org.marketSellerVerifiedBy ?? "admin"}
                               </span>
@@ -1048,7 +1048,7 @@ export function EdenMarketTab() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-6 text-[10px] gap-1 px-2 text-violet-600 border-violet-500/30"
+                              className="h-6 text-[10px] gap-1 px-2 text-indigo-600 border-indigo-500/30"
                               onClick={() => {
                                 const note = window.prompt(`Verify ${org.name} as an EdenMarket seller?\n\nOptional internal note (e.g., due-diligence reference):`) ?? undefined;
                                 if (note === undefined) return;

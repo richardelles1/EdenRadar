@@ -298,7 +298,7 @@ function PlanCTA({
 function EdenMarketTier({ session }: { session: Session | null }) {
   const [, navigate] = useLocation();
   const { subscribe, isLoading } = useMarketSubscribe();
-  const VIOLET = "hsl(271 81% 55%)";
+  const VIOLET = "hsl(234 80% 58%)";
 
   const { data: access } = useQuery<{ access: boolean; orgId: number | null }>({
     queryKey: ["/api/market/access"],
@@ -321,7 +321,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
         <h2 className="text-lg font-semibold text-foreground">EdenMarket</h2>
         <span
           className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
-          style={{ background: "hsl(271 81% 55% / 0.12)", color: VIOLET }}
+          style={{ background: "hsl(234 80% 58% / 0.12)", color: VIOLET }}
         >
           Marketplace
         </span>
@@ -332,12 +332,12 @@ function EdenMarketTier({ session }: { session: Session | null }) {
 
       <div
         className="rounded-xl overflow-hidden grid grid-cols-1 md:grid-cols-3"
-        style={{ border: "1px solid hsl(271 81% 55% / 0.25)", background: "linear-gradient(135deg, hsl(271 81% 55% / 0.05), hsl(271 81% 55% / 0.01))" }}
+        style={{ border: "1px solid hsl(234 80% 58% / 0.25)", background: "linear-gradient(135deg, hsl(234 80% 58% / 0.05), hsl(234 80% 58% / 0.01))" }}
       >
         {/* Left: subscription */}
-        <div className="p-6 md:col-span-1 flex flex-col gap-4 md:border-r" style={{ borderColor: "hsl(271 81% 55% / 0.18)" }}>
+        <div className="p-6 md:col-span-1 flex flex-col gap-4 md:border-r" style={{ borderColor: "hsl(234 80% 58% / 0.18)" }}>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(271 81% 55% / 0.15)" }}>
+            <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
               <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
             </div>
             <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: VIOLET }}>Access</span>
@@ -409,7 +409,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
               <div
                 key={t.label}
                 className="rounded-lg p-4"
-                style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }}
+                style={{ background: "hsl(var(--background))", border: "1px solid hsl(234 80% 58% / 0.15)" }}
                 data-testid={`edenmarket-fee-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: VIOLET }}>{t.label}</p>
@@ -418,7 +418,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
               </div>
             ))}
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-3 border-t" style={{ borderColor: "hsl(271 81% 55% / 0.15)" }}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-3 border-t" style={{ borderColor: "hsl(234 80% 58% / 0.15)" }}>
             <p className="text-xs text-muted-foreground flex-1">
               Listing assets is free for sellers. EdenMarket only earns when you close — incentives stay aligned with you.
             </p>
@@ -427,7 +427,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
                 variant="outline"
                 size="sm"
                 className="h-8 px-3 text-xs gap-1.5 whitespace-nowrap"
-                style={{ borderColor: "hsl(271 81% 55% / 0.4)", color: VIOLET }}
+                style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: VIOLET }}
                 data-testid="button-pricing-edenmarket-list"
               >
                 List your assets
