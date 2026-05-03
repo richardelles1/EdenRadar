@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { IndustrySidebar } from "@/components/IndustrySidebar";
 import { IndustryOnboarding } from "@/components/IndustryOnboarding";
+import { AppSwitcher } from "@/components/AppSwitcher";
 import { useAuth } from "@/hooks/use-auth";
 import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
 import { useOrg } from "@/hooks/use-org";
@@ -193,6 +194,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     >
       <IndustrySidebar />
       <div className="flex-1 flex flex-col min-w-0">
+        <div className="h-12 flex items-center justify-end px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">
+          <AppSwitcher active="scout" />
+        </div>
         {showPastDue && (
           <PastDueBanner
             onFixPayment={handleFixPayment}

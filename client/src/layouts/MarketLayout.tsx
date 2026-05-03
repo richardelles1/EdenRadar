@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { MarketSidebar } from "@/components/MarketSidebar";
+import { AppSwitcher } from "@/components/AppSwitcher";
 import { useAuth } from "@/hooks/use-auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
@@ -34,6 +35,9 @@ export function MarketLayout({ children }: MarketLayoutProps) {
     <div className="flex min-h-screen bg-background relative">
       <MarketSidebar />
       <div className="flex-1 flex flex-col min-w-0">
+        <div className="h-12 flex items-center justify-end px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">
+          <AppSwitcher active="market" />
+        </div>
         <main className="flex-1 overflow-y-auto relative z-10">
           <ErrorBoundary>
             {children}

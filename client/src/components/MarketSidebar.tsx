@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/aceternity-sidebar";
 import {
   ShoppingBag, Briefcase, FileText, LayoutDashboard,
-  Moon, Sun, LogOut, Menu, X, Settings, Shield, Lock, Bell,
+  Moon, Sun, LogOut, Menu, X, Settings, Shield, Lock, Bell, Radar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -44,6 +44,8 @@ const NAV_GROUPS = [
 
 const ACCENT = "hsl(271 81% 55%)";
 const ACCENT_MIX = "color-mix(in srgb, hsl(271 81% 55%) 12%, transparent)";
+const SCOUT_ACCENT = "var(--org-accent, hsl(142 52% 36%))";
+const SCOUT_ACCENT_MIX = "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 10%, transparent)";
 
 function AnimatedLabel({ children }: { children: React.ReactNode }) {
   const { open, animate } = useSidebar();
@@ -61,18 +63,28 @@ function AnimatedLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NavButton({ href, label, icon: Icon, exact, location, navigate }: NavItem & { location: string; navigate: (h: string) => void }) {
+function NavButton({ href, label, icon: Icon, exact, location, navigate, accent }: NavItem & { location: string; navigate: (h: string) => void; accent?: "market" | "scout" }) {
   const { open, animate } = useSidebar();
   const isActive = exact ? location === href : location.startsWith(href);
+  const useScoutAccent = accent === "scout";
+  const accentColor = useScoutAccent ? SCOUT_ACCENT : ACCENT;
+  const accentMix = useScoutAccent ? SCOUT_ACCENT_MIX : ACCENT_MIX;
 
   return (
     <button
       onClick={() => navigate(href)}
       className={cn(
         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
+        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         isActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
       )}
-      style={isActive ? { backgroundColor: ACCENT_MIX, color: ACCENT } : {}}
+      style={
+        useScoutAccent && !isActive
+          ? { color: accentColor }
+          : isActive
+            ? { backgroundColor: accentMix, color: accentColor }
+            : {}
+      }
       data-testid={`market-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
       <Icon className="w-4 h-4 shrink-0" />
@@ -204,6 +216,28 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
             </div>
           </div>
         ))}
+        {/* Cross-app jump back to EdenScout — mirrors the EdenMarket
+            entry's position at the bottom of the Scout sidebar. */}
+        <div>
+          <motion.p
+            animate={{ opacity: animate ? (open ? 1 : 0) : 1, height: animate ? (open ? "auto" : 0) : "auto" }}
+            transition={{ duration: 0.12, ease: "easeOut" }}
+            className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-0.5 overflow-hidden whitespace-pre"
+          >
+            EdenScout
+          </motion.p>
+          <div className="space-y-0.5">
+            <NavButton
+              href="/industry/dashboard"
+              label="Scout"
+              icon={Radar}
+              exact
+              location={location}
+              navigate={navigate}
+              accent="scout"
+            />
+          </div>
+        </div>
         {isAdmin && (
           <div>
             <motion.p
@@ -269,6 +303,7 @@ export function MarketSidebar() {
         className="fixed top-3.5 left-4 z-50 md:hidden p-1.5 rounded-md bg-background border border-border text-muted-foreground hover:text-foreground"
         onClick={() => setMobileOpen(true)}
         aria-label="Open menu"
+        data-testid="market-sidebar-mobile-open"
       >
         <Menu className="w-4 h-4" />
       </button>
