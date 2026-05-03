@@ -972,6 +972,72 @@ export const marketAvailabilityNotifications = pgTable("market_availability_noti
 }));
 export type MarketAvailabilityNotification = typeof marketAvailabilityNotifications.$inferSelect;
 
+// ── Feedback-driven Relevance (Task #694) ────────────────────────────────────
+
+export const FEEDBACK_ACTIONS = ["save", "dismiss", "view", "nda_request"] as const;
+export type FeedbackAction = (typeof FEEDBACK_ACTIONS)[number];
+
+export const userAssetFeedback = pgTable("user_asset_feedback", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  assetId: integer("asset_id").notNull(),
+  action: text("action").notNull(),
+  source: text("source").notNull().default("scout"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  userActionIdx: index("user_asset_feedback_user_action_idx").on(t.userId, t.action),
+  assetActionIdx: index("user_asset_feedback_asset_action_idx").on(t.assetId, t.action),
+  uniq: uniqueIndex("user_asset_feedback_user_asset_action_uniq").on(t.userId, t.assetId, t.action),
+}));
+
+export const insertUserAssetFeedbackSchema = createInsertSchema(userAssetFeedback)
+  .omit({ id: true, createdAt: true })
+  .extend({ action: z.enum(FEEDBACK_ACTIONS) });
+export type InsertUserAssetFeedback = z.infer<typeof insertUserAssetFeedbackSchema>;
+export type UserAssetFeedback = typeof userAssetFeedback.$inferSelect;
+
+// Holdout set for measuring/tuning the relevance pre-filter. Built from
+// human_verified flags and from strong save/dismiss signals on `ingested_assets`.
+export const RELEVANCE_LABEL_SOURCES = ["human_verified", "save_signal", "dismiss_signal"] as const;
+export type RelevanceLabelSource = (typeof RELEVANCE_LABEL_SOURCES)[number];
+
+export const relevanceHoldout = pgTable("relevance_holdout", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  label: boolean("label").notNull(),
+  labelSource: text("label_source").notNull(),
+  split: text("split").notNull().default("eval"),
+  text: text("text").notNull(),
+  assetClass: text("asset_class"),
+  sourceName: text("source_name"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  assetUniq: uniqueIndex("relevance_holdout_asset_uniq").on(t.assetId),
+  splitIdx: index("relevance_holdout_split_idx").on(t.split),
+}));
+export type RelevanceHoldoutRow = typeof relevanceHoldout.$inferSelect;
+
+// Aggregated weekly save/dismiss-rate metrics, sliced per dimension.
+export const RELEVANCE_DIMENSIONS = ["overall", "source", "asset_class", "institution"] as const;
+export type RelevanceDimension = (typeof RELEVANCE_DIMENSIONS)[number];
+
+export const relevanceMetrics = pgTable("relevance_metrics", {
+  id: serial("id").primaryKey(),
+  computedAt: timestamp("computed_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  periodDays: integer("period_days").notNull().default(7),
+  dimension: text("dimension").notNull(),
+  dimensionValue: text("dimension_value").notNull().default(""),
+  shownCount: integer("shown_count").notNull().default(0),
+  saveCount: integer("save_count").notNull().default(0),
+  dismissCount: integer("dismiss_count").notNull().default(0),
+  viewCount: integer("view_count").notNull().default(0),
+  saveRate: real("save_rate"),
+  dismissRate: real("dismiss_rate"),
+}, (t) => ({
+  computedDimIdx: index("relevance_metrics_computed_dim_idx").on(t.computedAt, t.dimension),
+}));
+export type RelevanceMetricsRow = typeof relevanceMetrics.$inferSelect;
+
 // ── Cloud Export Log ──────────────────────────────────────────────────────────
 export const exportLogs = pgTable("export_logs", {
   id: serial("id").primaryKey(),

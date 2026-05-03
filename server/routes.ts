@@ -385,7 +385,10 @@ export async function registerRoutes(
 
       let scored: import("./lib/types").ScoredAsset[];
       try {
-        scored = await scoreAssets(clustered, profile);
+        const userOffsets = searchUserId
+          ? await storage.getUserClassOffsets(searchUserId).catch(() => ({}))
+          : undefined;
+        scored = await scoreAssets(clustered, profile, userOffsets);
       } catch (scoreErr) {
         console.error("scoreAssets failed, returning clustered results without scores:", scoreErr);
         scored = clustered.map((a) => ({
@@ -841,7 +844,11 @@ export async function registerRoutes(
 
       const normalized = await normalizeSignals(signals);
       const clustered = clusterAssets(normalized);
-      const scored = await scoreAssets(clustered, profile);
+      const reportUserId = await tryGetUserId(req).catch(() => null);
+      const reportUserOffsets = reportUserId
+        ? await storage.getUserClassOffsets(reportUserId).catch(() => ({}))
+        : undefined;
+      const scored = await scoreAssets(clustered, profile, reportUserOffsets);
       const report = await generateReport(scored, query, profile);
       logAppEvent("report_generated", { assetCount: scored.length });
       return res.json(report);
@@ -1189,6 +1196,12 @@ export async function registerRoutes(
         pmid: body.pmid,
       }, userId);
       logTeamActivity(userId ?? null, "saved_asset", asset.ingestedAssetId ?? null, asset.assetName).catch(() => {});
+      // Record save as relevance feedback (Task #694).
+      if (userId && asset.ingestedAssetId) {
+        storage.recordFeedback(userId, asset.ingestedAssetId, "save", "saved_assets").catch(() => {});
+        // Remove any prior dismiss feedback so per-user offsets re-balance.
+        storage.deleteFeedback(userId, asset.ingestedAssetId, "dismiss").catch(() => {});
+      }
       res.status(201).json({ asset });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to save asset" });
@@ -1474,6 +1487,10 @@ export async function registerRoutes(
       if (!await canAccessSavedAsset(assetBefore, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       await storage.deleteSavedAsset(id);
       logTeamActivity(userId ?? null, "removed_asset", null, assetBefore.assetName).catch(() => {});
+      // Unsave clears the save signal (Task #694).
+      if (userId && assetBefore.ingestedAssetId) {
+        storage.deleteFeedback(userId, assetBefore.ingestedAssetId, "save").catch(() => {});
+      }
       res.status(204).send();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to delete asset" });
@@ -1910,9 +1927,138 @@ export async function registerRoutes(
     }
   });
 
+  // ── Feedback-driven Relevance (Task #694) ─────────────────────────────────
+  // Anonymous-tolerant: persisted only if the request resolves to a userId.
+  const feedbackBodySchema = z.object({
+    assetId: z.number().int().positive(),
+    action: z.enum(["save", "dismiss", "view", "nda_request"]),
+    source: z.string().max(40).optional(),
+  });
+
+  // Rate-limit feedback writes per IP — prevents a compromised/malicious account
+  // from spamming the table and skewing per-user offsets or weekly metrics.
+  const feedbackRateLimit = rateLimit({
+    windowMs: 60 * 1000,
+    max: 60,
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+    message: { error: "Too many feedback events — please slow down." },
+  });
+
+  app.post("/api/feedback", feedbackRateLimit, async (req, res) => {
+    try {
+      const body = feedbackBodySchema.parse(req.body);
+      const userId = await tryGetUserId(req).catch(() => null);
+      if (!userId) return res.status(200).json({ recorded: false, reason: "anonymous" });
+      // Save and dismiss are mutually exclusive for offset semantics — clear the
+      // opposite signal when one is recorded.
+      if (body.action === "save") {
+        storage.deleteFeedback(userId, body.assetId, "dismiss").catch(() => {});
+      } else if (body.action === "dismiss") {
+        storage.deleteFeedback(userId, body.assetId, "save").catch(() => {});
+      }
+      const row = await storage.recordFeedback(userId, body.assetId, body.action, body.source ?? "scout");
+      res.status(201).json({ recorded: true, feedback: row });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to record feedback" });
+    }
+  });
+
+  app.delete("/api/feedback", async (req, res) => {
+    try {
+      const body = feedbackBodySchema.parse(req.body);
+      const userId = await tryGetUserId(req).catch(() => null);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      const removed = await storage.deleteFeedback(userId, body.assetId, body.action);
+      res.json({ removed });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to delete feedback" });
+    }
+  });
+
   // ── Admin auth: every /api/admin/* route requires a Supabase Bearer token
   // for a user whose email is in the ADMIN_EMAILS allowlist.
   app.use("/api/admin", requireAdmin);
+
+  // ── Admin Relevance panel (Task #694) ─────────────────────────────────────
+  app.post("/api/admin/relevance/holdout/build", async (_req, res) => {
+    try {
+      const result = await storage.buildRelevanceHoldout();
+      const stats = await storage.getRelevanceHoldoutStats();
+      res.json({ ...result, stats });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to build holdout" });
+    }
+  });
+
+  app.get("/api/admin/relevance/eval", async (req, res) => {
+    try {
+      const { preFilterRelevance } = await import("./lib/pipeline/relevancePreFilter");
+      const { scoreText, CLASSIFIER_THRESHOLD } = await import("./lib/pipeline/relevanceClassifier");
+      const rows = await storage.listRelevanceHoldout(20000);
+      if (rows.length === 0) {
+        return res.json({ holdoutSize: 0, threshold: CLASSIFIER_THRESHOLD, v1: null, v2: null, sweep: [] });
+      }
+
+      const scored = rows.map((r) => {
+        const probV2 = scoreText(r.text || "").prob;
+        const v1 = preFilterRelevance({ title: r.text || "", description: "", url: "", source: r.sourceName || "unknown" } as any);
+        return { label: !!r.label, probV2, v1Pass: v1 !== "reject" };
+      });
+
+      const tally = (preds: Array<{ label: boolean; pred: boolean }>) => {
+        let tp = 0, fp = 0, tn = 0, fn = 0;
+        for (const p of preds) {
+          if (p.pred && p.label) tp++;
+          else if (p.pred && !p.label) fp++;
+          else if (!p.pred && p.label) fn++;
+          else tn++;
+        }
+        const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+        const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+        const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+        return { tp, fp, tn, fn, precision, recall, f1 };
+      };
+
+      const v1Stats = tally(scored.map((s) => ({ label: s.label, pred: s.v1Pass })));
+      const evalAt = (t: number) => tally(scored.map((s) => ({ label: s.label, pred: s.probV2 >= t })));
+      const v2Stats = evalAt(CLASSIFIER_THRESHOLD);
+      const sweep = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7].map((t) => ({
+        threshold: t,
+        ...evalAt(t),
+      }));
+
+      res.json({
+        holdoutSize: rows.length,
+        threshold: CLASSIFIER_THRESHOLD,
+        v1: v1Stats,
+        v2: v2Stats,
+        sweep,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to evaluate" });
+    }
+  });
+
+  app.get("/api/admin/relevance/metrics", async (_req, res) => {
+    try {
+      const rows = await storage.getLatestRelevanceMetrics(500);
+      const lastAt = await storage.getLastRelevanceMetricsAt();
+      res.json({ rows, lastComputedAt: lastAt });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch metrics" });
+    }
+  });
+
+  app.post("/api/admin/relevance/metrics/refresh", async (_req, res) => {
+    try {
+      const result = await storage.computeRelevanceMetrics(7);
+      res.json({ inserted: result.inserted });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to refresh metrics" });
+    }
+  });
+
 
   app.get("/api/admin/whoami", (req, res) => {
     res.json({

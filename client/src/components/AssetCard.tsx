@@ -383,16 +383,36 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           )}
 
           {/* CTA */}
-          <button
-            className="w-full h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-200 active:scale-95 hover:shadow-md hover:shadow-emerald-500/20"
-            onClick={(e) => {
-              e.stopPropagation();
-              handleViewDossier();
-            }}
-            data-testid={`button-dossier-${asset.id}`}
-          >
-            Asset Dossier
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              className="flex-1 h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-200 active:scale-95 hover:shadow-md hover:shadow-emerald-500/20"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleViewDossier();
+              }}
+              data-testid={`button-dossier-${asset.id}`}
+            >
+              Asset Dossier
+            </button>
+            <button
+              className="h-7 px-2 rounded-md text-[10px] font-medium text-zinc-500 dark:text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+              title="Mark not relevant — improves your future ranking"
+              onClick={(e) => {
+                e.stopPropagation();
+                const numericId = Number(asset.id);
+                if (!Number.isFinite(numericId)) return;
+                fetch("/api/feedback", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ assetId: numericId, action: "dismiss", source: "scout" }),
+                  credentials: "include",
+                }).catch(() => {});
+              }}
+              data-testid={`button-dismiss-${asset.id}`}
+            >
+              ✕
+            </button>
+          </div>
         </div>
       </div>
     </div>

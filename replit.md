@@ -388,6 +388,28 @@ Programmatic end-to-end test executed against the live Stripe **test-mode** API 
 7. `stripe.subscriptions.cancel(sub.id)`, then POST `customer.subscription.deleted` → expect `eden_market_access = false`, `eden_market_stripe_sub_id = null`.
 8. Cleanup: `stripe.customers.del(custId)`, `DELETE FROM organizations WHERE id = <id>`.
 
+## Feedback-Driven Relevance (Task #694)
+
+Three new tables drive the closed-loop relevance system:
+- `user_asset_feedback` — every save / dismiss / view / nda_request action
+  per (userId, assetId, action) with a partial unique index. Saves are also
+  recorded automatically from `POST /api/saved-assets` (with the prior dismiss
+  cleared) and unsaves clear the save signal from `DELETE /api/saved-assets/:id`.
+- `relevance_holdout` — eval set built from `ingested_assets.human_verified`
+  positives plus strong save (positive) / dismiss-only (negative) signals via
+  `storage.buildRelevanceHoldout`. Idempotent — existing rows are kept.
+- `relevance_metrics` — weekly aggregated save/dismiss counts and rates per
+  dimension (overall, source, asset_class). Written by
+  `storage.computeRelevanceMetrics(7)` and refreshed by
+  `scheduleRelevanceMetricsAggregation` in `server/index.ts` (1 minute after
+  boot if stale, then every 7 days).
+
+Public endpoint `POST /api/feedback {assetId, action, source?}` records
+feedback when a userId resolves (anonymous calls return `{recorded: false}`);
+the `✕ Not relevant` button on `AssetCard` posts `action="dismiss"` here.
+Admin endpoints `/api/admin/relevance/{holdout/build,eval,metrics,metrics/refresh}`
+power the Admin → Data Pipeline → Feedback-Driven Relevance panel.
+
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
 - `SUPABASE_DATABASE_URL`: Supabase PostgreSQL connection (used in server/db.ts)
@@ -418,6 +440,24 @@ Programmatic end-to-end test executed against the live Stripe **test-mode** API 
   Drug/Biologic formula — the card and dossier surface this with a "Class
   unknown" pill rather than a misleading score. Rollback: unset the var in prod
   (already off by default) or set `EDEN_CONFIDENCE_AWARE_RANKING=false` anywhere.
+- `EDEN_RELEVANCE_CLASSIFIER_V2` *(optional)*: Feature flag for Task #694
+  calibrated relevance classifier. **Default policy:** ON in non-prod, OFF in
+  prod unless set to `"true"`. When enabled, ingestion's pre-filter swaps the
+  legacy keyword rule (`preFilterRelevance`) for a logistic over biotech /
+  non-biotech keyword counts + a saturating length factor
+  (`server/lib/pipeline/relevanceClassifier.ts`). Threshold is tunable via
+  `EDEN_RELEVANCE_CLASSIFIER_THRESHOLD` (default `0.5`); a ±0.15 band around
+  it is routed to the existing review queue as "ambiguous" instead of
+  auto-rejecting. Diagnostics live in **Admin → Data Pipeline → Feedback-Driven
+  Relevance** (precision/recall/F1 + confusion matrix for v1 vs v2 against the
+  `relevance_holdout` set, plus a threshold sweep).
+- `EDEN_USER_FEEDBACK_OFFSET` *(optional)*: Feature flag for the per-user
+  additive ranking offset (Task #694). Default ON in non-prod / OFF in prod.
+  When enabled, `scoreAssets` adds `clamp(saves − dismisses, −10, +10)` per
+  asset class as a final additive bias before sort, so each user's previous
+  feedback nudges (but cannot dominate) their next ranking. The cap is
+  enforced both at the storage layer (`storage.getUserClassOffsets`) and again
+  inside `applyUserOffset` in `server/lib/pipeline/scoreAssets.ts`.
 - `IEDISON_API_KEY` *(optional)*: NIH iEdison REST API key. When set, the iEdison scraper
   uses authenticated JSON API requests (Bearer token + X-API-Key header) enabling full
   date-range access and higher rate limits. Obtain from https://iedison.nih.gov/iEdison/api/v1/publicInventions.

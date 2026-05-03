@@ -9318,9 +9318,207 @@ function DataPipeline({ pw }: { pw: string }) {
       </div>
 
       <Enrichment pw={pw} />
+      <RelevancePanel pw={pw} />
       <BulkCsvImport pw={pw} />
       <PotentialDuplicates pw={pw} />
     </>
+  );
+}
+
+// ─── Relevance Panel (Task #694) ────────────────────────────────────────────
+type RelevanceEvalStats = { tp: number; fp: number; tn: number; fn: number; precision: number; recall: number; f1: number };
+type RelevanceEvalResp = {
+  holdoutSize: number;
+  threshold: number;
+  v1: RelevanceEvalStats | null;
+  v2: RelevanceEvalStats | null;
+  sweep: Array<{ threshold: number } & RelevanceEvalStats>;
+};
+type RelevanceMetricsResp = {
+  rows: Array<{ id: number; computedAt: string; periodDays: number; dimension: string; dimensionValue: string; shownCount: number; saveCount: number; dismissCount: number; viewCount: number; saveRate: number | null; dismissRate: number | null }>;
+  lastComputedAt: string | null;
+};
+
+function fmtPct(v: number | null | undefined): string {
+  if (v == null || !Number.isFinite(v)) return "—";
+  return `${(v * 100).toFixed(1)}%`;
+}
+
+function RelevancePanel({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const authHeaders: Record<string, string> = pw ? { Authorization: `Bearer ${pw}` } : {};
+
+  const evalQ = useQuery<RelevanceEvalResp>({
+    queryKey: ["/api/admin/relevance/eval", pw],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/relevance/eval", { headers: authHeaders });
+      if (!r.ok) throw new Error("Eval failed");
+      return r.json();
+    },
+  });
+
+  const metricsQ = useQuery<RelevanceMetricsResp>({
+    queryKey: ["/api/admin/relevance/metrics", pw],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/relevance/metrics", { headers: authHeaders });
+      if (!r.ok) throw new Error("Metrics failed");
+      return r.json();
+    },
+  });
+
+  const buildHoldout = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/admin/relevance/holdout/build", { method: "POST", headers: authHeaders });
+      if (!r.ok) throw new Error("Build failed");
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Holdout built", description: `Total ${data?.stats?.total ?? "?"} rows (+${data?.inserted ?? 0} new)` });
+      evalQ.refetch();
+    },
+    onError: (e: any) => toast({ title: "Build failed", description: e.message, variant: "destructive" }),
+  });
+
+  const refreshMetrics = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/admin/relevance/metrics/refresh", { method: "POST", headers: authHeaders });
+      if (!r.ok) throw new Error("Refresh failed");
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Metrics refreshed", description: `${data?.inserted ?? 0} rows snapshotted` });
+      metricsQ.refetch();
+    },
+    onError: (e: any) => toast({ title: "Refresh failed", description: e.message, variant: "destructive" }),
+  });
+
+  const ev = evalQ.data;
+  const m = metricsQ.data;
+  const overallRow = m?.rows.find((r) => r.dimension === "overall");
+  const sourceRows = (m?.rows ?? []).filter((r) => r.dimension === "source").slice(0, 12);
+  const classRows = (m?.rows ?? []).filter((r) => r.dimension === "asset_class").slice(0, 12);
+
+  const renderStats = (s: RelevanceEvalStats | null | undefined, label: string) => (
+    <div className="border border-border rounded-lg p-3 bg-muted/10" data-testid={`relevance-stats-${label.toLowerCase()}`}>
+      <div className="text-xs font-semibold text-foreground mb-2">{label}</div>
+      {!s ? <div className="text-xs text-muted-foreground">No holdout yet</div> : (
+        <>
+          <div className="grid grid-cols-3 gap-2 text-xs mb-2">
+            <div><span className="text-muted-foreground">Precision</span><div className="font-semibold tabular-nums" data-testid={`stat-precision-${label.toLowerCase()}`}>{fmtPct(s.precision)}</div></div>
+            <div><span className="text-muted-foreground">Recall</span><div className="font-semibold tabular-nums" data-testid={`stat-recall-${label.toLowerCase()}`}>{fmtPct(s.recall)}</div></div>
+            <div><span className="text-muted-foreground">F1</span><div className="font-semibold tabular-nums" data-testid={`stat-f1-${label.toLowerCase()}`}>{fmtPct(s.f1)}</div></div>
+          </div>
+          <div className="grid grid-cols-2 gap-1 text-[10px] text-muted-foreground">
+            <div className="bg-emerald-50 dark:bg-emerald-950/30 px-2 py-1 rounded">TP <span className="font-semibold text-emerald-700 dark:text-emerald-300">{s.tp}</span></div>
+            <div className="bg-rose-50 dark:bg-rose-950/30 px-2 py-1 rounded">FP <span className="font-semibold text-rose-700 dark:text-rose-300">{s.fp}</span></div>
+            <div className="bg-rose-50 dark:bg-rose-950/30 px-2 py-1 rounded">FN <span className="font-semibold text-rose-700 dark:text-rose-300">{s.fn}</span></div>
+            <div className="bg-zinc-100 dark:bg-zinc-800/40 px-2 py-1 rounded">TN <span className="font-semibold">{s.tn}</span></div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="bg-card rounded-xl border border-border p-5 space-y-5" data-testid="relevance-panel">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" /> Feedback-Driven Relevance
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">Compare keyword pre-filter (v1) vs calibrated classifier (v2). Holdout built from human-verified flags + save/dismiss signals.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => buildHoldout.mutate()} disabled={buildHoldout.isPending} data-testid="button-build-holdout">
+            {buildHoldout.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Build holdout"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => refreshMetrics.mutate()} disabled={refreshMetrics.isPending} data-testid="button-refresh-metrics">
+            {refreshMetrics.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Refresh metrics"}
+          </Button>
+        </div>
+      </div>
+
+      <div>
+        <div className="text-xs text-muted-foreground mb-2">
+          Holdout size: <span className="font-semibold text-foreground" data-testid="holdout-size">{ev?.holdoutSize ?? "—"}</span>
+          {ev?.threshold != null && <> · Threshold: <span className="font-semibold text-foreground">{ev.threshold.toFixed(2)}</span></>}
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {renderStats(ev?.v1, "v1 keyword")}
+          {renderStats(ev?.v2, "v2 classifier")}
+        </div>
+      </div>
+
+      {ev?.sweep && ev.sweep.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-foreground mb-2">Threshold sweep (v2)</div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-muted-foreground">
+                <tr><th className="text-left py-1 px-2">Threshold</th><th className="text-right">Precision</th><th className="text-right">Recall</th><th className="text-right">F1</th><th className="text-right">TP</th><th className="text-right">FP</th><th className="text-right">FN</th></tr>
+              </thead>
+              <tbody>
+                {ev.sweep.map((s) => (
+                  <tr key={s.threshold} className="border-t border-border tabular-nums" data-testid={`sweep-row-${s.threshold}`}>
+                    <td className="py-1 px-2">{s.threshold.toFixed(2)}</td>
+                    <td className="text-right">{fmtPct(s.precision)}</td>
+                    <td className="text-right">{fmtPct(s.recall)}</td>
+                    <td className="text-right font-semibold">{fmtPct(s.f1)}</td>
+                    <td className="text-right">{s.tp}</td>
+                    <td className="text-right text-rose-600">{s.fp}</td>
+                    <td className="text-right text-rose-600">{s.fn}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div className="text-xs font-semibold text-foreground mb-2">Save / Dismiss rates (last snapshot{m?.lastComputedAt ? `: ${new Date(m.lastComputedAt).toLocaleString()}` : ""})</div>
+        {!overallRow && (m?.rows.length ?? 0) === 0 ? (
+          <div className="text-xs text-muted-foreground">No metrics yet — click Refresh metrics.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="border border-border rounded-lg p-3 bg-muted/10">
+              <div className="text-xs font-semibold text-foreground mb-1">Overall (7d)</div>
+              {overallRow ? (
+                <div className="text-xs space-y-1">
+                  <div>Saves: <span className="font-semibold tabular-nums">{overallRow.saveCount}</span></div>
+                  <div>Dismisses: <span className="font-semibold tabular-nums">{overallRow.dismissCount}</span></div>
+                  <div>Save rate: <span className="font-semibold tabular-nums">{fmtPct(overallRow.saveRate)}</span></div>
+                </div>
+              ) : <div className="text-xs text-muted-foreground">No overall snapshot</div>}
+            </div>
+            <div className="border border-border rounded-lg p-3 bg-muted/10">
+              <div className="text-xs font-semibold text-foreground mb-2">By source</div>
+              <div className="space-y-1 text-xs">
+                {sourceRows.length === 0 && <div className="text-muted-foreground">—</div>}
+                {sourceRows.map((r) => (
+                  <div key={r.id} className="flex justify-between gap-2 tabular-nums">
+                    <span className="truncate">{r.dimensionValue}</span>
+                    <span className="text-muted-foreground">{r.saveCount}/{r.dismissCount} · {fmtPct(r.saveRate)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="border border-border rounded-lg p-3 bg-muted/10">
+              <div className="text-xs font-semibold text-foreground mb-2">By asset class</div>
+              <div className="space-y-1 text-xs">
+                {classRows.length === 0 && <div className="text-muted-foreground">—</div>}
+                {classRows.map((r) => (
+                  <div key={r.id} className="flex justify-between gap-2 tabular-nums">
+                    <span className="truncate">{r.dimensionValue}</span>
+                    <span className="text-muted-foreground">{r.saveCount}/{r.dismissCount} · {fmtPct(r.saveRate)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 

@@ -64,6 +64,7 @@ import { storage } from "../storage";
 import { runAllScrapers, ALL_SCRAPERS, type ScrapedListing } from "./scrapers/index";
 import { enrichBatch } from "./scrapers/enrichAsset";
 import { preFilterBatch } from "./pipeline/relevancePreFilter";
+import { activePreFilterBatch } from "./pipeline/relevanceClassifier";
 import { classifyBatch, type AssetClassification } from "./pipeline/classifyAsset";
 import { computeContentHash, computeCompletenessScore, normalizeLicensingStatus, normalizePatentStatus } from "./pipeline/contentHash";
 import { syncStaging, type SyncStagingRow } from "@shared/schema";
@@ -146,8 +147,8 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     });
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
-    const { passed, rejected, ambiguous } = preFilterBatch(listings);
-    console.log(`[ingestion] Pre-filter: ${passed.length} passed, ${rejected.length} rejected, ${ambiguous.length} ambiguous`);
+    const { passed, rejected, ambiguous, variant } = activePreFilterBatch(listings);
+    console.log(`[ingestion] Pre-filter (${variant}): ${passed.length} passed, ${rejected.length} rejected, ${ambiguous.length} ambiguous`);
 
     const filteredListings = [...passed, ...ambiguous];
 

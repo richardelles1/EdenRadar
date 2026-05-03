@@ -35,6 +35,9 @@ import {
   marketDealDocuments, type MarketDealDocument, type InsertMarketDealDocument,
   marketDealMessages, type MarketDealMessage, type InsertMarketDealMessage,
   exportLogs, type ExportLog, type InsertExportLog,
+  userAssetFeedback, type UserAssetFeedback, type FeedbackAction, FEEDBACK_ACTIONS,
+  relevanceHoldout, type RelevanceHoldoutRow,
+  relevanceMetrics, type RelevanceMetricsRow,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -93,6 +96,19 @@ export interface IStorage {
   getAssetNoteMeta(savedAssetIds: number[]): Promise<Record<number, { count: number; lastNoteAt: Date | null }>>;
   updateAssetNote(noteId: number, content: string, userId: string): Promise<SavedAssetNote | null>;
   deleteAssetNote(noteId: number, userId: string): Promise<boolean>;
+
+  // ── Feedback-driven Relevance (Task #694) ────────────────────────────────
+  recordFeedback(userId: string, assetId: number, action: FeedbackAction, source?: string): Promise<UserAssetFeedback | null>;
+  deleteFeedback(userId: string, assetId: number, action: FeedbackAction): Promise<number>;
+  listUserFeedback(userId: string, limit?: number): Promise<UserAssetFeedback[]>;
+  backfillFeedbackFromSavedAssets(): Promise<{ inserted: number }>;
+  buildRelevanceHoldout(): Promise<{ inserted: number; fromHumanVerified: number; fromSaves: number; fromDismisses: number; total: number }>;
+  listRelevanceHoldout(limit?: number): Promise<RelevanceHoldoutRow[]>;
+  getRelevanceHoldoutStats(): Promise<{ total: number; positives: number; negatives: number; bySource: Array<{ labelSource: string; count: number; positives: number }> }>;
+  computeRelevanceMetrics(periodDays?: number): Promise<{ inserted: number; rows: RelevanceMetricsRow[] }>;
+  getLatestRelevanceMetrics(limit?: number): Promise<RelevanceMetricsRow[]>;
+  getLastRelevanceMetricsAt(): Promise<Date | null>;
+  getUserClassOffsets(userId: string): Promise<Record<string, number>>;
 
   getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]>;
   getPipelineList(id: number): Promise<PipelineList | undefined>;
@@ -3508,6 +3524,294 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(exportLogs)
       .orderBy(desc(exportLogs.exportedAt))
       .limit(limit);
+  }
+
+  // ── Feedback-driven Relevance (Task #694) ─────────────────────────────────
+
+  async recordFeedback(
+    userId: string,
+    assetId: number,
+    action: FeedbackAction,
+    source: string = "scout",
+  ): Promise<UserAssetFeedback | null> {
+    if (!userId || !Number.isFinite(assetId)) return null;
+    if (!FEEDBACK_ACTIONS.includes(action)) return null;
+    const [row] = await db.insert(userAssetFeedback)
+      .values({ userId, assetId, action, source })
+      .onConflictDoNothing({
+        target: [userAssetFeedback.userId, userAssetFeedback.assetId, userAssetFeedback.action],
+      })
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteFeedback(userId: string, assetId: number, action: FeedbackAction): Promise<number> {
+    if (!userId) return 0;
+    const result = await db.delete(userAssetFeedback)
+      .where(and(
+        eq(userAssetFeedback.userId, userId),
+        eq(userAssetFeedback.assetId, assetId),
+        eq(userAssetFeedback.action, action),
+      ))
+      .returning({ id: userAssetFeedback.id });
+    return result.length;
+  }
+
+  async listUserFeedback(userId: string, limit = 500): Promise<UserAssetFeedback[]> {
+    if (!userId) return [];
+    return db.select().from(userAssetFeedback)
+      .where(eq(userAssetFeedback.userId, userId))
+      .orderBy(desc(userAssetFeedback.createdAt))
+      .limit(limit);
+  }
+
+  async backfillFeedbackFromSavedAssets(): Promise<{ inserted: number }> {
+    // Idempotent: ON CONFLICT DO NOTHING via partial unique index.
+    const res = await db.execute(sql`
+      INSERT INTO user_asset_feedback (user_id, asset_id, action, source, created_at)
+      SELECT sa.user_id, sa.ingested_asset_id, 'save', 'backfill', sa.saved_at
+      FROM saved_assets sa
+      WHERE sa.user_id IS NOT NULL AND sa.ingested_asset_id IS NOT NULL
+      ON CONFLICT (user_id, asset_id, action) DO NOTHING
+    `);
+    return { inserted: (res as any).rowCount ?? 0 };
+  }
+
+  /**
+   * Builds a holdout set from:
+   *   - human_verified flags on ingested_assets (true → label=true, explicit false → label=false)
+   *   - "strong" save signals: assets saved by ≥1 distinct users
+   *   - "strong" dismiss signals: assets dismissed by ≥1 distinct users with no saves
+   * Idempotent: existing rows are left as-is, new rows added.
+   */
+  async buildRelevanceHoldout(): Promise<{
+    inserted: number;
+    fromHumanVerified: number;
+    fromSaves: number;
+    fromDismisses: number;
+    total: number;
+  }> {
+    await this.backfillFeedbackFromSavedAssets();
+
+    // Human-verified positives (any field flagged true).
+    const humanRes = await db.execute(sql`
+      INSERT INTO relevance_holdout (asset_id, label, label_source, split, text, asset_class, source_name)
+      SELECT
+        ia.id,
+        TRUE,
+        'human_verified',
+        'eval',
+        COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, ''),
+        ia.asset_class,
+        ia.source_name
+      FROM ingested_assets ia
+      WHERE ia.human_verified IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM jsonb_each_text(ia.human_verified) v WHERE v.value = 'true'
+        )
+      ON CONFLICT (asset_id) DO NOTHING
+    `);
+    const fromHumanVerified = (humanRes as any).rowCount ?? 0;
+
+    // Save signals: ≥1 user save → positive.
+    const saveRes = await db.execute(sql`
+      INSERT INTO relevance_holdout (asset_id, label, label_source, split, text, asset_class, source_name)
+      SELECT
+        ia.id,
+        TRUE,
+        'save_signal',
+        'eval',
+        COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, ''),
+        ia.asset_class,
+        ia.source_name
+      FROM ingested_assets ia
+      WHERE EXISTS (
+        SELECT 1 FROM user_asset_feedback uf
+        WHERE uf.asset_id = ia.id AND uf.action = 'save'
+      )
+      ON CONFLICT (asset_id) DO NOTHING
+    `);
+    const fromSaves = (saveRes as any).rowCount ?? 0;
+
+    // Dismiss signals: ≥1 dismiss and 0 saves → negative.
+    const dismissRes = await db.execute(sql`
+      INSERT INTO relevance_holdout (asset_id, label, label_source, split, text, asset_class, source_name)
+      SELECT
+        ia.id,
+        FALSE,
+        'dismiss_signal',
+        'eval',
+        COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, ''),
+        ia.asset_class,
+        ia.source_name
+      FROM ingested_assets ia
+      WHERE EXISTS (
+        SELECT 1 FROM user_asset_feedback uf
+        WHERE uf.asset_id = ia.id AND uf.action = 'dismiss'
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM user_asset_feedback uf2
+        WHERE uf2.asset_id = ia.id AND uf2.action = 'save'
+      )
+      ON CONFLICT (asset_id) DO NOTHING
+    `);
+    const fromDismisses = (dismissRes as any).rowCount ?? 0;
+
+    const totalRes = await db.execute(sql`SELECT COUNT(*)::int AS c FROM relevance_holdout`);
+    const total = ((totalRes as any).rows?.[0]?.c ?? 0) as number;
+
+    return {
+      inserted: fromHumanVerified + fromSaves + fromDismisses,
+      fromHumanVerified,
+      fromSaves,
+      fromDismisses,
+      total,
+    };
+  }
+
+  async listRelevanceHoldout(limit = 5000): Promise<RelevanceHoldoutRow[]> {
+    return db.select().from(relevanceHoldout).limit(limit);
+  }
+
+  async getRelevanceHoldoutStats(): Promise<{
+    total: number;
+    positives: number;
+    negatives: number;
+    bySource: Array<{ labelSource: string; count: number; positives: number }>;
+  }> {
+    const total = await db.execute(sql`SELECT COUNT(*)::int AS c FROM relevance_holdout`);
+    const pos = await db.execute(sql`SELECT COUNT(*)::int AS c FROM relevance_holdout WHERE label = TRUE`);
+    const neg = await db.execute(sql`SELECT COUNT(*)::int AS c FROM relevance_holdout WHERE label = FALSE`);
+    const bySource = await db.execute(sql`
+      SELECT label_source, COUNT(*)::int AS count,
+        SUM(CASE WHEN label THEN 1 ELSE 0 END)::int AS positives
+      FROM relevance_holdout GROUP BY label_source
+    `);
+    return {
+      total: ((total as any).rows?.[0]?.c ?? 0) as number,
+      positives: ((pos as any).rows?.[0]?.c ?? 0) as number,
+      negatives: ((neg as any).rows?.[0]?.c ?? 0) as number,
+      bySource: ((bySource as any).rows ?? []).map((r: any) => ({
+        labelSource: r.label_source as string,
+        count: r.count as number,
+        positives: r.positives as number,
+      })),
+    };
+  }
+
+  /**
+   * Computes save/dismiss rates per dimension over the recent period.
+   * Writes a snapshot row per (dimension, dimension_value) into
+   * relevance_metrics with `computed_at = now`. Returns the inserted rows.
+   */
+  async computeRelevanceMetrics(periodDays = 7): Promise<{ inserted: number; rows: RelevanceMetricsRow[] }> {
+    const since = new Date(Date.now() - periodDays * 24 * 3600 * 1000);
+
+    // Overall counts
+    const overall = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE action = 'save')::int AS saves,
+        COUNT(*) FILTER (WHERE action = 'dismiss')::int AS dismisses,
+        COUNT(*) FILTER (WHERE action = 'view')::int AS views
+      FROM user_asset_feedback
+      WHERE created_at >= ${since}
+    `);
+    const o = ((overall as any).rows?.[0] ?? {}) as { saves: number; dismisses: number; views: number };
+    const oTotal = (o.saves ?? 0) + (o.dismisses ?? 0);
+
+    // Per source
+    const perSource = await db.execute(sql`
+      SELECT
+        COALESCE(ia.source_name, 'unknown') AS dim_value,
+        COUNT(*) FILTER (WHERE uf.action = 'save')::int AS saves,
+        COUNT(*) FILTER (WHERE uf.action = 'dismiss')::int AS dismisses,
+        COUNT(*) FILTER (WHERE uf.action = 'view')::int AS views
+      FROM user_asset_feedback uf
+      JOIN ingested_assets ia ON ia.id = uf.asset_id
+      WHERE uf.created_at >= ${since}
+      GROUP BY COALESCE(ia.source_name, 'unknown')
+    `);
+
+    // Per asset class
+    const perClass = await db.execute(sql`
+      SELECT
+        COALESCE(ia.asset_class, 'unknown') AS dim_value,
+        COUNT(*) FILTER (WHERE uf.action = 'save')::int AS saves,
+        COUNT(*) FILTER (WHERE uf.action = 'dismiss')::int AS dismisses,
+        COUNT(*) FILTER (WHERE uf.action = 'view')::int AS views
+      FROM user_asset_feedback uf
+      JOIN ingested_assets ia ON ia.id = uf.asset_id
+      WHERE uf.created_at >= ${since}
+      GROUP BY COALESCE(ia.asset_class, 'unknown')
+    `);
+
+    type Bucket = { dimension: string; dimensionValue: string; saves: number; dismisses: number; views: number };
+    const buckets: Bucket[] = [
+      { dimension: "overall", dimensionValue: "", saves: o.saves ?? 0, dismisses: o.dismisses ?? 0, views: o.views ?? 0 },
+      ...((perSource as any).rows ?? []).map((r: any): Bucket => ({
+        dimension: "source", dimensionValue: r.dim_value, saves: r.saves, dismisses: r.dismisses, views: r.views,
+      })),
+      ...((perClass as any).rows ?? []).map((r: any): Bucket => ({
+        dimension: "asset_class", dimensionValue: r.dim_value, saves: r.saves, dismisses: r.dismisses, views: r.views,
+      })),
+    ];
+
+    if (buckets.length === 0) return { inserted: 0, rows: [] };
+
+    const values = buckets.map((b) => {
+      const denom = b.saves + b.dismisses;
+      return {
+        periodDays,
+        dimension: b.dimension,
+        dimensionValue: b.dimensionValue,
+        shownCount: denom,
+        saveCount: b.saves,
+        dismissCount: b.dismisses,
+        viewCount: b.views,
+        saveRate: denom > 0 ? b.saves / denom : null,
+        dismissRate: denom > 0 ? b.dismisses / denom : null,
+      };
+    });
+    const inserted = await db.insert(relevanceMetrics).values(values).returning();
+    return { inserted: inserted.length, rows: inserted };
+  }
+
+  async getLatestRelevanceMetrics(limit = 200): Promise<RelevanceMetricsRow[]> {
+    return db.select().from(relevanceMetrics)
+      .orderBy(desc(relevanceMetrics.computedAt))
+      .limit(limit);
+  }
+
+  async getLastRelevanceMetricsAt(): Promise<Date | null> {
+    const r = await db.execute(sql`SELECT MAX(computed_at) AS t FROM relevance_metrics`);
+    const t = (r as any).rows?.[0]?.t;
+    return t ? new Date(t) : null;
+  }
+
+  /**
+   * Returns the per-user, per-asset-class additive ranking offset.
+   * Offset is `clamp(saveCount - dismissCount, -10, +10)` per asset class.
+   * Returned as `{ assetClass: offsetPoints }` ready to add to score totals.
+   */
+  async getUserClassOffsets(userId: string): Promise<Record<string, number>> {
+    if (!userId) return {};
+    const rows = await db.execute(sql`
+      SELECT
+        COALESCE(ia.asset_class, 'unknown') AS asset_class,
+        SUM(CASE WHEN uf.action = 'save' THEN 1 ELSE 0 END)::int AS saves,
+        SUM(CASE WHEN uf.action = 'dismiss' THEN 1 ELSE 0 END)::int AS dismisses
+      FROM user_asset_feedback uf
+      JOIN ingested_assets ia ON ia.id = uf.asset_id
+      WHERE uf.user_id = ${userId}
+      GROUP BY COALESCE(ia.asset_class, 'unknown')
+    `);
+    const out: Record<string, number> = {};
+    for (const r of ((rows as any).rows ?? [])) {
+      const raw = (r.saves as number) - (r.dismisses as number);
+      const capped = Math.max(-10, Math.min(10, raw));
+      if (capped !== 0) out[r.asset_class as string] = capped;
+    }
+    return out;
   }
 }
 

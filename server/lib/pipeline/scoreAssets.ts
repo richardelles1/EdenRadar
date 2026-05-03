@@ -370,9 +370,35 @@ async function runWithConcurrency<T>(
   return results;
 }
 
+// ─── Per-user feedback offset (Task #694) ────────────────────────────────────
+// Adds a capped additive bonus per asset class based on a user's prior
+// save/dismiss history. Applied AFTER confidence-aware scaling so the offset
+// nudges ranking without distorting the raw score components.
+export const USER_OFFSET_CAP = 10;
+
+export type UserClassOffsets = Record<string, number>;
+
+const isProdEnvOffset = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+const offsetFlagRaw = (process.env.EDEN_USER_FEEDBACK_OFFSET ?? "").toLowerCase();
+export const USER_FEEDBACK_OFFSET_ENABLED = offsetFlagRaw === "true"
+  ? true
+  : offsetFlagRaw === "false"
+    ? false
+    : !isProdEnvOffset;
+
+function applyUserOffset(total: number, assetClass: string | null | undefined, offsets: UserClassOffsets | undefined): number {
+  if (!offsets || !USER_FEEDBACK_OFFSET_ENABLED) return total;
+  const key = assetClass || "unknown";
+  const raw = offsets[key];
+  if (!raw) return total;
+  const capped = Math.max(-USER_OFFSET_CAP, Math.min(USER_OFFSET_CAP, raw));
+  return clamp(total + capped);
+}
+
 export async function scoreAssets(
   normalized: Partial<ScoredAsset>[],
-  buyerProfile?: BuyerProfile
+  buyerProfile?: BuyerProfile,
+  userClassOffsets?: UserClassOffsets,
 ): Promise<ScoredAsset[]> {
   const scored: ScoredAsset[] = normalized.map((asset) => {
     const freshnessResult = scoreFreshness(asset);
@@ -405,9 +431,10 @@ export async function scoreAssets(
       ? Math.min(categoryConfidence, coverageNorm)
       : coverageNorm;
 
-    const total = CONFIDENCE_AWARE_RANKING_ENABLED
+    const totalAfterConfidence = CONFIDENCE_AWARE_RANKING_ENABLED
       ? clamp(rawTotal * (CONFIDENCE_FLOOR + (1 - CONFIDENCE_FLOOR) * confidenceFactor))
       : rawTotal;
+    const total = applyUserOffset(totalAfterConfidence, asset.asset_class, userClassOffsets);
 
     // Confidence label now reflects the *combined* factor, not just coverage,
     // so a high-coverage but mis-classified row no longer reads as "high".

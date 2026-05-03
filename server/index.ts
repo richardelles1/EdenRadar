@@ -1087,6 +1087,31 @@ function scheduleTrialReminderCheck() {
 // alerts on a short cadence so realtime subscribers receive new assets within
 // ~5 minutes of firstSeenAt. The isEvaluating guard inside checkAndSendAlerts
 // prevents concurrent runs; the lastAlertSentAt watermark prevents double-sends.
+// ── Weekly relevance-metrics aggregation (Task #694) ──────────────────────────
+function scheduleRelevanceMetricsAggregation() {
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  setTimeout(async () => {
+    try {
+      const lastAt = await storage.getLastRelevanceMetricsAt();
+      const stale = !lastAt || Date.now() - lastAt.getTime() > WEEK_MS;
+      if (stale) {
+        const r = await storage.computeRelevanceMetrics(7);
+        log(`[relevance] Initial metrics aggregation: ${r.inserted} rows`, "startup");
+      }
+    } catch (err: any) {
+      log(`[relevance] Initial aggregation failed: ${err?.message}`, "startup");
+    }
+    setInterval(async () => {
+      try {
+        const r = await storage.computeRelevanceMetrics(7);
+        log(`[relevance] Weekly metrics aggregation: ${r.inserted} rows`, "startup");
+      } catch (err: any) {
+        log(`[relevance] Weekly aggregation failed: ${err?.message}`, "startup");
+      }
+    }, WEEK_MS);
+  }, 60_000);
+}
+
 function schedulePeriodicAlertCheck() {
   const intervalMin = Math.max(2, Number(process.env.ALERT_EVAL_INTERVAL_MIN ?? 5));
   const intervalMs = intervalMin * 60 * 1000;
@@ -1440,6 +1465,8 @@ async function migrateAssetStatusValues() {
       scheduleTrialReminderCheck();
       // ── Periodic alert evaluation (every 5 min by default) ─────────────
       schedulePeriodicAlertCheck();
+      // ── Weekly relevance-metrics aggregation (Task #694) ─────────────────
+      scheduleRelevanceMetricsAggregation();
       // ── Index for alertMailer's matchAssetsForAlert query ──────────────
       ensureAlertMatchIndex().catch(() => {});
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
