@@ -7041,7 +7041,7 @@ If a field cannot be determined, use "N/A".`
       }
 
       // Add to org_members — store email/name for display in admin UI
-      const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role, invitedBy: "admin", inviteSource: "admin", inviteStatus: "pending" });
+      const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role, invitedBy: "admin", inviteSource: "admin", inviteStatus: "active" });
 
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
@@ -7301,7 +7301,7 @@ If a field cannot be determined, use "N/A".`
         if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
       } catch {}
 
-      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "pending" });
+      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "active" });
       await storage.setIndustryProfileOrg(newUserId, org.id);
       await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
         console.error("[email] Self-service invite email failed:", err)

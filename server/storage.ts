@@ -3526,10 +3526,9 @@ export class DatabaseStorage implements IStorage {
 
   async purgeExpiredPendingInvites(olderThanHours = 48): Promise<number> {
     const cutoff = new Date(Date.now() - olderThanHours * 60 * 60 * 1000);
-    // Fetch the rows first so we can clean up industry_profiles.org_id for each,
-    // mirroring the full side-effects of removeOrgMember().
+    // Count before deleting so we can return an accurate count.
     const expired = await db
-      .select({ orgId: orgMembers.orgId, userId: orgMembers.userId })
+      .select({ userId: orgMembers.userId })
       .from(orgMembers)
       .where(and(
         eq(orgMembers.inviteStatus, "pending"),
@@ -3538,13 +3537,10 @@ export class DatabaseStorage implements IStorage {
 
     if (expired.length === 0) return 0;
 
-    // Clear org linkage from industry_profiles for each expired invite so the
-    // user cannot regain org access via the profile fallback path.
-    for (const { userId } of expired) {
-      await this.setIndustryProfileOrg(userId, null);
-    }
-
-    // Now delete the membership rows.
+    // Delete the stale membership rows only.
+    // industry_profiles.org_id is intentionally left intact — it is the source
+    // of truth for org access and must not be nulled by invite housekeeping.
+    // If the user is re-invited later, their profile is already linked correctly.
     await db
       .delete(orgMembers)
       .where(and(
