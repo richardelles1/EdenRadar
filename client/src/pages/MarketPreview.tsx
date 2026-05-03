@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { Link } from "wouter";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -136,41 +136,12 @@ function ListingCardPreview({ l }: { l: typeof SAMPLE_LISTINGS[0] }) {
 }
 
 export default function MarketPreview() {
-  const { subscribe, isLoading } = useMarketSubscribe();
-
-  useEffect(() => {
-    document.title = "EdenMarket — Confidential Biopharma Deal Marketplace | EdenRadar";
-
-    const setMeta = (name: string, content: string) => {
-      let el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
-      if (!el) {
-        el = document.createElement("meta");
-        el.setAttribute("name", name);
-        document.head.appendChild(el);
-      }
-      el.content = content;
-    };
-    const setOg = (property: string, content: string) => {
-      let el = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
-      if (!el) {
-        el = document.createElement("meta");
-        el.setAttribute("property", property);
-        document.head.appendChild(el);
-      }
-      el.content = content;
-    };
-
-    setMeta(
-      "description",
+  useDocumentMeta({
+    title: "EdenMarket — Confidential Biopharma Deal Marketplace | EdenRadar",
+    description:
       "EdenMarket is the confidential biopharma deal marketplace — browse, compare, and submit EOIs on TTO spin-outs, deprioritized programs, and non-core assets. NDA-gated deal rooms, blind listings, success-fee model.",
-    );
-    setOg("og:title", "EdenMarket — Confidential Biopharma Deal Marketplace");
-    setOg(
-      "og:description",
-      "Browse curated biopharma assets for licensing or acquisition. Submit EOIs in NDA-protected deal rooms.",
-    );
-    setOg("og:type", "website");
-  }, []);
+  });
+  const { subscribe, isLoading } = useMarketSubscribe();
 
   return (
     <div className="min-h-screen bg-background">

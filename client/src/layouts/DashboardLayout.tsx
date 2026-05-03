@@ -8,6 +8,7 @@ import { useOrg } from "@/hooks/use-org";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AlertTriangle, Clock, X, ExternalLink, ArrowRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -104,6 +105,7 @@ function TrialBanner({ daysLeft, periodEnd }: { daysLeft: number; periodEnd: str
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
+  useDocumentMeta({ title: "EdenRadar", noindex: true });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   const [onboardingOpen, setOnboardingOpen] = useState(false);

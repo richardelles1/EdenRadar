@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { useAuth } from "@/hooks/use-auth";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import {
   Building2,
   FlaskConical,
@@ -434,6 +435,11 @@ const STATS = [
 ];
 
 export default function Landing() {
+  useDocumentMeta({
+    title: "EdenRadar — Where Biotech Research Meets Industry Intelligence",
+    description:
+      "AI-powered biotech asset discovery across 300+ tech transfer offices and scientific literature. Connect industry BD teams with university researchers, surface licensable assets, and run a confidential deal marketplace — all in EdenRadar.",
+  });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   const statsRef = useReveal();

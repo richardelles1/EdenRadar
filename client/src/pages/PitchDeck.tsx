@@ -41,6 +41,7 @@ import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { ExportMenu } from "@/components/ExportMenu";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 const SLIDE_COUNT = 9;
 
@@ -1790,6 +1791,11 @@ function ContactSlide({ colors }: { colors: Colors }) {
 
 /* ═══════════════════════ ROOT ═══════════════════════ */
 export default function PitchDeck() {
+  useDocumentMeta({
+    title: "EdenRadar Pitch Deck — Biotech Asset Discovery Platform",
+    description:
+      "EdenRadar's investor pitch: a 3-sided biotech ecosystem connecting industry BD, university research, and concept founders through AI-powered asset discovery and a confidential deal marketplace.",
+  });
   const [current, setCurrent] = useState(0);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("eden-theme") !== "light");
   const containerRef = useRef<HTMLDivElement>(null);

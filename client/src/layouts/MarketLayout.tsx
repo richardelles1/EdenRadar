@@ -3,12 +3,14 @@ import { useLocation } from "wouter";
 import { MarketSidebar } from "@/components/MarketSidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 type MarketLayoutProps = {
   children: React.ReactNode;
 };
 
 export function MarketLayout({ children }: MarketLayoutProps) {
+  useDocumentMeta({ title: "EdenMarket | EdenRadar", noindex: true });
   const [, navigate] = useLocation();
   const { session, loading } = useAuth();
 

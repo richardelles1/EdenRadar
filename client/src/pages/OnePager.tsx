@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Printer, Search, BarChart3, GitBranch, Shield, Bell, FileText, CheckCircle2, Globe, ShoppingBag, Lock, Handshake } from "lucide-react";
 import QRCode from "qrcode";
 import { ExportMenu } from "@/components/ExportMenu";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 const NAVY = "#0f1e35";
 const EMERALD = "#1e7a4a";
@@ -86,6 +87,11 @@ function useQrSvg(url: string) {
 }
 
 export default function OnePager() {
+  useDocumentMeta({
+    title: "EdenRadar One-Pager — Biotech Asset Discovery & Marketplace",
+    description:
+      "Single-page overview of EdenRadar: AI-powered biotech asset discovery, EDEN scoring, and a confidential industry-research-concept marketplace.",
+  });
   const qrSvg = useQrSvg("https://edenradar.com");
 
   function handlePrint() {

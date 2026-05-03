@@ -1,5 +1,5 @@
-import { useEffect } from "react";
 import { Nav } from "@/components/Nav";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { Button } from "@/components/ui/button";
 import {
   Tag,
@@ -58,39 +58,11 @@ const HOW_LISTING_WORKS = [
 ];
 
 export default function MarketList() {
-  useEffect(() => {
-    document.title = "List your biopharma assets on EdenMarket | EdenRadar";
-
-    const setMeta = (name: string, content: string) => {
-      let el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
-      if (!el) {
-        el = document.createElement("meta");
-        el.setAttribute("name", name);
-        document.head.appendChild(el);
-      }
-      el.content = content;
-    };
-    const setOg = (property: string, content: string) => {
-      let el = document.querySelector(`meta[property="${property}"]`) as HTMLMetaElement | null;
-      if (!el) {
-        el = document.createElement("meta");
-        el.setAttribute("property", property);
-        document.head.appendChild(el);
-      }
-      el.content = content;
-    };
-
-    setMeta(
-      "description",
+  useDocumentMeta({
+    title: "List your biopharma assets on EdenMarket | EdenRadar",
+    description:
       "List deprioritized programs, TTO spin-outs, and non-core biopharma assets on EdenMarket. Confidential blind listings, NDA-gated deal rooms, and a transparent success-fee model.",
-    );
-    setOg("og:title", "List your biopharma assets on EdenMarket");
-    setOg(
-      "og:description",
-      "Confidential listings, curated buyer base, success-fee pricing. List your assets on EdenMarket.",
-    );
-    setOg("og:type", "website");
-  }, []);
+  });
 
   return (
     <div className="min-h-screen bg-background">

@@ -10,6 +10,7 @@ import { useOrg } from "@/hooks/use-org";
 import type { OrgContext } from "@/hooks/use-org";
 import { useToast } from "@/hooks/use-toast";
 import { PLAN_PRICES, formatPrice } from "@/lib/pricing";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 const CONTACT_SALES = "sales@edenradar.com";
 
@@ -440,6 +441,11 @@ function EdenMarketTier({ session }: { session: Session | null }) {
 }
 
 export default function Pricing() {
+  useDocumentMeta({
+    title: "Pricing — EdenRadar Plans for Industry, Research & Discovery",
+    description:
+      "Transparent pricing for EdenScout, EdenLab, EdenDiscovery and EdenMarket. Start free, upgrade for unlimited assets, alerts, custom dashboards, and confidential deal flow.",
+  });
   const { session } = useAuth();
   const { data: org } = useOrg();
 

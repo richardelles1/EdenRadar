@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { DiscoverySidebar } from "@/components/DiscoverySidebar";
 import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 type DiscoveryLayoutProps = {
   children: React.ReactNode;
@@ -10,6 +11,13 @@ type DiscoveryLayoutProps = {
 };
 
 export function DiscoveryLayout({ children, requireAuth = true }: DiscoveryLayoutProps) {
+  useDocumentMeta({
+    title: requireAuth ? "EdenDiscovery — Concepts | EdenRadar" : "EdenDiscovery — Biotech Concept Community | EdenRadar",
+    description: requireAuth
+      ? undefined
+      : "Browse early-stage biotech concepts scored by EDEN. Submit your own hypotheses and connect with industry and research collaborators.",
+    noindex: requireAuth,
+  });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
 

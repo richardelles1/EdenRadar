@@ -5,6 +5,7 @@ import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import {
   ArrowRight,
   Sprout,
@@ -698,6 +699,11 @@ const HOW_STEPS = [
 ];
 
 export default function HowItWorks() {
+  useDocumentMeta({
+    title: "How It Works — EdenRadar Platform Walkthrough",
+    description:
+      "See how EdenRadar collects biotech assets, runs EDEN scoring, surfaces alerts, and drives confidential industry-research deals — step by step across the three portals.",
+  });
   const [, navigate] = useLocation();
   const pricingRef = useReveal();
   const demoRef = useReveal();

@@ -24,6 +24,12 @@ uri = "file://artifacts/mockup-sandbox/public/images/edenscout-ad-4-instrument.p
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "AbqWprQJMlTc88aUmOO0O"
+uri = "file://client/public/og-image.png"
+type = "image"
+title = "edenradar og banner"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"

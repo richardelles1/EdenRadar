@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -6465,6 +6466,7 @@ function AdminInner() {
 }
 
 export default function Admin() {
+  useDocumentMeta({ title: "Admin | EdenRadar", noindex: true });
   return <AdminAuthGate><AdminInner /></AdminAuthGate>;
 }
 

@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function AdminResetPassword() {
+  useDocumentMeta({ title: "Admin Password Reset | EdenRadar", noindex: true });
   const { session, loading, updatePassword } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { toast } = useToast();

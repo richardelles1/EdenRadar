@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { Sprout, ArrowLeft } from "lucide-react";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 const EFFECTIVE_DATE = "April 17, 2026";
 const COMPANY = "EdenRadar, Inc.";
@@ -16,6 +17,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function Privacy() {
+  useDocumentMeta({
+    title: "Privacy Policy | EdenRadar",
+    description: "How EdenRadar collects, uses, and safeguards your data across EdenScout, EdenLab, EdenDiscovery and EdenMarket.",
+  });
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-3xl mx-auto px-6 py-12 space-y-10">

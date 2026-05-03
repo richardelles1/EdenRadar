@@ -5,12 +5,14 @@ import { ResearcherOnboarding } from "@/components/ResearcherOnboarding";
 import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
 import { getResearcherProfile, useResearcherInit } from "@/hooks/use-researcher";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 type ResearchLayoutProps = {
   children: React.ReactNode;
 };
 
 export function ResearchLayout({ children }: ResearchLayoutProps) {
+  useDocumentMeta({ title: "EdenLab — Research Workspace | EdenRadar", noindex: true });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   useResearcherInit();

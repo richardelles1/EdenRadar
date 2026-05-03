@@ -4,6 +4,7 @@ import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Award, Sprout, Globe, Users } from "lucide-react";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 
@@ -106,6 +107,11 @@ const VALUES = [
 ];
 
 export default function About() {
+  useDocumentMeta({
+    title: "About EdenRadar — Bridging Biotech Research and Industry",
+    description:
+      "Meet the team behind EdenRadar. We're building the connective tissue between university research, industry BD, and biotech entrepreneurs to accelerate translation of breakthrough science.",
+  });
   const [, navigate] = useLocation();
   const missionRef = useReveal();
   const foundersRef = useReveal();

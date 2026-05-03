@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import {
   ArrowRight,
   Sprout,
@@ -218,6 +219,11 @@ const STATS = [
 ];
 
 export default function WhatWeDo() {
+  useDocumentMeta({
+    title: "What We Do — Biotech Asset Discovery & Marketplace | EdenRadar",
+    description:
+      "EdenRadar surfaces licensable biotech assets from 300+ tech transfer offices, scores them with our EDEN signal stack, and connects industry, researchers, and entrepreneurs in a confidential deal marketplace.",
+  });
   const [, navigate] = useLocation();
   const pipelineRef = useReveal();
   const portalsRef = useReveal();

@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { useLocation, Link } from "wouter";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -2173,5 +2174,6 @@ function AdminMobileInner() {
 }
 
 export default function AdminMobile() {
+  useDocumentMeta({ title: "Admin Mobile | EdenRadar", noindex: true });
   return <AdminAuthGate><AdminMobileInner /></AdminAuthGate>;
 }
