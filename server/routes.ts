@@ -8184,8 +8184,15 @@ If multiple assets appear, return each as a separate array item.`;
           if (sbUrl && sbKey) {
             const { createClient } = await import("@supabase/supabase-js");
             const sb = createClient(sbUrl, sbKey);
-            const { data } = await sb.auth.admin.listUsers({ page: 1, perPage: 200 });
-            const matchedId = data?.users?.find(u => (u.email ?? "").toLowerCase() === email)?.id;
+            // Paginate through Supabase users so account-matching works regardless
+            // of org size; cap at 50 pages × 200 = 10k users to bound work.
+            let matchedId: string | null = null;
+            for (let page = 1; page <= 50 && !matchedId; page++) {
+              const { data } = await sb.auth.admin.listUsers({ page, perPage: 200 });
+              const users = data?.users ?? [];
+              matchedId = users.find(u => (u.email ?? "").toLowerCase() === email)?.id ?? null;
+              if (users.length < 200) break;
+            }
             if (matchedId) {
               await db.insert(industryProfiles).values({ userId: matchedId, subscribedToDigest: false })
                 .onConflictDoUpdate({ target: industryProfiles.userId, set: { subscribedToDigest: false } });

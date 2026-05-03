@@ -218,9 +218,10 @@ export interface SendEmailOptions {
   from?: string;
   replyTo?: string;
   unsubscribeUrl?: string; // sets RFC 8058 List-Unsubscribe + List-Unsubscribe-Post headers
-  // Mailto-only List-Unsubscribe header (no one-click POST). Use when the
-  // recipient is a free-form address with no signed userId available — still
-  // satisfies Gmail/Yahoo bulk-sender requirement for a List-Unsubscribe header.
+  // Mailto-only List-Unsubscribe header (no one-click POST). Reserved for
+  // pure transactional helpers that need a header but cannot mint a signed
+  // token. Manual digest dispatch uses unsubscribeUrl with an email-keyed
+  // token instead, so this branch has no production callers today.
   unsubscribeMailto?: string;
 }
 
