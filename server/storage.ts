@@ -152,6 +152,7 @@ export interface IStorage {
   deleteIngestedAsset(id: number): Promise<void>;
   markAsIrrelevant(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
+  getIngestedAssetsByInstitutionNames(names: string[]): Promise<IngestedAsset[]>;
   getIngestedAssetsByIds(ids: number[]): Promise<RetrievedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
   getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]>;
@@ -986,6 +987,18 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(ingestedAssets)
       .where(and(ilike(ingestedAssets.institution, `%${institution}%`), eq(ingestedAssets.sourceType, "tech_transfer")))
+      .orderBy(desc(ingestedAssets.lastSeenAt));
+  }
+
+  // Used by /api/institutions/:slug/assets so a slug that aggregates several
+  // raw institution spellings (e.g. "MIT" + "Massachusetts Institute of
+  // Technology") returns assets from every alias, not just the canonical name.
+  async getIngestedAssetsByInstitutionNames(names: string[]): Promise<IngestedAsset[]> {
+    if (!names.length) return [];
+    return db
+      .select()
+      .from(ingestedAssets)
+      .where(and(inArray(ingestedAssets.institution, names), eq(ingestedAssets.sourceType, "tech_transfer")))
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 

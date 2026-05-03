@@ -2011,39 +2011,43 @@ export async function registerRoutes(
 
   app.get("/api/institutions/:slug/assets", async (req, res) => {
     try {
-      // Resolution order for slug → canonical institution name (no hardcoded
-      // map — everything is derived from live data via slugifyInstitutionName):
-      //   1. institution_metadata table (curated overlay, kept in sync via seed)
-      //   2. ALL_SCRAPERS reverse lookup (slug of scraper.institution matches)
-      //   3. distinct ingested_assets.institution reverse lookup
-      //   4. title-case derivation from the slug itself (last-resort)
+      // Slug → assets resolution. Membership is canonical-by-slug, so we
+      // gather EVERY raw institution name (from metadata, scrapers, and
+      // ingested_assets) whose slug matches and query all aliases at once.
+      // The display name is the metadata overlay if present, else the first
+      // scraper/ingested name, else a titleized slug.
       const slug = req.params.slug;
-      const meta = await db
-        .select({ name: institutionMetadata.name })
-        .from(institutionMetadata)
-        .where(eq(institutionMetadata.slug, slug))
-        .limit(1);
-      let name: string | undefined = meta[0]?.name;
-      if (!name) {
-        const scraperHit = ALL_SCRAPERS.find(
-          (s) => slugifyInstitutionName(s.institution) === slug,
-        );
-        if (scraperHit) name = scraperHit.institution;
-      }
-      if (!name) {
-        const counts = await storage.getInstitutionAssetCounts();
-        for (const rawName of Object.keys(counts)) {
-          if (slugifyInstitutionName(rawName) === slug) {
-            name = rawName;
-            break;
-          }
+      const [meta, counts] = await Promise.all([
+        db
+          .select({ name: institutionMetadata.name })
+          .from(institutionMetadata)
+          .where(eq(institutionMetadata.slug, slug))
+          .limit(1),
+        storage.getInstitutionAssetCounts(),
+      ]);
+
+      const aliasNames = new Set<string>();
+      if (meta[0]?.name) aliasNames.add(meta[0].name);
+      for (const s of ALL_SCRAPERS) {
+        if (slugifyInstitutionName(s.institution) === slug) {
+          aliasNames.add(s.institution);
         }
       }
-      if (!name) {
-        name = slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      for (const rawName of Object.keys(counts)) {
+        if (slugifyInstitutionName(rawName) === slug) {
+          aliasNames.add(rawName);
+        }
       }
-      const assets = await storage.getIngestedAssetsByInstitution(name);
-      res.json({ assets, institution: name });
+
+      const displayName =
+        meta[0]?.name ??
+        Array.from(aliasNames)[0] ??
+        slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+      const assets = aliasNames.size
+        ? await storage.getIngestedAssetsByInstitutionNames(Array.from(aliasNames))
+        : await storage.getIngestedAssetsByInstitution(displayName);
+      res.json({ assets, institution: displayName });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch assets" });
     }
