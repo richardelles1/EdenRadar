@@ -1157,55 +1157,53 @@ export default function Alerts() {
 
   const { data: alerts = [] } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
-  // Lifecycle on every mount:
-  //   1. ALWAYS POST /api/alerts/mark-read so the sidebar badge clears
-  //      promptly (whether this is the first visit, a refresh, or a back-nav).
-  //   2. The snapshot used for "since last visit" deltas is captured ONCE
-  //      per tab session (sessionStorage["edenAlertsSessionSince"]). On the
-  //      first mount we read DB lastViewedAlertsAt BEFORE issuing mark-read
-  //      so the snapshot reflects the *previous* visit, and pin it in
-  //      sessionStorage. Subsequent mounts in the same tab reuse this pinned
-  //      value so refreshes/back-navs don't rewind the counts to 0 even
-  //      though mark-read keeps advancing the DB timestamp.
-  //   3. When the tab is closed, sessionStorage clears. The next visit then
-  //      snapshots the DB value the previous session left behind — which is
-  //      exactly "since last visit".
+  // Per-visit snapshot lifecycle:
+  //   - "Visit" = one Alerts route instance. Refreshes (full page reload) do
+  //     NOT fire React's cleanup, so the sessionStorage cache survives and
+  //     keeps the snapshot stable across reloads within the same visit.
+  //   - Navigating away (wouter route change) DOES fire cleanup, which clears
+  //     the cache. The next entry to /alerts is a new visit and re-snapshots.
+  //   - On every mount: always call mark-read so the sidebar badge clears.
+  //   - First mount of a visit: read DB viewed-since BEFORE mark-read so the
+  //     snapshot reflects the *previous* visit boundary.
   useEffect(() => {
     let cancelled = false;
-    const cached = sessionStorage.getItem(SESSION_SINCE_KEY);
-
     const fireMarkRead = () => {
       apiRequest("POST", "/api/alerts/mark-read").then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
       }).catch(() => {});
     };
-
+    const cached = sessionStorage.getItem(SESSION_SINCE_KEY);
     if (cached) {
-      // Snapshot already pinned for this session. Just clear the badge.
+      // This is a refresh within the current visit — keep snapshot stable.
       fireMarkRead();
-      return () => { cancelled = true; };
-    }
-
-    // First mount of the session: snapshot DB viewed-since BEFORE mark-read.
-    getAuthHeaders().then(async (authHeaders) => {
-      let captured: string | null = null;
-      try {
-        const r = await fetch("/api/alerts/viewed-since", { credentials: "include", headers: authHeaders });
-        if (r.ok) {
-          const { since } = await r.json();
-          if (since) captured = since as string;
+    } else {
+      getAuthHeaders().then(async (authHeaders) => {
+        let captured: string | null = null;
+        try {
+          const r = await fetch("/api/alerts/viewed-since", { credentials: "include", headers: authHeaders });
+          if (r.ok) {
+            const { since } = await r.json();
+            if (since) captured = since as string;
+          }
+        } catch { /* ignore */ }
+        if (cancelled) return;
+        const lockedSince = captured ?? sinceParam;
+        sessionStorage.setItem(SESSION_SINCE_KEY, lockedSince);
+        if (captured) {
+          setSinceParam(captured);
+          localStorage.setItem(STORAGE_KEY, captured);
         }
-      } catch { /* ignore */ }
-      if (cancelled) return;
-      const lockedSince = captured ?? sinceParam;
-      sessionStorage.setItem(SESSION_SINCE_KEY, lockedSince);
-      if (captured) {
-        setSinceParam(captured);
-        localStorage.setItem(STORAGE_KEY, captured);
-      }
-      fireMarkRead();
-    });
-    return () => { cancelled = true; };
+        fireMarkRead();
+      });
+    }
+    return () => {
+      cancelled = true;
+      // Clear the per-visit snapshot when leaving Alerts via in-app
+      // navigation. Page reloads/closes don't fire this cleanup, so the
+      // cache survives a refresh (intended).
+      sessionStorage.removeItem(SESSION_SINCE_KEY);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
