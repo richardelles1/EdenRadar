@@ -3896,9 +3896,11 @@ function Enrichment({ pw }: { pw: string }) {
                                 step={50}
                                 value={bandCap[band.id] ?? 500}
                                 onChange={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
+                                onBlur={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
                                 className="w-16 h-5 rounded border border-input bg-background px-1 text-[11px] text-foreground tabular-nums"
                                 data-testid={`band-cap-input-${band.id}`}
                               />
+                              <span className="text-[10px] text-muted-foreground/60">(10–5k)</span>
                             </label>
 
                             {/* Run / Confirm */}
