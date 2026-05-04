@@ -109,9 +109,13 @@ type AlertDeltaResponse = {
   since?: string;
 };
 
-/** Returns the name if it contains at least one alphanumeric character, otherwise "Unnamed asset". */
+/**
+ * Returns the name if it contains at least 3 alphanumeric characters,
+ * otherwise returns "Unnamed asset". Catches comma/whitespace garbage from
+ * removed-asset events and very short noise tokens like "a" or "x1".
+ */
 function sanitiseAssetName(name: string | null | undefined): string {
-  if (name && /[a-zA-Z0-9]/.test(name)) return name;
+  if (name && (name.match(/[a-zA-Z0-9]/g) ?? []).length >= 3) return name;
   return "Unnamed asset";
 }
 
