@@ -240,7 +240,7 @@ export default function Institutions() {
   const [search, setSearch] = useState("");
   const [continent, setContinent] = useState<Continent>("All");
   const [sortOrder, setSortOrder] = useState<SortOrder>("listings-desc");
-  const [selectedSpecialties, setSelectedSpecialties] = useState<Set<string>>(new Set());
+  const [selectedSpecialty, setSelectedSpecialty] = useState<string>("");
 
   const { data, isLoading } = useQuery<InstitutionsListResponse>({
     queryKey: ["/api/institutions"],
@@ -265,9 +265,7 @@ export default function Institutions() {
     const base = allInstitutions.filter((i) => {
       const matchesContinent = continent === "All" || institutionContinent(i) === continent;
       const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
-      const matchesSpecialty =
-        selectedSpecialties.size === 0 ||
-        i.specialties.some((s) => selectedSpecialties.has(s));
+      const matchesSpecialty = selectedSpecialty === "" || i.specialties.includes(selectedSpecialty);
       return matchesContinent && matchesSearch && matchesSpecialty;
     });
     return base.sort((a, b) => {
@@ -284,16 +282,7 @@ export default function Institutions() {
       }
       return b.name.localeCompare(a.name);
     });
-  }, [allInstitutions, continent, search, sortOrder, selectedSpecialties]);
-
-  function toggleSpecialty(s: string) {
-    setSelectedSpecialties((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
-  }
+  }, [allInstitutions, continent, search, sortOrder, selectedSpecialty]);
 
   return (
     <div className="min-h-full">
@@ -332,24 +321,49 @@ export default function Institutions() {
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-2 flex-wrap justify-between">
-                <div className="flex items-center gap-2 flex-wrap" data-testid="continent-filter">
-                  {CONTINENTS.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setContinent(c)}
-                      data-testid={`filter-continent-${c.toLowerCase().replace(/[^a-z]/g, "-")}`}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150 ${
-                        continent === c
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-                      }`}
+            <div className="flex items-center gap-2 flex-wrap justify-between">
+              <div className="flex items-center gap-2 flex-wrap" data-testid="continent-filter">
+                {CONTINENTS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setContinent(c)}
+                    data-testid={`filter-continent-${c.toLowerCase().replace(/[^a-z]/g, "-")}`}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150 ${
+                      continent === c
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                    }`}
+                  >
+                    {c}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {allSpecialties.length > 0 && (
+                  <Select
+                    value={selectedSpecialty}
+                    onValueChange={(v) => setSelectedSpecialty(v === "__all__" ? "" : v)}
+                  >
+                    <SelectTrigger
+                      className="h-8 w-44 text-xs gap-1.5"
+                      data-testid="select-specialty-filter"
                     >
-                      {c}
-                    </button>
-                  ))}
-                </div>
+                      <SelectValue placeholder="Focus area" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__" data-testid="specialty-option-all">All focus areas</SelectItem>
+                      {allSpecialties.map((s) => (
+                        <SelectItem
+                          key={s}
+                          value={s}
+                          data-testid={`specialty-option-${s.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                        >
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
                 <Select
                   value={sortOrder}
                   onValueChange={(v) => { if (isSortOrder(v)) setSortOrder(v); }}
@@ -369,38 +383,6 @@ export default function Institutions() {
                   </SelectContent>
                 </Select>
               </div>
-
-              {allSpecialties.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap" data-testid="specialty-filter">
-                  <span className="text-xs text-muted-foreground font-medium shrink-0">Focus:</span>
-                  {allSpecialties.map((s) => {
-                    const active = selectedSpecialties.has(s);
-                    return (
-                      <button
-                        key={s}
-                        onClick={() => toggleSpecialty(s)}
-                        data-testid={`filter-specialty-${s.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
-                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors duration-150 ${
-                          active
-                            ? "bg-primary text-primary-foreground border-primary"
-                            : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    );
-                  })}
-                  {selectedSpecialties.size > 0 && (
-                    <button
-                      onClick={() => setSelectedSpecialties(new Set())}
-                      data-testid="button-clear-specialties"
-                      className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-dashed border-muted-foreground/40 text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors duration-150"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-              )}
             </div>
           </div>
         </div>
