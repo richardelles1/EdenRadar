@@ -4216,7 +4216,7 @@ export async function registerRoutes(
 
       const existingJob = await storage.getRunningEnrichmentJob();
       if (existingJob) {
-        return res.status(409).json({ error: "Enrichment job already running (will resume on next restart)" });
+        return res.status(409).json({ error: "Enrichment job already running — resume manually from the Data Quality tab if interrupted" });
       }
 
       // ?all=1 (or POST body { all: true }) drains the entire mini-queue under a single
