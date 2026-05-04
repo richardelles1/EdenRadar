@@ -98,20 +98,11 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const isResearcherPublished = asset.source_types?.includes("researcher");
   const tier = scoreTier(asset.score, isUnscored);
 
-  // Confidence factor (combined classifier + coverage). Surfaced both as a
-  // visible pill in the metadata row AND inside the score tooltip for detail.
-  const confFactor = asset.score_breakdown?.confidence_factor;
-  const confLabel = asset.confidence;
   const classUnknown =
     !asset.asset_class || asset.asset_class === "other" || asset.asset_class === "unknown";
-  const confPillClass: Record<"high" | "medium" | "low", string> =
-    {
-      high: "bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 text-emerald-700 dark:text-emerald-300",
-      medium: "bg-amber-50 dark:bg-amber-950/40 border border-amber-200/70 dark:border-amber-700/30 text-amber-700 dark:text-amber-300",
-      low: "bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400",
-    };
 
   const rawScore = isUnscored ? null : Math.round(asset.score);
+
   const scoreDisplay = rawScore !== null ? Math.max(1, Math.round(rawScore / 10)) : null;
 
   const hasOwner = asset.owner_name && asset.owner_name !== "unknown";
@@ -124,8 +115,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
   const stageLabel = normalizePillValue(asset.development_stage);
   const modalityLabel = normalizePillValue(asset.modality);
-  const showConfPill = !!confLabel && typeof confFactor === "number" && !isUnscored;
-  const hasPills = stageLabel || modalityLabel || showConfPill || classUnknown;
+  const hasPills = stageLabel || modalityLabel || classUnknown;
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
@@ -233,13 +223,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {asset.score_breakdown && !isUnscored && (
             <TooltipContent side="right" className="p-3 w-52 shadow-xl">
               <p className="text-xs font-semibold mb-2">Signal Profile</p>
-              {typeof confFactor === "number" && (
-                <p className="text-[10px] text-muted-foreground mb-2" data-testid={`text-confidence-${asset.id}`}>
-                  Confidence: <span className="font-semibold text-foreground">{Math.round(confFactor * 100)}%</span>
-                  {typeof asset.score_breakdown.category_confidence === "number" &&
-                    ` · class ${Math.round(asset.score_breakdown.category_confidence * 100)}%`}
-                </p>
-              )}
               <div className="space-y-1.5">
                 {SCORE_BREAKDOWN_KEYS.map((k) => {
                   const val: number = asset.score_breakdown[k as keyof ScoreBreakdown] as number;
@@ -303,15 +286,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
           </h3>
 
-          {/* Sparse data warning */}
-          {asset.dataSparse && (
-            <p
-              className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1"
-              data-testid={`text-sparse-${asset.id}`}
-            >
-              <span aria-hidden="true">⚠</span> Insufficient source data
-            </p>
-          )}
 
           {/* Metadata pill row — stage + modality */}
           {hasPills && (
@@ -342,15 +316,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   data-testid={`pill-modality-${asset.id}`}
                 >
                   {modalityLabel}
-                </span>
-              )}
-              {confLabel && typeof confFactor === "number" && !isUnscored && (
-                <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${confPillClass[confLabel]}`}
-                  title={`Confidence ${Math.round(confFactor * 100)}%`}
-                  data-testid={`pill-confidence-${asset.id}`}
-                >
-                  {confLabel === "high" ? "High conf" : confLabel === "medium" ? "Med conf" : "Low conf"}
                 </span>
               )}
               {classUnknown && (

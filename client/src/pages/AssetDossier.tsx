@@ -393,22 +393,6 @@ export default function AssetDossier() {
           </Button>
         </div>
 
-        {/* ── dataSparse warning banner ── */}
-        {intelligence?.assetRecord?.dataSparse && (
-          <div
-            className="flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 no-print"
-            style={{ animation: "dash-fade-up 350ms ease both" }}
-            data-testid="banner-data-sparse"
-          >
-            <span className="text-amber-500 mt-0.5 shrink-0 text-base">⚠</span>
-            <div>
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Insufficient source data</p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                This asset has limited public disclosure. Key fields may be incomplete and AI-generated insights may have lower confidence.
-              </p>
-            </div>
-          </div>
-        )}
 
         {/* ── Header panel ── */}
         <div
@@ -428,24 +412,6 @@ export default function AssetDossier() {
                     {asset.development_stage}
                   </span>
                 )}
-                {typeof bd?.confidence_factor === "number" && (() => {
-                  const cf = bd.confidence_factor!;
-                  const tone = cf >= 0.75
-                    ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                    : cf >= 0.5
-                    ? "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/20"
-                    : "text-zinc-700 dark:text-zinc-300 bg-zinc-500/10 border-zinc-500/20";
-                  const label = cf >= 0.75 ? "High confidence" : cf >= 0.5 ? "Medium confidence" : "Low confidence";
-                  return (
-                    <span
-                      className={`inline-flex items-center gap-1 text-xs border rounded-md px-2.5 py-1 font-semibold ${tone}`}
-                      title={`Combined classifier + signal-coverage confidence: ${Math.round(cf * 100)}%`}
-                      data-testid="badge-confidence"
-                    >
-                      {label} · {Math.round(cf * 100)}%
-                    </span>
-                  );
-                })()}
                 {(!asset.asset_class || asset.asset_class === "other") && (
                   <span
                     className="inline-flex items-center gap-1 text-xs text-zinc-700 dark:text-zinc-300 bg-zinc-500/10 border border-zinc-500/20 rounded-md px-2.5 py-1 font-semibold"
