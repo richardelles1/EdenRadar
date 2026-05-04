@@ -157,6 +157,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
+  const { open, animate } = useSidebar();
 
   const { data: unreadData } = useQuery<{ count: number }>({
     queryKey: ["/api/alerts/unread-count"],
@@ -239,15 +240,24 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
                       showDot={item.alertsBadge && totalAlerts > 0}
                     />
                     {isMarket && showMarketUpsell && (
-                      <div className="px-2 pb-0.5">
-                        <span
-                          className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full inline-block"
-                          style={{ background: "hsl(234 80% 58% / 0.18)", color: "hsl(234 80% 58%)" }}
-                          data-testid="badge-market-upsell"
-                        >
-                          Get access
-                        </span>
-                      </div>
+                      <motion.div
+                        animate={{
+                          opacity: animate ? (open ? 1 : 0) : 1,
+                          height: animate ? (open ? "auto" : 0) : "auto",
+                        }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
+                        className="overflow-hidden"
+                      >
+                        <div className="px-2 pb-0.5">
+                          <span
+                            className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full inline-block"
+                            style={{ background: "hsl(234 80% 58% / 0.18)", color: "hsl(234 80% 58%)" }}
+                            data-testid="badge-market-upsell"
+                          >
+                            Get access
+                          </span>
+                        </div>
+                      </motion.div>
                     )}
                   </div>
                 );
