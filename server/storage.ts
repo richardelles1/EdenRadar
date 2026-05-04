@@ -39,6 +39,7 @@ import {
   userAssetFeedback, type UserAssetFeedback, type FeedbackAction, FEEDBACK_ACTIONS,
   relevanceHoldout, type RelevanceHoldoutRow,
   relevanceMetrics, type RelevanceMetricsRow,
+  inviteTokens, type InviteToken,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -425,6 +426,12 @@ export interface IStorage {
   // Team Activities
   getOrgMemberByUserId(orgId: number, userId: string): Promise<OrgMember | undefined>;
   getOrgMemberByEmail(email: string): Promise<OrgMember | undefined>;
+
+  // Custom invite tokens (scanner-proof alternative to Supabase OTP links)
+  createInviteToken(data: { token: string; userId: string; email: string; orgId: number; expiresAt: Date }): Promise<InviteToken>;
+  getInviteToken(token: string): Promise<InviteToken | undefined>;
+  markInviteTokenUsed(token: string): Promise<void>;
+
   createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity>;
   getTeamActivities(orgId: number, limit?: number): Promise<TeamActivity[]>;
   getUserActivities(userId: string, limit?: number): Promise<TeamActivity[]>;
@@ -3630,6 +3637,20 @@ export class DatabaseStorage implements IStorage {
       .where(eq(orgMembers.email, email))
       .limit(1);
     return row;
+  }
+
+  async createInviteToken(data: { token: string; userId: string; email: string; orgId: number; expiresAt: Date }): Promise<InviteToken> {
+    const [row] = await db.insert(inviteTokens).values(data).returning();
+    return row;
+  }
+
+  async getInviteToken(token: string): Promise<InviteToken | undefined> {
+    const [row] = await db.select().from(inviteTokens).where(eq(inviteTokens.token, token)).limit(1);
+    return row;
+  }
+
+  async markInviteTokenUsed(token: string): Promise<void> {
+    await db.update(inviteTokens).set({ usedAt: new Date() }).where(eq(inviteTokens.token, token));
   }
 
   async createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity> {

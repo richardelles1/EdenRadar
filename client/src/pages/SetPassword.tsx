@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,7 @@ function ExpiredCard() {
         <CardHeader>
           <CardTitle>Link expired</CardTitle>
           <CardDescription>
-            Your invitation link is no longer valid — links expire after 24 hours.
+            Your invitation link is no longer valid — links expire after 7 days.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -97,8 +98,201 @@ function ExpiredCard() {
   );
 }
 
+function PasswordForm({
+  onSubmit,
+  submitting,
+  password,
+  setPassword,
+  confirm,
+  setConfirm,
+  confirmError,
+  setConfirmError,
+  disabled,
+}: {
+  onSubmit: (e: React.FormEvent) => void;
+  submitting: boolean;
+  password: string;
+  setPassword: (v: string) => void;
+  confirm: string;
+  setConfirm: (v: string) => void;
+  confirmError: string;
+  setConfirmError: (v: string) => void;
+  disabled?: boolean;
+}) {
+  const rules = {
+    length: password.length >= 8,
+    lower: /[a-z]/.test(password),
+    upper: /[A-Z]/.test(password),
+    digit: /[0-9]/.test(password),
+  };
+  const passwordValid = Object.values(rules).every(Boolean);
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-5">
+      <div className="space-y-2">
+        <Label htmlFor="new-password">New password</Label>
+        <Input
+          id="new-password"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete="new-password"
+          autoFocus
+          required
+          data-testid="input-new-password"
+        />
+        <ul className="space-y-1 pt-1">
+          <PasswordRule met={rules.length} label="At least 8 characters" />
+          <PasswordRule met={rules.lower} label="One lowercase letter" />
+          <PasswordRule met={rules.upper} label="One uppercase letter" />
+          <PasswordRule met={rules.digit} label="One number" />
+        </ul>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="confirm-password">Confirm password</Label>
+        <Input
+          id="confirm-password"
+          type="password"
+          value={confirm}
+          onChange={(e) => { setConfirm(e.target.value); setConfirmError(""); }}
+          autoComplete="new-password"
+          required
+          data-testid="input-confirm-password"
+        />
+        {confirmError && (
+          <p className="text-xs text-red-500" data-testid="text-confirm-error">{confirmError}</p>
+        )}
+      </div>
+      <Button
+        type="submit"
+        className="w-full"
+        disabled={submitting || disabled || !passwordValid}
+        data-testid="button-set-password-submit"
+      >
+        {submitting ? "Setting password…" : "Set password & continue"}
+      </Button>
+    </form>
+  );
+}
+
+// Custom token flow: the invite email contains ?invite_token=UUID (stored in our DB).
+// This bypasses Supabase OTP entirely, so email scanner pre-fetches can't burn the token.
+function InviteTokenFlow({ token }: { token: string }) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
+  const [expired, setExpired] = useState(false);
+
+  const rules = {
+    length: password.length >= 8,
+    lower: /[a-z]/.test(password),
+    upper: /[A-Z]/.test(password),
+    digit: /[0-9]/.test(password),
+  };
+  const passwordValid = Object.values(rules).every(Boolean);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setConfirmError("");
+
+    if (!passwordValid) {
+      toast({ title: "Password doesn't meet the requirements", variant: "destructive" });
+      return;
+    }
+    if (password !== confirm) {
+      setConfirmError("Passwords do not match");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await fetch("/api/auth/complete-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+
+      if (res.status === 410) {
+        setExpired(true);
+        setSubmitting(false);
+        return;
+      }
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to set password");
+      }
+
+      const { email } = await res.json();
+
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+      if (signInError) throw new Error(signInError.message);
+
+      // Activate invite (sets org membership to active)
+      const { data: { session: newSession } } = await supabase.auth.getSession();
+      if (newSession) {
+        await fetch("/api/industry/activate-invite", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${newSession.access_token}`,
+          },
+        }).catch((err) => console.warn("[set-password] activate-invite error:", err));
+      }
+
+      toast({ title: "Password set!", description: "Welcome to EdenRadar." });
+      navigate("/industry/dashboard", { replace: true });
+    } catch (err: any) {
+      toast({ title: "Could not set password", description: err.message, variant: "destructive" });
+      setSubmitting(false);
+    }
+  }
+
+  if (expired) return <ExpiredCard />;
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
+      <Card className="w-full max-w-md" data-testid="card-set-password">
+        <CardHeader>
+          <CardTitle>Welcome to EdenRadar</CardTitle>
+          <CardDescription>
+            Choose a password to activate your account and get started.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PasswordForm
+            onSubmit={onSubmit}
+            submitting={submitting}
+            password={password}
+            setPassword={setPassword}
+            confirm={confirm}
+            setConfirm={setConfirm}
+            confirmError={confirmError}
+            setConfirmError={setConfirmError}
+          />
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function SetPassword() {
   useDocumentMeta({ title: "Set Your Password | EdenRadar", noindex: true });
+
+  const search = useSearch();
+  const inviteToken = new URLSearchParams(search).get("invite_token");
+
+  // Custom token flow — handles invite emails with ?invite_token=UUID
+  if (inviteToken) return <InviteTokenFlow token={inviteToken} />;
+
+  // Legacy Supabase recovery flow — handles password reset emails with #type=recovery hash
+  return <RecoveryFlow />;
+}
+
+function RecoveryFlow() {
   const { session, loading, updatePassword } = useAuth();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -139,12 +333,9 @@ export default function SetPassword() {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-      const activateRes = await fetch("/api/industry/activate-invite", { method: "POST", headers });
-      if (!activateRes.ok) {
-        console.warn("[set-password] activate-invite responded", activateRes.status, "– fallback activation will run on /api/industry/org");
-      }
+      await fetch("/api/industry/activate-invite", { method: "POST", headers });
     } catch (activateErr) {
-      console.warn("[set-password] activate-invite network error:", activateErr, "– fallback activation will run on /api/industry/org");
+      console.warn("[set-password] activate-invite error:", activateErr);
     }
 
     setSubmitting(false);
@@ -152,9 +343,7 @@ export default function SetPassword() {
     navigate("/industry/dashboard", { replace: true });
   }
 
-  if (!loading && !session) {
-    return <ExpiredCard />;
-  }
+  if (!loading && !session) return <ExpiredCard />;
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-background">
@@ -166,50 +355,17 @@ export default function SetPassword() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label htmlFor="new-password">New password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                autoFocus
-                required
-                data-testid="input-new-password"
-              />
-              <ul className="space-y-1 pt-1">
-                <PasswordRule met={rules.length} label="At least 8 characters" />
-                <PasswordRule met={rules.lower} label="One lowercase letter" />
-                <PasswordRule met={rules.upper} label="One uppercase letter" />
-                <PasswordRule met={rules.digit} label="One number" />
-              </ul>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="confirm-password">Confirm password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                value={confirm}
-                onChange={(e) => { setConfirm(e.target.value); setConfirmError(""); }}
-                autoComplete="new-password"
-                required
-                data-testid="input-confirm-password"
-              />
-              {confirmError && (
-                <p className="text-xs text-red-500" data-testid="text-confirm-error">{confirmError}</p>
-              )}
-            </div>
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={submitting || loading || !passwordValid}
-              data-testid="button-set-password-submit"
-            >
-              {submitting ? "Setting password…" : "Set password & continue"}
-            </Button>
-          </form>
+          <PasswordForm
+            onSubmit={onSubmit}
+            submitting={submitting}
+            password={password}
+            setPassword={setPassword}
+            confirm={confirm}
+            setConfirm={setConfirm}
+            confirmError={confirmError}
+            setConfirmError={setConfirmError}
+            disabled={loading}
+          />
         </CardContent>
       </Card>
     </div>

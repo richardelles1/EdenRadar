@@ -1234,3 +1234,16 @@ export const impersonationAuditEvents = pgTable("impersonation_audit_events", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type ImpersonationAuditEvent = typeof impersonationAuditEvents.$inferSelect;
+
+// Custom invite tokens — stored in our DB to avoid email-scanner pre-fetching
+// consuming Supabase one-time OTP links before the real user clicks them.
+export const inviteTokens = pgTable("invite_tokens", {
+  id: serial("id").primaryKey(),
+  token: text("token").notNull().unique(),
+  userId: text("user_id").notNull(),
+  email: text("email").notNull(),
+  orgId: integer("org_id").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+});
+export type InviteToken = typeof inviteTokens.$inferSelect;

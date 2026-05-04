@@ -7023,24 +7023,12 @@ If a field cannot be determined, use "N/A".`
       if (supabaseError) return res.status(500).json({ error: supabaseError.message });
       const userId = userData.user.id;
 
-      // Generate a password-recovery link the new member uses to set their password.
-      // type: "recovery" works for users created with email_confirm: true (confirmed).
-      // The OTP expiry is configured in the Supabase dashboard (set to 86400s = 24h).
-      let setPasswordLink: string | undefined;
-      try {
-        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-          type: "recovery",
-          email,
-          options: { redirectTo: `${APP_URL}/set-password` },
-        });
-        if (linkError) {
-          console.warn("[email] Could not generate password-set link:", linkError.message);
-        } else {
-          setPasswordLink = linkData?.properties?.action_link ?? undefined;
-        }
-      } catch (linkErr) {
-        console.warn("[email] generateLink threw:", linkErr);
-      }
+      // Generate a durable custom invite token stored in our DB.
+      // Avoids Supabase OTP one-time-use tokens being burned by email security
+      // scanners (Microsoft Safe Links, etc.) before the real user clicks.
+      const inviteToken = crypto.randomUUID();
+      await storage.createInviteToken({ token: inviteToken, userId, email, orgId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+      const setPasswordLink = `${APP_URL}/set-password?invite_token=${inviteToken}`;
 
       // Add to org_members — store email/name for display in admin UI
       const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role, invitedBy: "admin", inviteSource: "admin", inviteStatus: "active" });
@@ -7074,9 +7062,6 @@ If a field cannot be determined, use "N/A".`
   // Resend invite — generates a fresh invite link and re-sends the team invite email
   app.post("/api/admin/organizations/:id/members/:userId/resend-invite", async (req, res) => {
     try {
-      if (!supabaseServiceRoleKey || !supabaseUrl) {
-        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
-      }
       const orgId = Number(req.params.id);
       const { userId } = req.params;
 
@@ -7088,16 +7073,9 @@ If a field cannot be determined, use "N/A".`
       if (!member) return res.status(404).json({ error: "Member not found in this organization" });
       if (!member.email) return res.status(400).json({ error: "Member has no email address on record" });
 
-      const { createClient } = await import("@supabase/supabase-js");
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-        type: "recovery",
-        email: member.email,
-        options: { redirectTo: `${APP_URL}/set-password` },
-      });
-      if (linkError) return res.status(500).json({ error: linkError.message });
-      const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+      const inviteToken = crypto.randomUUID();
+      await storage.createInviteToken({ token: inviteToken, userId: member.userId, email: member.email, orgId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+      const setPasswordLink = `${APP_URL}/set-password?invite_token=${inviteToken}`;
 
       await sendTeamInviteEmail(
         member.email,
@@ -7248,15 +7226,44 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // POST /api/auth/complete-invite — validates a custom invite token and sets the user's password.
+  // Called by SetPassword.tsx InviteTokenFlow after the user submits a new password.
+  // Returns { email } on success so the frontend can sign in with email+password.
+  app.post("/api/auth/complete-invite", async (req, res) => {
+    try {
+      const { token, password } = z.object({
+        token: z.string().uuid(),
+        password: z.string().min(8),
+      }).parse(req.body);
+
+      const record = await storage.getInviteToken(token);
+      if (!record) return res.status(404).json({ error: "Invalid invite link" });
+      if (record.usedAt) return res.status(410).json({ error: "already_used" });
+      if (record.expiresAt < new Date()) return res.status(410).json({ error: "expired" });
+
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+      const { error: updateError } = await adminSupabase.auth.admin.updateUserById(record.userId, { password });
+      if (updateError) return res.status(500).json({ error: updateError.message });
+
+      await storage.markInviteTokenUsed(token);
+      res.json({ email: record.email });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // POST /api/auth/resend-invite-link — unauthenticated self-service link re-request.
   // Called from the /set-password expired page when the user's link has expired.
   // Looks up the email in org_members, generates a fresh invite link, and emails it.
   // Always returns { ok: true } to avoid user enumeration.
   app.post("/api/auth/resend-invite-link", async (req, res) => {
     try {
-      if (!supabaseServiceRoleKey || !supabaseUrl) {
-        return res.status(500).json({ error: "Service not configured" });
-      }
       const { email } = z.object({ email: z.string().email() }).parse(req.body);
 
       // Look up member record to find their org
@@ -7264,24 +7271,11 @@ If a field cannot be determined, use "N/A".`
       if (member) {
         const org = await storage.getOrganization(member.orgId);
         if (org) {
-          try {
-            const { createClient } = await import("@supabase/supabase-js");
-            const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-            const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-              type: "recovery",
-              email,
-              options: { redirectTo: `${APP_URL}/set-password` },
-            });
-            if (!linkError) {
-              const setPasswordLink = linkData?.properties?.action_link ?? undefined;
-              await sendTeamInviteEmail(email, member.memberName ?? "", org.name, org.planTier ?? "individual", setPasswordLink)
-                .catch((err) => console.error("[email] Resend invite link (self-service expired) failed:", err));
-            } else {
-              console.warn("[resend-invite-link] generateLink error:", linkError.message);
-            }
-          } catch (err) {
-            console.error("[resend-invite-link] Error generating link:", err);
-          }
+          const inviteToken = crypto.randomUUID();
+          await storage.createInviteToken({ token: inviteToken, userId: member.userId, email, orgId: member.orgId, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+          const setPasswordLink = `${APP_URL}/set-password?invite_token=${inviteToken}`;
+          await sendTeamInviteEmail(email, member.memberName ?? "", org.name, org.planTier ?? "individual", setPasswordLink)
+            .catch((err) => console.error("[email] Resend invite link (self-service expired) failed:", err));
         }
       }
       // Always return ok — do not reveal whether email was found
@@ -7341,11 +7335,9 @@ If a field cannot be determined, use "N/A".`
       if (supabaseError) return res.status(500).json({ error: supabaseError.message });
       const newUserId = userData.user.id;
 
-      let setPasswordLink: string | undefined;
-      try {
-        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${APP_URL}/set-password` } });
-        if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
-      } catch {}
+      const inviteToken = crypto.randomUUID();
+      await storage.createInviteToken({ token: inviteToken, userId: newUserId, email, orgId: org.id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+      const setPasswordLink = `${APP_URL}/set-password?invite_token=${inviteToken}`;
 
       const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "active" });
       await storage.setIndustryProfileOrg(newUserId, org.id);
@@ -7392,20 +7384,14 @@ If a field cannot be determined, use "N/A".`
       const { org } = ctx;
       const memberId = req.params.memberId as string;
 
-      if (!supabaseServiceRoleKey || !supabaseUrl) {
-        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
-      }
-
       const members = await storage.getOrgMembers(org.id);
       const member = members.find((m) => m.userId === memberId);
       if (!member) return res.status(404).json({ error: "Member not found" });
       if (!member.email) return res.status(400).json({ error: "Member has no email on record" });
 
-      const { createClient } = await import("@supabase/supabase-js");
-      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: `${APP_URL}/set-password` } });
-      if (linkError) return res.status(500).json({ error: linkError.message });
-      const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+      const inviteToken = crypto.randomUUID();
+      await storage.createInviteToken({ token: inviteToken, userId: member.userId, email: member.email, orgId: org.id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
+      const setPasswordLink = `${APP_URL}/set-password?invite_token=${inviteToken}`;
 
       await sendTeamInviteEmail(member.email, member.memberName ?? "", org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
         console.error("[email] Resend self-service invite failed:", err)
