@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +44,13 @@ const MODALITIES = [
 export function IndustryOnboarding({ open, onClose, initialCompanyName }: Props) {
   const saved = getIndustryProfile();
   const [companyName, setCompanyName] = useState(saved.companyName || initialCompanyName || "");
+
+  // Backfill if org data arrives asynchronously after mount
+  useEffect(() => {
+    if (!companyName && !saved.companyName && initialCompanyName) {
+      setCompanyName(initialCompanyName);
+    }
+  }, [initialCompanyName]);
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>(
     saved.therapeuticAreas
   );

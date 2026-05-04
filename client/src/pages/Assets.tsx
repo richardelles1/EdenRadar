@@ -1339,11 +1339,21 @@ export default function Assets() {
                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
                   <Layers className="w-8 h-8 text-muted-foreground/40" />
                   <p className="text-sm">
-                    {sourceTypeFilter !== "all" && totalAssets > 0
+                    {selectedPipeline === null && uncategorisedCount === 0
+                      ? "All assets are in a pipeline."
+                      : sourceTypeFilter !== "all" && totalAssets > 0
                       ? `No ${SOURCE_TYPE_CONFIG[sourceTypeFilter as SourceTypeKey].shortLabel.toLowerCase()} assets in this pipeline.`
                       : teamScope ? "No team assets saved yet." : "No assets in this pipeline yet."}
                   </p>
-                  {sourceTypeFilter !== "all" && totalAssets > 0 ? (
+                  {selectedPipeline === null && uncategorisedCount === 0 ? (
+                    <button
+                      onClick={() => setSelectedPipeline("all")}
+                      className="text-xs text-primary hover:underline"
+                      data-testid="button-go-to-all-assets"
+                    >
+                      View all assets
+                    </button>
+                  ) : sourceTypeFilter !== "all" && totalAssets > 0 ? (
                     <button
                       onClick={() => setSourceTypeFilter("all")}
                       className="text-xs text-primary hover:underline"

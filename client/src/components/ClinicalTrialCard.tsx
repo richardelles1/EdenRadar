@@ -91,7 +91,9 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
     ? signal.text.length > 110 ? signal.text.slice(0, 107) + "..." : signal.text
     : null;
 
-  const trialUrl = asset.source_urls?.[0] ?? signal?.url ?? "";
+  const trialUrl = nctId
+    ? `https://clinicaltrials.gov/study/${nctId}`
+    : (asset.source_urls?.[0] ?? signal?.url ?? "");
   const drugName =
     asset.asset_name && asset.asset_name !== "unknown" ? asset.asset_name : interventionName || null;
   const conditionsDisplay = conditions.length > 0
