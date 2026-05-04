@@ -28,6 +28,7 @@ const SPECIALTY_PATTERNS: Array<[string, string]> = [
   ["gene-ther",    "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"],
   ["viral vect",   "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"],
   ["car-t",        "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
+  ["car t",        "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
   ["cart ",        "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
   ["chimeric",     "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
   ["cell ther",    "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
