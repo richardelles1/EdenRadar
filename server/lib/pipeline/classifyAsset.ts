@@ -150,9 +150,10 @@ export async function classifyAsset(
   const focusBlock = unknownFields.length
     ? `\nFocus on filling these currently-unknown fields if the source supports it: ${unknownFields.join(", ")}.`
     : "";
-  // Gap-fill mode: strict override — only generate the requested fields
-  const gapFillBlock = ctx?.fieldsToGenerate?.length
-    ? `\nGAP-FILL MODE: Only generate values for these fields: ${ctx.fieldsToGenerate.join(", ")}. For ALL other output fields return "unknown" or null — do NOT attempt to derive them.`
+  // Gap-fill mode: strict prompt instruction to limit output to target fields
+  const gapFillFields = ctx?.fieldsToGenerate?.length ? ctx.fieldsToGenerate : null;
+  const gapFillBlock = gapFillFields
+    ? `\nGAP-FILL MODE: Only generate values for these fields: ${gapFillFields.join(", ")}. For ALL other output fields return "unknown" or null — do NOT attempt to derive them.`
     : "";
 
   const inputText = [
@@ -236,20 +237,27 @@ export async function classifyAsset(
     const indication = !isDrug ? null : (rawIndication ? sanitizeToVocab(rawIndication, "indication") : "unknown");
     const target = !isDrug ? null : (rawTarget ? sanitizeToVocab(rawTarget, "target") : "unknown");
 
+    // Gap-fill strict output contract: null out any drug field NOT in the target list,
+    // so non-target fields can never overwrite existing DB values downstream.
+    // This is applied structurally after parsing — model prompt alone is not a sufficient guard.
+    const gapFillSet = gapFillFields ? new Set(gapFillFields) : null;
+    const gapNull = <T>(field: string, val: T): T | null =>
+      gapFillSet && !gapFillSet.has(field) ? null : val;
+
     return {
       biotechRelevant: parsed.biotechRelevant === true,
       assetClass,
       target,
       modality: isDrug ? sanitize(parsed.modality ?? "", MODALITY_VALUES, "unknown") : null,
       indication,
-      mechanismOfAction: isDrug ? nullIfUnknown(parsed.mechanismOfAction) : null,
-      comparableDrugs: isDrug ? nullIfUnknown(parsed.comparableDrugs) : null,
-      unmetNeed: isDrug ? nullIfUnknown(parsed.unmetNeed) : null,
+      mechanismOfAction: gapNull("mechanismOfAction", isDrug ? nullIfUnknown(parsed.mechanismOfAction) : null),
+      comparableDrugs: gapNull("comparableDrugs", isDrug ? nullIfUnknown(parsed.comparableDrugs) : null),
+      unmetNeed: gapNull("unmetNeed", isDrug ? nullIfUnknown(parsed.unmetNeed) : null),
       deviceAttributes,
       developmentStage: sanitize(parsed.developmentStage ?? "", STAGE_VALUES, "unknown"),
       categories: Array.isArray(parsed.categories) ? parsed.categories.map((c: string) => c.toLowerCase().trim()) : [],
       categoryConfidence: typeof parsed.categoryConfidence === "number" ? Math.min(1, Math.max(0, parsed.categoryConfidence)) : 0,
-      innovationClaim: (parsed.innovationClaim ?? "").trim(),
+      innovationClaim: gapNull("innovationClaim", (parsed.innovationClaim ?? "").trim()) ?? "",
       ipType: sanitize(parsed.ipType ?? "", IP_TYPES, "unknown"),
       licensingReadiness: sanitize(parsed.licensingReadiness ?? "", LICENSING_READINESS, "unknown"),
     };

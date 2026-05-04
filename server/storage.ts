@@ -1924,12 +1924,16 @@ export class DatabaseStorage implements IStorage {
             deepEnrichAttempts: (cur.deepEnrichAttempts ?? 0) + 1,
           };
 
-          // Only write target fields if model returned non-empty, non-"unknown" value
-          // and field is not human-verified — never downgrade good data
+          // Only write target fields when ALL conditions hold:
+          // 1. Field is not human-verified
+          // 2. Model returned a non-empty, non-"unknown" value
+          // 3. Current DB field is null/empty (gap-fill must never overwrite existing good data)
           const isGoodValue = (v: string) => v && v.trim() !== "" && v.toLowerCase() !== "unknown" && v.toLowerCase() !== "n/a";
+          const isEmptyInDb = (v: string | null | undefined) => !v || v.trim() === "";
 
           for (const field of GAP_FILL_TARGET_FIELDS) {
-            if (!hv[field] && isGoodValue(data[field])) {
+            const currentDbValue = cur[field as keyof typeof cur] as string | null | undefined;
+            if (!hv[field] && isGoodValue(data[field]) && isEmptyInDb(currentDbValue)) {
               (update as Record<string, unknown>)[field] = data[field];
               newSources[field] = source;
               onFieldFilled?.(field);

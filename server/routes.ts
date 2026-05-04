@@ -4582,13 +4582,14 @@ export async function registerRoutes(
       let assets: Array<{
         id: number; assetName: string; summary: string; abstract: string | null;
         assetClass: string | null; mechanismOfAction: string | null; unmetNeed: string | null;
+        comparableDrugs: string | null; innovationClaim: string | null;
         categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
         inventors: string[] | null; sourceUrl: string | null;
         target: string | null; modality: string | null; indication: string | null; developmentStage: string;
       }>;
 
       if (gapFill) {
-        // Gap-fill: drug_biologic assets missing MoA OR unmet need in this band
+        // Gap-fill: drug_biologic assets missing at least one of the 4 target fields in this band
         const rangeClause = range.min !== null && range.max !== null
           ? sql`completeness_score BETWEEN ${range.min} AND ${range.max}`
           : range.min !== null
@@ -4598,17 +4599,24 @@ export async function registerRoutes(
         const rows = await db.execute<{
           id: number; asset_name: string; summary: string; abstract: string | null;
           asset_class: string | null; mechanism_of_action: string | null; unmet_need: string | null;
+          comparable_drugs: string | null; innovation_claim: string | null;
           categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
           inventors: string[] | null; source_url: string | null;
           target: string | null; modality: string | null; indication: string | null; development_stage: string;
         }>(sql`
           SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
+                 comparable_drugs, innovation_claim,
                  categories, patent_status, licensing_readiness, inventors, source_url,
                  target, modality, indication, development_stage
           FROM ingested_assets
           WHERE relevant = true
             AND asset_class = 'drug_biologic'
-            AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR unmet_need IS NULL OR unmet_need = '')
+            AND (
+              mechanism_of_action IS NULL OR mechanism_of_action = ''
+              OR unmet_need IS NULL OR unmet_need = ''
+              OR comparable_drugs IS NULL OR comparable_drugs = ''
+              OR innovation_claim IS NULL OR innovation_claim = ''
+            )
             AND ${rangeClause}
             AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
           ORDER BY ${newestFirst ? sql`first_seen_at DESC NULLS LAST` : sql`completeness_score DESC NULLS LAST`}
@@ -4617,6 +4625,7 @@ export async function registerRoutes(
         assets = rows.rows.map((r) => ({
           id: r.id, assetName: r.asset_name, summary: r.summary, abstract: r.abstract,
           assetClass: r.asset_class, mechanismOfAction: r.mechanism_of_action, unmetNeed: r.unmet_need,
+          comparableDrugs: r.comparable_drugs, innovationClaim: r.innovation_claim,
           categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
           inventors: r.inventors, sourceUrl: r.source_url,
           target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
@@ -4632,11 +4641,13 @@ export async function registerRoutes(
         const rows = await db.execute<{
           id: number; asset_name: string; summary: string; abstract: string | null;
           asset_class: string | null; mechanism_of_action: string | null; unmet_need: string | null;
+          comparable_drugs: string | null; innovation_claim: string | null;
           categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
           inventors: string[] | null; source_url: string | null;
           target: string | null; modality: string | null; indication: string | null; development_stage: string;
         }>(sql`
           SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
+                 comparable_drugs, innovation_claim,
                  categories, patent_status, licensing_readiness, inventors, source_url,
                  target, modality, indication, development_stage
           FROM ingested_assets
@@ -4649,6 +4660,7 @@ export async function registerRoutes(
         assets = rows.rows.map((r) => ({
           id: r.id, assetName: r.asset_name, summary: r.summary, abstract: r.abstract,
           assetClass: r.asset_class, mechanismOfAction: r.mechanism_of_action, unmetNeed: r.unmet_need,
+          comparableDrugs: r.comparable_drugs, innovationClaim: r.innovation_claim,
           categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
           inventors: r.inventors, sourceUrl: r.source_url,
           target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
@@ -4693,14 +4705,15 @@ export async function registerRoutes(
 
       const startMs = Date.now();
 
-      // Helper: compute per-asset missing fields from the 4 gap-fill targets
-      const isEmpty = (v: string | null) => !v || v.trim() === "";
+      // Helper: compute per-asset missing fields — only include fields that are null/empty for THIS asset
+      const isEmpty = (v: string | null | undefined) => !v || v.trim() === "";
       const perAssetFields = (a: typeof assets[0]) =>
         GAP_FILL_FIELDS.filter((f) => {
           if (f === "mechanismOfAction") return isEmpty(a.mechanismOfAction);
           if (f === "unmetNeed") return isEmpty(a.unmetNeed);
-          // comparableDrugs and innovationClaim always include when targeted
-          return true;
+          if (f === "comparableDrugs") return isEmpty(a.comparableDrugs);
+          if (f === "innovationClaim") return isEmpty(a.innovationClaim);
+          return false; // unknown field — skip
         });
 
       deepEnrichBatch(
