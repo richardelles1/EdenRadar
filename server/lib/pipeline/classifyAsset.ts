@@ -184,17 +184,36 @@ export async function classifyAsset(
     licensingReadiness: "unknown",
   };
 
+  // Gap-fill JSON schema: structurally restrict the API response to only the requested fields.
+  // Each field is a nullable string; all are required (strictMode compatible).
+  const gapFillSchema = gapFillFields
+    ? {
+        type: "json_schema" as const,
+        json_schema: {
+          name: "gap_fill_output",
+          strict: true,
+          schema: {
+            type: "object" as const,
+            properties: Object.fromEntries(
+              gapFillFields.map((f) => [f, { type: ["string", "null"] }]),
+            ),
+            required: gapFillFields,
+            additionalProperties: false,
+          },
+        },
+      }
+    : { type: "json_object" as const };
+
   try {
     const response = await openai.chat.completions.create({
       model,
       temperature: 0,
-      // Bumped from 500 — full drug_biologic JSON with categories[], deviceAttributes,
-      // an innovationClaim sentence and MOA frequently exceeded 500 tokens, causing
-      // truncated JSON, parse failure, and a silent "unknown" fallback.
-      max_tokens: 1000,
-      response_format: { type: "json_object" },
+      // Gap-fill: much shorter response (only 1-4 short string fields) so reduce max_tokens.
+      // Full pass: full drug_biologic JSON with categories[], deviceAttributes etc.
+      max_tokens: gapFillFields ? 300 : 1000,
+      response_format: gapFillSchema,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: gapFillFields ? `You are a biotech analyst. Return a JSON object with exactly these fields: ${gapFillFields.join(", ")}. Each field should contain the requested information about the technology, or null if not determinable from the text.` : SYSTEM_PROMPT },
         { role: "user", content: inputText },
       ],
     });

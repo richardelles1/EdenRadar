@@ -4485,8 +4485,12 @@ export async function registerRoutes(
           COUNT(*) AS total,
           COUNT(CASE
             WHEN asset_class = 'drug_biologic'
-              AND ((mechanism_of_action IS NULL OR mechanism_of_action = '')
-                OR (unmet_need IS NULL OR unmet_need = ''))
+              AND (
+                (mechanism_of_action IS NULL OR mechanism_of_action = '')
+                OR (unmet_need IS NULL OR unmet_need = '')
+                OR (comparable_drugs IS NULL OR comparable_drugs = '')
+                OR (innovation_claim IS NULL OR innovation_claim = '')
+              )
             THEN 1 END
           ) AS gap_fill_count,
           COUNT(CASE WHEN mechanism_of_action IS NULL OR mechanism_of_action = '' THEN 1 END) AS missing_moa,
@@ -4572,7 +4576,7 @@ export async function registerRoutes(
     if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
     if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is already running — stop it first" });
 
-    const { band, gapFill = true, cap = 500, newestFirst = false, fields } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean; fields?: string[] };
+    const { band, gapFill = true, cap = 5000, newestFirst = false, fields } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean; fields?: string[] };
     const range = BAND_SCORE_RANGES[band];
     if (!range) return res.status(400).json({ error: `Unknown band: ${band}` });
     if (band === "bare") return res.status(400).json({ error: "Bare assets lack content — re-scrape first" });

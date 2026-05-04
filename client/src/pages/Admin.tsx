@@ -2862,6 +2862,7 @@ function Enrichment({ pw }: { pw: string }) {
   // ── Surgical Band Enrichment (Step 3) state ──────────────────────────────
   const [bandGapFill, setBandGapFill] = React.useState<Record<string, boolean>>({});
   const [bandNewestFirst, setBandNewestFirst] = React.useState<Record<string, boolean>>({});
+  const [bandCap, setBandCap] = React.useState<Record<string, number>>({});
   const [bandPolling, setBandPolling] = React.useState(false);
   const [bandConfirm, setBandConfirm] = React.useState<string | null>(null);
   const [bandSummaryDismissed, setBandSummaryDismissed] = React.useState(false);
@@ -3884,6 +3885,21 @@ function Enrichment({ pw }: { pw: string }) {
                               <span className="text-[11px] text-muted-foreground">Newest first</span>
                             </label>
 
+                            {/* Per-band cap */}
+                            <label className="flex items-center gap-1 text-[11px] text-muted-foreground" data-testid={`band-cap-label-${band.id}`}>
+                              <span>Cap:</span>
+                              <input
+                                type="number"
+                                min={1}
+                                max={50000}
+                                step={100}
+                                value={bandCap[band.id] ?? 5000}
+                                onChange={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.max(1, parseInt(e.target.value) || 5000) }))}
+                                className="w-16 h-5 rounded border border-input bg-background px-1 text-[11px] text-foreground tabular-nums"
+                                data-testid={`band-cap-input-${band.id}`}
+                              />
+                            </label>
+
                             {/* Run / Confirm */}
                             {isConfirming ? (
                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -3894,7 +3910,7 @@ function Enrichment({ pw }: { pw: string }) {
                                   size="sm"
                                   className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
                                   disabled={runBand.isPending}
-                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: 500, newestFirst: isNewest })}
+                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: bandCap[band.id] ?? 5000, newestFirst: isNewest })}
                                   data-testid={`button-band-confirm-${band.id}`}
                                 >
                                   {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
