@@ -732,17 +732,17 @@ function PipelineSidebar({
         <span className="flex-1 text-left">All Assets</span>
       </button>
 
-      <button
-        onClick={() => onSelect(null)}
-        className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${selectedId === null ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
-        data-testid="pipeline-filter-uncategorised"
-      >
-        <FolderOpen className="w-3.5 h-3.5 shrink-0" />
-        <span className="flex-1 text-left">Uncategorised</span>
-        {uncategorisedCount > 0 && (
+      {uncategorisedCount > 0 && (
+        <button
+          onClick={() => onSelect(null)}
+          className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${selectedId === null ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
+          data-testid="pipeline-filter-uncategorised"
+        >
+          <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+          <span className="flex-1 text-left">Uncategorised</span>
           <span className="text-[10px] tabular-nums text-muted-foreground">{uncategorisedCount}</span>
-        )}
-      </button>
+        </button>
+      )}
 
       {isLoading ? (
         <div className="space-y-1 mt-1">
@@ -1027,9 +1027,18 @@ export default function Assets() {
   const sourceTypeCounts: Record<SourceTypeKey, number> = { tto: 0, patent: 0, trial: 0, literature: 0 };
   for (const a of allAssets) sourceTypeCounts[getSourceTypeKey(a.sourceName)]++;
 
-  const displayedAssets = sourceTypeFilter === "all"
-    ? allAssets
-    : allAssets.filter((a) => getSourceTypeKey(a.sourceName) === sourceTypeFilter);
+  const SOURCE_SORT_ORDER: Record<SourceTypeKey, number> = { tto: 0, literature: 1, patent: 2, trial: 3 };
+
+  const displayedAssets = (() => {
+    const base = sourceTypeFilter === "all"
+      ? allAssets
+      : allAssets.filter((a) => getSourceTypeKey(a.sourceName) === sourceTypeFilter);
+    return [...base].sort(
+      (a, b) =>
+        (SOURCE_SORT_ORDER[getSourceTypeKey(a.sourceName)] ?? 99) -
+        (SOURCE_SORT_ORDER[getSourceTypeKey(b.sourceName)] ?? 99)
+    );
+  })();
 
   const isLoading = pipelinesLoading || assetsLoading;
   const totalAssets = allAssets.length;
@@ -1294,6 +1303,38 @@ export default function Assets() {
                 </div>
               )}
 
+              {/* Synthesis strip — named pipeline only, all types, multiple types present */}
+              {typeof selectedPipeline === "number" && sourceTypeFilter === "all" && displayedAssets.length > 0 && (
+                Object.values(sourceTypeCounts).filter(c => c > 0).length > 1
+              ) && (
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground mb-3 px-0.5" data-testid="synthesis-strip">
+                  {sourceTypeCounts.tto > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      {sourceTypeCounts.tto} TTO
+                    </span>
+                  )}
+                  {sourceTypeCounts.patent > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                      {sourceTypeCounts.patent} Patent{sourceTypeCounts.patent !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {sourceTypeCounts.trial > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-teal-500 shrink-0" />
+                      {sourceTypeCounts.trial} Trial{sourceTypeCounts.trial !== 1 ? "s" : ""}
+                    </span>
+                  )}
+                  {sourceTypeCounts.literature > 0 && (
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                      {sourceTypeCounts.literature} Literature
+                    </span>
+                  )}
+                </div>
+              )}
+
               {displayedAssets.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
                   <Layers className="w-8 h-8 text-muted-foreground/40" />
@@ -1320,7 +1361,7 @@ export default function Assets() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {displayedAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}

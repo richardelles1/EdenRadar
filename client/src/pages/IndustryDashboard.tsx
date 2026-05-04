@@ -100,6 +100,7 @@ type SavedAssetRow = {
   pipelineListId: number | null;
   status: string | null;
   savedAt: string;
+  sourceName?: string | null;
 };
 
 type AlertDeltaResponse = {
@@ -1003,41 +1004,58 @@ export default function IndustryDashboard() {
                 </Link>
               )}
 
-              {!pipelineLoading && (
-                <>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
-                      <span className="text-[10px] text-muted-foreground">Saved Assets</span>
-                      <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalSavedAssets ?? 0}</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-institutions">
-                      <span className="text-[10px] text-muted-foreground">Institutions</span>
-                      <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.institutionCount ?? 0}</span>
-                    </div>
-                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-pipelines">
-                      <span className="text-[10px] text-muted-foreground">Pipelines</span>
-                      <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
-                    </div>
-                  </div>
-
-                  {(pipelineData?.totalSavedAssets ?? 0) > 0 && (
+              {!pipelineLoading && (() => {
+                const allSaved = recentSavedData?.assets ?? [];
+                const ttoCount = allSaved.filter(a => {
+                  const sn = (a.sourceName ?? "").toLowerCase();
+                  return sn !== "patent" && sn !== "patents" &&
+                    sn !== "clinical_trial" && sn !== "clinicaltrials" && sn !== "trial";
+                }).length;
+                const patentCount = allSaved.filter(a =>
+                  ["patent", "patents"].includes((a.sourceName ?? "").toLowerCase())
+                ).length;
+                const trialCount = allSaved.filter(a =>
+                  ["clinical_trial", "clinicaltrials", "trial"].includes((a.sourceName ?? "").toLowerCase())
+                ).length;
+                const researchCount = allSaved.filter(a =>
+                  ["literature", "pubmed", "biorxiv", "medrxiv", "preprint", "paper"].includes((a.sourceName ?? "").toLowerCase())
+                ).length;
+                return (
+                  <>
                     <div className="grid grid-cols-3 gap-2">
-                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-patents">
-                        <span className="text-[10px] text-muted-foreground">Patents</span>
-                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.typeCounts?.patents ?? 0}</span>
+                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
+                        <span className="text-[10px] text-muted-foreground">TTO Assets</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{ttoCount}</span>
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-research-studies">
-                        <span className="text-[10px] text-muted-foreground">Research Studies</span>
-                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.typeCounts?.researchStudies ?? 0}</span>
+                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-institutions">
+                        <span className="text-[10px] text-muted-foreground">Institutions</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.institutionCount ?? 0}</span>
                       </div>
-                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-clinical-trials">
-                        <span className="text-[10px] text-muted-foreground">Clinical Trials</span>
-                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.typeCounts?.clinicalTrials ?? 0}</span>
+                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-pipelines">
+                        <span className="text-[10px] text-muted-foreground">Pipelines</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
                       </div>
                     </div>
-                  )}
-                </>
-              )}
+
+                    {allSaved.length > 0 && (
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-patents">
+                          <span className="text-[10px] text-muted-foreground">Patents</span>
+                          <span className="text-base font-bold text-foreground tabular-nums">{patentCount}</span>
+                        </div>
+                        <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-research-studies">
+                          <span className="text-[10px] text-muted-foreground">Research Studies</span>
+                          <span className="text-base font-bold text-foreground tabular-nums">{researchCount}</span>
+                        </div>
+                        <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-clinical-trials">
+                          <span className="text-[10px] text-muted-foreground">Clinical Trials</span>
+                          <span className="text-base font-bold text-foreground tabular-nums">{trialCount}</span>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {pipelineData !== undefined && pipelineData.lists.length === 0 && (
                 <OrientationHint

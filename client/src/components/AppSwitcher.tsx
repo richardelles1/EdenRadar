@@ -21,9 +21,9 @@ type PortalDef = {
 };
 
 const PORTALS: PortalDef[] = [
-  { key: "lab",       label: "Lab",       href: "/research",           Icon: FlaskConical, accent: "hsl(262 80% 60%)" },
-  { key: "discovery", label: "Discovery", href: "/discovery",          Icon: Lightbulb,    accent: "hsl(38 92% 50%)"  },
-  { key: "scout",     label: "Scout",     href: "/industry/dashboard", Icon: Radar,        accent: "var(--org-accent, hsl(142 52% 36%))" },
+  // { key: "lab",       label: "Lab",       href: "/research",           Icon: FlaskConical, accent: "hsl(262 80% 60%)" },
+  // { key: "discovery", label: "Discovery", href: "/discovery",          Icon: Lightbulb,    accent: "hsl(38 92% 50%)"  },
+  { key: "scout",     label: "Scout",     href: "/industry/dashboard", Icon: Radar,        accent: "hsl(142 52% 36%)" },
   { key: "market",    label: "Market",    href: "/market",             Icon: ShoppingBag,  accent: "hsl(234 80% 58%)" },
 ];
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ExternalLink, BookOpen, FlaskConical, Calendar } from "lucide-react";
 import type { ScoredAsset, SourceType } from "@/lib/types";
 import { SCOUT_CARD_TINTS } from "@/lib/scoutCardTints";
+import { PipelinePicker } from "@/components/PipelinePicker";
 
 type SourceConfig = {
   label: string;
@@ -66,9 +67,10 @@ const FALLBACK_SOURCE: SourceConfig = {
 
 type ResearchCardProps = {
   asset: ScoredAsset;
+  isSaved?: boolean;
 };
 
-export function ResearchCard({ asset }: ResearchCardProps) {
+export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
 
@@ -157,8 +159,33 @@ export function ResearchCard({ asset }: ResearchCardProps) {
           style={{ background: SCOUT_CARD_TINTS.research.stripColor }}
         />
 
+        {/* PipelinePicker — top-right */}
+        <div
+          className="absolute top-1.5 right-1.5 z-[5]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <PipelinePicker
+            payload={{
+              asset_name: asset.asset_name,
+              target: asset.target,
+              modality: asset.modality,
+              development_stage: asset.development_stage,
+              disease_indication: asset.indication,
+              summary: asset.summary,
+              source_title: asset.signals?.[0]?.title ?? asset.asset_name,
+              source_journal: journalName ?? (asset.institution !== "unknown" ? asset.institution : "Unknown"),
+              publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+              source_name: primarySourceType,
+              source_url: rawUrl || null,
+              pmid: asset.id,
+            }}
+            alreadySaved={isSaved}
+            iconClassName="w-7 h-7 rounded-lg"
+          />
+        </div>
+
         {/* Content */}
-        <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-3 pb-3">
+        <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">
 
           {/* Source badge + year */}
           <div className="flex items-center justify-between gap-1 mb-1.5">

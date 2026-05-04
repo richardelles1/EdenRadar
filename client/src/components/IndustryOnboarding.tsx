@@ -25,6 +25,7 @@ const DEAL_STAGES = [
 interface Props {
   open: boolean;
   onClose: () => void;
+  initialCompanyName?: string;
 }
 
 const MODALITIES = [
@@ -40,9 +41,9 @@ const MODALITIES = [
   "CRISPR",
 ];
 
-export function IndustryOnboarding({ open, onClose }: Props) {
+export function IndustryOnboarding({ open, onClose, initialCompanyName }: Props) {
   const saved = getIndustryProfile();
-  const [companyName, setCompanyName] = useState(saved.companyName || "");
+  const [companyName, setCompanyName] = useState(saved.companyName || initialCompanyName || "");
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>(
     saved.therapeuticAreas
   );

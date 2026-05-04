@@ -220,6 +220,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <IndustryOnboarding
         open={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
+        initialCompanyName={org?.name}
       />
     </div>
   );

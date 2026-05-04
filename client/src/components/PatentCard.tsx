@@ -137,8 +137,33 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
             style={{ background: stripColor }}
           />
 
+          {/* PipelinePicker — top-right */}
+          <div
+            className="absolute top-1.5 right-1.5 z-[5]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PipelinePicker
+              payload={{
+                asset_name: asset.asset_name,
+                target: asset.target,
+                modality: asset.modality,
+                development_stage: asset.development_stage,
+                disease_indication: asset.indication,
+                summary: asset.summary,
+                source_title: signal?.title ?? asset.asset_name,
+                source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
+                publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+                source_name: "patent",
+                source_url: asset.source_urls?.[0] ?? null,
+                pmid: patentId ?? asset.id,
+              }}
+              alreadySaved={isSaved}
+              iconClassName="w-7 h-7 rounded-lg"
+            />
+          </div>
+
           {/* Content */}
-          <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-3 pb-3">
+          <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">
 
             {/* Top row: Patent badge + year */}
             <div className="flex items-center justify-between gap-1 mb-1.5">
@@ -217,28 +242,7 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
               <span className="text-[9px] text-zinc-400 dark:text-zinc-500 italic">
                 Click to expand
               </span>
-              <div className="flex items-center gap-2 shrink-0">
-                <div onClick={(e) => e.stopPropagation()}>
-                  <PipelinePicker
-                    payload={{
-                      asset_name: asset.asset_name,
-                      target: asset.target,
-                      modality: asset.modality,
-                      development_stage: asset.development_stage,
-                      disease_indication: asset.indication,
-                      summary: asset.summary,
-                      source_title: signal?.title ?? asset.asset_name,
-                      source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
-                      publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-                      source_name: "patent",
-                      source_url: asset.source_urls?.[0] ?? null,
-                      pmid: patentId ?? asset.id,
-                    }}
-                    alreadySaved={isSaved}
-                    iconClassName="w-5 h-5 rounded"
-                  />
-                </div>
-                {patentUrl && (
+              {patentUrl && (
                 <a
                   href={patentUrl}
                   target="_blank"
@@ -255,7 +259,6 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
           </div>
         </div>
       </div>
-    </div>
 
       {/* Detail drawer */}
       <Sheet open={open} onOpenChange={setOpen}>

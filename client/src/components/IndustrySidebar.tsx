@@ -239,13 +239,15 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
                       showDot={item.alertsBadge && totalAlerts > 0}
                     />
                     {isMarket && showMarketUpsell && (
-                      <span
-                        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
-                        style={{ background: "hsl(234 80% 58% / 0.18)", color: "hsl(234 80% 58%)" }}
-                        data-testid="badge-market-upsell"
-                      >
-                        Get access
-                      </span>
+                      <div className="px-2 pb-0.5">
+                        <span
+                          className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full inline-block"
+                          style={{ background: "hsl(234 80% 58% / 0.18)", color: "hsl(234 80% 58%)" }}
+                          data-testid="badge-market-upsell"
+                        >
+                          Get access
+                        </span>
+                      </div>
                     )}
                   </div>
                 );
