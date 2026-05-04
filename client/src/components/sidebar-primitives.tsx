@@ -6,7 +6,7 @@ export type PortalKey = "lab" | "scout" | "market" | "discovery";
 
 export const PORTAL_ACCENT: Record<PortalKey, string> = {
   lab: "hsl(262 80% 60%)",
-  scout: "var(--org-accent, hsl(142 52% 36%))",
+  scout: "hsl(142 52% 36%)",
   market: "hsl(234 80% 58%)",
   discovery: "hsl(38 92% 50%)",
 };

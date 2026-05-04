@@ -2021,6 +2021,7 @@ export default function Scout() {
                         <ResearchCard
                           key={asset.id + "-research"}
                           asset={asset}
+                          isSaved={savedAssetIds.has(asset.id)}
                         />
                       ))}
                     </div>
