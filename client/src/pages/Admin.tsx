@@ -6247,9 +6247,6 @@ function CitationCard({ asset, index, savedIngestedIds }: {
 
 function EdenTab({ pw }: { pw: string }) {
   const { toast } = useToast();
-  const [confirming, setConfirming] = useState(false);
-  const [embedConfirming, setEmbedConfirming] = useState(false);
-  const [readinessOpen, setReadinessOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
   const [introPlayed, setIntroPlayed] = useState(() => {
@@ -6283,7 +6280,7 @@ function EdenTab({ pw }: { pw: string }) {
   const [messageFeedback, setMessageFeedback] = useState<Record<number, "up" | "down">>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
+  const { data: stats } = useQuery<EdenStatsResponse>({
     queryKey: ["/api/admin/eden/stats"],
     queryFn: async () => {
       const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
@@ -6291,89 +6288,6 @@ function EdenTab({ pw }: { pw: string }) {
       return res.json();
     },
     refetchInterval: 5000,
-  });
-
-  const { data: status, refetch: refetchStatus } = useQuery<EdenStatusResponse>({
-    queryKey: ["/api/admin/eden/enrich/status"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load status");
-      return res.json();
-    },
-    refetchInterval: 3000,
-  });
-
-  const { data: embedStatus } = useQuery<EdenEmbedStatusResponse>({
-    queryKey: ["/api/admin/eden/embed/status"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/eden/embed/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load embed status");
-      return res.json();
-    },
-    refetchInterval: 3000,
-  });
-
-  const startMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error ?? "Failed to start");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setConfirming(false);
-      toast({ title: "EDEN Deep Enrichment started", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` });
-      refetchStats();
-      refetchStatus();
-    },
-    onError: (e: Error) => {
-      setConfirming(false);
-      toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" });
-    },
-  });
-
-  const stopEdenMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Stop signal sent", description: "EDEN Deep Enrichment will halt after the current batch finishes" });
-      refetchStatus();
-    },
-    onError: (e: Error) => toast({ title: "Failed to stop", description: e.message, variant: "destructive" }),
-  });
-
-  const embedMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/embed", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error ?? "Failed to start embedding");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setEmbedConfirming(false);
-      toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` });
-      refetchStats();
-    },
-    onError: (e: Error) => {
-      setEmbedConfirming(false);
-      toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" });
-    },
   });
 
   const { data: sessionsData, refetch: refetchSessions } = useQuery<EdenSessionSummary[]>({
@@ -6442,19 +6356,7 @@ function EdenTab({ pw }: { pw: string }) {
     (transcript) => setChatInput(chatInput ? `${chatInput} ${transcript}` : transcript)
   );
 
-  const cov = stats?.coverage;
   const emb = stats?.embeddingCoverage;
-  const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total, succeeded: 0, failed: 0 } : null;
-  const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
-  const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
-  const breakdown = stats?.breakdown;
-  const remaining = breakdown?.total ?? stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
-  const estCostUsd = remaining > 0 ? (remaining * 0.01).toFixed(2) : "0.00";
-  const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
-  const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
-  const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
-  const embedLive = embedStatus?.running ? embedStatus : null;
-  const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
   const chatReady = emb && emb.totalEmbedded > 0;
   const institutionCount = 223;
 
@@ -6548,7 +6450,7 @@ function EdenTab({ pw }: { pw: string }) {
         {!chatReady && (
           <div className="mx-5 my-3 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 flex items-center gap-2" data-testid="chat-not-ready">
             <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-400">EDEN is not yet active. Generate vector embeddings first using the EDEN Readiness panel below.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">EDEN is not yet active. Generate vector embeddings first using the Data Quality tab.</p>
           </div>
         )}
 
@@ -6838,189 +6740,6 @@ function EdenTab({ pw }: { pw: string }) {
         </>
       </div>
 
-      {/* ── EDEN Readiness (collapsible) ── */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-readiness">
-        <button
-          className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/40 transition-colors"
-          onClick={() => setReadinessOpen((v) => !v)}
-          data-testid="button-toggle-readiness"
-        >
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">EDEN Readiness</span>
-            {embPct >= 100 && deepPct >= 90 ? (
-              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 ml-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"/>
-                Active
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block"/>
-                Indexing
-              </span>
-            )}
-          </div>
-          {readinessOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        </button>
-
-        {readinessOpen && (
-          <div className="border-t border-border p-5 space-y-6">
-            {/* Coverage stat cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-total">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Corpus</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">relevant assets</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-enriched">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Enriched</p>
-                <p className="text-xl font-bold text-emerald-600 mt-0.5">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">{deepPct}% with GPT-4o</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-embedded">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Embedded</p>
-                <p className="text-xl font-bold text-violet-600 mt-0.5">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">{embPct}% vectorized</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-moa">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">With MoA</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.withMoa?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">mechanism of action</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-score">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Completeness</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}` : "—"}</p>
-                <p className="text-[11px] text-muted-foreground">avg / 100 pts</p>
-              </div>
-            </div>
-
-            {/* Coverage bars */}
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>Deep Enrichment</span><span>{deepPct}%</span>
-                </div>
-                <Progress value={deepPct} className="h-1.5" />
-              </div>
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>Vector Embeddings</span><span>{embPct}%</span>
-                </div>
-                <Progress value={embPct} className="h-1.5" />
-              </div>
-            </div>
-
-            {/* Live EDEN deep enrichment status */}
-            {live && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="card-eden-live">
-                <div className="flex items-center gap-2 mb-2">
-                  <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
-                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                    EDEN Deep Enrichment (GPT-4o): {live.processed.toLocaleString()} / {live.total.toLocaleString()}
-                  </span>
-                  <span className="text-sm font-bold text-emerald-600">{pct}%</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => stopEdenMutation.mutate()}
-                    disabled={stopEdenMutation.isPending}
-                    className="ml-auto h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                    data-testid="button-eden-stop"
-                  >
-                    {stopEdenMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
-                  </Button>
-                </div>
-                <Progress value={pct ?? 0} className="h-1.5" />
-              </div>
-            )}
-
-            {/* Live embedding status */}
-            {embedLive && (
-              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
-                <div className="flex items-center gap-2 mb-2">
-                  <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
-                  <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
-                    Embedding running: {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
-                  </span>
-                  <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
-                </div>
-                <Progress value={embedPct ?? 0} className="h-1.5" />
-              </div>
-            )}
-
-            {/* Run enrichment */}
-            <div data-testid="card-eden-run">
-              <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
-              <p className="text-xs text-muted-foreground mb-2">
-                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs and Licensing Readiness.
-                <span className="ml-1 font-semibold text-foreground">{remaining.toLocaleString()} assets</span> queued
-                {remaining > 0 && <> at <span className="font-semibold text-foreground">~$0.01/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.
-              </p>
-              {breakdown && remaining > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3" data-testid="enrich-breakdown">
-                  {breakdown.fresh > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-blue-500/8 border-blue-500/20 text-blue-700 dark:text-blue-400" data-testid="breakdown-fresh">
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
-                      {breakdown.fresh.toLocaleString()} fresh
-                    </span>
-                  )}
-                  {breakdown.legacy > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-amber-500/8 border-amber-500/20 text-amber-700 dark:text-amber-400" data-testid="breakdown-legacy">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
-                      {breakdown.legacy.toLocaleString()} legacy
-                    </span>
-                  )}
-                  {breakdown.lowQualityRetry > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400" data-testid="breakdown-low-quality">
-                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
-                      {breakdown.lowQualityRetry.toLocaleString()} low-score retry
-                    </span>
-                  )}
-                </div>
-              )}
-              {!confirming ? (
-                <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">
-                  <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
-                  {remaining === 0 ? "All Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-amber-600">Use ~${estCostUsd} of GPT-4o budget?</p>
-                  <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-confirm">
-                    {startMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                    Yes, Run
-                  </Button>
-                  <Button variant="outline" onClick={() => setConfirming(false)} className="h-8 text-xs" data-testid="button-eden-cancel">Cancel</Button>
-                </div>
-              )}
-            </div>
-
-            {/* Run embeddings */}
-            <div data-testid="card-eden-embeddings">
-              <h4 className="text-xs font-semibold text-foreground mb-1">Vector Embeddings</h4>
-              <p className="text-xs text-muted-foreground mb-3">
-                {emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} assets embedded with text-embedding-3-small.
-                {embRemaining > 0 && <> Remaining cost: <span className="font-semibold text-foreground">${embEstCost}</span>.</>}
-              </p>
-              {!embedConfirming ? (
-                <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-run">
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  {embRemaining === 0 ? "All Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})?</p>
-                  <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-confirm">
-                    {embedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                    Yes, Embed
-                  </Button>
-                  <Button variant="outline" onClick={() => setEmbedConfirming(false)} className="h-8 text-xs" data-testid="button-embed-cancel">Cancel</Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
@@ -9989,8 +9708,24 @@ function PlatformInfo({ pw }: { pw: string }) {
 }
 
 function DataPipeline({ pw }: { pw: string }) {
+  return (
+    <>
+      <DataHealth pw={pw} />
+      <div className="mt-8">
+        <BulkCsvImport pw={pw} />
+      </div>
+    </>
+  );
+}
+
+// ── Data Quality Tab ─────────────────────────────────────────────────────────
+
+function DataQualityTab({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [staleDismissed, setStaleDismissed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [embedConfirming, setEmbedConfirming] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
 
   const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
     running: boolean;
@@ -10012,8 +9747,28 @@ function DataPipeline({ pw }: { pw: string }) {
       if (!res.ok) throw new Error("Failed to load enrichment status");
       return res.json();
     },
-    refetchInterval: 10_000,
+    refetchInterval: 5000,
     retry: 2,
+  });
+
+  const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
+    queryKey: ["/api/admin/eden/stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load EDEN stats");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: embedStatus } = useQuery<EdenEmbedStatusResponse>({
+    queryKey: ["/api/admin/eden/embed/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/embed/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load embed status");
+      return res.json();
+    },
+    refetchInterval: 3000,
   });
 
   const resumeEnrichMutation = useMutation({
@@ -10046,50 +9801,91 @@ function DataPipeline({ pw }: { pw: string }) {
     onError: (err: Error) => toast({ title: "Toggle failed", description: err.message, variant: "destructive" }),
   });
 
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error ?? "Failed to start");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setConfirming(false);
+      toast({ title: "EDEN Deep Enrichment started", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` });
+      refetchStats();
+      refetchEdenStatus();
+    },
+    onError: (e: Error) => {
+      setConfirming(false);
+      toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const stopEdenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Stop signal sent", description: "EDEN Deep Enrichment will halt after the current batch finishes" });
+      refetchEdenStatus();
+    },
+    onError: (e: Error) => toast({ title: "Failed to stop", description: e.message, variant: "destructive" }),
+  });
+
+  const embedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/embed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error ?? "Failed to start embedding");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setEmbedConfirming(false);
+      toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` });
+      refetchStats();
+    },
+    onError: (e: Error) => {
+      setEmbedConfirming(false);
+      toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" });
+    },
+  });
+
   const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
 
-  function scrollTo(id: string) {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  const cov = stats?.coverage;
+  const emb = stats?.embeddingCoverage;
+  const live = edenStatus?.running ? edenStatus : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total } : null;
+  const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
+  const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
+  const breakdown = stats?.breakdown;
+  const remaining = breakdown?.total ?? stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
+  const estCostUsd = remaining > 0 ? (remaining * 0.01).toFixed(2) : "0.00";
+  const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
+  const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
+  const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
+  const embedLive = embedStatus?.running ? embedStatus : null;
+  const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
 
   return (
-    <>
-      {/* ── In-page sticky sub-nav ─────────────────────────── */}
-      <div
-        className="sticky top-0 z-10 -mx-6 px-6 py-2 bg-background/95 backdrop-blur border-b border-border mb-6 flex gap-2 overflow-x-auto"
-        data-testid="subnav-data-pipeline"
-      >
-        <button
-          onClick={() => scrollTo("scraper-health")}
-          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-muted text-foreground whitespace-nowrap transition-colors"
-          data-testid="subnav-link-scraper-health"
-        >
-          <Server className="h-3 w-3" />
-          Collector Health
-        </button>
-        <button
-          onClick={() => scrollTo("data-quality")}
-          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-muted text-foreground whitespace-nowrap transition-colors"
-          data-testid="subnav-link-data-quality"
-        >
-          <Database className="h-3 w-3" />
-          Data Quality &amp; Enrichment
-        </button>
-      </div>
-
-      <div id="scraper-health" className="scroll-mt-14">
-        <DataHealth pw={pw} />
-      </div>
-
-      <div id="data-quality" className="mt-8 mb-4 scroll-mt-14">
-        <h3 className="text-lg font-semibold text-foreground" data-testid="text-quality-section-title">Data Quality &amp; Enrichment</h3>
-        <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets.</p>
-      </div>
+    <div className="space-y-6" data-testid="data-quality-tab">
 
       {/* Stale-job resume banner */}
       {showStaleBanner && (
-        <div className="mb-5 rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
           <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
@@ -10120,7 +9916,7 @@ function DataPipeline({ pw }: { pw: string }) {
       )}
 
       {/* EDEN Deep Enrichment Controls */}
-      <div className="mb-6 border border-border rounded-xl bg-card overflow-hidden" data-testid="card-pipeline-enrich-controls">
+      <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-pipeline-enrich-controls">
         <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-3">
           <BrainCircuit className="h-4 w-4 text-violet-500" />
           <span className="text-sm font-semibold text-foreground">Deep Enrichment (EDEN)</span>
@@ -10180,11 +9976,194 @@ function DataPipeline({ pw }: { pw: string }) {
         </div>
       </div>
 
+      {/* EDEN Readiness (collapsible) */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-readiness">
+        <button
+          className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/40 transition-colors"
+          onClick={() => setReadinessOpen((v) => !v)}
+          data-testid="button-toggle-readiness"
+        >
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">EDEN Readiness</span>
+            {embPct >= 100 && deepPct >= 90 ? (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 ml-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"/>
+                Active
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block"/>
+                Indexing
+              </span>
+            )}
+          </div>
+          {readinessOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {readinessOpen && (
+          <div className="border-t border-border p-5 space-y-6">
+            {/* Coverage stat cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-total">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Corpus</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">relevant assets</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-enriched">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Enriched</p>
+                <p className="text-xl font-bold text-emerald-600 mt-0.5">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">{deepPct}% with GPT-4o</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-embedded">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Embedded</p>
+                <p className="text-xl font-bold text-violet-600 mt-0.5">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">{embPct}% vectorized</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-moa">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">With MoA</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.withMoa?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">mechanism of action</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-score">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Completeness</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}` : "—"}</p>
+                <p className="text-[11px] text-muted-foreground">avg / 100 pts</p>
+              </div>
+            </div>
+
+            {/* Coverage bars */}
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Deep Enrichment</span><span>{deepPct}%</span>
+                </div>
+                <Progress value={deepPct} className="h-1.5" />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Vector Embeddings</span><span>{embPct}%</span>
+                </div>
+                <Progress value={embPct} className="h-1.5" />
+              </div>
+            </div>
+
+            {/* Live EDEN deep enrichment status */}
+            {live && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="card-eden-live">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
+                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    EDEN Deep Enrichment (GPT-4o): {live.processed.toLocaleString()} / {live.total.toLocaleString()}
+                  </span>
+                  <span className="text-sm font-bold text-emerald-600">{pct}%</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => stopEdenMutation.mutate()}
+                    disabled={stopEdenMutation.isPending}
+                    className="ml-auto h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    data-testid="button-eden-stop"
+                  >
+                    {stopEdenMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                  </Button>
+                </div>
+                <Progress value={pct ?? 0} className="h-1.5" />
+              </div>
+            )}
+
+            {/* Live embedding status */}
+            {embedLive && (
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
+                  <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                    Embedding running: {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
+                  </span>
+                  <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
+                </div>
+                <Progress value={embedPct ?? 0} className="h-1.5" />
+              </div>
+            )}
+
+            {/* Run enrichment */}
+            <div data-testid="card-eden-run">
+              <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
+              <p className="text-xs text-muted-foreground mb-2">
+                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs and Licensing Readiness.
+                <span className="ml-1 font-semibold text-foreground">{remaining.toLocaleString()} assets</span> queued
+                {remaining > 0 && <> at <span className="font-semibold text-foreground">~$0.01/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.
+              </p>
+              {breakdown && remaining > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3" data-testid="enrich-breakdown">
+                  {breakdown.fresh > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-blue-500/8 border-blue-500/20 text-blue-700 dark:text-blue-400" data-testid="breakdown-fresh">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
+                      {breakdown.fresh.toLocaleString()} fresh
+                    </span>
+                  )}
+                  {breakdown.legacy > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-amber-500/8 border-amber-500/20 text-amber-700 dark:text-amber-400" data-testid="breakdown-legacy">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
+                      {breakdown.legacy.toLocaleString()} legacy
+                    </span>
+                  )}
+                  {breakdown.lowQualityRetry > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400" data-testid="breakdown-low-quality">
+                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
+                      {breakdown.lowQualityRetry.toLocaleString()} low-score retry
+                    </span>
+                  )}
+                </div>
+              )}
+              {!confirming ? (
+                <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">
+                  <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
+                  {remaining === 0 ? "All Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs font-semibold text-amber-600">Use ~${estCostUsd} of GPT-4o budget?</p>
+                  <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-confirm">
+                    {startMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Yes, Run
+                  </Button>
+                  <Button variant="outline" onClick={() => setConfirming(false)} className="h-8 text-xs" data-testid="button-eden-cancel">Cancel</Button>
+                </div>
+              )}
+            </div>
+
+            {/* Run embeddings */}
+            <div data-testid="card-eden-embeddings">
+              <h4 className="text-xs font-semibold text-foreground mb-1">Vector Embeddings</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                {emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} assets embedded with text-embedding-3-small.
+                {embRemaining > 0 && <> Remaining cost: <span className="font-semibold text-foreground">${embEstCost}</span>.</>}
+              </p>
+              {!embedConfirming ? (
+                <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-run">
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  {embRemaining === 0 ? "All Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})?</p>
+                  <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-confirm">
+                    {embedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Yes, Embed
+                  </Button>
+                  <Button variant="outline" onClick={() => setEmbedConfirming(false)} className="h-8 text-xs" data-testid="button-embed-cancel">Cancel</Button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
       <Enrichment pw={pw} />
       <RelevancePanel pw={pw} />
-      <BulkCsvImport pw={pw} />
       <PotentialDuplicates pw={pw} />
-    </>
+    </div>
   );
 }
 
@@ -10965,6 +10944,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
               Data Pipeline
             </button>
             <button
+              onClick={() => setActiveTab("data-quality")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "data-quality" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-data-quality"
+            >
+              <Database className="h-4 w-4" />
+              Data Quality
+            </button>
+            <button
               onClick={() => setActiveTab("manual-import")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "manual-import" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -11181,9 +11170,19 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Pipeline</h2>
-                <p className="text-sm text-muted-foreground mt-1">Collector health, live connections, dataset quality, field coverage, enrichment controls, CSV import, and duplicate detection — all in one place.</p>
+                <p className="text-sm text-muted-foreground mt-1">Collector health, live connections, and bulk CSV import.</p>
               </div>
               <DataPipeline pw={pw} />
+            </>
+          )}
+
+          {activeTab === "data-quality" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Quality</h2>
+                <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, enrichment controls, EDEN readiness, and duplicate detection.</p>
+              </div>
+              <DataQualityTab pw={pw} />
             </>
           )}
 

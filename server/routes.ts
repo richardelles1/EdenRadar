@@ -4243,26 +4243,24 @@ export async function registerRoutes(
     }
   });
 
-  // Delay startup enrichment resume check so the migration client and scheduler
-  // restoration queries can connect to Supabase/PgBouncer first without contention.
+  // On startup, mark any stale enrichment job as interrupted so the admin can
+  // resume it manually from the Data Quality tab. Auto-resume is disabled to
+  // prevent unbounded cost on server restart.
   setTimeout(async () => {
     try {
       const staleJob = await storage.getRunningEnrichmentJob();
       if (staleJob) {
-        // Use mini-queue criteria (relevant, non-sparse, >150 chars, unscored OR 3+ unknowns,
-        // capped at 500) so resume respects the same cost-controlled batch semantics as a
-        // fresh run — preventing unbounded reprocessing after a restart.
         const remaining = await storage.getMiniEnrichBatch(500);
         if (remaining.length > 0) {
-          console.log(`[enrichment] Resuming job ${staleJob.id}: ${remaining.length} assets in mini-queue (${staleJob.processed} already processed)`);
-          runEnrichmentWorker(staleJob.id, remaining, staleJob.processed, staleJob.improved, true);
+          console.log(`[enrichment] Stale job ${staleJob.id} detected (${remaining.length} assets remaining). Auto-resume disabled — resume from the Data Quality tab.`);
+          await storage.updateEnrichmentJob(staleJob.id, { status: "interrupted" });
         } else {
           await storage.updateEnrichmentJob(staleJob.id, { status: "done", completedAt: new Date() });
           console.log(`[enrichment] Stale job ${staleJob.id} had no remaining work — marked done`);
         }
       }
     } catch (e) {
-      console.error("[enrichment] Failed to check for resumable jobs:", e);
+      console.error("[enrichment] Failed to check for stale jobs:", e);
     }
   }, 15_000);
 
