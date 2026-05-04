@@ -180,15 +180,15 @@ export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
               pmid: asset.id,
             }}
             alreadySaved={isSaved}
-            iconClassName="w-7 h-7 rounded-lg"
+            bare
           />
         </div>
 
         {/* Content */}
         <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">
 
-          {/* Source badge + year */}
-          <div className="flex items-center justify-between gap-1 mb-1.5">
+          {/* Source badge */}
+          <div className="flex items-center gap-1 mb-1.5">
             <span
               className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.12em] border ${config.badgeClass}`}
               data-testid={`research-source-type-${asset.id}`}
@@ -196,12 +196,6 @@ export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
               {config.icon}
               {config.label}
             </span>
-            {yearStr && (
-              <span className="flex items-center gap-0.5 text-[9px] font-medium text-zinc-500 dark:text-zinc-400">
-                <Calendar className="w-2.5 h-2.5" />
-                {yearStr}
-              </span>
-            )}
           </div>
 
           {/* Title */}
@@ -238,11 +232,16 @@ export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
 
           {/* Footer */}
           <div className="mt-auto pt-1.5 flex items-center justify-between gap-1">
-            {asset.target && asset.target !== "unknown" && (
+            {yearStr ? (
+              <span className="flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500">
+                <Calendar className="w-2.5 h-2.5" />
+                {yearStr}
+              </span>
+            ) : asset.target && asset.target !== "unknown" ? (
               <span className="text-[9px] rounded px-1.5 py-0.5 truncate max-w-[90px] font-mono bg-muted/60 dark:bg-muted/20 border border-border text-zinc-500 dark:text-zinc-400">
                 {asset.target}
               </span>
-            )}
+            ) : null}
             {rawUrl && (
               <a
                 href={rawUrl}

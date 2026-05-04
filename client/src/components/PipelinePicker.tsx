@@ -60,6 +60,7 @@ type Props = {
   alreadySaved?: boolean;
   variant?: "icon" | "button";
   iconClassName?: string;
+  bare?: boolean;
 };
 
 function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
@@ -79,7 +80,7 @@ function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
   };
 }
 
-export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName }: Props) {
+export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName, bare }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -311,6 +312,21 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
             {isSaved ? "Saved" : "Save"}
             <ChevronDown className="w-3 h-3 opacity-60" />
           </Button>
+        ) : bare ? (
+          <button
+            className={`flex items-center justify-center transition-opacity duration-150 ${
+              isSaved ? "text-primary opacity-100" : "text-muted-foreground opacity-60 hover:opacity-100 hover:text-primary"
+            }`}
+            disabled={isPending}
+            data-testid={`button-save-asset-${effectivePayload?.pmid ?? effectivePayload?.asset_name}`}
+            title={isSaved ? "Saved. Click to manage pipeline" : "Save to pipeline"}
+          >
+            {isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Bookmark className="w-3.5 h-3.5" fill={isSaved ? "currentColor" : "none"} />
+            )}
+          </button>
         ) : (
           <button
             className={`rounded flex items-center justify-center transition-all duration-150 ${

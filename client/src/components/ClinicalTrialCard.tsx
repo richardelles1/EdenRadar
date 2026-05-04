@@ -182,36 +182,28 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
                 pmid: nctId ?? asset.id,
               }}
               alreadySaved={isSaved}
-              iconClassName="w-7 h-7 rounded-lg"
+              bare
             />
           </div>
 
           {/* Content */}
           <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">
 
-            {/* Top row: Trial badge + phase badge + date */}
-            <div className="flex items-center justify-between gap-1 mb-1.5">
-              <div className="flex items-center gap-1 min-w-0">
-                <span
-                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.12em] border text-teal-600 dark:text-teal-400 bg-teal-500/10 border-teal-500/30 shrink-0"
-                  data-testid={`trial-badge-${asset.id}`}
-                >
-                  <FlaskConical className="w-2.5 h-2.5" />
-                  Trial
-                </span>
-                <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-[0.1em] border shrink-0 ${phaseStyle.className}`}
-                  data-testid={`trial-phase-badge-${asset.id}`}
-                >
-                  {phaseStyle.label}
-                </span>
-              </div>
-              {startDateStr && (
-                <span className="flex items-center gap-0.5 text-[9px] font-medium text-zinc-500 dark:text-zinc-400 shrink-0">
-                  <Calendar className="w-2.5 h-2.5" />
-                  {startDateStr}
-                </span>
-              )}
+            {/* Top row: Trial badge + phase badge */}
+            <div className="flex items-center gap-1 mb-1.5">
+              <span
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.12em] border text-teal-600 dark:text-teal-400 bg-teal-500/10 border-teal-500/30 shrink-0"
+                data-testid={`trial-badge-${asset.id}`}
+              >
+                <FlaskConical className="w-2.5 h-2.5" />
+                Trial
+              </span>
+              <span
+                className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-[0.1em] border shrink-0 ${phaseStyle.className}`}
+                data-testid={`trial-phase-badge-${asset.id}`}
+              >
+                {phaseStyle.label}
+              </span>
             </div>
 
             {/* NCT number */}
@@ -287,15 +279,18 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
 
             {/* Footer */}
             <div className="mt-auto pt-1.5 flex items-center justify-between gap-1">
-              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 italic">
-                Click to expand
-              </span>
+              {startDateStr && (
+                <span className="flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500">
+                  <Calendar className="w-2.5 h-2.5" />
+                  {startDateStr}
+                </span>
+              )}
               {trialUrl && (
                 <a
                   href={trialUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-0.5 text-[10px] font-semibold text-teal-600 hover:text-teal-500 dark:text-teal-400 dark:hover:text-teal-300 transition-colors shrink-0"
+                  className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-teal-600 hover:text-teal-500 dark:text-teal-400 dark:hover:text-teal-300 transition-colors shrink-0"
                   data-testid={`link-view-trial-${asset.id}`}
                   onClick={(e) => e.stopPropagation()}
                 >

@@ -158,15 +158,15 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
                 pmid: patentId ?? asset.id,
               }}
               alreadySaved={isSaved}
-              iconClassName="w-7 h-7 rounded-lg"
+              bare
             />
           </div>
 
           {/* Content */}
           <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">
 
-            {/* Top row: Patent badge + year */}
-            <div className="flex items-center justify-between gap-1 mb-1.5">
+            {/* Top row: Patent badge */}
+            <div className="flex items-center gap-1 mb-1.5">
               <span
                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.12em] border text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30"
                 data-testid={`patent-badge-${asset.id}`}
@@ -174,12 +174,6 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
                 <ScrollText className="w-2.5 h-2.5" />
                 Patent
               </span>
-              {grantDateStr && (
-                <span className="flex items-center gap-0.5 text-[9px] font-medium text-zinc-500 dark:text-zinc-400">
-                  <Calendar className="w-2.5 h-2.5" />
-                  {grantDateStr}
-                </span>
-              )}
             </div>
 
             {/* Patent number */}
@@ -239,15 +233,18 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
 
             {/* Footer */}
             <div className="mt-auto pt-1.5 flex items-center justify-between gap-1">
-              <span className="text-[9px] text-zinc-400 dark:text-zinc-500 italic">
-                Click to expand
-              </span>
+              {grantDateStr && (
+                <span className="flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500">
+                  <Calendar className="w-2.5 h-2.5" />
+                  {grantDateStr}
+                </span>
+              )}
               {patentUrl && (
                 <a
                   href={patentUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300 transition-colors shrink-0"
+                  className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 hover:text-amber-500 dark:text-amber-400 dark:hover:text-amber-300 transition-colors shrink-0"
                   data-testid={`link-view-patent-${asset.id}`}
                   onClick={(e) => e.stopPropagation()}
                 >
