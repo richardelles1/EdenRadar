@@ -148,7 +148,7 @@ function getSourceTypeKey(sourceName: string | null | undefined): SourceTypeKey 
   const sn = (sourceName ?? "").toLowerCase();
   if (sn === "patent" || sn === "patents") return "patent";
   if (sn === "clinical_trial" || sn === "clinicaltrials" || sn === "trial") return "trial";
-  if (sn === "literature" || sn === "pubmed" || sn === "biorxiv" || sn === "medrxiv" || sn === "preprint") return "literature";
+  if (sn === "literature" || sn === "pubmed" || sn === "biorxiv" || sn === "medrxiv" || sn === "preprint" || sn === "paper") return "literature";
   return "tto";
 }
 
@@ -400,19 +400,31 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
                   {asset.publicationYear}
                 </span>
               )}
-              {asset.sourceUrl && (
-                <a
-                  href={asset.sourceUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors shrink-0"
-                  data-testid={`link-view-tto-${asset.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  View
-                  <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
-                </a>
-              )}
+              <div className="ml-auto flex items-center gap-2 shrink-0">
+                {canNavigate && (
+                  <button
+                    className="flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
+                    data-testid={`link-dossier-tto-${asset.id}`}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/industry/tto/${asset.ingestedAssetId}`); }}
+                  >
+                    Dossier
+                    <ArrowRight className="w-2.5 h-2.5 ml-0.5" />
+                  </button>
+                )}
+                {asset.sourceUrl && (
+                  <a
+                    href={asset.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-0.5 text-[10px] font-semibold text-zinc-400 hover:text-zinc-300 dark:text-zinc-500 dark:hover:text-zinc-400 transition-colors"
+                    data-testid={`link-view-tto-${asset.id}`}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    View
+                    <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -429,7 +441,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
 
       {/* Management strip */}
       <div
-        className={`bg-muted/50 border border-t-0 border-card-border/70 px-2.5 py-2 flex items-center gap-2 ${notesOpen ? "rounded-b-none" : "rounded-b-xl"}`}
+        className={`bg-muted/50 border border-t-0 border-card-border/70 px-2.5 py-2 flex items-center gap-1.5 overflow-hidden min-w-0 ${notesOpen ? "rounded-b-none" : "rounded-b-xl"}`}
         onClick={(e) => e.stopPropagation()}
         data-testid={`mgmt-strip-${asset.id}`}
       >
@@ -438,7 +450,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
           value={localStatus ?? "none"}
           onChange={(e) => statusMutation.mutate(e.target.value === "none" ? null : e.target.value)}
           disabled={statusMutation.isPending}
-          className={`text-[10px] bg-transparent border border-card-border rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors shrink-0 ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
+          className={`text-[10px] bg-transparent border border-card-border rounded px-1 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors shrink-0 max-w-[82px] truncate ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
           data-testid={`select-status-${asset.id}`}
         >
           <option value="none">Set stage</option>
@@ -454,11 +466,12 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
           data-testid={`button-notes-toggle-${asset.id}`}
         >
           <MessageSquare className="w-2.5 h-2.5" />
-          {noteCount > 0 ? `${noteCount} note${noteCount !== 1 ? "s" : ""}` : "Notes"}
+          {noteCount > 0 ? noteCount : ""}
+          {noteCount === 0 && "Notes"}
           {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
         </button>
 
-        <div className="flex-1" />
+        <div className="flex-1 min-w-0" />
 
         {/* Move dropdown */}
         {pipelines.length > 0 && !restrictMeta && (
@@ -468,7 +481,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
               const val = e.target.value;
               onMove(asset.id, val === "null" ? null : parseInt(val, 10));
             }}
-            className="text-[10px] text-muted-foreground bg-transparent border-0 focus:outline-none cursor-pointer hover:text-foreground shrink-0"
+            className="text-[10px] text-muted-foreground bg-transparent border-0 focus:outline-none cursor-pointer hover:text-foreground shrink-0 max-w-[80px] truncate"
             title="Move to pipeline"
             data-testid={`select-move-asset-${asset.id}`}
           >
@@ -1435,7 +1448,7 @@ export default function Assets() {
                   )}
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                   {displayedAssets.map((asset) => (
                     <PipelineCardWrapper
                       key={asset.id}
