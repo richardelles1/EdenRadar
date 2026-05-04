@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Building2, Search, ShieldOff } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Building2, Search, ShieldOff, SlidersHorizontal } from "lucide-react";
 import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
 
 type Continent = "All" | "North America" | "Europe" | "Asia-Pacific";
@@ -231,9 +232,15 @@ function InstitutionCard({
   );
 }
 
+type SortOrder = "listings-desc" | "listings-asc" | "name-asc" | "name-desc";
+const SORT_OPTIONS: SortOrder[] = ["listings-desc", "listings-asc", "name-asc", "name-desc"];
+function isSortOrder(v: string): v is SortOrder { return (SORT_OPTIONS as string[]).includes(v); }
+
 export default function Institutions() {
   const [search, setSearch] = useState("");
   const [continent, setContinent] = useState<Continent>("All");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("listings-desc");
+  const [selectedSpecialties, setSelectedSpecialties] = useState<Set<string>>(new Set());
 
   const { data, isLoading } = useQuery<InstitutionsListResponse>({
     queryKey: ["/api/institutions"],
@@ -244,18 +251,49 @@ export default function Institutions() {
   const totalIndexed = data?.total ?? 0;
   const noneScanned = !isLoading && allInstitutions.every((i) => i.count === 0);
 
+  const allSpecialties = useMemo(() => {
+    const set = new Set<string>();
+    for (const inst of allInstitutions) {
+      for (const s of inst.specialties) {
+        set.add(s);
+      }
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allInstitutions]);
+
   const filtered = useMemo(() => {
     const base = allInstitutions.filter((i) => {
       const matchesContinent = continent === "All" || institutionContinent(i) === continent;
       const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
-      return matchesContinent && matchesSearch;
+      const matchesSpecialty =
+        selectedSpecialties.size === 0 ||
+        i.specialties.some((s) => selectedSpecialties.has(s));
+      return matchesContinent && matchesSearch && matchesSpecialty;
     });
     return base.sort((a, b) => {
-      const diff = (b.count ?? 0) - (a.count ?? 0);
-      if (diff !== 0) return diff;
-      return a.name.localeCompare(b.name);
+      if (sortOrder === "listings-desc") {
+        const diff = (b.count ?? 0) - (a.count ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      }
+      if (sortOrder === "listings-asc") {
+        const diff = (a.count ?? 0) - (b.count ?? 0);
+        return diff !== 0 ? diff : a.name.localeCompare(b.name);
+      }
+      if (sortOrder === "name-asc") {
+        return a.name.localeCompare(b.name);
+      }
+      return b.name.localeCompare(a.name);
     });
-  }, [allInstitutions, continent, search]);
+  }, [allInstitutions, continent, search, sortOrder, selectedSpecialties]);
+
+  function toggleSpecialty(s: string) {
+    setSelectedSpecialties((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }
 
   return (
     <div className="min-h-full">
@@ -294,21 +332,75 @@ export default function Institutions() {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 flex-wrap" data-testid="continent-filter">
-              {CONTINENTS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setContinent(c)}
-                  data-testid={`filter-continent-${c.toLowerCase().replace(/[^a-z]/g, "-")}`}
-                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150 ${
-                    continent === c
-                      ? "bg-primary text-primary-foreground border-primary"
-                      : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
-                  }`}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-2 flex-wrap justify-between">
+                <div className="flex items-center gap-2 flex-wrap" data-testid="continent-filter">
+                  {CONTINENTS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setContinent(c)}
+                      data-testid={`filter-continent-${c.toLowerCase().replace(/[^a-z]/g, "-")}`}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150 ${
+                        continent === c
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
+                <Select
+                  value={sortOrder}
+                  onValueChange={(v) => { if (isSortOrder(v)) setSortOrder(v); }}
                 >
-                  {c}
-                </button>
-              ))}
+                  <SelectTrigger
+                    className="h-8 w-44 text-xs gap-1.5"
+                    data-testid="select-sort-order"
+                  >
+                    <SlidersHorizontal className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder="Sort by…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="listings-desc" data-testid="sort-option-listings-desc">Listings ↓</SelectItem>
+                    <SelectItem value="listings-asc" data-testid="sort-option-listings-asc">Listings ↑</SelectItem>
+                    <SelectItem value="name-asc" data-testid="sort-option-name-asc">Name A→Z</SelectItem>
+                    <SelectItem value="name-desc" data-testid="sort-option-name-desc">Name Z→A</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {allSpecialties.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap" data-testid="specialty-filter">
+                  <span className="text-xs text-muted-foreground font-medium shrink-0">Focus:</span>
+                  {allSpecialties.map((s) => {
+                    const active = selectedSpecialties.has(s);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => toggleSpecialty(s)}
+                        data-testid={`filter-specialty-${s.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-medium border transition-colors duration-150 ${
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                  {selectedSpecialties.size > 0 && (
+                    <button
+                      onClick={() => setSelectedSpecialties(new Set())}
+                      data-testid="button-clear-specialties"
+                      className="px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-dashed border-muted-foreground/40 text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors duration-150"
+                    >
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
