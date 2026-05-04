@@ -1746,84 +1746,33 @@ export default function Scout() {
                       </button>
                     </div>
 
-                    {/* Trial controls — desktop only */}
-                    <div className="hidden md:flex flex-wrap items-center gap-3">
-                      {/* Sort toggle */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sort</span>
-                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-sort-toggle">
-                          {(["newest", "by_phase"] as const).map((mode) => (
-                            <button
-                              key={mode}
-                              onClick={() => setTrialSortMode(mode)}
-                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
-                                trialSortMode === mode
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                              data-testid={`trial-sort-${mode}`}
-                            >
-                              {mode === "newest" ? "Newest" : "By Phase"}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Compact sort + sponsor row — desktop only */}
+                    <div className="hidden md:flex items-center justify-between gap-3">
+                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-sort-toggle">
+                        {(["newest", "by_phase"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setTrialSortMode(mode)}
+                            className={`px-2.5 py-1 text-[11px] font-medium transition-colors border-r border-border last:border-r-0 ${
+                              trialSortMode === mode
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                            data-testid={`trial-sort-${mode}`}
+                          >
+                            {mode === "newest" ? "Newest" : "By Phase"}
+                          </button>
+                        ))}
                       </div>
-
-                      {/* Phase filter */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Phase</span>
-                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-phase-filter">
-                          {(["all", "phase 1", "phase 2", "phase 3", "preclinical"] as const).map((p) => (
-                            <button
-                              key={p}
-                              onClick={() => setTrialPhaseFilter(p)}
-                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
-                                trialPhaseFilter === p
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                              data-testid={`trial-phase-filter-${p.replace(" ", "-")}`}
-                            >
-                              {p === "all" ? "All" : p === "phase 1" ? "Phase 1" : p === "phase 2" ? "Phase 2" : p === "phase 3" ? "Phase 3" : "Preclinical"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Status filter */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Status</span>
-                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-status-filter">
-                          {(["all", "recruiting", "active", "completed"] as const).map((s) => (
-                            <button
-                              key={s}
-                              onClick={() => setTrialStatusFilter(s)}
-                              className={`px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors border-r border-border last:border-r-0 ${
-                                trialStatusFilter === s
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                              data-testid={`trial-status-filter-${s}`}
-                            >
-                              {s === "all" ? "All" : s === "recruiting" ? "Recruiting" : s === "active" ? "Active" : "Completed"}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Sponsor search */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sponsor</span>
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                          <Input
-                            value={trialSponsorSearch}
-                            onChange={(e) => setTrialSponsorSearch(e.target.value)}
-                            placeholder="Filter by sponsor…"
-                            className="h-7 pl-6 pr-2 text-[11px] w-[160px] border-border"
-                            data-testid="input-trial-sponsor-search"
-                          />
-                        </div>
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                        <Input
+                          value={trialSponsorSearch}
+                          onChange={(e) => setTrialSponsorSearch(e.target.value)}
+                          placeholder="Filter by sponsor…"
+                          className="h-7 pl-6 pr-2 text-[11px] w-[180px] border-border"
+                          data-testid="input-trial-sponsor-search"
+                        />
                       </div>
                     </div>
 
