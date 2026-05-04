@@ -1738,9 +1738,28 @@ export async function registerRoutes(
       const assets = await storage.getSavedAssets(pipelineListId, userId);
       const assetIds = assets.map((a) => a.id);
       const noteMeta = await storage.getAssetNoteMeta(assetIds);
+
+      // Batch-resolve fingerprints for saved assets that link to ingested_assets,
+      // so the dashboard can build correct /asset/<fingerprint> URLs.
+      const ingestedIds = assets
+        .map((a) => a.ingestedAssetId)
+        .filter((id): id is number => id !== null);
+      const fingerprintMap: Record<number, string> = {};
+      if (ingestedIds.length > 0) {
+        try {
+          const fpRows = await db.execute(
+            sql`SELECT id, fingerprint FROM ingested_assets WHERE id = ANY(${ingestedIds}::int[]) AND fingerprint IS NOT NULL`
+          );
+          for (const row of fpRows.rows as { id: number; fingerprint: string }[]) {
+            fingerprintMap[row.id] = row.fingerprint;
+          }
+        } catch { /* non-fatal */ }
+      }
+
       res.json({
         assets: assets.map((a) => ({
           ...a,
+          fingerprint: a.ingestedAssetId ? (fingerprintMap[a.ingestedAssetId] ?? null) : null,
           noteCount: noteMeta[a.id]?.count ?? 0,
           lastNoteAt: noteMeta[a.id]?.lastNoteAt ?? null,
         })),

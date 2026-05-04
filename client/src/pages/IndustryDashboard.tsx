@@ -96,6 +96,7 @@ type BrowseAsset = {
 type SavedAssetRow = {
   id: number;
   ingestedAssetId: number | null;
+  fingerprint: string | null;
   assetName: string;
   pipelineListId: number | null;
   status: string | null;
@@ -494,7 +495,8 @@ export default function IndustryDashboard() {
 
   const { data: recentSavedData, isLoading: recentSavedLoading } = useQuery<{ assets: SavedAssetRow[] }>({
     queryKey: ["/api/saved-assets"],
-    staleTime: 2 * 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   });
 
   // Fetch DB-backed last-viewed timestamp so dashboard count matches sidebar badge.
@@ -528,8 +530,8 @@ export default function IndustryDashboard() {
 
   const { data: teamActivityData, isLoading: teamActivityLoading } = useQuery<TeamActivityResponse>({
     queryKey: ["/api/team/activity"],
-    staleTime: 60 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 15 * 1000,
+    refetchInterval: 30 * 1000,
     retry: false,
   });
 
@@ -1098,7 +1100,13 @@ export default function IndustryDashboard() {
                     data-testid={`recent-saved-${asset.id}`}
                   >
                     <button
-                      onClick={() => navigate(`/asset/${asset.ingestedAssetId ?? asset.id}`)}
+                      onClick={() => {
+                        if (asset.fingerprint) {
+                          navigate(`/asset/${asset.fingerprint}`);
+                        } else {
+                          navigate("/assets");
+                        }
+                      }}
                       className="min-w-0 flex-1 text-left group"
                     >
                       <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
@@ -1191,8 +1199,14 @@ export default function IndustryDashboard() {
                                 {sanitiseAssetName(item.assetName)}
                               </span>
                             </Link>
+                          ) : sanitiseAssetName(item.assetName) !== "Unnamed asset" ? (
+                            <Link href={`/scout?q=${encodeURIComponent(item.assetName)}`}>
+                              <span className="font-medium text-muted-foreground hover:text-primary hover:underline cursor-pointer" data-testid={`team-activity-asset-link-${item.id}`}>
+                                {sanitiseAssetName(item.assetName)}
+                              </span>
+                            </Link>
                           ) : (
-                            <span className="font-medium" data-testid={`team-activity-asset-text-${item.id}`}>{sanitiseAssetName(item.assetName)}</span>
+                            <span className="font-medium text-muted-foreground" data-testid={`team-activity-asset-text-${item.id}`}>{sanitiseAssetName(item.assetName)}</span>
                           )}
                         </p>
                       </div>
