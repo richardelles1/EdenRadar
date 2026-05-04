@@ -4243,20 +4243,23 @@ export async function registerRoutes(
     }
   });
 
-  // On startup, mark any stale enrichment job as interrupted so the admin can
-  // resume it manually from the Data Quality tab. Auto-resume is disabled to
-  // prevent unbounded cost on server restart.
+  // On startup, mark any stale mini-enrichment job as interrupted so the admin
+  // can resume it manually from the Data Quality tab. Auto-resume is disabled
+  // to prevent unbounded cost on server restart.
+  // Note: only handles mini-enrichment jobs (model != "gpt-4o"). Stale EDEN
+  // deep-enrichment jobs (model = "gpt-4o") keep status = "running" so the
+  // stale-job resume banner in the Data Quality tab can detect and surface them.
   setTimeout(async () => {
     try {
       const staleJob = await storage.getRunningEnrichmentJob();
-      if (staleJob) {
+      if (staleJob && staleJob.model !== "gpt-4o") {
         const remaining = await storage.getMiniEnrichBatch(500);
         if (remaining.length > 0) {
-          console.log(`[enrichment] Stale job ${staleJob.id} detected (${remaining.length} assets remaining). Auto-resume disabled — resume from the Data Quality tab.`);
+          console.log(`[enrichment] Stale mini-enrichment job ${staleJob.id} detected (${remaining.length} assets remaining). Auto-resume disabled — resume from the Data Quality tab.`);
           await storage.updateEnrichmentJob(staleJob.id, { status: "interrupted" });
         } else {
           await storage.updateEnrichmentJob(staleJob.id, { status: "done", completedAt: new Date() });
-          console.log(`[enrichment] Stale job ${staleJob.id} had no remaining work — marked done`);
+          console.log(`[enrichment] Stale mini-enrichment job ${staleJob.id} had no remaining work — marked done`);
         }
       }
     } catch (e) {

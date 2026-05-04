@@ -9883,37 +9883,7 @@ function DataQualityTab({ pw }: { pw: string }) {
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
 
-      {/* Stale-job resume banner */}
-      {showStaleBanner && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
-          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
-            <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-              Deep enrichment job #{edenStatus?.staleJobId} was in progress when the server restarted and has not been resumed.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => resumeEnrichMutation.mutate()}
-              disabled={resumeEnrichMutation.isPending}
-              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
-              data-testid="button-stale-resume"
-            >
-              {resumeEnrichMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-              Resume
-            </button>
-            <button
-              onClick={() => setStaleDismissed(true)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="button-stale-dismiss"
-              aria-label="Dismiss"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
+      <Enrichment pw={pw} />
 
       {/* EDEN Deep Enrichment Controls */}
       <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-pipeline-enrich-controls">
@@ -10160,7 +10130,38 @@ function DataQualityTab({ pw }: { pw: string }) {
         )}
       </div>
 
-      <Enrichment pw={pw} />
+      {/* Stale-job resume banner */}
+      {showStaleBanner && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+              Deep enrichment job #{edenStatus?.staleJobId} was in progress when the server restarted and has not been resumed.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => resumeEnrichMutation.mutate()}
+              disabled={resumeEnrichMutation.isPending}
+              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
+              data-testid="button-stale-resume"
+            >
+              {resumeEnrichMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+              Resume
+            </button>
+            <button
+              onClick={() => setStaleDismissed(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="button-stale-dismiss"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       <RelevancePanel pw={pw} />
       <PotentialDuplicates pw={pw} />
     </div>
