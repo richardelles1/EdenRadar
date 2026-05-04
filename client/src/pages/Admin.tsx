@@ -1882,12 +1882,17 @@ interface BandStatusResponse {
   succeeded: number;
   failed: number;
   liveCostUsd: number;
+  liveProjectedTotalUsd: number;
   liveInputTokens: number;
   liveOutputTokens: number;
+  liveFieldCounts: Record<string, number>;
   lastSummary: {
     band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
     fieldsFilledNames: string[];
+    fieldFillCounts: Record<string, number>;
+    avgScoreBefore: number | null;
+    avgScoreAfter: number | null;
   } | null;
 }
 
@@ -3703,7 +3708,7 @@ function Enrichment({ pw }: { pw: string }) {
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
                       <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">
-                        Live cost: ${bandStatus.liveCostUsd.toFixed(4)} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (est)
+                        ${bandStatus.liveCostUsd.toFixed(4)} of ~${bandStatus.liveProjectedTotalUsd?.toFixed(2) ?? "?"} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (est)
                       </span>
                     </div>
                   </div>
@@ -3743,10 +3748,37 @@ function Enrichment({ pw }: { pw: string }) {
                         <p className="text-[10px] text-muted-foreground">tokens (est)</p>
                       </div>
                     </div>
-                    {bandStatus.lastSummary.fieldsFilledNames.length > 0 && (
+                    {/* Score delta */}
+                    {bandStatus.lastSummary.avgScoreBefore != null && bandStatus.lastSummary.avgScoreAfter != null && (
+                      <div className="flex items-center gap-1.5 text-[11px]" data-testid="summary-score-delta">
+                        <span className="text-muted-foreground">Avg score:</span>
+                        <span className="font-medium text-foreground">{bandStatus.lastSummary.avgScoreBefore}</span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className={`font-semibold ${bandStatus.lastSummary.avgScoreAfter > bandStatus.lastSummary.avgScoreBefore ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
+                          {bandStatus.lastSummary.avgScoreAfter}
+                        </span>
+                        {bandStatus.lastSummary.avgScoreAfter > bandStatus.lastSummary.avgScoreBefore && (
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            (+{(bandStatus.lastSummary.avgScoreAfter - bandStatus.lastSummary.avgScoreBefore).toFixed(1)})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {/* Field fill counts (gap-fill mode) */}
+                    {bandStatus.lastSummary.gapFill && Object.keys(bandStatus.lastSummary.fieldFillCounts ?? {}).length > 0 && (
+                      <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
+                        {Object.entries(bandStatus.lastSummary.fieldFillCounts).map(([f, n]) => (
+                          <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium">
+                            {f.replace(/([A-Z])/g, " $1").toLowerCase()} ×{n}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* Full-pass: just show field names */}
+                    {!bandStatus.lastSummary.gapFill && bandStatus.lastSummary.fieldsFilledNames.length > 0 && (
                       <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
                         {bandStatus.lastSummary.fieldsFilledNames.map((f) => (
-                          <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium">
+                          <span key={f} className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-[10px] px-2 py-0.5 font-medium">
                             {f.replace(/([A-Z])/g, " $1").toLowerCase()}
                           </span>
                         ))}
@@ -3765,7 +3797,7 @@ function Enrichment({ pw }: { pw: string }) {
                     { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true },
                   ]).map((band) => {
                     const isBare = band.id === "bare";
-                    const isGapFill = bandGapFill[band.id] ?? false;
+                    const isGapFill = bandGapFill[band.id] ?? !isBare;
                     const isNewest = bandNewestFirst[band.id] ?? false;
                     const targetCount = isGapFill ? band.gapFillCount : band.count;
                     const estCost = isGapFill ? band.estCostGapFill : band.estCostFull;

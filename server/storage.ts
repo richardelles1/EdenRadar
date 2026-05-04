@@ -269,7 +269,7 @@ export interface IStorage {
   }>, source?: "mini" | "gpt4o" | "deep" | string): Promise<number>;
   bulkUpdateIngestedAssetsGapFill(batch: Array<{
     id: number; mechanismOfAction: string; unmetNeed: string; comparableDrugs: string; innovationClaim: string;
-  }>, source?: string): Promise<number>;
+  }>, source?: string, onFieldFilled?: (field: string) => void): Promise<number>;
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
   getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
@@ -1881,7 +1881,7 @@ export class DatabaseStorage implements IStorage {
 
   async bulkUpdateIngestedAssetsGapFill(batch: Array<{
     id: number; mechanismOfAction: string; unmetNeed: string; comparableDrugs: string; innovationClaim: string;
-  }>, source = "gpt4o"): Promise<number> {
+  }>, source = "gpt4o", onFieldFilled?: (field: string) => void): Promise<number> {
     if (batch.length === 0) return 0;
     let written = 0;
     const now = new Date();
@@ -1932,6 +1932,7 @@ export class DatabaseStorage implements IStorage {
             if (!hv[field] && isGoodValue(data[field])) {
               (update as Record<string, unknown>)[field] = data[field];
               newSources[field] = source;
+              onFieldFilled?.(field);
             }
           }
 

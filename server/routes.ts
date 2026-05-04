@@ -4448,10 +4448,16 @@ export async function registerRoutes(
   let bandShouldStop = false;
   let bandInputTokens = 0;
   let bandOutputTokens = 0;
+  let bandFieldCounts: Record<string, number> = {};
+  let bandAvgScoreBefore: number | null = null;
+  let bandAssetIds: number[] = [];
   let bandLastSummary: {
     band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
     fieldsFilledNames: string[];
+    fieldFillCounts: Record<string, number>;
+    avgScoreBefore: number | null;
+    avgScoreAfter: number | null;
   } | null = null;
 
   const BAND_SCORE_RANGES: Record<string, { min: number | null; max: number | null }> = {
@@ -4511,6 +4517,7 @@ export async function registerRoutes(
       const costPerGapAsset = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
         const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0 };
+        const isBare = id === "bare";
         return {
           id,
           count: d.count,
@@ -4519,9 +4526,10 @@ export async function registerRoutes(
           missingUnmet: d.missingUnmet,
           missingComparable: d.missingComparable,
           missingInnovation: d.missingInnovation,
-          estCostFull: parseFloat((d.count * costPerAsset).toFixed(2)),
-          estCostGapFill: parseFloat((d.gapFillCount * costPerGapAsset).toFixed(2)),
-          needsRescrape: id === "bare",
+          // Bare assets have no content — zero cost, re-scrape required
+          estCostFull: isBare ? 0 : parseFloat((d.count * costPerAsset).toFixed(2)),
+          estCostGapFill: isBare ? 0 : parseFloat((d.gapFillCount * costPerGapAsset).toFixed(2)),
+          needsRescrape: isBare,
         };
       });
       res.json({ bands });
@@ -4534,6 +4542,9 @@ export async function registerRoutes(
     const GPT4O_INPUT_PER_M = 2.50;
     const GPT4O_OUTPUT_PER_M = 10.0;
     const liveCostUsd = (bandInputTokens * GPT4O_INPUT_PER_M + bandOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    const costPerAssetFull = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    const costPerAssetGap = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    const liveProjectedTotalUsd = bandTotal * (bandGapFill ? costPerAssetGap : costPerAssetFull);
     res.json({
       running: bandRunning,
       band: bandBand || null,
@@ -4543,8 +4554,10 @@ export async function registerRoutes(
       succeeded: bandSucceeded,
       failed: bandFailed,
       liveCostUsd: parseFloat(liveCostUsd.toFixed(4)),
+      liveProjectedTotalUsd: parseFloat(liveProjectedTotalUsd.toFixed(4)),
       liveInputTokens: bandInputTokens,
       liveOutputTokens: bandOutputTokens,
+      liveFieldCounts: bandFieldCounts,
       lastSummary: bandLastSummary,
     });
   });
@@ -4559,7 +4572,7 @@ export async function registerRoutes(
     if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
     if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is already running — stop it first" });
 
-    const { band, gapFill = false, cap = 500, newestFirst = false } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean };
+    const { band, gapFill = true, cap = 500, newestFirst = false, fields } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean; fields?: string[] };
     const range = BAND_SCORE_RANGES[band];
     if (!range) return res.status(400).json({ error: `Unknown band: ${band}` });
     if (band === "bare") return res.status(400).json({ error: "Bare assets lack content — re-scrape first" });
@@ -4644,6 +4657,24 @@ export async function registerRoutes(
 
       if (assets.length === 0) return res.json({ message: "No assets found for this band/mode", total: 0 });
 
+      // ── Pre-run: sample avg completeness score of target assets ──────────
+      const assetIdList = assets.map((a) => a.id);
+      let avgScoreBefore: number | null = null;
+      try {
+        const scoreRow = await db.execute<{ avg_score: string | null }>(sql`
+          SELECT AVG(completeness_score)::float AS avg_score
+          FROM ingested_assets
+          WHERE id = ANY(${assetIdList}::int[]) AND completeness_score IS NOT NULL
+        `);
+        const raw = scoreRow.rows[0]?.avg_score;
+        avgScoreBefore = raw != null ? parseFloat(parseFloat(raw).toFixed(1)) : null;
+      } catch { /* non-fatal */ }
+
+      // ── Canonical gap-fill target fields (overridable) ───────────────────
+      const ALL_GAP_FILL_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
+      const GAP_FILL_FIELDS = (fields && fields.length > 0) ? fields : ALL_GAP_FILL_FIELDS;
+      const FULL_PASS_FIELDS = ["target", "modality", "indication", "developmentStage", "mechanismOfAction", "innovationClaim", "unmetNeed", "comparableDrugs", "licensingReadiness"];
+
       bandRunning = true;
       bandBand = band;
       bandGapFill = gapFill;
@@ -4654,38 +4685,53 @@ export async function registerRoutes(
       bandShouldStop = false;
       bandInputTokens = 0;
       bandOutputTokens = 0;
+      bandFieldCounts = {};
+      bandAvgScoreBefore = avgScoreBefore;
+      bandAssetIds = assetIdList;
 
       res.json({ message: "Band enrichment started", band, gapFill, newestFirst, total: assets.length });
 
-      const GAP_FILL_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
-      const FULL_PASS_FIELDS = ["target", "modality", "indication", "developmentStage", "mechanismOfAction", "innovationClaim", "unmetNeed", "comparableDrugs", "licensingReadiness"];
       const startMs = Date.now();
 
+      // Helper: compute per-asset missing fields from the 4 gap-fill targets
+      const isEmpty = (v: string | null) => !v || v.trim() === "";
+      const perAssetFields = (a: typeof assets[0]) =>
+        GAP_FILL_FIELDS.filter((f) => {
+          if (f === "mechanismOfAction") return isEmpty(a.mechanismOfAction);
+          if (f === "unmetNeed") return isEmpty(a.unmetNeed);
+          // comparableDrugs and innovationClaim always include when targeted
+          return true;
+        });
+
       deepEnrichBatch(
-        assets.map((a) => ({
-          id: a.id,
-          assetName: a.assetName,
-          summary: a.summary,
-          abstract: a.abstract,
-          ctx: {
-            categories: a.categories,
-            patentStatus: a.patentStatus,
-            licensingStatus: a.licensingStatus,
-            inventors: a.inventors,
-            sourceUrl: a.sourceUrl,
-            currentValues: {
-              target: a.target,
-              modality: a.modality,
-              indication: a.indication,
-              developmentStage: a.developmentStage,
+        assets.map((a) => {
+          // Gap-fill: compute actual per-asset missing fields so we only request what's needed
+          const assetFields = gapFill ? perAssetFields(a) : null;
+          return {
+            id: a.id,
+            assetName: a.assetName,
+            summary: a.summary,
+            abstract: a.abstract,
+            ctx: {
+              categories: a.categories,
+              patentStatus: a.patentStatus,
+              licensingStatus: a.licensingStatus,
+              inventors: a.inventors,
+              sourceUrl: a.sourceUrl,
+              currentValues: {
+                target: a.target,
+                modality: a.modality,
+                indication: a.indication,
+                developmentStage: a.developmentStage,
+              },
+              fieldsToGenerate: assetFields && assetFields.length > 0 ? assetFields : null,
             },
-            fieldsToGenerate: gapFill ? GAP_FILL_FIELDS : null,
-          },
-        })),
+          };
+        }),
         20,
         async (batch) => {
           if (gapFill) {
-            // Gap-fill: selective writer that preserves non-target fields and merges scores
+            // Gap-fill: selective writer that only writes target fields and merges completeness score
             return storage.bulkUpdateIngestedAssetsGapFill(
               batch.map((r) => ({
                 id: r.id,
@@ -4695,6 +4741,7 @@ export async function registerRoutes(
                 innovationClaim: r.innovationClaim,
               })),
               "gpt4o",
+              (field) => { bandFieldCounts[field] = (bandFieldCounts[field] ?? 0) + 1; },
             );
           }
           return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
@@ -4709,19 +4756,35 @@ export async function registerRoutes(
           bandInputTokens += inTok;
           bandOutputTokens += outTok;
         },
-      ).then((result) => {
+      ).then(async (result) => {
         bandRunning = false;
         const durationMs = Date.now() - startMs;
         const GPT4O_INPUT_PER_M = 2.50;
         const GPT4O_OUTPUT_PER_M = 10.0;
         const costUsd = (result.inputTokensEst * GPT4O_INPUT_PER_M + result.outputTokensEst * GPT4O_OUTPUT_PER_M) / 1_000_000;
+
+        // Post-run: query avg completeness score of the same asset IDs
+        let avgScoreAfter: number | null = null;
+        try {
+          const postRow = await db.execute<{ avg_score: string | null }>(sql`
+            SELECT AVG(completeness_score)::float AS avg_score
+            FROM ingested_assets
+            WHERE id = ANY(${bandAssetIds}::int[]) AND completeness_score IS NOT NULL
+          `);
+          const rawPost = postRow.rows[0]?.avg_score;
+          avgScoreAfter = rawPost != null ? parseFloat(parseFloat(rawPost).toFixed(1)) : null;
+        } catch { /* non-fatal */ }
+
         bandLastSummary = {
           band, gapFill, total: assets.length, succeeded: result.succeeded, failed: result.failed,
           inputTokens: result.inputTokensEst, outputTokens: result.outputTokensEst,
           costUsd: parseFloat(costUsd.toFixed(4)), durationMs,
           fieldsFilledNames: gapFill ? GAP_FILL_FIELDS : FULL_PASS_FIELDS,
+          fieldFillCounts: { ...bandFieldCounts },
+          avgScoreBefore: bandAvgScoreBefore,
+          avgScoreAfter,
         };
-        console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}`);
+        console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, score ${bandAvgScoreBefore} → ${avgScoreAfter}`);
       }).catch((e) => {
         bandRunning = false;
         console.error("[band-enrich] failed:", e);
