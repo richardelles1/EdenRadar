@@ -221,7 +221,12 @@ export async function classifyAsset(
     const text = response.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(text.replace(/```json?|```/g, "").trim());
 
-    const assetClass: AssetClass = ASSET_CLASSES.has(parsed.assetClass) ? parsed.assetClass : "other";
+    // In gap-fill mode the response schema only contains the target fields — `assetClass` is
+    // absent from the parsed JSON. Since run-band pre-filters to asset_class='drug_biologic',
+    // force isDrug=true so drug-specific fields are extracted correctly.
+    const assetClass: AssetClass = gapFillFields
+      ? "drug_biologic"
+      : ASSET_CLASSES.has(parsed.assetClass) ? parsed.assetClass : "other";
     const isDrug = assetClass === "drug_biologic";
 
     // Parse device attributes for non-drug classes
