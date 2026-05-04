@@ -4451,6 +4451,7 @@ export async function registerRoutes(
   let bandLastSummary: {
     band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
+    fieldsFilledNames: string[];
   } | null = null;
 
   const BAND_SCORE_RANGES: Record<string, { min: number | null; max: number | null }> = {
@@ -4465,6 +4466,7 @@ export async function registerRoutes(
     try {
       const rows = await db.execute<{
         band: string; total: string; gap_fill_count: string;
+        missing_moa: string; missing_unmet: string; missing_comparable: string; missing_innovation: string;
       }>(sql`
         SELECT
           CASE
@@ -4477,30 +4479,49 @@ export async function registerRoutes(
           COUNT(*) AS total,
           COUNT(CASE
             WHEN asset_class = 'drug_biologic'
-              AND (mechanism_of_action IS NULL OR mechanism_of_action = '')
-              AND (unmet_need IS NULL OR unmet_need = '')
+              AND ((mechanism_of_action IS NULL OR mechanism_of_action = '')
+                OR (unmet_need IS NULL OR unmet_need = ''))
             THEN 1 END
-          ) AS gap_fill_count
+          ) AS gap_fill_count,
+          COUNT(CASE WHEN mechanism_of_action IS NULL OR mechanism_of_action = '' THEN 1 END) AS missing_moa,
+          COUNT(CASE WHEN unmet_need IS NULL OR unmet_need = '' THEN 1 END) AS missing_unmet,
+          COUNT(CASE WHEN comparable_drugs IS NULL OR comparable_drugs = '' THEN 1 END) AS missing_comparable,
+          COUNT(CASE WHEN innovation_claim IS NULL OR innovation_claim = '' THEN 1 END) AS missing_innovation
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY band
       `);
-      const bandMap: Record<string, { count: number; gapFillCount: number }> = {};
+      const bandMap: Record<string, {
+        count: number; gapFillCount: number;
+        missingMoa: number; missingUnmet: number; missingComparable: number; missingInnovation: number;
+      }> = {};
       for (const r of rows.rows) {
-        bandMap[r.band] = { count: parseInt(r.total, 10), gapFillCount: parseInt(r.gap_fill_count, 10) };
+        bandMap[r.band] = {
+          count: parseInt(r.total, 10),
+          gapFillCount: parseInt(r.gap_fill_count, 10),
+          missingMoa: parseInt(r.missing_moa, 10),
+          missingUnmet: parseInt(r.missing_unmet, 10),
+          missingComparable: parseInt(r.missing_comparable, 10),
+          missingInnovation: parseInt(r.missing_innovation, 10),
+        };
       }
       const GPT4O_INPUT_PER_M = 2.50;
       const GPT4O_OUTPUT_PER_M = 10.0;
       const costPerAsset = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const costPerGapAsset = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
-        const d = bandMap[id] ?? { count: 0, gapFillCount: 0 };
+        const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0 };
         return {
           id,
           count: d.count,
           gapFillCount: d.gapFillCount,
+          missingMoa: d.missingMoa,
+          missingUnmet: d.missingUnmet,
+          missingComparable: d.missingComparable,
+          missingInnovation: d.missingInnovation,
           estCostFull: parseFloat((d.count * costPerAsset).toFixed(2)),
           estCostGapFill: parseFloat((d.gapFillCount * costPerGapAsset).toFixed(2)),
+          needsRescrape: id === "bare",
         };
       });
       res.json({ bands });
@@ -4538,7 +4559,7 @@ export async function registerRoutes(
     if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
     if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is already running — stop it first" });
 
-    const { band, gapFill = false, cap = 500 } = req.body as { band: string; gapFill?: boolean; cap?: number };
+    const { band, gapFill = false, cap = 500, newestFirst = false } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean };
     const range = BAND_SCORE_RANGES[band];
     if (!range) return res.status(400).json({ error: `Unknown band: ${band}` });
     if (band === "bare") return res.status(400).json({ error: "Bare assets lack content — re-scrape first" });
@@ -4577,7 +4598,7 @@ export async function registerRoutes(
             AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR unmet_need IS NULL OR unmet_need = '')
             AND ${rangeClause}
             AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
-          ORDER BY completeness_score DESC NULLS LAST
+          ORDER BY ${newestFirst ? sql`first_seen_at DESC NULLS LAST` : sql`completeness_score DESC NULLS LAST`}
           LIMIT ${cap}
         `);
         assets = rows.rows.map((r) => ({
@@ -4609,7 +4630,7 @@ export async function registerRoutes(
           WHERE relevant = true
             AND ${rangeClause}
             AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
-          ORDER BY completeness_score DESC NULLS LAST
+          ORDER BY ${newestFirst ? sql`first_seen_at DESC NULLS LAST` : sql`completeness_score DESC NULLS LAST`}
           LIMIT ${cap}
         `);
         assets = rows.rows.map((r) => ({
@@ -4634,9 +4655,10 @@ export async function registerRoutes(
       bandInputTokens = 0;
       bandOutputTokens = 0;
 
-      res.json({ message: "Band enrichment started", band, gapFill, total: assets.length });
+      res.json({ message: "Band enrichment started", band, gapFill, newestFirst, total: assets.length });
 
       const GAP_FILL_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
+      const FULL_PASS_FIELDS = ["target", "modality", "indication", "developmentStage", "mechanismOfAction", "innovationClaim", "unmetNeed", "comparableDrugs", "licensingReadiness"];
       const startMs = Date.now();
 
       deepEnrichBatch(
@@ -4662,6 +4684,19 @@ export async function registerRoutes(
         })),
         20,
         async (batch) => {
+          if (gapFill) {
+            // Gap-fill: selective writer that preserves non-target fields and merges scores
+            return storage.bulkUpdateIngestedAssetsGapFill(
+              batch.map((r) => ({
+                id: r.id,
+                mechanismOfAction: r.mechanismOfAction,
+                unmetNeed: r.unmetNeed,
+                comparableDrugs: r.comparableDrugs,
+                innovationClaim: r.innovationClaim,
+              })),
+              "gpt4o",
+            );
+          }
           return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
         },
         (processed, _total, succeeded, failed) => {
@@ -4684,6 +4719,7 @@ export async function registerRoutes(
           band, gapFill, total: assets.length, succeeded: result.succeeded, failed: result.failed,
           inputTokens: result.inputTokensEst, outputTokens: result.outputTokensEst,
           costUsd: parseFloat(costUsd.toFixed(4)), durationMs,
+          fieldsFilledNames: gapFill ? GAP_FILL_FIELDS : FULL_PASS_FIELDS,
         };
         console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}`);
       }).catch((e) => {

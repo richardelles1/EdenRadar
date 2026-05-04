@@ -1864,8 +1864,13 @@ interface BandInfo {
   id: "rich" | "decent" | "sparse" | "very_sparse" | "bare";
   count: number;
   gapFillCount: number;
+  missingMoa: number;
+  missingUnmet: number;
+  missingComparable: number;
+  missingInnovation: number;
   estCostFull: number;
   estCostGapFill: number;
+  needsRescrape: boolean;
 }
 
 interface BandStatusResponse {
@@ -1882,6 +1887,7 @@ interface BandStatusResponse {
   lastSummary: {
     band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
+    fieldsFilledNames: string[];
   } | null;
 }
 
@@ -2850,8 +2856,10 @@ function Enrichment({ pw }: { pw: string }) {
 
   // ── Surgical Band Enrichment (Step 3) state ──────────────────────────────
   const [bandGapFill, setBandGapFill] = React.useState<Record<string, boolean>>({});
+  const [bandNewestFirst, setBandNewestFirst] = React.useState<Record<string, boolean>>({});
   const [bandPolling, setBandPolling] = React.useState(false);
   const [bandConfirm, setBandConfirm] = React.useState<string | null>(null);
+  const [bandSummaryDismissed, setBandSummaryDismissed] = React.useState(false);
 
   const { data: bandsData, refetch: refetchBands } = useQuery<{ bands: BandInfo[] }>({
     queryKey: ["/api/admin/enrichment/bands", pw],
@@ -2891,11 +2899,11 @@ function Enrichment({ pw }: { pw: string }) {
   }, [bandStatus?.running]);
 
   const runBand = useMutation({
-    mutationFn: async ({ band, gapFill, cap }: { band: string; gapFill: boolean; cap: number }) => {
+    mutationFn: async ({ band, gapFill, cap, newestFirst }: { band: string; gapFill: boolean; cap: number; newestFirst: boolean }) => {
       const res = await fetch("/api/admin/enrichment/run-band", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-        body: JSON.stringify({ band, gapFill, cap }),
+        body: JSON.stringify({ band, gapFill, cap, newestFirst }),
       });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
@@ -2903,6 +2911,7 @@ function Enrichment({ pw }: { pw: string }) {
     onSuccess: (_d, vars) => {
       setBandPolling(true);
       setBandConfirm(null);
+      setBandSummaryDismissed(false);
       refetchBandStatus();
       toast({
         title: `Band run started`,
@@ -3659,7 +3668,7 @@ function Enrichment({ pw }: { pw: string }) {
               </div>
               <div className="p-4 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Target a specific quality band for GPT-4o deep enrichment. Enable <span className="font-medium text-foreground">gap-fill</span> to only generate missing MoA/unmet-need fields on drug assets — minimising cost.
+                  Target a specific quality band for GPT-4o deep enrichment. Enable <span className="font-medium text-foreground">gap-fill</span> to only generate missing MoA/unmet-need fields on drug assets — minimising cost. <span className="font-medium text-foreground">Newest first</span> processes recently ingested assets before older ones.
                 </p>
 
                 {/* Live progress */}
@@ -3694,27 +3703,31 @@ function Enrichment({ pw }: { pw: string }) {
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
                       <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">
-                        Live cost: ${bandStatus.liveCostUsd.toFixed(4)}
+                        Live cost: ${bandStatus.liveCostUsd.toFixed(4)} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (est)
                       </span>
                     </div>
                   </div>
                 )}
 
                 {/* Last run summary */}
-                {!bandStatus?.running && bandStatus?.lastSummary && (
-                  <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1" data-testid="band-last-summary">
+                {!bandStatus?.running && !bandSummaryDismissed && bandStatus?.lastSummary && (
+                  <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-2" data-testid="band-last-summary">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
                       <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
                         Last run: {bandStatus.lastSummary.band.replace("_", " ")} band{bandStatus.lastSummary.gapFill ? " gap-fill" : ""}
                       </span>
-                      <span className="ml-auto text-[11px] text-muted-foreground">
-                        {Math.round(bandStatus.lastSummary.durationMs / 1000)}s
-                      </span>
+                      <span className="text-[11px] text-muted-foreground">{Math.round(bandStatus.lastSummary.durationMs / 1000)}s</span>
+                      <button
+                        onClick={() => setBandSummaryDismissed(true)}
+                        className="ml-auto text-[11px] text-muted-foreground hover:text-foreground"
+                        data-testid="button-band-dismiss-summary"
+                        aria-label="Dismiss summary"
+                      >✕</button>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 pt-1">
+                    <div className="grid grid-cols-4 gap-2">
                       <div className="text-center">
-                        <p className="text-sm font-bold text-foreground">{bandStatus.lastSummary.succeeded.toLocaleString()}</p>
+                        <p className="text-sm font-bold text-foreground" data-testid="summary-succeeded">{bandStatus.lastSummary.succeeded.toLocaleString()}</p>
                         <p className="text-[10px] text-muted-foreground">improved</p>
                       </div>
                       <div className="text-center">
@@ -3722,24 +3735,38 @@ function Enrichment({ pw }: { pw: string }) {
                         <p className="text-[10px] text-muted-foreground">failed</p>
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-bold text-violet-600">${bandStatus.lastSummary.costUsd.toFixed(4)}</p>
+                        <p className="text-sm font-bold text-violet-600" data-testid="summary-cost">${bandStatus.lastSummary.costUsd.toFixed(4)}</p>
                         <p className="text-[10px] text-muted-foreground">cost</p>
                       </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">{(bandStatus.lastSummary.inputTokens + bandStatus.lastSummary.outputTokens).toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">tokens (est)</p>
+                      </div>
                     </div>
+                    {bandStatus.lastSummary.fieldsFilledNames.length > 0 && (
+                      <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
+                        {bandStatus.lastSummary.fieldsFilledNames.map((f) => (
+                          <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium">
+                            {f.replace(/([A-Z])/g, " $1").toLowerCase()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Band rows */}
                 <div className="space-y-2" data-testid="band-rows">
                   {(bandsData?.bands ?? [
-                    { id: "rich" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
-                    { id: "decent" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
-                    { id: "sparse" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
-                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
-                    { id: "bare" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
+                    { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true },
                   ]).map((band) => {
                     const isBare = band.id === "bare";
                     const isGapFill = bandGapFill[band.id] ?? false;
+                    const isNewest = bandNewestFirst[band.id] ?? false;
                     const targetCount = isGapFill ? band.gapFillCount : band.count;
                     const estCost = isGapFill ? band.estCostGapFill : band.estCostFull;
                     const isThisRunning = bandStatus?.running && bandStatus.band === band.id;
@@ -3755,12 +3782,21 @@ function Enrichment({ pw }: { pw: string }) {
                     };
                     const m = bandMeta[band.id];
 
+                    // Per-field gap pills for non-bare bands
+                    const gapPills = !isBare ? [
+                      { key: "moa", label: "MoA", count: band.missingMoa },
+                      { key: "unmet", label: "Unmet need", count: band.missingUnmet },
+                      { key: "comparable", label: "Comparables", count: band.missingComparable },
+                      { key: "innovation", label: "Innovation", count: band.missingInnovation },
+                    ].filter((p) => p.count > 0) : [];
+
                     return (
                       <div
                         key={band.id}
                         className={`rounded-lg border ${m.border} ${m.bg} p-3 space-y-2`}
                         data-testid={`band-row-${band.id}`}
                       >
+                        {/* Header row: dot + label + count + cost */}
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`h-2 w-2 rounded-full ${m.dot} shrink-0`} />
                           <span className={`text-xs font-semibold ${m.text}`}>{m.label}</span>
@@ -3778,7 +3814,19 @@ function Enrichment({ pw }: { pw: string }) {
                           </span>
                         </div>
 
-                        {!isBare && (
+                        {/* Per-field gap pills */}
+                        {gapPills.length > 0 && (
+                          <div className="flex flex-wrap gap-1" data-testid={`band-gap-pills-${band.id}`}>
+                            {gapPills.map((p) => (
+                              <span key={p.key} className="rounded-full bg-white/60 dark:bg-white/5 border border-current/10 text-[10px] px-1.5 py-0.5 text-muted-foreground">
+                                {p.count.toLocaleString()} missing {p.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Controls */}
+                        {!isBare ? (
                           <div className="flex items-center gap-3 flex-wrap">
                             {/* Gap-fill toggle */}
                             <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-gapfill-toggle-${band.id}`}>
@@ -3793,6 +3841,17 @@ function Enrichment({ pw }: { pw: string }) {
                               </span>
                             </label>
 
+                            {/* Newest first toggle */}
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-newest-toggle-${band.id}`}>
+                              <div
+                                onClick={() => setBandNewestFirst((prev) => ({ ...prev, [band.id]: !prev[band.id] }))}
+                                className={`relative h-4 w-7 rounded-full transition-colors cursor-pointer ${isNewest ? "bg-violet-400" : "bg-muted-foreground/30"}`}
+                              >
+                                <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${isNewest ? "translate-x-3" : "translate-x-0.5"}`} />
+                              </div>
+                              <span className="text-[11px] text-muted-foreground">Newest first</span>
+                            </label>
+
                             {/* Run / Confirm */}
                             {isConfirming ? (
                               <div className="flex items-center gap-1.5 flex-wrap">
@@ -3803,7 +3862,7 @@ function Enrichment({ pw }: { pw: string }) {
                                   size="sm"
                                   className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
                                   disabled={runBand.isPending}
-                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: 500 })}
+                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: 500, newestFirst: isNewest })}
                                   data-testid={`button-band-confirm-${band.id}`}
                                 >
                                   {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
@@ -3833,12 +3892,21 @@ function Enrichment({ pw }: { pw: string }) {
                               </Button>
                             )}
                           </div>
-                        )}
-
-                        {isBare && (
-                          <p className="text-[11px] text-muted-foreground">
-                            Assets with zero content — re-scrape first before enriching.
-                          </p>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-6 px-2.5 text-[11px] border-border text-muted-foreground opacity-50 cursor-not-allowed"
+                              disabled
+                              data-testid="button-band-run-bare"
+                              title="Bare assets have no content — run a scrape pass first to gather text before enriching"
+                            >
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Run full pass
+                            </Button>
+                            <span className="text-[11px] text-muted-foreground">Re-scrape first</span>
+                          </div>
                         )}
                       </div>
                     );

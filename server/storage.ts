@@ -267,6 +267,9 @@ export interface IStorage {
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }>, source?: "mini" | "gpt4o" | "deep" | string): Promise<number>;
+  bulkUpdateIngestedAssetsGapFill(batch: Array<{
+    id: number; mechanismOfAction: string; unmetNeed: string; comparableDrugs: string; innovationClaim: string;
+  }>, source?: string): Promise<number>;
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
   getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
@@ -1870,6 +1873,95 @@ export class DatabaseStorage implements IStorage {
           written++;
         } catch (e) {
           console.error(`[bulkUpdate] failed for asset ${data.id}:`, e);
+        }
+      }
+    });
+    return written;
+  }
+
+  async bulkUpdateIngestedAssetsGapFill(batch: Array<{
+    id: number; mechanismOfAction: string; unmetNeed: string; comparableDrugs: string; innovationClaim: string;
+  }>, source = "gpt4o"): Promise<number> {
+    if (batch.length === 0) return 0;
+    let written = 0;
+    const now = new Date();
+    const GAP_FILL_TARGET_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"] as const;
+    await db.transaction(async (tx) => {
+      for (const data of batch) {
+        try {
+          // Fetch full current state so we can merge safely and recompute score
+          const [cur] = await tx.select({
+            humanVerified: ingestedAssets.humanVerified,
+            enrichmentSources: ingestedAssets.enrichmentSources,
+            deepEnrichAttempts: ingestedAssets.deepEnrichAttempts,
+            // All fields needed for completenessScore recompute
+            assetClass: ingestedAssets.assetClass,
+            target: ingestedAssets.target,
+            modality: ingestedAssets.modality,
+            indication: ingestedAssets.indication,
+            developmentStage: ingestedAssets.developmentStage,
+            mechanismOfAction: ingestedAssets.mechanismOfAction,
+            innovationClaim: ingestedAssets.innovationClaim,
+            ipType: ingestedAssets.ipType,
+            unmetNeed: ingestedAssets.unmetNeed,
+            comparableDrugs: ingestedAssets.comparableDrugs,
+            licensingReadiness: ingestedAssets.licensingReadiness,
+            deviceAttributes: ingestedAssets.deviceAttributes,
+            summary: ingestedAssets.summary,
+            abstract: ingestedAssets.abstract,
+            categories: ingestedAssets.categories,
+            inventors: ingestedAssets.inventors,
+            patentStatus: ingestedAssets.patentStatus,
+          }).from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
+
+          if (!cur) continue;
+
+          const hv: Record<string, boolean> = (cur.humanVerified as Record<string, boolean>) ?? {};
+          const existingSources: Record<string, string> = (cur.enrichmentSources as Record<string, string>) ?? {};
+          const newSources = { ...existingSources };
+          const update: Partial<typeof ingestedAssets.$inferInsert> = {
+            enrichedAt: now,
+            deepEnrichAttempts: (cur.deepEnrichAttempts ?? 0) + 1,
+          };
+
+          // Only write target fields if model returned non-empty, non-"unknown" value
+          // and field is not human-verified — never downgrade good data
+          const isGoodValue = (v: string) => v && v.trim() !== "" && v.toLowerCase() !== "unknown" && v.toLowerCase() !== "n/a";
+
+          for (const field of GAP_FILL_TARGET_FIELDS) {
+            if (!hv[field] && isGoodValue(data[field])) {
+              (update as Record<string, unknown>)[field] = data[field];
+              newSources[field] = source;
+            }
+          }
+
+          // Recompute completenessScore from MERGED state (preserve non-target field values)
+          const merged = {
+            assetClass: cur.assetClass,
+            target: cur.target,
+            modality: cur.modality,
+            indication: cur.indication,
+            developmentStage: cur.developmentStage ?? "unknown",
+            mechanismOfAction: (update.mechanismOfAction as string | undefined) ?? cur.mechanismOfAction ?? "",
+            innovationClaim: (update.innovationClaim as string | undefined) ?? cur.innovationClaim ?? "",
+            ipType: cur.ipType ?? "",
+            unmetNeed: (update.unmetNeed as string | undefined) ?? cur.unmetNeed ?? "",
+            comparableDrugs: (update.comparableDrugs as string | undefined) ?? cur.comparableDrugs ?? "",
+            licensingReadiness: cur.licensingReadiness ?? "",
+            deviceAttributes: cur.deviceAttributes as Record<string, unknown> | null | undefined,
+            summary: cur.summary,
+            abstract: cur.abstract,
+            categories: cur.categories,
+            inventors: cur.inventors,
+            patentStatus: cur.patentStatus,
+          };
+          update.completenessScore = computeCompletenessScore(merged);
+          update.enrichmentSources = newSources;
+
+          await tx.update(ingestedAssets).set(update).where(eq(ingestedAssets.id, data.id));
+          written++;
+        } catch (e) {
+          console.error(`[bulkGapFill] failed for asset ${data.id}:`, e);
         }
       }
     });
