@@ -1868,6 +1868,7 @@ interface BandInfo {
   missingUnmet: number;
   missingComparable: number;
   missingInnovation: number;
+  totalMissingFields: number;
   estCostFull: number;
   estCostGapFill: number;
   needsRescrape: boolean;
@@ -3791,11 +3792,11 @@ function Enrichment({ pw }: { pw: string }) {
                 {/* Band rows */}
                 <div className="space-y-2" data-testid="band-rows">
                   {(bandsData?.bands ?? [
-                    { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true },
+                    { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
+                    { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true },
                   ]).map((band) => {
                     const isBare = band.id === "bare";
                     const isGapFill = bandGapFill[band.id] ?? !isBare;

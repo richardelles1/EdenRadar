@@ -4493,10 +4493,10 @@ export async function registerRoutes(
               )
             THEN 1 END
           ) AS gap_fill_count,
-          COUNT(CASE WHEN mechanism_of_action IS NULL OR mechanism_of_action = '' THEN 1 END) AS missing_moa,
-          COUNT(CASE WHEN unmet_need IS NULL OR unmet_need = '' THEN 1 END) AS missing_unmet,
-          COUNT(CASE WHEN comparable_drugs IS NULL OR comparable_drugs = '' THEN 1 END) AS missing_comparable,
-          COUNT(CASE WHEN innovation_claim IS NULL OR innovation_claim = '' THEN 1 END) AS missing_innovation
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (mechanism_of_action IS NULL OR mechanism_of_action = '') THEN 1 END) AS missing_moa,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (unmet_need IS NULL OR unmet_need = '') THEN 1 END) AS missing_unmet,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (comparable_drugs IS NULL OR comparable_drugs = '') THEN 1 END) AS missing_comparable,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (innovation_claim IS NULL OR innovation_claim = '') THEN 1 END) AS missing_innovation
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY band
@@ -4517,11 +4517,16 @@ export async function registerRoutes(
       }
       const GPT4O_INPUT_PER_M = 2.50;
       const GPT4O_OUTPUT_PER_M = 10.0;
+      // Full-pass: fixed cost per asset (all fields)
       const costPerAsset = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
-      const costPerGapAsset = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
+      // Gap-fill: cost per targeted field-fill (4 fields split evenly across 1000 input + 300 output)
+      const costPerFieldFill = ((1000 / 4) * GPT4O_INPUT_PER_M + (300 / 4) * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
         const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0 };
         const isBare = id === "bare";
+        // Formula-based gap-fill cost: total missing field-fills across all gap-fill eligible assets
+        // (sum of per-field missing counts for drug_biologic in this band)
+        const totalMissingFields = d.missingMoa + d.missingUnmet + d.missingComparable + d.missingInnovation;
         return {
           id,
           count: d.count,
@@ -4530,9 +4535,11 @@ export async function registerRoutes(
           missingUnmet: d.missingUnmet,
           missingComparable: d.missingComparable,
           missingInnovation: d.missingInnovation,
+          totalMissingFields,
           // Bare assets have no content — zero cost, re-scrape required
           estCostFull: isBare ? 0 : parseFloat((d.count * costPerAsset).toFixed(2)),
-          estCostGapFill: isBare ? 0 : parseFloat((d.gapFillCount * costPerGapAsset).toFixed(2)),
+          // Gap-fill cost = avg missing fields per asset × per-field-fill cost × eligible asset count
+          estCostGapFill: isBare ? 0 : parseFloat((totalMissingFields * costPerFieldFill).toFixed(2)),
           needsRescrape: isBare,
         };
       });

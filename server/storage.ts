@@ -1964,7 +1964,11 @@ export class DatabaseStorage implements IStorage {
           update.enrichmentSources = newSources;
 
           await tx.update(ingestedAssets).set(update).where(eq(ingestedAssets.id, data.id));
-          written++;
+          // Only count as "succeeded/improved" when at least one gap field was actually written
+          const anyFieldFilled = GAP_FILL_TARGET_FIELDS.some(
+            (f) => f in update && (update as Record<string, unknown>)[f] != null,
+          );
+          if (anyFieldFilled) written++;
         } catch (e) {
           console.error(`[bulkGapFill] failed for asset ${data.id}:`, e);
         }
