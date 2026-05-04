@@ -4583,7 +4583,7 @@ export async function registerRoutes(
     if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
     if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is already running — stop it first" });
 
-    const { band, gapFill = true, cap = 5000, newestFirst = false, fields } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean; fields?: string[] };
+    const { band, gapFill = true, cap = 500, newestFirst = false, fields } = req.body as { band: string; gapFill?: boolean; cap?: number; newestFirst?: boolean; fields?: string[] };
     const range = BAND_SCORE_RANGES[band];
     if (!range) return res.status(400).json({ error: `Unknown band: ${band}` });
     if (band === "bare") return res.status(400).json({ error: "Bare assets lack content — re-scrape first" });

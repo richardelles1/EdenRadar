@@ -3891,27 +3891,36 @@ function Enrichment({ pw }: { pw: string }) {
                               <span>Cap:</span>
                               <input
                                 type="number"
-                                min={1}
-                                max={50000}
-                                step={100}
-                                value={bandCap[band.id] ?? 5000}
-                                onChange={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.max(1, parseInt(e.target.value) || 5000) }))}
+                                min={10}
+                                max={5000}
+                                step={50}
+                                value={bandCap[band.id] ?? 500}
+                                onChange={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
                                 className="w-16 h-5 rounded border border-input bg-background px-1 text-[11px] text-foreground tabular-nums"
                                 data-testid={`band-cap-input-${band.id}`}
                               />
                             </label>
 
                             {/* Run / Confirm */}
-                            {isConfirming ? (
+                            {isConfirming ? (() => {
+                              const capValue = bandCap[band.id] ?? 500;
+                              const effectiveCount = Math.min(targetCount, capValue);
+                              // Per-asset average cost: for gap-fill use formula cost ÷ eligible assets; for full use band average
+                              const perAssetCost = targetCount > 0 ? estCost / targetCount : 0;
+                              const effectiveCost = effectiveCount * perAssetCost;
+                              return (
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[11px] font-semibold text-amber-600">
-                                  Run {targetCount.toLocaleString()} assets (~${estCost.toFixed(2)})?
+                                <span className="text-[11px] font-semibold text-amber-600" data-testid={`band-confirm-text-${band.id}`}>
+                                  Run {effectiveCount.toLocaleString()} assets (~${effectiveCost.toFixed(2)})?
+                                  {effectiveCount < targetCount && (
+                                    <span className="text-amber-500 font-normal"> (capped from {targetCount.toLocaleString()})</span>
+                                  )}
                                 </span>
                                 <Button
                                   size="sm"
                                   className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
                                   disabled={runBand.isPending}
-                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: bandCap[band.id] ?? 5000, newestFirst: isNewest })}
+                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: capValue, newestFirst: isNewest })}
                                   data-testid={`button-band-confirm-${band.id}`}
                                 >
                                   {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
@@ -3926,7 +3935,8 @@ function Enrichment({ pw }: { pw: string }) {
                                   Cancel
                                 </Button>
                               </div>
-                            ) : (
+                              );
+                            })() : (
                               <Button
                                 size="sm"
                                 variant="outline"
