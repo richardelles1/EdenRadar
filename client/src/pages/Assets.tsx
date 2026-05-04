@@ -1024,6 +1024,14 @@ export default function Assets() {
   const uncategorisedCount = pipelinesData?.uncategorisedCount ?? 0;
   const allAssets = data?.assets ?? [];
 
+  // Auto-redirect: if viewing Uncategorised and it empties out, go to All Assets
+  useEffect(() => {
+    if (!pipelinesLoading && selectedPipeline === null && uncategorisedCount === 0) {
+      setSelectedPipeline("all");
+      toast({ title: "All assets are now organised" });
+    }
+  }, [uncategorisedCount, pipelinesLoading]);
+
   const sourceTypeCounts: Record<SourceTypeKey, number> = { tto: 0, patent: 0, trial: 0, literature: 0 };
   for (const a of allAssets) sourceTypeCounts[getSourceTypeKey(a.sourceName)]++;
 
