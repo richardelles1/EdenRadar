@@ -1860,6 +1860,31 @@ interface EnrichmentStatus {
   error?: string;
 }
 
+interface BandInfo {
+  id: "rich" | "decent" | "sparse" | "very_sparse" | "bare";
+  count: number;
+  gapFillCount: number;
+  estCostFull: number;
+  estCostGapFill: number;
+}
+
+interface BandStatusResponse {
+  running: boolean;
+  band: string | null;
+  gapFill: boolean;
+  processed: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+  liveCostUsd: number;
+  liveInputTokens: number;
+  liveOutputTokens: number;
+  lastSummary: {
+    band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
+    inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
+  } | null;
+}
+
 interface DatasetQualityGlobal {
   total_relevant: number;
   scored_count: number;
@@ -2823,6 +2848,80 @@ function Enrichment({ pw }: { pw: string }) {
     onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
   });
 
+  // ── Surgical Band Enrichment (Step 3) state ──────────────────────────────
+  const [bandGapFill, setBandGapFill] = React.useState<Record<string, boolean>>({});
+  const [bandPolling, setBandPolling] = React.useState(false);
+  const [bandConfirm, setBandConfirm] = React.useState<string | null>(null);
+
+  const { data: bandsData, refetch: refetchBands } = useQuery<{ bands: BandInfo[] }>({
+    queryKey: ["/api/admin/enrichment/bands", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/bands", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load band data");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: bandStatus, refetch: refetchBandStatus } = useQuery<BandStatusResponse>({
+    queryKey: ["/api/admin/enrichment/band/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/band/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load band status");
+      return res.json();
+    },
+    refetchInterval: bandPolling ? 1500 : false,
+  });
+
+  const prevBandRunningRef = React.useRef<boolean>(false);
+  React.useEffect(() => {
+    const wasRunning = prevBandRunningRef.current;
+    prevBandRunningRef.current = bandStatus?.running ?? false;
+    if (bandStatus?.running && !bandPolling) setBandPolling(true);
+    if (wasRunning && !bandStatus?.running) {
+      setBandPolling(false);
+      refetchBands();
+      if (bandStatus?.lastSummary) {
+        toast({
+          title: "Band enrichment complete",
+          description: `${bandStatus.lastSummary.succeeded} assets improved · $${bandStatus.lastSummary.costUsd.toFixed(4)} spent`,
+        });
+      }
+    }
+  }, [bandStatus?.running]);
+
+  const runBand = useMutation({
+    mutationFn: async ({ band, gapFill, cap }: { band: string; gapFill: boolean; cap: number }) => {
+      const res = await fetch("/api/admin/enrichment/run-band", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ band, gapFill, cap }),
+      });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: (_d, vars) => {
+      setBandPolling(true);
+      setBandConfirm(null);
+      refetchBandStatus();
+      toast({
+        title: `Band run started`,
+        description: `GPT-4o running on ${vars.band.replace("_", " ")} band${vars.gapFill ? " (gap-fill)" : ""}…`,
+      });
+    },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
+  });
+
+  const stopBand = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/band/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Stop signal sent" }); refetchBandStatus(); },
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
   const isRunning = status?.status === "running";
   const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
@@ -3551,18 +3650,200 @@ function Enrichment({ pw }: { pw: string }) {
               </div>
             </div>
 
-            {/* ── Step 3: Deep Pass ── */}
-            <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden">
+            {/* ── Step 3: GPT-4o Surgical Band Enrichment ── */}
+            <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden" data-testid="card-band-enrichment">
               <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
                 <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">3</span>
-                <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">GPT-4o Deep Pass</span>
-                <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400">highest quality</span>
+                <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">GPT-4o Surgical Deep Pass</span>
+                <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400">~$0.01/asset</span>
               </div>
-              <div className="p-4">
+              <div className="p-4 space-y-3">
                 <p className="text-xs text-muted-foreground">
-                  Full GPT-4o deep enrichment with long-context reasoning. Handles innovation claims, unmet needs, comparable drugs, and licensing readiness scoring.
-                  Run from the <span className="font-semibold text-violet-700 dark:text-violet-400">EDEN tab</span> using the Deep Enrich controls.
+                  Target a specific quality band for GPT-4o deep enrichment. Enable <span className="font-medium text-foreground">gap-fill</span> to only generate missing MoA/unmet-need fields on drug assets — minimising cost.
                 </p>
+
+                {/* Live progress */}
+                {bandStatus?.running && (
+                  <div className="space-y-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 p-3" data-testid="band-live-progress">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-600" />
+                      <span className="text-xs font-medium text-violet-700 dark:text-violet-400">
+                        {bandStatus.band?.replace("_", " ")} band{bandStatus.gapFill ? " (gap-fill)" : ""} running…
+                      </span>
+                      <span className="ml-auto text-xs tabular-nums text-muted-foreground" data-testid="band-progress-text">
+                        {bandStatus.processed.toLocaleString()}/{bandStatus.total.toLocaleString()}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => stopBand.mutate()}
+                        disabled={stopBand.isPending}
+                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                        data-testid="button-band-stop"
+                      >
+                        {stopBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                      </Button>
+                    </div>
+                    <div className="w-full bg-violet-100 dark:bg-violet-900/40 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
+                        style={{ width: `${bandStatus.total > 0 ? Math.round((bandStatus.processed / bandStatus.total) * 100) : 0}%` }}
+                        data-testid="band-progress-bar"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                      <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
+                      <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">
+                        Live cost: ${bandStatus.liveCostUsd.toFixed(4)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Last run summary */}
+                {!bandStatus?.running && bandStatus?.lastSummary && (
+                  <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1" data-testid="band-last-summary">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                        Last run: {bandStatus.lastSummary.band.replace("_", " ")} band{bandStatus.lastSummary.gapFill ? " gap-fill" : ""}
+                      </span>
+                      <span className="ml-auto text-[11px] text-muted-foreground">
+                        {Math.round(bandStatus.lastSummary.durationMs / 1000)}s
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">{bandStatus.lastSummary.succeeded.toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">improved</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-foreground">{bandStatus.lastSummary.failed.toLocaleString()}</p>
+                        <p className="text-[10px] text-muted-foreground">failed</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-bold text-violet-600">${bandStatus.lastSummary.costUsd.toFixed(4)}</p>
+                        <p className="text-[10px] text-muted-foreground">cost</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Band rows */}
+                <div className="space-y-2" data-testid="band-rows">
+                  {(bandsData?.bands ?? [
+                    { id: "rich" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
+                    { id: "decent" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
+                    { id: "sparse" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
+                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
+                    { id: "bare" as const, count: 0, gapFillCount: 0, estCostFull: 0, estCostGapFill: 0 },
+                  ]).map((band) => {
+                    const isBare = band.id === "bare";
+                    const isGapFill = bandGapFill[band.id] ?? false;
+                    const targetCount = isGapFill ? band.gapFillCount : band.count;
+                    const estCost = isGapFill ? band.estCostGapFill : band.estCostFull;
+                    const isThisRunning = bandStatus?.running && bandStatus.band === band.id;
+                    const anyRunning = bandStatus?.running;
+                    const isConfirming = bandConfirm === band.id;
+
+                    const bandMeta: Record<string, { label: string; range: string; dot: string; bg: string; border: string; text: string }> = {
+                      rich:        { label: "Rich",        range: "80–100", dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/20",  border: "border-emerald-200 dark:border-emerald-900", text: "text-emerald-700 dark:text-emerald-400" },
+                      decent:      { label: "Decent",      range: "60–79",  dot: "bg-teal-500",    bg: "bg-teal-50 dark:bg-teal-950/20",        border: "border-teal-200 dark:border-teal-900",    text: "text-teal-700 dark:text-teal-400" },
+                      sparse:      { label: "Sparse",      range: "40–59",  dot: "bg-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/20",      border: "border-amber-200 dark:border-amber-900",  text: "text-amber-700 dark:text-amber-400" },
+                      very_sparse: { label: "Very Sparse", range: "1–39",   dot: "bg-orange-500",  bg: "bg-orange-50 dark:bg-orange-950/20",    border: "border-orange-200 dark:border-orange-900", text: "text-orange-700 dark:text-orange-400" },
+                      bare:        { label: "Bare",        range: "0/null", dot: "bg-muted-foreground/40", bg: "bg-muted/20", border: "border-border", text: "text-muted-foreground" },
+                    };
+                    const m = bandMeta[band.id];
+
+                    return (
+                      <div
+                        key={band.id}
+                        className={`rounded-lg border ${m.border} ${m.bg} p-3 space-y-2`}
+                        data-testid={`band-row-${band.id}`}
+                      >
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`h-2 w-2 rounded-full ${m.dot} shrink-0`} />
+                          <span className={`text-xs font-semibold ${m.text}`}>{m.label}</span>
+                          <span className="text-[11px] text-muted-foreground">score {m.range}</span>
+                          <span className="text-[11px] font-medium text-foreground tabular-nums" data-testid={`band-count-${band.id}`}>
+                            {band.count.toLocaleString()} assets
+                          </span>
+                          {!isBare && band.gapFillCount > 0 && (
+                            <span className="text-[11px] text-muted-foreground">
+                              · {band.gapFillCount.toLocaleString()} gap-fillable
+                            </span>
+                          )}
+                          <span className="ml-auto text-[11px] font-medium text-violet-600 dark:text-violet-400 tabular-nums" data-testid={`band-cost-${band.id}`}>
+                            {isBare ? "—" : `~$${estCost.toFixed(2)}`}
+                          </span>
+                        </div>
+
+                        {!isBare && (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {/* Gap-fill toggle */}
+                            <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-gapfill-toggle-${band.id}`}>
+                              <div
+                                onClick={() => setBandGapFill((prev) => ({ ...prev, [band.id]: !prev[band.id] }))}
+                                className={`relative h-4 w-7 rounded-full transition-colors cursor-pointer ${isGapFill ? "bg-violet-500" : "bg-muted-foreground/30"}`}
+                              >
+                                <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${isGapFill ? "translate-x-3" : "translate-x-0.5"}`} />
+                              </div>
+                              <span className="text-[11px] text-muted-foreground">
+                                Gap-fill{isGapFill && band.gapFillCount > 0 ? ` (${band.gapFillCount.toLocaleString()})` : ""}
+                              </span>
+                            </label>
+
+                            {/* Run / Confirm */}
+                            {isConfirming ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] font-semibold text-amber-600">
+                                  Run {targetCount.toLocaleString()} assets (~${estCost.toFixed(2)})?
+                                </span>
+                                <Button
+                                  size="sm"
+                                  className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
+                                  disabled={runBand.isPending}
+                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: 500 })}
+                                  data-testid={`button-band-confirm-${band.id}`}
+                                >
+                                  {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-6 px-2 text-[11px]"
+                                  onClick={() => setBandConfirm(null)}
+                                  data-testid={`button-band-cancel-${band.id}`}
+                                >
+                                  Cancel
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={`h-6 px-2.5 text-[11px] ${m.border} ${m.text} hover:bg-white/60 dark:hover:bg-white/5`}
+                                disabled={anyRunning || targetCount === 0 || runBand.isPending}
+                                onClick={() => setBandConfirm(band.id)}
+                                data-testid={`button-band-run-${band.id}`}
+                                title={isThisRunning ? "Running…" : targetCount === 0 ? "No assets to process" : `Run GPT-4o on ${targetCount.toLocaleString()} assets`}
+                              >
+                                {isThisRunning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
+                                Run {isGapFill ? "gap-fill" : "full pass"}
+                              </Button>
+                            )}
+                          </div>
+                        )}
+
+                        {isBare && (
+                          <p className="text-[11px] text-muted-foreground">
+                            Assets with zero content — re-scrape first before enriching.
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
 

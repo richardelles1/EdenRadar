@@ -67,6 +67,12 @@ export interface AssetContext {
     indication?: string | null;
     developmentStage?: string | null;
   } | null;
+  /**
+   * Gap-fill mode: when set, the model is instructed to ONLY generate values for
+   * these specific fields. All other output fields are returned as "unknown"/null.
+   * Reduces token cost and prevents overwriting already-good fields.
+   */
+  fieldsToGenerate?: string[] | null;
 }
 
 const SYSTEM_PROMPT = `You are a biotech licensing analyst classifying university TTO listings. Analyze the technology and return JSON only (no markdown).
@@ -144,6 +150,10 @@ export async function classifyAsset(
   const focusBlock = unknownFields.length
     ? `\nFocus on filling these currently-unknown fields if the source supports it: ${unknownFields.join(", ")}.`
     : "";
+  // Gap-fill mode: strict override — only generate the requested fields
+  const gapFillBlock = ctx?.fieldsToGenerate?.length
+    ? `\nGAP-FILL MODE: Only generate values for these fields: ${ctx.fieldsToGenerate.join(", ")}. For ALL other output fields return "unknown" or null — do NOT attempt to derive them.`
+    : "";
 
   const inputText = [
     `Title: ${title}`,
@@ -152,6 +162,7 @@ export async function classifyAsset(
     ...contextLines,
     knownBlock,
     focusBlock,
+    gapFillBlock,
   ].filter(Boolean).join("\n");
 
   const fallback: AssetClassification = {

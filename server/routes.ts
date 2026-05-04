@@ -4436,6 +4436,266 @@ export async function registerRoutes(
     res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
   });
 
+  // ── Surgical band enrichment (Step 3 GPT-4o) ─────────────────────────────
+
+  let bandRunning = false;
+  let bandBand = "";
+  let bandGapFill = false;
+  let bandProcessed = 0;
+  let bandTotal = 0;
+  let bandSucceeded = 0;
+  let bandFailed = 0;
+  let bandShouldStop = false;
+  let bandInputTokens = 0;
+  let bandOutputTokens = 0;
+  let bandLastSummary: {
+    band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
+    inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
+  } | null = null;
+
+  const BAND_SCORE_RANGES: Record<string, { min: number | null; max: number | null }> = {
+    rich:       { min: 80,  max: null },
+    decent:     { min: 60,  max: 79   },
+    sparse:     { min: 40,  max: 59   },
+    very_sparse:{ min: 1,   max: 39   },
+    bare:       { min: null, max: 0   },
+  };
+
+  app.get("/api/admin/enrichment/bands", requireAdmin, async (req, res) => {
+    try {
+      const rows = await db.execute<{
+        band: string; total: string; gap_fill_count: string;
+      }>(sql`
+        SELECT
+          CASE
+            WHEN completeness_score >= 80 THEN 'rich'
+            WHEN completeness_score >= 60 THEN 'decent'
+            WHEN completeness_score >= 40 THEN 'sparse'
+            WHEN completeness_score >= 1  THEN 'very_sparse'
+            ELSE 'bare'
+          END AS band,
+          COUNT(*) AS total,
+          COUNT(CASE
+            WHEN asset_class = 'drug_biologic'
+              AND (mechanism_of_action IS NULL OR mechanism_of_action = '')
+              AND (unmet_need IS NULL OR unmet_need = '')
+            THEN 1 END
+          ) AS gap_fill_count
+        FROM ingested_assets
+        WHERE relevant = true
+        GROUP BY band
+      `);
+      const bandMap: Record<string, { count: number; gapFillCount: number }> = {};
+      for (const r of rows.rows) {
+        bandMap[r.band] = { count: parseInt(r.total, 10), gapFillCount: parseInt(r.gap_fill_count, 10) };
+      }
+      const GPT4O_INPUT_PER_M = 2.50;
+      const GPT4O_OUTPUT_PER_M = 10.0;
+      const costPerAsset = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
+      const costPerGapAsset = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
+      const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
+        const d = bandMap[id] ?? { count: 0, gapFillCount: 0 };
+        return {
+          id,
+          count: d.count,
+          gapFillCount: d.gapFillCount,
+          estCostFull: parseFloat((d.count * costPerAsset).toFixed(2)),
+          estCostGapFill: parseFloat((d.gapFillCount * costPerGapAsset).toFixed(2)),
+        };
+      });
+      res.json({ bands });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/band/status", requireAdmin, async (req, res) => {
+    const GPT4O_INPUT_PER_M = 2.50;
+    const GPT4O_OUTPUT_PER_M = 10.0;
+    const liveCostUsd = (bandInputTokens * GPT4O_INPUT_PER_M + bandOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    res.json({
+      running: bandRunning,
+      band: bandBand || null,
+      gapFill: bandGapFill,
+      processed: bandProcessed,
+      total: bandTotal,
+      succeeded: bandSucceeded,
+      failed: bandFailed,
+      liveCostUsd: parseFloat(liveCostUsd.toFixed(4)),
+      liveInputTokens: bandInputTokens,
+      liveOutputTokens: bandOutputTokens,
+      lastSummary: bandLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/band/stop", requireAdmin, async (req, res) => {
+    if (!bandRunning) return res.json({ message: "No band enrichment running" });
+    bandShouldStop = true;
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/run-band", requireAdmin, async (req, res) => {
+    if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
+    if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is already running — stop it first" });
+
+    const { band, gapFill = false, cap = 500 } = req.body as { band: string; gapFill?: boolean; cap?: number };
+    const range = BAND_SCORE_RANGES[band];
+    if (!range) return res.status(400).json({ error: `Unknown band: ${band}` });
+    if (band === "bare") return res.status(400).json({ error: "Bare assets lack content — re-scrape first" });
+
+    try {
+      // Fetch assets in the target score band
+      let assets: Array<{
+        id: number; assetName: string; summary: string; abstract: string | null;
+        assetClass: string | null; mechanismOfAction: string | null; unmetNeed: string | null;
+        categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
+        inventors: string[] | null; sourceUrl: string | null;
+        target: string | null; modality: string | null; indication: string | null; developmentStage: string;
+      }>;
+
+      if (gapFill) {
+        // Gap-fill: drug_biologic assets missing MoA OR unmet need in this band
+        const rangeClause = range.min !== null && range.max !== null
+          ? sql`completeness_score BETWEEN ${range.min} AND ${range.max}`
+          : range.min !== null
+            ? sql`completeness_score >= ${range.min}`
+            : sql`(completeness_score IS NULL OR completeness_score = 0)`;
+
+        const rows = await db.execute<{
+          id: number; asset_name: string; summary: string; abstract: string | null;
+          asset_class: string | null; mechanism_of_action: string | null; unmet_need: string | null;
+          categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
+          inventors: string[] | null; source_url: string | null;
+          target: string | null; modality: string | null; indication: string | null; development_stage: string;
+        }>(sql`
+          SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
+                 categories, patent_status, licensing_readiness, inventors, source_url,
+                 target, modality, indication, development_stage
+          FROM ingested_assets
+          WHERE relevant = true
+            AND asset_class = 'drug_biologic'
+            AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR unmet_need IS NULL OR unmet_need = '')
+            AND ${rangeClause}
+            AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
+          ORDER BY completeness_score DESC NULLS LAST
+          LIMIT ${cap}
+        `);
+        assets = rows.rows.map((r) => ({
+          id: r.id, assetName: r.asset_name, summary: r.summary, abstract: r.abstract,
+          assetClass: r.asset_class, mechanismOfAction: r.mechanism_of_action, unmetNeed: r.unmet_need,
+          categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
+          inventors: r.inventors, sourceUrl: r.source_url,
+          target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
+        }));
+      } else {
+        // Full pass: all assets in this band
+        const rangeClause = range.min !== null && range.max !== null
+          ? sql`completeness_score BETWEEN ${range.min} AND ${range.max}`
+          : range.min !== null
+            ? sql`completeness_score >= ${range.min}`
+            : sql`(completeness_score IS NULL OR completeness_score = 0)`;
+
+        const rows = await db.execute<{
+          id: number; asset_name: string; summary: string; abstract: string | null;
+          asset_class: string | null; mechanism_of_action: string | null; unmet_need: string | null;
+          categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
+          inventors: string[] | null; source_url: string | null;
+          target: string | null; modality: string | null; indication: string | null; development_stage: string;
+        }>(sql`
+          SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
+                 categories, patent_status, licensing_readiness, inventors, source_url,
+                 target, modality, indication, development_stage
+          FROM ingested_assets
+          WHERE relevant = true
+            AND ${rangeClause}
+            AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
+          ORDER BY completeness_score DESC NULLS LAST
+          LIMIT ${cap}
+        `);
+        assets = rows.rows.map((r) => ({
+          id: r.id, assetName: r.asset_name, summary: r.summary, abstract: r.abstract,
+          assetClass: r.asset_class, mechanismOfAction: r.mechanism_of_action, unmetNeed: r.unmet_need,
+          categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
+          inventors: r.inventors, sourceUrl: r.source_url,
+          target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
+        }));
+      }
+
+      if (assets.length === 0) return res.json({ message: "No assets found for this band/mode", total: 0 });
+
+      bandRunning = true;
+      bandBand = band;
+      bandGapFill = gapFill;
+      bandProcessed = 0;
+      bandTotal = assets.length;
+      bandSucceeded = 0;
+      bandFailed = 0;
+      bandShouldStop = false;
+      bandInputTokens = 0;
+      bandOutputTokens = 0;
+
+      res.json({ message: "Band enrichment started", band, gapFill, total: assets.length });
+
+      const GAP_FILL_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
+      const startMs = Date.now();
+
+      deepEnrichBatch(
+        assets.map((a) => ({
+          id: a.id,
+          assetName: a.assetName,
+          summary: a.summary,
+          abstract: a.abstract,
+          ctx: {
+            categories: a.categories,
+            patentStatus: a.patentStatus,
+            licensingStatus: a.licensingStatus,
+            inventors: a.inventors,
+            sourceUrl: a.sourceUrl,
+            currentValues: {
+              target: a.target,
+              modality: a.modality,
+              indication: a.indication,
+              developmentStage: a.developmentStage,
+            },
+            fieldsToGenerate: gapFill ? GAP_FILL_FIELDS : null,
+          },
+        })),
+        20,
+        async (batch) => {
+          return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
+        },
+        (processed, _total, succeeded, failed) => {
+          bandProcessed = processed;
+          bandSucceeded = succeeded;
+          bandFailed = failed;
+        },
+        () => bandShouldStop,
+        (inTok, outTok) => {
+          bandInputTokens += inTok;
+          bandOutputTokens += outTok;
+        },
+      ).then((result) => {
+        bandRunning = false;
+        const durationMs = Date.now() - startMs;
+        const GPT4O_INPUT_PER_M = 2.50;
+        const GPT4O_OUTPUT_PER_M = 10.0;
+        const costUsd = (result.inputTokensEst * GPT4O_INPUT_PER_M + result.outputTokensEst * GPT4O_OUTPUT_PER_M) / 1_000_000;
+        bandLastSummary = {
+          band, gapFill, total: assets.length, succeeded: result.succeeded, failed: result.failed,
+          inputTokens: result.inputTokensEst, outputTokens: result.outputTokensEst,
+          costUsd: parseFloat(costUsd.toFixed(4)), durationMs,
+        };
+        console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}`);
+      }).catch((e) => {
+        bandRunning = false;
+        console.error("[band-enrich] failed:", e);
+      });
+    } catch (err: any) {
+      bandRunning = false;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── EDEN embedding routes ────────────────────────────────────────────────
 
   let embedRunning = false;
