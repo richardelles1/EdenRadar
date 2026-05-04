@@ -407,7 +407,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
                     data-testid={`link-dossier-tto-${asset.id}`}
                     onClick={(e) => { e.stopPropagation(); navigate(`/industry/tto/${asset.ingestedAssetId}`); }}
                   >
-                    Dossier
+                    View dossier
                     <ArrowRight className="w-2.5 h-2.5 ml-0.5" />
                   </button>
                 )}
@@ -466,8 +466,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
           data-testid={`button-notes-toggle-${asset.id}`}
         >
           <MessageSquare className="w-2.5 h-2.5" />
-          {noteCount > 0 ? noteCount : ""}
-          {noteCount === 0 && "Notes"}
+          {noteCount > 0 ? `${noteCount}` : "Notes"}
           {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
         </button>
 
