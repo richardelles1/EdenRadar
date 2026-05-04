@@ -11,6 +11,8 @@ type ClinicalTrialCardProps = {
   isSaved?: boolean;
   onSave?: () => void;
   onUnsave?: () => void;
+  hidePicker?: boolean;
+  pipelineMode?: boolean;
 };
 
 const PHASE_STYLES: Record<string, { label: string; className: string }> = {
@@ -31,7 +33,7 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   NOT_YET_RECRUITING:     { label: "Not Started",  className: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/30" },
 };
 
-export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: ClinicalTrialCardProps) {
+export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker, pipelineMode }: ClinicalTrialCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -120,7 +122,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
         onClick={() => setOpen(true)}
       >
         <div
-          className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.trial.containerBg} border border-white/90 dark:border-white/10`}
+          className={`relative w-full h-full ${pipelineMode ? "rounded-t-[17px] rounded-b-none" : "rounded-[17px]"} overflow-hidden ${SCOUT_CARD_TINTS.trial.containerBg} border border-white/90 dark:border-white/10`}
           style={{
             willChange: "transform",
             transform: pressed ? "scale(0.97)" : hovered ? "scale(1.01)" : "scale(1)",
@@ -162,29 +164,31 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: Clinical
           />
 
           {/* PipelinePicker — top-right */}
-          <div
-            className="absolute top-1.5 right-1.5 z-[5]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <PipelinePicker
-              payload={{
-                asset_name: asset.asset_name,
-                target: asset.target,
-                modality: asset.modality,
-                development_stage: asset.development_stage,
-                disease_indication: asset.indication,
-                summary: asset.summary,
-                source_title: signal?.title ?? asset.asset_name,
-                source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
-                publication_year: (signal?.date ?? asset.latest_signal_date)?.slice(0, 4) ?? "Unknown",
-                source_name: "clinical_trial",
-                source_url: asset.source_urls?.[0] ?? null,
-                pmid: nctId ?? asset.id,
-              }}
-              alreadySaved={isSaved}
-              bare
-            />
-          </div>
+          {!hidePicker && (
+            <div
+              className="absolute top-1.5 right-1.5 z-[5]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <PipelinePicker
+                payload={{
+                  asset_name: asset.asset_name,
+                  target: asset.target,
+                  modality: asset.modality,
+                  development_stage: asset.development_stage,
+                  disease_indication: asset.indication,
+                  summary: asset.summary,
+                  source_title: signal?.title ?? asset.asset_name,
+                  source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
+                  publication_year: (signal?.date ?? asset.latest_signal_date)?.slice(0, 4) ?? "Unknown",
+                  source_name: "clinical_trial",
+                  source_url: asset.source_urls?.[0] ?? null,
+                  pmid: nctId ?? asset.id,
+                }}
+                alreadySaved={isSaved}
+                bare
+              />
+            </div>
+          )}
 
           {/* Content */}
           <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">

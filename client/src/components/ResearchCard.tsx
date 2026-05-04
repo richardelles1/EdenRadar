@@ -68,9 +68,11 @@ const FALLBACK_SOURCE: SourceConfig = {
 type ResearchCardProps = {
   asset: ScoredAsset;
   isSaved?: boolean;
+  hidePicker?: boolean;
+  pipelineMode?: boolean;
 };
 
-export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
+export function ResearchCard({ asset, isSaved, hidePicker, pipelineMode }: ResearchCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
 
@@ -118,7 +120,7 @@ export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
       data-testid={`research-card-wrapper-${asset.id}`}
     >
       <div
-        className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.research.containerBg} border border-white/90 dark:border-white/10`}
+        className={`relative w-full h-full ${pipelineMode ? "rounded-t-[17px] rounded-b-none" : "rounded-[17px]"} overflow-hidden ${SCOUT_CARD_TINTS.research.containerBg} border border-white/90 dark:border-white/10`}
         style={{
           willChange: "transform",
           transform: pressed ? "scale(0.97)" : hovered ? "scale(1.01)" : "scale(1)",
@@ -160,29 +162,31 @@ export function ResearchCard({ asset, isSaved }: ResearchCardProps) {
         />
 
         {/* PipelinePicker — top-right */}
-        <div
-          className="absolute top-1.5 right-1.5 z-[5]"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <PipelinePicker
-            payload={{
-              asset_name: asset.asset_name,
-              target: asset.target,
-              modality: asset.modality,
-              development_stage: asset.development_stage,
-              disease_indication: asset.indication,
-              summary: asset.summary,
-              source_title: asset.signals?.[0]?.title ?? asset.asset_name,
-              source_journal: journalName ?? (asset.institution !== "unknown" ? asset.institution : "Unknown"),
-              publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-              source_name: primarySourceType,
-              source_url: rawUrl || null,
-              pmid: asset.id,
-            }}
-            alreadySaved={isSaved}
-            bare
-          />
-        </div>
+        {!hidePicker && (
+          <div
+            className="absolute top-1.5 right-1.5 z-[5]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <PipelinePicker
+              payload={{
+                asset_name: asset.asset_name,
+                target: asset.target,
+                modality: asset.modality,
+                development_stage: asset.development_stage,
+                disease_indication: asset.indication,
+                summary: asset.summary,
+                source_title: asset.signals?.[0]?.title ?? asset.asset_name,
+                source_journal: journalName ?? (asset.institution !== "unknown" ? asset.institution : "Unknown"),
+                publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+                source_name: primarySourceType,
+                source_url: rawUrl || null,
+                pmid: asset.id,
+              }}
+              alreadySaved={isSaved}
+              bare
+            />
+          </div>
+        )}
 
         {/* Content */}
         <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">

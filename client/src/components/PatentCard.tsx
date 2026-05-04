@@ -11,9 +11,11 @@ type PatentCardProps = {
   isSaved?: boolean;
   onSave?: () => void;
   onUnsave?: () => void;
+  hidePicker?: boolean;
+  pipelineMode?: boolean;
 };
 
-export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps) {
+export function PatentCard({ asset, isSaved, onSave, onUnsave, hidePicker, pipelineMode }: PatentCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -96,7 +98,7 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
         onClick={() => setOpen(true)}
       >
         <div
-          className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.patent.containerBg} border border-white/90 dark:border-white/10`}
+          className={`relative w-full h-full ${pipelineMode ? "rounded-t-[17px] rounded-b-none" : "rounded-[17px]"} overflow-hidden ${SCOUT_CARD_TINTS.patent.containerBg} border border-white/90 dark:border-white/10`}
           style={{
             willChange: "transform",
             transform: pressed ? "scale(0.97)" : hovered ? "scale(1.01)" : "scale(1)",
@@ -138,29 +140,31 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
           />
 
           {/* PipelinePicker — top-right */}
-          <div
-            className="absolute top-1.5 right-1.5 z-[5]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <PipelinePicker
-              payload={{
-                asset_name: asset.asset_name,
-                target: asset.target,
-                modality: asset.modality,
-                development_stage: asset.development_stage,
-                disease_indication: asset.indication,
-                summary: asset.summary,
-                source_title: signal?.title ?? asset.asset_name,
-                source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
-                publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-                source_name: "patent",
-                source_url: asset.source_urls?.[0] ?? null,
-                pmid: patentId ?? asset.id,
-              }}
-              alreadySaved={isSaved}
-              bare
-            />
-          </div>
+          {!hidePicker && (
+            <div
+              className="absolute top-1.5 right-1.5 z-[5]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <PipelinePicker
+                payload={{
+                  asset_name: asset.asset_name,
+                  target: asset.target,
+                  modality: asset.modality,
+                  development_stage: asset.development_stage,
+                  disease_indication: asset.indication,
+                  summary: asset.summary,
+                  source_title: signal?.title ?? asset.asset_name,
+                  source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
+                  publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+                  source_name: "patent",
+                  source_url: asset.source_urls?.[0] ?? null,
+                  pmid: patentId ?? asset.id,
+                }}
+                alreadySaved={isSaved}
+                bare
+              />
+            </div>
+          )}
 
           {/* Content */}
           <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">

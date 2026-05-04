@@ -8,7 +8,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
+import { PatentCard } from "@/components/PatentCard";
+import { ClinicalTrialCard } from "@/components/ClinicalTrialCard";
+import { ResearchCard } from "@/components/ResearchCard";
+import type { ScoredAsset, RawSignal, SourceType } from "@/lib/types";
 import {
   Download,
   Trash2,
@@ -35,6 +39,7 @@ import {
   Activity,
   BookOpen,
   Lightbulb,
+  Calendar,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -169,6 +174,454 @@ function formatNoteTime(dateStr: string): string {
   const diffHr = Math.floor(diffMin / 60);
   if (diffHr < 24) return `${diffHr}h ago`;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function teamSavedAssetToScoredAsset(asset: TeamSavedAsset): ScoredAsset {
+  const sourceKey = getSourceTypeKey(asset.sourceName);
+  const sourceType: SourceType =
+    sourceKey === "patent" ? "patent" :
+    sourceKey === "trial" ? "clinical_trial" :
+    sourceKey === "literature" ? "paper" :
+    "tech_transfer";
+
+  const signal: RawSignal = {
+    id: String(asset.id),
+    source_type: sourceType,
+    title: asset.sourceTitle || asset.assetName || "unknown",
+    text: asset.summary || "",
+    authors_or_owner: "",
+    institution_or_sponsor: asset.sourceJournal || "",
+    date: asset.publicationYear ? `${asset.publicationYear}-01-01` : "",
+    stage_hint: asset.developmentStage || "",
+    url: asset.sourceUrl || "",
+    metadata: {
+      patent_id: sourceKey === "patent" ? (asset.pmid ?? null) : null,
+      nct_id: sourceKey === "trial" ? (asset.pmid ?? null) : null,
+      journal: asset.sourceJournal || null,
+      filing_date: null,
+      owner_type: "unknown",
+    },
+  };
+
+  return {
+    id: String(asset.id),
+    asset_name: asset.assetName ?? "unknown",
+    target: asset.target || "unknown",
+    modality: asset.modality || "unknown",
+    indication: asset.diseaseIndication || "unknown",
+    development_stage: asset.developmentStage || "unknown",
+    owner_name: asset.sourceJournal || "unknown",
+    owner_type: "unknown",
+    institution: asset.sourceJournal || "unknown",
+    patent_status: "",
+    licensing_status: "",
+    summary: asset.summary || "",
+    why_it_matters: "",
+    evidence_count: 1,
+    source_types: [sourceType],
+    source_urls: asset.sourceUrl ? [asset.sourceUrl] : [],
+    latest_signal_date: asset.publicationYear ? `${asset.publicationYear}-01-01` : "",
+    score: 0,
+    score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
+    matching_tags: [],
+    confidence: "medium",
+    signals: [signal],
+  };
+}
+
+function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta, currentUserId }: {
+  asset: TeamSavedAsset;
+  onDelete: (id: number) => void;
+  onMove: (id: number, pipelineListId: number | null) => void;
+  pipelines: PipelineWithCount[];
+  restrictMeta?: boolean;
+  currentUserId?: string | null;
+}) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+  const notesEndRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setLocalStatus(asset.status ?? null); }, [asset.status]);
+
+  const { data: notesData, isLoading: notesLoading } = useQuery<{ notes: SavedAssetNote[] }>({
+    queryKey: ["/api/saved-assets", asset.id, "notes"],
+    queryFn: () =>
+      fetch(`/api/saved-assets/${asset.id}/notes`).then((r) => {
+        if (!r.ok) throw new Error("Failed to load notes");
+        return r.json();
+      }),
+    enabled: notesOpen,
+    staleTime: 10000,
+    refetchInterval: notesOpen ? 15000 : false,
+  });
+
+  const notes = notesData?.notes ?? [];
+
+  useEffect(() => {
+    if (notesOpen && notesEndRef.current) {
+      notesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [notesOpen, notes.length]);
+
+  const statusMutation = useMutation<unknown, Error, string | null, { prev: string | null }>({
+    mutationFn: async (status: string | null) => {
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, { status });
+      return res.json();
+    },
+    onMutate: (newStatus) => {
+      const prev = localStatus;
+      setLocalStatus(newStatus);
+      return { prev };
+    },
+    onSuccess: (_, newStatus) => {
+      setLocalStatus(newStatus);
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err, _, ctx) => {
+      if (ctx?.prev !== undefined) setLocalStatus(ctx.prev);
+      toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const noteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      setNoteText("");
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
+  });
+
+  const editNoteMutation = useMutation({
+    mutationFn: async ({ noteId, content }: { noteId: number; content: string }) => {
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/notes/${noteId}`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      setEditingNoteId(null);
+      setEditingContent("");
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+    },
+    onError: (err: any) => toast({ title: "Edit failed", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: async (noteId: number) => {
+      await apiRequest("DELETE", `/api/saved-assets/${asset.id}/notes/${noteId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleNoteSubmit = () => {
+    const content = noteText.trim();
+    if (!content) return;
+    noteMutation.mutate(content);
+  };
+
+  const noteCount = notesOpen ? notes.length : (asset.noteCount ?? 0);
+  const sourceKey = getSourceTypeKey(asset.sourceName);
+  const scoredAsset = teamSavedAssetToScoredAsset(asset);
+
+  function renderCard() {
+    if (sourceKey === "patent") {
+      return <PatentCard asset={scoredAsset} hidePicker pipelineMode />;
+    }
+    if (sourceKey === "trial") {
+      return <ClinicalTrialCard asset={scoredAsset} hidePicker pipelineMode />;
+    }
+    if (sourceKey === "literature") {
+      return <ResearchCard asset={scoredAsset} hidePicker pipelineMode />;
+    }
+    // TTO — inline card navigating to detail page
+    const canNavigate = !!asset.ingestedAssetId;
+    return (
+      <div
+        className={`w-full h-[260px] shrink-0 ${canNavigate ? "cursor-pointer" : ""}`}
+        onClick={canNavigate ? () => navigate(`/industry/tto/${asset.ingestedAssetId}`) : undefined}
+        data-testid={`tto-pipeline-card-${asset.id}`}
+      >
+        <div
+          className="relative w-full h-full rounded-t-[17px] rounded-b-none overflow-hidden bg-emerald-50/60 dark:bg-emerald-950/20 border border-white/90 dark:border-white/10"
+          style={{
+            boxShadow: "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
+          }}
+        >
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
+          <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-4 pt-3 pb-3">
+            <div className="flex items-center gap-1 mb-1.5">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.12em] border text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/30">
+                <FlaskConical className="w-2.5 h-2.5" />
+                TTO
+              </span>
+            </div>
+            <h3 className="text-[12px] font-semibold leading-snug line-clamp-3 mb-1.5 text-foreground">
+              {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
+            </h3>
+            {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+              <p className="text-[10px] truncate mb-1 text-zinc-700 dark:text-zinc-200 font-medium">
+                {asset.sourceJournal}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1 mb-1">
+              {asset.modality && asset.modality !== "unknown" && (
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-[0.1em] border ${getBadgeClass(asset.modality)}`}>
+                  {asset.modality}
+                </span>
+              )}
+              {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-[0.1em] border bg-muted text-muted-foreground border-border capitalize">
+                  {asset.developmentStage}
+                </span>
+              )}
+            </div>
+            {asset.summary && (
+              <p className="text-[10px] leading-relaxed line-clamp-2 flex-1 text-zinc-500 dark:text-zinc-400">
+                {asset.summary.length > 110 ? asset.summary.slice(0, 107) + "..." : asset.summary}
+              </p>
+            )}
+            <div className="mt-auto pt-1.5 flex items-center justify-between gap-1">
+              {asset.publicationYear && (
+                <span className="flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500">
+                  <Calendar className="w-2.5 h-2.5" />
+                  {asset.publicationYear}
+                </span>
+              )}
+              {asset.sourceUrl && (
+                <a
+                  href={asset.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors shrink-0"
+                  data-testid={`link-view-tto-${asset.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  View
+                  <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
+
+  return (
+    <div className="flex flex-col" data-testid={`pipeline-card-${asset.id}`} data-source-type={sourceKey}>
+      {/* Scout card — bottom corners clipped by overflow-hidden on wrapper */}
+      {renderCard()}
+
+      {/* Management strip */}
+      <div
+        className={`bg-muted/50 border border-t-0 border-card-border/70 px-2.5 py-2 flex items-center gap-2 ${notesOpen ? "rounded-b-none" : "rounded-b-xl"}`}
+        onClick={(e) => e.stopPropagation()}
+        data-testid={`mgmt-strip-${asset.id}`}
+      >
+        {/* Stage select */}
+        <select
+          value={localStatus ?? "none"}
+          onChange={(e) => statusMutation.mutate(e.target.value === "none" ? null : e.target.value)}
+          disabled={statusMutation.isPending}
+          className={`text-[10px] bg-transparent border border-card-border rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors shrink-0 ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
+          data-testid={`select-status-${asset.id}`}
+        >
+          <option value="none">Set stage</option>
+          {SAVED_ASSET_STATUSES.map((s) => (
+            <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
+          ))}
+        </select>
+
+        {/* Notes button */}
+        <button
+          onClick={() => setNotesOpen((o) => !o)}
+          className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors shrink-0 ${notesOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-card-border text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
+          data-testid={`button-notes-toggle-${asset.id}`}
+        >
+          <MessageSquare className="w-2.5 h-2.5" />
+          {noteCount > 0 ? `${noteCount} note${noteCount !== 1 ? "s" : ""}` : "Notes"}
+          {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+        </button>
+
+        <div className="flex-1" />
+
+        {/* Move dropdown */}
+        {pipelines.length > 0 && !restrictMeta && (
+          <select
+            value={asset.pipelineListId ?? "null"}
+            onChange={(e) => {
+              const val = e.target.value;
+              onMove(asset.id, val === "null" ? null : parseInt(val, 10));
+            }}
+            className="text-[10px] text-muted-foreground bg-transparent border-0 focus:outline-none cursor-pointer hover:text-foreground shrink-0"
+            title="Move to pipeline"
+            data-testid={`select-move-asset-${asset.id}`}
+          >
+            <option value="null">Uncategorised</option>
+            {pipelines.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        )}
+
+        {/* Delete icon */}
+        {!restrictMeta && (
+          <button
+            onClick={() => onDelete(asset.id)}
+            className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150 shrink-0"
+            data-testid={`button-delete-asset-${asset.id}`}
+            title="Remove asset"
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
+      </div>
+
+      {/* Notes panel */}
+      {notesOpen && (
+        <div
+          className="rounded-b-xl border border-t-0 border-card-border/70 bg-muted/20 flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`notes-panel-${asset.id}`}
+        >
+          <div className="max-h-48 overflow-y-auto px-3 py-2 flex flex-col gap-2">
+            {notesLoading ? (
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground py-2">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                Loading...
+              </div>
+            ) : notes.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground py-2 text-center">No notes yet</p>
+            ) : (
+              notes.map((note) => (
+                <div
+                  key={note.id}
+                  className={`text-xs group/note ${note.isSystemEvent ? "flex items-center gap-1 text-muted-foreground/70 italic" : "flex flex-col gap-0.5"}`}
+                  data-testid={`note-item-${note.id}`}
+                >
+                  {note.isSystemEvent ? (
+                    <>
+                      <Clock className="w-2.5 h-2.5 shrink-0" />
+                      <span>{note.content}</span>
+                      <span className="ml-auto text-[10px] shrink-0 pl-2">{formatNoteTime(note.createdAt as unknown as string)}</span>
+                    </>
+                  ) : editingNoteId === note.id ? (
+                    <>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                          {getInitials(note.authorName)}
+                        </span>
+                        <span className="font-medium text-foreground text-[11px]">{note.authorName}</span>
+                      </div>
+                      <Textarea
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        className="text-xs min-h-[48px] max-h-20 resize-none bg-background pl-5"
+                        data-testid={`textarea-edit-note-${note.id}`}
+                        autoFocus
+                      />
+                      <div className="flex gap-1 mt-1 pl-5">
+                        <button
+                          onClick={() => editNoteMutation.mutate({ noteId: note.id, content: editingContent.trim() })}
+                          disabled={!editingContent.trim() || editNoteMutation.isPending}
+                          className="text-[10px] px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                          data-testid={`button-save-edit-note-${note.id}`}
+                        >
+                          {editNoteMutation.isPending ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={() => { setEditingNoteId(null); setEditingContent(""); }}
+                          className="text-[10px] px-2 py-0.5 rounded border border-card-border text-muted-foreground hover:text-foreground transition-colors"
+                          data-testid={`button-cancel-edit-note-${note.id}`}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                          {getInitials(note.authorName)}
+                        </span>
+                        <span className="font-medium text-foreground text-[11px]">{note.authorName}</span>
+                        <span className="text-muted-foreground text-[10px] ml-auto">{formatNoteTime(note.createdAt as unknown as string)}</span>
+                        {currentUserId && note.userId === currentUserId && (
+                          <div className="flex gap-0.5 opacity-0 group-hover/note:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => { setEditingNoteId(note.id); setEditingContent(note.content); }}
+                              className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit note"
+                              data-testid={`button-edit-note-${note.id}`}
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm("Delete this note?")) {
+                                  deleteNoteMutation.mutate(note.id);
+                                }
+                              }}
+                              disabled={deleteNoteMutation.isPending}
+                              className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                              title="Delete note"
+                              data-testid={`button-delete-note-${note.id}`}
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-foreground/90 pl-5.5 leading-relaxed">{note.content}</p>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+            <div ref={notesEndRef} />
+          </div>
+          <div className="flex items-end gap-1.5 px-3 pb-2.5 pt-1.5 border-t border-card-border/50">
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleNoteSubmit();
+                }
+              }}
+              placeholder="Add a note… (Enter to send)"
+              className="text-xs min-h-[52px] max-h-24 resize-none flex-1 bg-background"
+              data-testid={`textarea-note-${asset.id}`}
+            />
+            <button
+              onClick={handleNoteSubmit}
+              disabled={!noteText.trim() || noteMutation.isPending}
+              className="w-7 h-7 flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0 mb-0.5"
+              data-testid={`button-note-submit-${asset.id}`}
+            >
+              {noteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUserId }: {
@@ -1381,7 +1834,7 @@ export default function Assets() {
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                   {displayedAssets.map((asset) => (
-                    <AssetCard
+                    <PipelineCardWrapper
                       key={asset.id}
                       asset={asset}
                       onDelete={(id) => deleteMutation.mutate(id)}
