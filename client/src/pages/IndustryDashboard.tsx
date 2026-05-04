@@ -109,6 +109,12 @@ type AlertDeltaResponse = {
   since?: string;
 };
 
+/** Returns the name if it contains at least one alphanumeric character, otherwise "Unnamed asset". */
+function sanitiseAssetName(name: string | null | undefined): string {
+  if (name && /[a-zA-Z0-9]/.test(name)) return name;
+  return "Unnamed asset";
+}
+
 type TeamActivityItem = {
   id: number;
   orgId: number;
@@ -1178,11 +1184,11 @@ export default function IndustryDashboard() {
                           {item.assetFingerprint ? (
                             <Link href={`/asset/${encodeURIComponent(item.assetFingerprint)}`}>
                               <span className="font-medium text-primary hover:underline cursor-pointer" data-testid={`team-activity-asset-link-${item.id}`}>
-                                {item.assetName}
+                                {sanitiseAssetName(item.assetName)}
                               </span>
                             </Link>
                           ) : (
-                            <span className="font-medium" data-testid={`team-activity-asset-text-${item.id}`}>{item.assetName}</span>
+                            <span className="font-medium" data-testid={`team-activity-asset-text-${item.id}`}>{sanitiseAssetName(item.assetName)}</span>
                           )}
                         </p>
                       </div>
