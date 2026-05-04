@@ -7023,13 +7023,13 @@ If a field cannot be determined, use "N/A".`
       if (supabaseError) return res.status(500).json({ error: supabaseError.message });
       const userId = userData.user.id;
 
-      // Generate an invite link the new member can use to set their password.
-      // type: "invite" uses Supabase's invite token lifetime (default 24h) instead
-      // of the recovery token lifetime (default 1h), matching what the email says.
+      // Generate a password-recovery link the new member uses to set their password.
+      // type: "recovery" works for users created with email_confirm: true (confirmed).
+      // The OTP expiry is configured in the Supabase dashboard (set to 86400s = 24h).
       let setPasswordLink: string | undefined;
       try {
         const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-          type: "invite",
+          type: "recovery",
           email,
           options: { redirectTo: `${APP_URL}/set-password` },
         });
@@ -7092,7 +7092,7 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
       const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-        type: "invite",
+        type: "recovery",
         email: member.email,
         options: { redirectTo: `${APP_URL}/set-password` },
       });
@@ -7268,7 +7268,7 @@ If a field cannot be determined, use "N/A".`
             const { createClient } = await import("@supabase/supabase-js");
             const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
             const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-              type: "invite",
+              type: "recovery",
               email,
               options: { redirectTo: `${APP_URL}/set-password` },
             });
@@ -7343,7 +7343,7 @@ If a field cannot be determined, use "N/A".`
 
       let setPasswordLink: string | undefined;
       try {
-        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "invite", email, options: { redirectTo: `${APP_URL}/set-password` } });
+        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${APP_URL}/set-password` } });
         if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
       } catch {}
 
@@ -7403,7 +7403,7 @@ If a field cannot be determined, use "N/A".`
 
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "invite", email: member.email, options: { redirectTo: `${APP_URL}/set-password` } });
+      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: `${APP_URL}/set-password` } });
       if (linkError) return res.status(500).json({ error: linkError.message });
       const setPasswordLink = linkData?.properties?.action_link ?? undefined;
 
