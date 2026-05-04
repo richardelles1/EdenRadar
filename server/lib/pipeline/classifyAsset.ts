@@ -117,6 +117,10 @@ Software ONLY — return null for other types:
 - deviceAttributes.useCase (string): primary application
 - deviceAttributes.deploymentModel: cloud|on-premise|both|unknown`;
 
+export interface ClassifyResult extends AssetClassification {
+  tokenUsage: { inputTokens: number; outputTokens: number };
+}
+
 export async function classifyAsset(
   title: string,
   description: string,
@@ -124,7 +128,7 @@ export async function classifyAsset(
   model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini",
   throwOnError = false,
   ctx?: AssetContext,
-): Promise<AssetClassification> {
+): Promise<ClassifyResult> {
   const contextLines: string[] = [];
   if (ctx?.categories?.length) contextLines.push(`Tags/Categories: ${ctx.categories.join(", ")}`);
   if (ctx?.patentStatus && ctx.patentStatus !== "unknown") contextLines.push(`Patent Status: ${ctx.patentStatus}`);
@@ -166,7 +170,7 @@ export async function classifyAsset(
     gapFillBlock,
   ].filter(Boolean).join("\n");
 
-  const fallback: AssetClassification = {
+  const fallback: ClassifyResult = {
     biotechRelevant: false,
     assetClass: "other",
     target: null,
@@ -182,6 +186,7 @@ export async function classifyAsset(
     innovationClaim: "",
     ipType: "unknown",
     licensingReadiness: "unknown",
+    tokenUsage: { inputTokens: 0, outputTokens: 0 },
   };
 
   // Gap-fill JSON schema: structurally restrict the API response to only the requested fields.
@@ -284,6 +289,10 @@ export async function classifyAsset(
       innovationClaim: gapNull("innovationClaim", (parsed.innovationClaim ?? "").trim()) ?? "",
       ipType: sanitize(parsed.ipType ?? "", IP_TYPES, "unknown"),
       licensingReadiness: sanitize(parsed.licensingReadiness ?? "", LICENSING_READINESS, "unknown"),
+      tokenUsage: {
+        inputTokens: response.usage?.prompt_tokens ?? 0,
+        outputTokens: response.usage?.completion_tokens ?? 0,
+      },
     };
   } catch (e) {
     if (throwOnError) throw e;

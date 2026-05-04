@@ -3710,7 +3710,7 @@ function Enrichment({ pw }: { pw: string }) {
                     <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
                       <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">
-                        ${bandStatus.liveCostUsd.toFixed(4)} of ~${bandStatus.liveProjectedTotalUsd?.toFixed(2) ?? "?"} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (est)
+                        ${bandStatus.liveCostUsd.toFixed(4)} of ~${bandStatus.liveProjectedTotalUsd?.toFixed(2) ?? "?"} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (actual)
                       </span>
                     </div>
                   </div>
@@ -3747,7 +3747,7 @@ function Enrichment({ pw }: { pw: string }) {
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-bold text-foreground">{(bandStatus.lastSummary.inputTokens + bandStatus.lastSummary.outputTokens).toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground">tokens (est)</p>
+                        <p className="text-[10px] text-muted-foreground">tokens (actual)</p>
                       </div>
                     </div>
                     {/* Score delta */}

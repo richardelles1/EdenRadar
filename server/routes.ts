@@ -4786,7 +4786,7 @@ export async function registerRoutes(
         const durationMs = Date.now() - startMs;
         const GPT4O_INPUT_PER_M = 2.50;
         const GPT4O_OUTPUT_PER_M = 10.0;
-        const costUsd = (result.inputTokensEst * GPT4O_INPUT_PER_M + result.outputTokensEst * GPT4O_OUTPUT_PER_M) / 1_000_000;
+        const costUsd = (result.inputTokens * GPT4O_INPUT_PER_M + result.outputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
 
         // Post-run: query avg completeness score of the same asset IDs
         let avgScoreAfter: number | null = null;
@@ -4802,7 +4802,7 @@ export async function registerRoutes(
 
         bandLastSummary = {
           band, gapFill, total: assets.length, succeeded: result.succeeded, failed: result.failed,
-          inputTokens: result.inputTokensEst, outputTokens: result.outputTokensEst,
+          inputTokens: result.inputTokens, outputTokens: result.outputTokens,
           costUsd: parseFloat(costUsd.toFixed(4)), durationMs,
           fieldsFilledNames: gapFill ? GAP_FILL_FIELDS : FULL_PASS_FIELDS,
           fieldFillCounts: { ...bandFieldCounts },

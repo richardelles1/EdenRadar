@@ -34,8 +34,8 @@ export interface DeepEnrichBatchResult {
   results: Map<number, DeepEnrichResult>;
   succeeded: number;
   failed: number;
-  inputTokensEst: number;
-  outputTokensEst: number;
+  inputTokens: number;
+  outputTokens: number;
 }
 
 const FLUSH_SIZE = 50;
@@ -73,13 +73,6 @@ async function withRetry<T>(fn: () => Promise<T>, assetId: number): Promise<T> {
   throw lastErr;
 }
 
-// GPT-4o token estimates per asset (input + output)
-// Full pass: ~1500 input + 700 output ≈ $0.01075/asset
-// Gap-fill pass: ~1000 input + 300 output ≈ $0.0055/asset
-export const TOKEN_EST_FULL_INPUT = 1500;
-export const TOKEN_EST_FULL_OUTPUT = 700;
-export const TOKEN_EST_GAP_INPUT = 1000;
-export const TOKEN_EST_GAP_OUTPUT = 300;
 
 export async function deepEnrichBatch(
   assets: DeepEnrichAssetInput[],
@@ -194,10 +187,9 @@ export async function deepEnrichBatch(
         buffer.push(result);
         succeeded = true;
 
-        // Track estimated token usage (full vs gap-fill mode)
-        const isGapFill = !!(asset.ctx?.fieldsToGenerate?.length);
-        const inTok = isGapFill ? TOKEN_EST_GAP_INPUT : TOKEN_EST_FULL_INPUT;
-        const outTok = isGapFill ? TOKEN_EST_GAP_OUTPUT : TOKEN_EST_FULL_OUTPUT;
+        // Use real token counts from the API response
+        const inTok = classification.tokenUsage.inputTokens;
+        const outTok = classification.tokenUsage.outputTokens;
         totalInputTokens += inTok;
         totalOutputTokens += outTok;
         onTokens?.(inTok, outTok);
@@ -219,5 +211,5 @@ export async function deepEnrichBatch(
   await Promise.all(workers);
   await flushBuffer(true);
 
-  return { results: allResults, succeeded: totalSucceeded, failed: totalFailed, inputTokensEst: totalInputTokens, outputTokensEst: totalOutputTokens };
+  return { results: allResults, succeeded: totalSucceeded, failed: totalFailed, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
 }
