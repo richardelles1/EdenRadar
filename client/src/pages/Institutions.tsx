@@ -339,6 +339,24 @@ export default function Institutions() {
                 ))}
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                <Select
+                  value={sortOrder}
+                  onValueChange={(v) => { if (isSortOrder(v)) setSortOrder(v); }}
+                >
+                  <SelectTrigger
+                    className="h-8 w-44 text-xs gap-1.5"
+                    data-testid="select-sort-order"
+                  >
+                    <SlidersHorizontal className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <SelectValue placeholder="Sort by…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="listings-desc" data-testid="sort-option-listings-desc">Listings ↓</SelectItem>
+                    <SelectItem value="listings-asc" data-testid="sort-option-listings-asc">Listings ↑</SelectItem>
+                    <SelectItem value="name-asc" data-testid="sort-option-name-asc">Name A→Z</SelectItem>
+                    <SelectItem value="name-desc" data-testid="sort-option-name-desc">Name Z→A</SelectItem>
+                  </SelectContent>
+                </Select>
                 {allSpecialties.length > 0 && (
                   <Select
                     value={selectedSpecialty}
@@ -364,24 +382,6 @@ export default function Institutions() {
                     </SelectContent>
                   </Select>
                 )}
-                <Select
-                  value={sortOrder}
-                  onValueChange={(v) => { if (isSortOrder(v)) setSortOrder(v); }}
-                >
-                  <SelectTrigger
-                    className="h-8 w-44 text-xs gap-1.5"
-                    data-testid="select-sort-order"
-                  >
-                    <SlidersHorizontal className="w-3 h-3 text-muted-foreground shrink-0" />
-                    <SelectValue placeholder="Sort by…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="listings-desc" data-testid="sort-option-listings-desc">Listings ↓</SelectItem>
-                    <SelectItem value="listings-asc" data-testid="sort-option-listings-asc">Listings ↑</SelectItem>
-                    <SelectItem value="name-asc" data-testid="sort-option-name-asc">Name A→Z</SelectItem>
-                    <SelectItem value="name-desc" data-testid="sort-option-name-desc">Name Z→A</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
           </div>
