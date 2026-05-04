@@ -11,21 +11,49 @@ import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
 type Continent = "All" | "North America" | "Europe" | "Asia-Pacific";
 const CONTINENTS: Continent[] = ["All", "North America", "Europe", "Asia-Pacific"];
 
-const SPECIALTY_COLORS: Record<string, string> = {
-  "Oncology": "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
-  "Neuroscience": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
-  "Gene Therapy": "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20",
-  "Immunology": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  "Immunotherapy": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  "CAR-T": "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20",
-  "mRNA": "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20",
-  "CRISPR": "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-  "Drug Delivery": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  "Rare Disease": "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
-};
+const SPECIALTY_PATTERNS: Array<[string, string]> = [
+  ["oncol",        "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"],
+  ["cancer",       "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"],
+  ["tumor",        "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"],
+  ["tumour",       "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"],
+  ["neurosc",      "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"],
+  ["neurol",       "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"],
+  ["brain",        "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"],
+  ["cns",          "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"],
+  ["drug deliv",   "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"],
+  ["drug-deliv",   "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"],
+  ["nanoparticl",  "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"],
+  ["formul",       "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"],
+  ["gene ther",    "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"],
+  ["gene-ther",    "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"],
+  ["viral vect",   "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"],
+  ["car-t",        "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
+  ["cart ",        "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
+  ["chimeric",     "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
+  ["cell ther",    "bg-fuchsia-500/10 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20"],
+  ["immuno",       "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"],
+  ["mrna",         "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20"],
+  ["rna ther",     "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20"],
+  ["antisense",    "bg-orange-500/10 text-orange-600 dark:text-orange-400 border-orange-500/20"],
+  ["crispr",       "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"],
+  ["genome edit",  "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"],
+  ["gene edit",    "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"],
+  ["base edit",    "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20"],
+  ["rare dis",     "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"],
+  ["orphan",       "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20"],
+  ["diagnost",     "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20"],
+  ["biomarker",    "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20"],
+  ["imaging",      "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20"],
+  ["biomaterial",  "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"],
+  ["scaffold",     "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20"],
+  ["bioelectron",  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"],
+  ["neural interface", "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"],
+];
 
 function getSpecialtyClass(s: string) {
-  return SPECIALTY_COLORS[s] ?? "bg-muted/40 text-muted-foreground border-border";
+  const lower = s.toLowerCase();
+  const match = SPECIALTY_PATTERNS.find(([pattern]) => lower.includes(pattern));
+  return match ? match[1] : "bg-muted/40 text-muted-foreground border-border";
 }
 
 function institutionContinent(inst: Institution): string {
@@ -216,10 +244,15 @@ export default function Institutions() {
   const noneScanned = !isLoading && allInstitutions.every((i) => i.count === 0);
 
   const filtered = useMemo(() => {
-    return allInstitutions.filter((i) => {
+    const base = allInstitutions.filter((i) => {
       const matchesContinent = continent === "All" || institutionContinent(i) === continent;
       const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
       return matchesContinent && matchesSearch;
+    });
+    return base.sort((a, b) => {
+      const diff = (b.count ?? 0) - (a.count ?? 0);
+      if (diff !== 0) return diff;
+      return a.name.localeCompare(b.name);
     });
   }, [allInstitutions, continent, search]);
 
