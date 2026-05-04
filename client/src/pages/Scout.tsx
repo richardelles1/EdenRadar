@@ -319,9 +319,10 @@ export default function Scout() {
   const [shownPatentCount, setShownPatentCount] = useState(PATENT_PAGE_SIZE);
   const [shownResearchCount, setShownResearchCount] = useState(RESEARCH_PAGE_SIZE);
   const [shownTrialCount, setShownTrialCount] = useState(TRIAL_PAGE_SIZE);
+  const [researchSortMode, setResearchSortMode] = useState<"newest" | "relevance">("relevance");
 
   useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
-  useEffect(() => { setShownResearchCount(RESEARCH_PAGE_SIZE); }, [researchResults]);
+  useEffect(() => { setShownResearchCount(RESEARCH_PAGE_SIZE); }, [researchResults, researchSortMode]);
   useEffect(() => { setShownTrialCount(TRIAL_PAGE_SIZE); }, [trialResults, trialPhaseFilter, trialStatusFilter, trialSponsorSearch, trialSortMode]);
 
   useEffect(() => {
@@ -909,6 +910,18 @@ export default function Scout() {
     });
   }, [trialResults, trialSponsorSearch]);
 
+  const sortedResearchResults = useMemo(() => {
+    if (researchSortMode === "newest") {
+      return [...researchResults].sort((a, b) => {
+        const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
+        const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
+        if (db !== da) return db - da;
+        return (a.id ?? "").localeCompare(b.id ?? "");
+      });
+    }
+    return researchResults;
+  }, [researchResults, researchSortMode]);
+
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
@@ -1429,89 +1442,72 @@ export default function Scout() {
                       </button>
                     </div>
 
-                    {/* Patent controls — desktop only */}
-                    <div className="hidden md:flex flex-wrap items-center gap-3">
-                      {/* Sort toggle */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sort</span>
-                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-sort-toggle">
-                          {(["newest", "best_match"] as const).map((mode) => (
-                            <button
-                              key={mode}
-                              onClick={() => setPatentSortMode(mode)}
-                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
-                                patentSortMode === mode
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                              data-testid={`patent-sort-${mode}`}
-                            >
-                              {mode === "newest" ? "Newest" : "Best Match"}
-                            </button>
-                          ))}
-                        </div>
+                    {/* Patent controls — desktop only, compact single row */}
+                    <div className="hidden md:flex items-center gap-2">
+                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-sort-toggle">
+                        {(["newest", "best_match"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setPatentSortMode(mode)}
+                            className={`px-2.5 py-1 text-[11px] font-medium transition-colors border-r border-border last:border-r-0 ${
+                              patentSortMode === mode
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                            data-testid={`patent-sort-${mode}`}
+                          >
+                            {mode === "newest" ? "Newest" : "Best Match"}
+                          </button>
+                        ))}
                       </div>
-
-                      {/* Owner type filter */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Assignee Type</span>
-                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-owner-filter">
-                          {(["all", "university", "company"] as const).map((type) => (
-                            <button
-                              key={type}
-                              onClick={() => setPatentOwnerFilter(type)}
-                              className={`px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors border-r border-border last:border-r-0 ${
-                                patentOwnerFilter === type
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                              data-testid={`patent-owner-filter-${type}`}
-                            >
-                              {type === "all" ? "All" : type === "university" ? "University" : "Company"}
-                            </button>
-                          ))}
-                        </div>
+                      <span className="text-muted-foreground/30 text-xs select-none">·</span>
+                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-owner-filter">
+                        {(["all", "university", "company"] as const).map((type) => (
+                          <button
+                            key={type}
+                            onClick={() => setPatentOwnerFilter(type)}
+                            className={`px-2.5 py-1 text-[11px] font-medium capitalize transition-colors border-r border-border last:border-r-0 ${
+                              patentOwnerFilter === type
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                            data-testid={`patent-owner-filter-${type}`}
+                          >
+                            {type === "all" ? "All" : type === "university" ? "University" : "Company"}
+                          </button>
+                        ))}
                       </div>
-
-                      {/* Date range filter */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Date</span>
-                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-date-filter">
-                          {(["any", "6m", "2024", "2023", "2022"] as const).map((opt) => (
-                            <button
-                              key={opt}
-                              onClick={() => {
-                                setPatentDateFilter(opt);
-                                if (currentQuery) {
-                                  patentMutation.mutate({ query: currentQuery, patentSince: opt !== "any" ? opt : undefined });
-                                }
-                              }}
-                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
-                                patentDateFilter === opt
-                                  ? "bg-primary text-primary-foreground"
-                                  : "bg-background text-muted-foreground hover:text-foreground"
-                              }`}
-                              data-testid={`patent-date-filter-${opt}`}
-                            >
-                              {opt === "any" ? "Any time" : opt === "6m" ? "Last 6 months" : opt === "2022" ? "2022 and older" : opt}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      {/* Assignee search */}
-                      <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Assignee</span>
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-                          <Input
-                            value={patentAssigneeSearch}
-                            onChange={(e) => setPatentAssigneeSearch(e.target.value)}
-                            placeholder="Filter by assignee…"
-                            className="h-7 pl-6 pr-2 text-[11px] w-[160px] border-border"
-                            data-testid="input-patent-assignee-search"
-                          />
-                        </div>
+                      <Select
+                        value={patentDateFilter}
+                        onValueChange={(v) => {
+                          const opt = v as typeof patentDateFilter;
+                          setPatentDateFilter(opt);
+                          if (currentQuery) {
+                            patentMutation.mutate({ query: currentQuery, patentSince: opt !== "any" ? opt : undefined });
+                          }
+                        }}
+                        data-testid="patent-date-filter"
+                      >
+                        <SelectTrigger className="h-7 text-[11px] w-[130px] border-border" data-testid="patent-date-filter-trigger">
+                          <SelectValue placeholder="Any time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Any time</SelectItem>
+                          <SelectItem value="6m">Last 6 months</SelectItem>
+                          <SelectItem value="2024">2024</SelectItem>
+                          <SelectItem value="2023">2023</SelectItem>
+                          <SelectItem value="2022">2022 and older</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="relative ml-auto">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                        <Input
+                          value={patentAssigneeSearch}
+                          onChange={(e) => setPatentAssigneeSearch(e.target.value)}
+                          placeholder="Filter by assignee…"
+                          className="h-7 pl-6 pr-2 text-[11px] w-[160px] border-border"
+                          data-testid="input-patent-assignee-search"
+                        />
                       </div>
                     </div>
 
@@ -1910,15 +1906,61 @@ export default function Scout() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Results count — all breakpoints */}
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm text-muted-foreground" data-testid="research-results-count">
-                        {researchResults.length > shownResearchCount ? (
-                          <>Showing <span className="text-foreground font-semibold">{shownResearchCount}</span> of <span className="text-foreground font-semibold">{researchResults.length}</span> research signals</>
+                        {sortedResearchResults.length > shownResearchCount ? (
+                          <>Showing <span className="text-foreground font-semibold">{shownResearchCount}</span> of <span className="text-foreground font-semibold">{sortedResearchResults.length}</span> research signals</>
                         ) : (
-                          <><span className="text-foreground font-semibold">{researchResults.length}</span> research signal{researchResults.length !== 1 ? "s" : ""}</>
+                          <><span className="text-foreground font-semibold">{sortedResearchResults.length}</span> research signal{sortedResearchResults.length !== 1 ? "s" : ""}</>
                         )}
                         {currentQuery ? <> found for "<span className="text-foreground">{currentQuery}</span>"</> : " found"}
                       </p>
+                      {/* Action buttons — visible on mobile; hidden on desktop where the sort row shows them */}
+                      <div className="flex md:hidden items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => setFiltersOpen(true)}
+                          className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                          data-testid="button-filters-hint-research-mobile"
+                        >
+                          <SlidersHorizontal className="w-3 h-3" />
+                          {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
+                        </button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-[11px] h-9 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary shrink-0"
+                          onClick={handleGenerateReport}
+                          disabled={isAnyPending}
+                          data-testid="button-generate-report-research-mobile"
+                        >
+                          {reportMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <FileBarChart2 className="w-3 h-3" />
+                          )}
+                          <span>{reportMutation.isPending ? "..." : "Report"}</span>
+                        </Button>
+                      </div>
+                    </div>
+                    {/* Compact sort + actions row — desktop only */}
+                    <div className="hidden md:flex items-center justify-between gap-3">
+                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="research-sort-toggle">
+                        {(["relevance", "newest"] as const).map((mode) => (
+                          <button
+                            key={mode}
+                            onClick={() => setResearchSortMode(mode)}
+                            className={`px-2.5 py-1 text-[11px] font-medium transition-colors border-r border-border last:border-r-0 ${
+                              researchSortMode === mode
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                            data-testid={`research-sort-${mode}`}
+                          >
+                            {mode === "relevance" ? "Relevance" : "Newest"}
+                          </button>
+                        ))}
+                      </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
                           onClick={() => setFiltersOpen(true)}
@@ -1966,7 +2008,7 @@ export default function Scout() {
                       </div>
                     )}
                     <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                      {researchResults.slice(0, shownResearchCount).map((asset) => (
+                      {sortedResearchResults.slice(0, shownResearchCount).map((asset) => (
                         <ResearchCard
                           key={asset.id + "-research"}
                           asset={asset}
@@ -1974,7 +2016,7 @@ export default function Scout() {
                         />
                       ))}
                     </div>
-                    {shownResearchCount < researchResults.length && (
+                    {shownResearchCount < sortedResearchResults.length && (
                       <div className="flex justify-center pt-2">
                         <Button
                           variant="outline"
@@ -1983,7 +2025,7 @@ export default function Scout() {
                           onClick={() => setShownResearchCount((c) => c + RESEARCH_PAGE_SIZE)}
                           data-testid="button-load-more-research"
                         >
-                          Show {Math.min(RESEARCH_PAGE_SIZE, researchResults.length - shownResearchCount)} more papers
+                          Show {Math.min(RESEARCH_PAGE_SIZE, sortedResearchResults.length - shownResearchCount)} more papers
                         </Button>
                       </div>
                     )}
