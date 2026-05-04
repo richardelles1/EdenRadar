@@ -1030,7 +1030,7 @@ export default function Assets() {
       setSelectedPipeline("all");
       toast({ title: "All assets are now organised" });
     }
-  }, [uncategorisedCount, pipelinesLoading]);
+  }, [uncategorisedCount, pipelinesLoading, selectedPipeline, toast]);
 
   const sourceTypeCounts: Record<SourceTypeKey, number> = { tto: 0, patent: 0, trial: 0, literature: 0 };
   for (const a of allAssets) sourceTypeCounts[getSourceTypeKey(a.sourceName)]++;
