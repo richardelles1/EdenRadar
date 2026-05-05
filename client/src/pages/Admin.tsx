@@ -6118,6 +6118,7 @@ type EnrichBreakdown = {
   fresh: number;
   legacy: number;
   lowQualityRetry: number;
+  nullCategory?: number;
   total: number;
 };
 
@@ -6136,6 +6137,7 @@ type EdenStatusResponse = {
   total: number;
   succeeded: number;
   failed: number;
+  skipped: number;
   job: { id: number; total: number; processed: number; improved: number; status: string; startedAt: string; completedAt: string | null } | null;
   staleJobDetected: boolean;
   staleJobId: number | null;
@@ -9735,6 +9737,7 @@ function DataQualityTab({ pw }: { pw: string }) {
     total: number;
     succeeded: number;
     failed: number;
+    skipped: number;
     lastCycleCount: number;
     lastCycleDeferred: number;
     job: { status: string; completedAt: string | null } | null;
@@ -10039,6 +10042,25 @@ function DataQualityTab({ pw }: { pw: string }) {
                   </Button>
                 </div>
                 <Progress value={pct ?? 0} className="h-1.5" />
+                {(edenStatus?.succeeded != null || edenStatus?.failed != null || edenStatus?.skipped != null) && (
+                  <div className="flex items-center gap-3 mt-2 text-[11px]" data-testid="eden-live-counters">
+                    {(edenStatus?.succeeded ?? 0) > 0 && (
+                      <span className="text-emerald-700 dark:text-emerald-400 font-medium" data-testid="eden-live-enriched">
+                        {edenStatus!.succeeded.toLocaleString()} enriched
+                      </span>
+                    )}
+                    {(edenStatus?.skipped ?? 0) > 0 && (
+                      <span className="text-muted-foreground" data-testid="eden-live-skipped">
+                        {edenStatus!.skipped.toLocaleString()} thin content
+                      </span>
+                    )}
+                    {(edenStatus?.failed ?? 0) > 0 && (
+                      <span className="text-red-600 dark:text-red-400" data-testid="eden-live-failed">
+                        {edenStatus!.failed.toLocaleString()} failed
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -10082,6 +10104,12 @@ function DataQualityTab({ pw }: { pw: string }) {
                     <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400" data-testid="breakdown-low-quality">
                       <span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
                       {breakdown.lowQualityRetry.toLocaleString()} low-score retry
+                    </span>
+                  )}
+                  {(breakdown.nullCategory ?? 0) > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-red-500/8 border-red-500/20 text-red-700 dark:text-red-400" data-testid="breakdown-null-category">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-400 inline-block" />
+                      {breakdown.nullCategory!.toLocaleString()} missing category
                     </span>
                   )}
                 </div>

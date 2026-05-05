@@ -34,6 +34,7 @@ export interface DeepEnrichBatchResult {
   results: Map<number, DeepEnrichResult>;
   succeeded: number;
   failed: number;
+  skipped: number;
   inputTokens: number;
   outputTokens: number;
 }
@@ -78,7 +79,7 @@ export async function deepEnrichBatch(
   assets: DeepEnrichAssetInput[],
   concurrency = 20,
   onFlush: (results: DeepEnrichResult[]) => Promise<number>,
-  onProgress?: (processed: number, total: number, succeeded: number, failed: number) => void,
+  onProgress?: (processed: number, total: number, succeeded: number, failed: number, skipped: number) => void,
   abortCheck?: () => boolean,
   onTokens?: (inputTokens: number, outputTokens: number) => void,
 ): Promise<DeepEnrichBatchResult> {
@@ -87,6 +88,7 @@ export async function deepEnrichBatch(
   let processed = 0;
   let totalSucceeded = 0;
   let totalFailed = 0;
+  let totalSkipped = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   const total = assets.length;
@@ -118,9 +120,10 @@ export async function deepEnrichBatch(
       if (!asset) continue;
 
       // Quality gate: combined text must be >= MIN_CONTENT_CHARS.
-      // Skip (leave enrichedAt=null) so the asset is retried once it gains more content.
-      // Deduplicate before summing — when no description was scraped, summary falls back
-      // to the title, so counting both would incorrectly inflate the length.
+      // Skip (leave enrichedAt=null, do NOT increment deepEnrichAttempts) so the
+      // asset is retried once it gains more content from a future scrape.
+      // Deduplicate before summing — when no description was scraped, summary falls
+      // back to the title, so counting both would incorrectly inflate the length.
       const assetName = asset.assetName || "";
       const summary = asset.summary || "";
       const abstract = asset.abstract || "";
@@ -132,8 +135,10 @@ export async function deepEnrichBatch(
         console.log(
           `[deepEnrich] Skipping asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — combined text too short (${combinedLength} chars < ${MIN_CONTENT_CHARS}). Will retry next cycle.`,
         );
+        // Count as skipped (no GPT call made, no DB write, deepEnrichAttempts unchanged).
+        totalSkipped++;
         processed++;
-        onProgress?.(processed, total, totalSucceeded, totalFailed);
+        onProgress?.(processed, total, totalSucceeded, totalFailed, totalSkipped);
         continue;
       }
 
@@ -203,7 +208,7 @@ export async function deepEnrichBatch(
 
       if (!succeeded) totalFailed++;
       processed++;
-      onProgress?.(processed, total, totalSucceeded, totalFailed);
+      onProgress?.(processed, total, totalSucceeded, totalFailed, totalSkipped);
     }
   }
 
@@ -211,5 +216,5 @@ export async function deepEnrichBatch(
   await Promise.all(workers);
   await flushBuffer(true);
 
-  return { results: allResults, succeeded: totalSucceeded, failed: totalFailed, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
+  return { results: allResults, succeeded: totalSucceeded, failed: totalFailed, skipped: totalSkipped, inputTokens: totalInputTokens, outputTokens: totalOutputTokens };
 }

@@ -1716,7 +1716,18 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
-              sql`${ingestedAssets.deepEnrichAttempts} <= 1`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
+            ),
+            // Bucket D — null-category orphan (enrichedAt IS NOT NULL but categories IS NULL):
+            //   Covers assets that were enriched but the GPT call returned no category data
+            //   (e.g., total GPT failure that still wrote enrichedAt). Without this bucket
+            //   they would never be re-selected because enrichedAt IS NOT NULL excludes
+            //   them from bucket A, and completenessScore may be non-null excluding them
+            //   from bucket B.
+            and(
+              sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
+              sql`${ingestedAssets.categories} IS NULL`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
             ),
           ),
         ),
@@ -1740,7 +1751,12 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
-              sql`${ingestedAssets.deepEnrichAttempts} <= 1`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
+            ),
+            and(
+              sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
+              sql`${ingestedAssets.categories} IS NULL`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
             ),
           ),
         ),
@@ -1748,19 +1764,21 @@ export class DatabaseStorage implements IStorage {
     return row?.count ?? 0;
   }
 
-  async getAssetsNeedingDeepEnrichBreakdown(): Promise<{ fresh: number; legacy: number; lowQualityRetry: number; total: number }> {
-    const result = await db.execute<{ fresh: number; legacy: number; low_quality_retry: number; total: number }>(sql`
+  async getAssetsNeedingDeepEnrichBreakdown(): Promise<{ fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number }> {
+    const result = await db.execute<{ fresh: number; legacy: number; low_quality_retry: number; null_category: number; total: number }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                                               AS fresh,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                            AS legacy,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 1)::int AS low_quality_retry,
-        COUNT(*)::int                                                                                                                   AS total
+        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                                                                    AS fresh,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                                                 AS legacy,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)::int   AS low_quality_retry,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)::int                                           AS null_category,
+        COUNT(*)::int                                                                                                                                        AS total
       FROM ingested_assets
       WHERE relevant = true
         AND (
           enriched_at IS NULL
           OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
-          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 1)
+          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)
+          OR (enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)
         )
     `);
     const row = result.rows[0];
@@ -1768,6 +1786,7 @@ export class DatabaseStorage implements IStorage {
       fresh: Number(row?.fresh ?? 0),
       legacy: Number(row?.legacy ?? 0),
       lowQualityRetry: Number(row?.low_quality_retry ?? 0),
+      nullCategory: Number(row?.null_category ?? 0),
       total: Number(row?.total ?? 0),
     };
   }

@@ -4275,6 +4275,7 @@ export async function registerRoutes(
   let edenTotal = 0;
   let edenImproved = 0;
   let edenFailed = 0;
+  let edenSkipped = 0;
   let edenShouldStop = false;
   let edenPaused = false;
   const _rawCap = parseInt(process.env.ENRICH_MAX_PER_CYCLE ?? "500", 10);
@@ -4311,7 +4312,7 @@ export async function registerRoutes(
         storage.getAssetsNeedingDeepEnrich(),
         storage.getAssetsNeedingDeepEnrichBreakdown(),
       ]);
-      if (assets.length === 0) return res.json({ message: "All relevant assets already deeply enriched", total: 0, breakdown: { fresh: 0, legacy: 0, lowQualityRetry: 0, total: 0 } });
+      if (assets.length === 0) return res.json({ message: "All relevant assets already deeply enriched", total: 0, breakdown: { fresh: 0, legacy: 0, lowQualityRetry: 0, nullCategory: 0, total: 0 } });
 
       const capped = assets.slice(0, ENRICH_MAX_PER_CYCLE);
       const deferred = assets.length - capped.length;
@@ -4325,6 +4326,7 @@ export async function registerRoutes(
       edenShouldStop = false;
       edenImproved = 0;
       edenFailed = 0;
+      edenSkipped = 0;
 
       const job = await storage.createDeepEnrichmentJob(capped.length);
       edenJobId = job.id;
@@ -4349,12 +4351,13 @@ export async function registerRoutes(
         async (batch) => {
           return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
         },
-        (processed, _total, succeeded, failed) => {
+        (processed, _total, succeeded, failed, skipped) => {
           edenProcessed = processed;
           edenImproved = succeeded;
           edenFailed = failed;
+          edenSkipped = skipped;
           if (edenJobId !== null) {
-            storage.updateEnrichmentJob(edenJobId, { processed, improved: succeeded }).catch(() => {});
+            storage.updateEnrichmentJob(edenJobId, { processed: succeeded + failed, improved: succeeded }).catch(() => {});
           }
         },
         () => edenShouldStop,
@@ -4362,6 +4365,7 @@ export async function registerRoutes(
         edenRunning = false;
         edenImproved = batchResult.succeeded;
         edenFailed = batchResult.failed;
+        edenSkipped = batchResult.skipped;
         edenLastCycleCount = batchResult.succeeded;
         edenLastCycleDeferred = deferred;
         if (edenJobId !== null) {
@@ -4372,7 +4376,7 @@ export async function registerRoutes(
             improved: batchResult.succeeded,
           }).catch(() => {});
         }
-        console.log(`[EDEN] Deep enrichment ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
+        console.log(`[EDEN] Deep enrichment ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} enriched, ${batchResult.failed} failed, ${batchResult.skipped} skipped (thin content)`);
         // Automatically trigger near-duplicate detection after enrichment completes
         if (!edenShouldStop) {
           storage.runNearDuplicateDetection((msg) => console.log(`[dedup/post-enrich] ${msg}`))
@@ -4407,6 +4411,7 @@ export async function registerRoutes(
         total: edenTotal,
         succeeded: edenImproved,
         failed: edenFailed,
+        skipped: edenSkipped,
         lastCycleCount: edenLastCycleCount,
         lastCycleDeferred: edenLastCycleDeferred,
         job: latest ?? null,
