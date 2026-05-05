@@ -44,7 +44,7 @@ import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { ExportMenu } from "@/components/ExportMenu";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
-const SLIDE_COUNT = 9;
+const SLIDE_COUNT = 10;
 
 const DARK = {
   bg: "#0d1117",
@@ -1317,7 +1317,7 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
   }
 
   return (
-    <Slide index={7} section="EDEN" accent={colors.green} colors={colors}>
+    <Slide index={8} section="EDEN" accent={colors.green} colors={colors}>
 
       {/* ── HEADER ── */}
       <div className="flex items-start justify-between mb-4 sm:mb-5">
@@ -1454,7 +1454,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
   ];
   return (
-    <Slide index={5} section="EdenScout" accent={colors.green} colors={colors} waves>
+    <Slide index={6} section="EdenScout" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.greenDim }}>
@@ -1519,7 +1519,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
   ];
 
   return (
-    <Slide index={6} section="Supply Side" accent={colors.green} colors={colors}>
+    <Slide index={5} section="Supply Side" accent={colors.green} colors={colors}>
       <PitchDots color={colors.amber} count={5} seed={0} />
       <PitchDots color={colors.violet} count={5} seed={2} />
       <p className="text-xs sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>The supply side of the ecosystem</p>
@@ -1691,7 +1691,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
   ];
 
   return (
-    <Slide index={8} section="Pricing" accent={colors.green} colors={colors}>
+    <Slide index={9} section="Pricing" accent={colors.green} colors={colors}>
       <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
         Simple, transparent <span style={{ color: colors.green }}>pricing</span>.
       </h2>
@@ -1757,33 +1757,50 @@ function TractionSlide({ colors }: { colors: Colors }) {
               </div>
               <div>
                 <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
-                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.indigo }}>Transactional</p>
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.indigo }}>Deal Marketplace</p>
                   <span className="px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider" style={{ background: colors.indigo, color: "#fff" }}>Deal-Driven</span>
                 </div>
                 <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenMarket</h3>
-                <p className="text-xs" style={{ color: colors.text }}>Listing &amp; deal-room access for buyers and sellers</p>
+                <p className="text-xs" style={{ color: colors.text }}>Confidential biopharma deal marketplace</p>
               </div>
             </div>
             <div className="text-right shrink-0">
               <div className="flex items-baseline gap-0.5 justify-end">
-                <span className="text-base sm:text-lg font-extrabold" style={{ color: colors.indigo }}>Per-deal</span>
+                <span className="text-2xl sm:text-3xl font-extrabold tabular-nums" style={{ color: colors.indigo }}>$1,000</span>
+                <span className="text-xs" style={{ color: colors.text }}>/mo</span>
               </div>
-              <p className="text-xs mt-0.5" style={{ color: colors.textMuted }}>listing &amp; access fees</p>
+              <p className="text-xs mt-0.5" style={{ color: colors.textMuted }}>buyer access</p>
             </div>
           </div>
-          <div className="grid grid-cols-1 gap-y-1.5 mt-1">
+          <div className="grid grid-cols-1 gap-y-1.5 mt-1 mb-3">
             {[
               "Confidential, NDA-gated deal rooms",
               "Blind listings for licensable assets",
               "Buyer–seller EOI workflow",
               "Closes the loop on Scout discoveries",
-              "Pay only when a deal is in motion",
             ].map((f) => (
               <div key={f} className="flex items-start gap-1.5 text-xs sm:text-xs" style={{ color: colors.text }}>
                 <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.indigo }} />
                 {f}
               </div>
             ))}
+          </div>
+          <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${colors.indigo}33` }}>
+            <div className="px-3 py-1.5" style={{ background: colors.indigoDim }}>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.indigo }}>Success Fees · Paid at close</p>
+            </div>
+            <div className="grid grid-cols-3 text-center" style={{ borderTop: `1px solid ${colors.border}` }}>
+              {[
+                { label: "Pre-clinical", fee: "$10K" },
+                { label: "Clinical", fee: "$30K" },
+                { label: "Late-stage", fee: "$50K" },
+              ].map((tier) => (
+                <div key={tier.label} className="px-2 py-2" style={{ background: colors.bgLight }}>
+                  <p className="text-xs font-extrabold" style={{ color: colors.indigo }}>{tier.fee}</p>
+                  <p className="text-[10px]" style={{ color: colors.textMuted }}>{tier.label}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -1794,7 +1811,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
         <p className="text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>Supply-Side Context · Free for Researchers</p>
         <div className="flex-1 h-px" style={{ background: colors.border }} />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
         <div className="rounded-lg p-2.5 sm:p-3 flex items-center gap-2.5" style={{ background: colors.amberDim, border: `1px solid ${colors.amber}33` }}>
           <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: colors.amber }}>
             <Lightbulb className="w-3.5 h-3.5 text-white" />
@@ -1819,6 +1836,113 @@ function TractionSlide({ colors }: { colors: Colors }) {
             <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>Research workspace → feeds Scout</p>
           </div>
         </div>
+        <div className="rounded-lg p-2.5 sm:p-3 flex items-center gap-2.5" style={{ background: colors.indigoDim, border: `1px solid ${colors.indigo}33` }}>
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-md flex items-center justify-center shrink-0" style={{ background: colors.indigo }}>
+            <ShoppingBag className="w-3.5 h-3.5 text-white" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between gap-1">
+              <h3 className="text-xs sm:text-sm font-bold leading-tight truncate" style={{ color: colors.text }}>EdenMarket</h3>
+              <span className="text-xs sm:text-xs font-extrabold" style={{ color: colors.indigo }}>$1K/mo</span>
+            </div>
+            <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>Blind marketplace → closes Scout deals</p>
+          </div>
+        </div>
+      </div>
+    </Slide>
+  );
+}
+
+/* ═══════════════════════ SLIDE 7 — EDEN MARKET PORTAL ═══════════════════════ */
+function EdenMarketSlide({ colors }: { colors: Colors }) {
+  const features = [
+    {
+      icon: ShoppingBag,
+      title: "Confidential Listings",
+      desc: "Assets listed with therapeutic area, modality, stage, and IP profile visible upfront. Seller identity stays hidden until NDA is signed.",
+    },
+    {
+      icon: Lock,
+      title: "NDA-gated Deal Rooms",
+      desc: "Once both parties engage, a secure deal room opens with document vault, encrypted messaging, and a complete audit trail.",
+    },
+    {
+      icon: Users,
+      title: "EOI Submission",
+      desc: "Buyers submit structured Expressions of Interest directly from the listing. No cold outreach. No missed connections.",
+    },
+    {
+      icon: Check,
+      title: "Success-fee Aligned",
+      desc: "Listing is free for sellers. EdenMarket earns only when a deal closes — incentives stay perfectly aligned with both sides.",
+    },
+  ];
+
+  return (
+    <Slide index={7} section="EdenMarket" accent={colors.indigo} colors={colors}>
+      <PitchDots color={colors.indigo} count={8} />
+      <div className="flex items-center gap-3 mb-3 sm:mb-4">
+        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.indigoDim }}>
+          <ShoppingBag className="w-5 h-5" style={{ color: colors.indigo }} />
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest mb-0.5" style={{ color: colors.indigo }}>The deal layer</p>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold" style={{ color: colors.text }}>
+            Eden<span style={{ color: colors.indigo }}>Market</span>
+          </h2>
+        </div>
+      </div>
+      <p className="text-sm sm:text-base lg:text-lg mb-4 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
+        The industry's first confidential marketplace for licensable biotech assets. Buyers browse anonymously, sign an NDA inside a secure deal room, and unlock the full asset. EdenMarket only earns when a deal closes.
+      </p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-4 sm:mb-5">
+        {features.map((f) => (
+          <div
+            key={f.title}
+            className="rounded-xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start"
+            style={{ background: colors.bgLight, border: `1px solid ${colors.indigo}33` }}
+          >
+            <div
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0"
+              style={{ background: colors.indigoDim }}
+            >
+              <f.icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.indigo }} />
+            </div>
+            <div>
+              <p className="text-xs sm:text-sm font-semibold mb-1" style={{ color: colors.text }}>{f.title}</p>
+              <p className="text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Pricing model */}
+      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${colors.indigo}44` }}>
+        <div className="px-4 py-2.5 flex items-center gap-2" style={{ background: colors.indigoDim }}>
+          <ShoppingBag className="w-3.5 h-3.5" style={{ color: colors.indigo }} />
+          <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.indigo }}>Pricing Model · Membership + Success Fee</p>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4" style={{ borderTop: `1px solid ${colors.indigo}22` }}>
+          <div className="px-4 py-3 flex flex-col items-center text-center" style={{ background: colors.bgLight, borderRight: `1px solid ${colors.border}` }}>
+            <p className="text-xs font-semibold mb-1" style={{ color: colors.textMuted }}>Buyer Access</p>
+            <p className="text-lg sm:text-xl font-extrabold tabular-nums" style={{ color: colors.indigo }}>$1,000</p>
+            <p className="text-xs" style={{ color: colors.textMuted }}>/month</p>
+          </div>
+          {[
+            { label: "Pre-clinical", fee: "$10K" },
+            { label: "Clinical", fee: "$30K" },
+            { label: "Late-stage", fee: "$50K" },
+          ].map((tier) => (
+            <div key={tier.label} className="px-4 py-3 flex flex-col items-center text-center" style={{ background: colors.bgLight, borderLeft: `1px solid ${colors.border}` }}>
+              <p className="text-xs font-semibold mb-1" style={{ color: colors.textMuted }}>{tier.label}</p>
+              <p className="text-lg sm:text-xl font-extrabold" style={{ color: colors.indigo }}>{tier.fee}</p>
+              <p className="text-xs" style={{ color: colors.textMuted }}>success fee</p>
+            </div>
+          ))}
+        </div>
+        <div className="px-4 py-2 text-center" style={{ background: `${colors.indigo}08` }}>
+          <p className="text-xs" style={{ color: colors.textMuted }}>Listing is free. Sellers pay nothing unless a deal closes.</p>
+        </div>
       </div>
     </Slide>
   );
@@ -1827,14 +1951,15 @@ function TractionSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 10 — CONTACT ═══════════════════════ */
 function ContactSlide({ colors }: { colors: Colors }) {
   return (
-    <Slide index={9} section="Contact" accent={colors.green} colors={colors} waves>
+    <Slide index={10} section="Contact" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
         <div className="flex flex-row flex-wrap items-center justify-center gap-x-6 sm:gap-x-8 gap-y-3 mb-6">
           {[
-            { label: "Discovery", color: colors.amber, Icon: Lightbulb },
+            { label: "Discovery", color: colors.amber,  Icon: Lightbulb },
             { label: "Lab",       color: colors.violet, Icon: FlaskConical },
             { label: "Scout",     color: colors.green,  Icon: Search },
+            { label: "Market",    color: colors.indigo, Icon: ShoppingBag },
           ].map(({ label, color, Icon }) => (
             <div key={label} className="flex items-center gap-2.5">
               <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color }}>
@@ -1976,8 +2101,9 @@ export default function PitchDeck() {
       <WhoWeAreSlide colors={colors} />
       <ProblemSlide colors={colors} />
       <SolutionPortalsSlide colors={colors} />
-      <RadarSlide colors={colors} />
       <EarlySignalSlide colors={colors} />
+      <RadarSlide colors={colors} />
+      <EdenMarketSlide colors={colors} />
       <PitchEdenChatSlide colors={colors} />
       <TractionSlide colors={colors} />
       <ContactSlide colors={colors} />
