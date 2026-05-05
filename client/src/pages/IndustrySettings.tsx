@@ -665,7 +665,7 @@ export default function IndustrySettings() {
               </p>
             ) : null}
           </div>
-          {org?.stripeCustomerId && (org.stripeStatus === "active" || org.stripeStatus === "trialing" || org.stripeStatus === "past_due") ? (
+          {(org?.stripeStatus === "active" || org?.stripeStatus === "trialing" || org?.stripeStatus === "past_due") ? (
             <Button
               size="sm"
               variant="outline"
