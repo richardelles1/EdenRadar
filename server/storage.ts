@@ -1676,8 +1676,10 @@ export class DatabaseStorage implements IStorage {
         sourceUrl: ingestedAssets.sourceUrl,
       })
       .from(ingestedAssets)
-      // Three finite, non-overlapping selection buckets. Each asset will only ever
-      // fall into one bucket; once it exits all three it is never re-selected.
+      // Four selection buckets. Buckets can overlap in edge cases (e.g., an asset
+      // that is null-category AND low-quality will match both C and D); that is
+      // acceptable — the union de-duplicates via the OR predicate. Once an asset
+      // exits all four predicates it is never re-selected automatically.
       //
       // Bucket A — fresh/reset (enrichedAt IS NULL):
       //   Covers: new inserts (default null) and content-change resets
@@ -1688,21 +1690,22 @@ export class DatabaseStorage implements IStorage {
       //   These have enrichedAt set but no score recorded.
       //
       // Bucket C — low-quality retry (completenessScore < 15 AND enrichedAt IS NOT NULL
-      //           AND deepEnrichAttempts <= 1):
-      //   Covers: assets that produced a near-zero score on their first GPT-4o pass
+      //           AND deepEnrichAttempts <= 3):
+      //   Covers: assets that produced a near-zero score on an earlier GPT-4o pass
       //   (e.g., thin-content stub that later gained an abstract).
       //   Threshold: score < 15 means not even one standard field was filled
       //   (target/modality/indication each contribute 15 pts; a legitimate result
-      //   that extracted one field cleanly will score >= 15 and exit this bucket).
+      //   that extracted one field cleanly will score >= 15 and exits this bucket).
+      //   Cap of <= 3 allows up to 3 retry passes before the asset is excluded.
+      //   Content-change resets both enrichedAt and deepEnrichAttempts to null/0,
+      //   restarting the lifecycle for updated content.
       //
-      //   Why <= 1 and not = 0:
-      //     - Every deep-enrich write (bucket A or B) increments deepEnrichAttempts (0→1).
-      //     - After the first pass, deepEnrichAttempts = 1.  If score is still < 15,
-      //       the asset enters bucket C (attempts = 1, which satisfies <= 1) for ONE retry.
-      //     - The retry increments deepEnrichAttempts to 2, permanently excluding the asset
-      //       (2 > 1).  Total: at most TWO GPT-4o calls per asset.
-      //     - Content-change resets both enrichedAt and deepEnrichAttempts to 0/null,
-      //       restarting the two-pass lifecycle for updated content.
+      // Bucket D — null-category orphan (enrichedAt IS NOT NULL AND categories IS NULL
+      //           AND deepEnrichAttempts <= 3):
+      //   Covers: assets that were written by a prior enrichment run but the GPT
+      //   response returned no category data. Without this bucket they would be
+      //   permanently excluded: enrichedAt IS NOT NULL rules them out of A, and
+      //   completenessScore may be non-null ruling them out of B.
       .where(
         and(
           eq(ingestedAssets.relevant, true),
