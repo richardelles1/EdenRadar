@@ -442,7 +442,7 @@ export default function IndustrySettings() {
         return;
       }
       if (data.url) {
-        window.location.href = data.url;
+        window.open(data.url, "_blank");
       }
     } catch {
       toast({ title: "Network error", description: "Failed to connect. Please try again.", variant: "destructive" });
