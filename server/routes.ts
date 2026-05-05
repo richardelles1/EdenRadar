@@ -4730,6 +4730,7 @@ export async function registerRoutes(
           COUNT(*) AS total,
           COUNT(CASE
             WHEN asset_class = 'drug_biologic'
+              AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
               AND (
                 (mechanism_of_action IS NULL OR mechanism_of_action = '')
                 OR (unmet_need IS NULL OR unmet_need = '')
@@ -4738,10 +4739,10 @@ export async function registerRoutes(
               )
             THEN 1 END
           ) AS gap_fill_count,
-          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (mechanism_of_action IS NULL OR mechanism_of_action = '') THEN 1 END) AS missing_moa,
-          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (unmet_need IS NULL OR unmet_need = '') THEN 1 END) AS missing_unmet,
-          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (comparable_drugs IS NULL OR comparable_drugs = '') THEN 1 END) AS missing_comparable,
-          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (innovation_claim IS NULL OR innovation_claim = '') THEN 1 END) AS missing_innovation,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (mechanism_of_action IS NULL OR mechanism_of_action = '') THEN 1 END) AS missing_moa,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (unmet_need IS NULL OR unmet_need = '') THEN 1 END) AS missing_unmet,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (comparable_drugs IS NULL OR comparable_drugs = '') THEN 1 END) AS missing_comparable,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (innovation_claim IS NULL OR innovation_claim = '') THEN 1 END) AS missing_innovation,
           COUNT(CASE WHEN summary IS NOT NULL AND LENGTH(summary) >= 120 THEN 1 END) AS pop_b_count
         FROM ingested_assets
         WHERE relevant = true
