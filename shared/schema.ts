@@ -1247,3 +1247,13 @@ export const inviteTokens = pgTable("invite_tokens", {
   usedAt: timestamp("used_at"),
 });
 export type InviteToken = typeof inviteTokens.$inferSelect;
+
+// Persists the last run summary for each enrichment pipeline (band, eden) so
+// the post-run report survives server restarts. One row per runType (UPSERT).
+export const enrichmentRunLog = pgTable("enrichment_run_log", {
+  id: serial("id").primaryKey(),
+  runType: text("run_type").notNull().unique(),
+  data: jsonb("data").notNull().$type<Record<string, unknown>>(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export type EnrichmentRunLog = typeof enrichmentRunLog.$inferSelect;

@@ -4282,6 +4282,12 @@ export async function registerRoutes(
   const ENRICH_MAX_PER_CYCLE = Number.isFinite(_rawCap) && _rawCap > 0 ? _rawCap : 500;
   let edenLastCycleCount = 0;
   let edenLastCycleDeferred = 0;
+  let edenStartMs = 0;
+  let edenSnapshotBefore: Record<number, string> = {};
+  let edenLastSummary: {
+    succeeded: number; failed: number; skipped: number; total: number; deferred: number;
+    durationMs: number; bandMovements: Record<string, number>; completedAt: string;
+  } | null = null;
 
   app.get("/api/admin/eden/stats", async (req, res) => {
     try {
@@ -4327,6 +4333,18 @@ export async function registerRoutes(
       edenImproved = 0;
       edenFailed = 0;
       edenSkipped = 0;
+      edenStartMs = Date.now();
+
+      // Snapshot band distribution of the assets we are about to process so we
+      // can report band movements (e.g. bare→very_sparse) after the run.
+      edenSnapshotBefore = {};
+      try {
+        const cappedIds = capped.map((a) => a.id);
+        const snapRows = await db.execute<{ id: number; completeness_score: number | null }>(sql`
+          SELECT id, completeness_score FROM ingested_assets WHERE id = ANY(${cappedIds}::int[])
+        `);
+        for (const r of snapRows.rows) edenSnapshotBefore[r.id] = scoreToBand(r.completeness_score);
+      } catch { /* non-fatal */ }
 
       const job = await storage.createDeepEnrichmentJob(capped.length);
       edenJobId = job.id;
@@ -4376,6 +4394,29 @@ export async function registerRoutes(
             improved: batchResult.succeeded,
           }).catch(() => {});
         }
+        const edenDurationMs = Date.now() - edenStartMs;
+        // Compute band movements by re-querying the same asset IDs post-run
+        let edenBandMovements: Record<string, number> = {};
+        try {
+          const cappedIds = Object.keys(edenSnapshotBefore).map(Number);
+          if (cappedIds.length > 0) {
+            const postRows = await db.execute<{ id: number; completeness_score: number | null }>(sql`
+              SELECT id, completeness_score FROM ingested_assets WHERE id = ANY(${cappedIds}::int[])
+            `);
+            edenBandMovements = computeBandMovements(edenSnapshotBefore, postRows.rows);
+          }
+        } catch { /* non-fatal */ }
+        edenLastSummary = {
+          succeeded: batchResult.succeeded,
+          failed: batchResult.failed,
+          skipped: batchResult.skipped,
+          total: edenTotal,
+          deferred,
+          durationMs: edenDurationMs,
+          bandMovements: edenBandMovements,
+          completedAt: new Date().toISOString(),
+        };
+        storage.saveEnrichmentRun("eden", edenLastSummary as unknown as Record<string, unknown>).catch(() => {});
         console.log(`[EDEN] Deep enrichment ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} enriched, ${batchResult.failed} failed, ${batchResult.skipped} skipped (thin content)`);
         // Automatically trigger near-duplicate detection after enrichment completes
         if (!edenShouldStop) {
@@ -4403,6 +4444,13 @@ export async function registerRoutes(
       // has not been resumed or completed. The admin must explicitly resume it.
       const staleJob = !edenRunning ? await storage.getRunningDeepEnrichmentJob() : null;
       const staleJobDetected = staleJob !== null && staleJob !== undefined;
+      // Lazy-load from DB if in-memory summary was cleared by a server restart
+      if (edenLastSummary === null) {
+        try {
+          const stored = await storage.getLastEnrichmentRun("eden");
+          if (stored) edenLastSummary = stored as unknown as typeof edenLastSummary;
+        } catch { /* non-fatal */ }
+      }
       res.json({
         running: edenRunning,
         paused: edenPaused,
@@ -4417,6 +4465,7 @@ export async function registerRoutes(
         job: latest ?? null,
         staleJobDetected,
         staleJobId: staleJob?.id ?? null,
+        lastSummary: edenLastSummary,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -4457,6 +4506,7 @@ export async function registerRoutes(
   let bandFieldCounts: Record<string, number> = {};
   let bandAvgScoreBefore: number | null = null;
   let bandAssetIds: number[] = [];
+  let bandSnapshotBefore: Record<number, string> = {};
   let bandLastSummary: {
     band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
@@ -4464,6 +4514,8 @@ export async function registerRoutes(
     fieldFillCounts: Record<string, number>;
     avgScoreBefore: number | null;
     avgScoreAfter: number | null;
+    bandMovements: Record<string, number>;
+    completedAt: string;
   } | null = null;
 
   const BAND_SCORE_RANGES: Record<string, { min: number | null; max: number | null }> = {
@@ -4472,6 +4524,30 @@ export async function registerRoutes(
     sparse:     { min: 40,  max: 59   },
     very_sparse:{ min: 1,   max: 39   },
     bare:       { min: null, max: 0   },
+  };
+
+  const scoreToBand = (score: number | null | undefined): string => {
+    if (score == null || score === 0) return "bare";
+    if (score >= 80) return "rich";
+    if (score >= 60) return "decent";
+    if (score >= 40) return "sparse";
+    return "very_sparse";
+  };
+
+  const computeBandMovements = (
+    before: Record<number, string>,
+    rows: Array<{ id: number; completeness_score: number | null }>,
+  ): Record<string, number> => {
+    const movements: Record<string, number> = {};
+    for (const row of rows) {
+      const bnd = scoreToBand(row.completeness_score);
+      const prev = before[row.id];
+      if (prev && bnd !== prev) {
+        const key = `${prev}→${bnd}`;
+        movements[key] = (movements[key] ?? 0) + 1;
+      }
+    }
+    return movements;
   };
 
   app.get("/api/admin/enrichment/bands", requireAdmin, async (req, res) => {
@@ -4562,6 +4638,13 @@ export async function registerRoutes(
     const costPerAssetFull = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
     const costPerAssetGap = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
     const liveProjectedTotalUsd = bandTotal * (bandGapFill ? costPerAssetGap : costPerAssetFull);
+    // Lazy-load from DB if in-memory summary was cleared by a server restart
+    if (bandLastSummary === null) {
+      try {
+        const stored = await storage.getLastEnrichmentRun("band");
+        if (stored) bandLastSummary = stored as unknown as typeof bandLastSummary;
+      } catch { /* non-fatal */ }
+    }
     res.json({
       running: bandRunning,
       band: bandBand || null,
@@ -4687,15 +4770,17 @@ export async function registerRoutes(
 
       if (assets.length === 0) return res.json({ message: "No assets found for this band/mode", total: 0 });
 
-      // ── Pre-run: sample avg completeness score of target assets ──────────
+      // ── Pre-run: sample avg completeness score + snapshot band distribution ──
       const assetIdList = assets.map((a) => a.id);
       let avgScoreBefore: number | null = null;
+      bandSnapshotBefore = {};
       try {
-        const scoreRow = await db.execute<{ avg_score: string | null }>(sql`
-          SELECT AVG(completeness_score)::float AS avg_score
+        const scoreRow = await db.execute<{ id: number; avg_score: string | null; completeness_score: number | null }>(sql`
+          SELECT id, completeness_score, AVG(completeness_score) OVER ()::float AS avg_score
           FROM ingested_assets
-          WHERE id = ANY(${assetIdList}::int[]) AND completeness_score IS NOT NULL
+          WHERE id = ANY(${assetIdList}::int[])
         `);
+        for (const r of scoreRow.rows) bandSnapshotBefore[r.id] = scoreToBand(r.completeness_score);
         const raw = scoreRow.rows[0]?.avg_score;
         avgScoreBefore = raw != null ? parseFloat(parseFloat(raw).toFixed(1)) : null;
       } catch { /* non-fatal */ }
@@ -4806,6 +4891,15 @@ export async function registerRoutes(
           avgScoreAfter = rawPost != null ? parseFloat(parseFloat(rawPost).toFixed(1)) : null;
         } catch { /* non-fatal */ }
 
+        // Compute band movements by re-querying the same asset IDs post-run
+        let bandMovements: Record<string, number> = {};
+        try {
+          const postRows = await db.execute<{ id: number; completeness_score: number | null }>(sql`
+            SELECT id, completeness_score FROM ingested_assets WHERE id = ANY(${bandAssetIds}::int[])
+          `);
+          bandMovements = computeBandMovements(bandSnapshotBefore, postRows.rows);
+        } catch { /* non-fatal */ }
+
         bandLastSummary = {
           band, gapFill, total: assets.length, succeeded: result.succeeded, failed: result.failed,
           inputTokens: result.inputTokens, outputTokens: result.outputTokens,
@@ -4814,8 +4908,11 @@ export async function registerRoutes(
           fieldFillCounts: { ...bandFieldCounts },
           avgScoreBefore: bandAvgScoreBefore,
           avgScoreAfter,
+          bandMovements,
+          completedAt: new Date().toISOString(),
         };
-        console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, score ${bandAvgScoreBefore} → ${avgScoreAfter}`);
+        storage.saveEnrichmentRun("band", bandLastSummary as unknown as Record<string, unknown>).catch(() => {});
+        console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, score ${bandAvgScoreBefore} → ${avgScoreAfter}, movements: ${JSON.stringify(bandMovements)}`);
       }).catch((e) => {
         bandRunning = false;
         console.error("[band-enrich] failed:", e);

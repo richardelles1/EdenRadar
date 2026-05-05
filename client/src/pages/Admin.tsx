@@ -1894,6 +1894,8 @@ interface BandStatusResponse {
     fieldFillCounts: Record<string, number>;
     avgScoreBefore: number | null;
     avgScoreAfter: number | null;
+    bandMovements: Record<string, number>;
+    completedAt: string;
   } | null;
 }
 
@@ -3786,6 +3788,26 @@ function Enrichment({ pw }: { pw: string }) {
                         ))}
                       </div>
                     )}
+                    {/* Band movements */}
+                    {Object.keys(bandStatus.lastSummary.bandMovements ?? {}).length > 0 && (() => {
+                      const bandOrder = ["bare", "very_sparse", "sparse", "decent", "rich"];
+                      return (
+                        <div data-testid="summary-band-movements">
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Band movements</p>
+                          <div className="flex flex-wrap gap-1">
+                            {Object.entries(bandStatus.lastSummary!.bandMovements).sort((a, b) => b[1] - a[1]).map(([key, n]) => {
+                              const [from, to] = key.split("→");
+                              const isUp = bandOrder.indexOf(to) > bandOrder.indexOf(from);
+                              return (
+                                <span key={key} className={`rounded-full text-[10px] px-2 py-0.5 font-medium border ${isUp ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"}`}>
+                                  {from.replace("_", " ")} → {to.replace("_", " ")} ×{n}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                 )}
 
@@ -9743,6 +9765,10 @@ function DataQualityTab({ pw }: { pw: string }) {
     job: { status: string; completedAt: string | null } | null;
     staleJobDetected: boolean;
     staleJobId: number | null;
+    lastSummary: {
+      succeeded: number; failed: number; skipped: number; total: number; deferred: number;
+      durationMs: number; bandMovements: Record<string, number>; completedAt: string;
+    } | null;
   }>({
     queryKey: ["/api/admin/eden/enrich/status", pw],
     queryFn: async () => {
@@ -10178,6 +10204,64 @@ function DataQualityTab({ pw }: { pw: string }) {
           </div>
         )}
       </div>
+
+      {/* EDEN last-run post-run summary (persisted, survives restarts) */}
+      {!edenStatus?.running && edenStatus?.lastSummary && (() => {
+        const s = edenStatus.lastSummary;
+        const movements = Object.entries(s.bandMovements ?? {}).sort((a, b) => b[1] - a[1]);
+        const completedAt = s.completedAt ? new Date(s.completedAt).toLocaleString() : null;
+        return (
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 overflow-hidden" data-testid="card-eden-last-run">
+            <div className="px-5 py-3 bg-emerald-100/60 dark:bg-emerald-900/30 border-b border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+              <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Last EDEN Run</span>
+              {completedAt && <span className="text-[11px] text-muted-foreground ml-1">{completedAt}</span>}
+              {s.durationMs > 0 && <span className="text-[11px] text-muted-foreground">· {Math.round(s.durationMs / 1000)}s</span>}
+            </div>
+            <div className="p-5 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-enriched">
+                  <p className="text-xl font-bold text-emerald-600">{s.succeeded.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">enriched</p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-skipped">
+                  <p className="text-xl font-bold text-amber-500">{s.skipped.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">thin content</p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-failed">
+                  <p className="text-xl font-bold text-red-500">{s.failed.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">failed</p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-deferred">
+                  <p className="text-xl font-bold text-foreground">{s.deferred.toLocaleString()}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">deferred</p>
+                </div>
+              </div>
+              {movements.length > 0 && (
+                <div data-testid="eden-run-movements">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Band movements</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {movements.map(([key, n]) => {
+                      const [from, to] = key.split("→");
+                      const isUp = ["bare","very_sparse","sparse","decent","rich"].indexOf(to) > ["bare","very_sparse","sparse","decent","rich"].indexOf(from);
+                      return (
+                        <span key={key} className={`rounded-full text-[11px] px-2.5 py-0.5 font-medium border ${isUp ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"}`} data-testid={`eden-movement-${key}`}>
+                          {from.replace("_", " ")} → {to.replace("_", " ")} <span className="opacity-70">×{n}</span>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {s.deferred > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  <span className="font-medium text-foreground">{s.deferred.toLocaleString()}</span> assets were deferred (per-cycle cap reached) and will be processed on the next run.
+                </p>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Stale-job resume banner */}
       {showStaleBanner && (

@@ -40,6 +40,7 @@ import {
   relevanceHoldout, type RelevanceHoldoutRow,
   relevanceMetrics, type RelevanceMetricsRow,
   inviteTokens, type InviteToken,
+  enrichmentRunLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -489,6 +490,10 @@ export interface IStorage {
 
   logExport(data: InsertExportLog): Promise<ExportLog>;
   getRecentExports(limit?: number): Promise<ExportLog[]>;
+
+  // Enrichment run log — persists post-run summaries across server restarts
+  saveEnrichmentRun(runType: string, data: Record<string, unknown>): Promise<void>;
+  getLastEnrichmentRun(runType: string): Promise<Record<string, unknown> | null>;
 }
 
 export type SubscriberMatchEntry = {
@@ -4507,6 +4512,20 @@ export class DatabaseStorage implements IStorage {
     } catch {
       return null;
     }
+  }
+
+  async saveEnrichmentRun(runType: string, data: Record<string, unknown>): Promise<void> {
+    await db.insert(enrichmentRunLog)
+      .values({ runType, data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: enrichmentRunLog.runType,
+        set: { data, updatedAt: new Date() },
+      });
+  }
+
+  async getLastEnrichmentRun(runType: string): Promise<Record<string, unknown> | null> {
+    const [row] = await db.select().from(enrichmentRunLog).where(eq(enrichmentRunLog.runType, runType));
+    return (row?.data as Record<string, unknown>) ?? null;
   }
 }
 
