@@ -1,4 +1,4 @@
-import { classifyAsset, MIN_CONTENT_CHARS, type AssetContext } from "./classifyAsset";
+import { classifyAsset, MIN_CONTENT_CHARS, MIN_THIN_CHARS, type AssetContext } from "./classifyAsset";
 import { computeCompletenessScore } from "./contentHash";
 
 export interface DeepEnrichResult {
@@ -131,21 +131,31 @@ export async function deepEnrichBatch(
         assetName.length +
         (summary !== assetName ? summary.length : 0) +
         (abstract && abstract !== assetName && abstract !== summary ? abstract.length : 0);
-      if (combinedLength < MIN_CONTENT_CHARS) {
+      if (combinedLength < MIN_THIN_CHARS) {
         console.log(
-          `[deepEnrich] Skipping asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — combined text too short (${combinedLength} chars < ${MIN_CONTENT_CHARS}). Will retry next cycle.`,
+          `[deepEnrich] Skipping asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — text too short even for lite pass (${combinedLength} chars < ${MIN_THIN_CHARS}). Will retry next cycle.`,
         );
-        // Count as skipped (no GPT call made, no DB write, deepEnrichAttempts unchanged).
         totalSkipped++;
         processed++;
         onProgress?.(processed, total, totalSucceeded, totalFailed, totalSkipped);
         continue;
       }
 
+      // Route thin-text assets (MIN_THIN_CHARS <= chars < MIN_CONTENT_CHARS) to gpt-4o-mini
+      // for a lite classification pass: sets assetClass, developmentStage, modality, indication,
+      // ipType, licensingReadiness. Avoids skipping 66%+ of the corpus entirely.
+      const useLitePass = combinedLength < MIN_CONTENT_CHARS;
+      const model: "gpt-4o" | "gpt-4o-mini" = useLitePass ? "gpt-4o-mini" : "gpt-4o";
+      if (useLitePass) {
+        console.log(
+          `[deepEnrich] Lite pass (gpt-4o-mini) for asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — ${combinedLength} chars`,
+        );
+      }
+
       let succeeded = false;
       try {
         const classification = await withRetry(
-          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, "gpt-4o", true, asset!.ctx),
+          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, model, true, asset!.ctx),
           asset.id,
         );
 

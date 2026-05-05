@@ -834,7 +834,9 @@ export class DatabaseStorage implements IStorage {
       for (const listing of urlDuplicates) {
         const existing = urlDeduped.get(listing.sourceUrl!);
         if (!existing) continue;
-        const contentChanged = listing.contentHash && existing.contentHash !== listing.contentHash;
+        // Only treat as a genuine content change when BOTH hashes exist AND differ.
+        // null-stored → new-hash is first-time population, not a real change.
+        const contentChanged = !!(listing.contentHash && existing.contentHash && listing.contentHash !== existing.contentHash);
         await db
           .update(ingestedAssets)
           .set({
@@ -873,16 +875,23 @@ export class DatabaseStorage implements IStorage {
 
     // 3. Bulk UPDATE existing listings — update lastSeenAt + runId, detect content changes
     const changedFps: string[] = [];
+    // First-time hash population: stored hash is null, incoming hash is new.
+    // Write the hash to establish a baseline but do NOT reset enrichedAt —
+    // we have no prior hash to compare against so this is not a real content change.
+    const hashHealFps: string[] = [];
     // Unchanged but needs sourceUrl healed (stored null, incoming has real URL)
     const unchangedNeedsUrlFps: string[] = [];
     const unchangedFps: string[] = [];
     for (const listing of existingListings) {
       const existing = existingSet.get(listing.fingerprint);
       const needsUrlHeal = !existing?.sourceUrl && !!listing.sourceUrl;
-      // Treat as changed when: incoming hash exists AND differs from stored hash
-      // (includes null stored hash = first-time hash population on a legacy row)
-      if (existing && listing.contentHash && listing.contentHash !== existing.contentHash) {
+      // Genuine content change: BOTH hashes exist AND they differ.
+      // Guard: if stored hash is null we cannot tell if content changed — treat as
+      // first-time hash population (hashHeal) to avoid mass enrichedAt resets.
+      if (existing && listing.contentHash && existing.contentHash && listing.contentHash !== existing.contentHash) {
         changedFps.push(listing.fingerprint);
+      } else if (existing && listing.contentHash && !existing.contentHash) {
+        hashHealFps.push(listing.fingerprint);
       } else if (needsUrlHeal) {
         unchangedNeedsUrlFps.push(listing.fingerprint);
       } else {
@@ -908,6 +917,21 @@ export class DatabaseStorage implements IStorage {
           .update(ingestedAssets)
           .set({ lastSeenAt: now, runId, sourceUrl: listing.sourceUrl })
           .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
+      }
+    }
+
+    // First-time hash population: write hash to establish baseline, no enrichedAt reset.
+    if (hashHealFps.length > 0) {
+      console.log(`[storage] Populating content_hash baseline for ${hashHealFps.length} legacy assets (no enrichedAt reset)`);
+      for (let i = 0; i < hashHealFps.length; i += CHUNK) {
+        const chunk = hashHealFps.slice(i, i + CHUNK);
+        const chunkListings = existingListings.filter((l) => chunk.includes(l.fingerprint));
+        for (const listing of chunkListings) {
+          await db
+            .update(ingestedAssets)
+            .set({ lastSeenAt: now, runId, contentHash: listing.contentHash })
+            .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
+        }
       }
     }
 

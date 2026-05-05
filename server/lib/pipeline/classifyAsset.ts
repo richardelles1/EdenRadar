@@ -90,6 +90,13 @@ Common fields (ALL types):
 - biotechRelevant (bool): true if relevant to pharma/biotech/medtech licensing
 - assetClass: one of the 5 classes above
 - developmentStage: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown
+  Infer from context clues — do NOT default to unknown when signals exist:
+  "randomized trial", "clinical study", "enrolled patients", "dose escalation" → phase 1 or phase 2
+  "phase 1/2", "first-in-human", "FIH study" → phase 1
+  "IND-enabling", "GLP toxicology", "animal model efficacy", "in vivo proof of concept", "preclinical models" → preclinical
+  "hit identified", "lead optimization", "proof of concept", "early-stage discovery" → discovery
+  "FDA approved", "EMA approved", "CE marked", "510(k) cleared", "commercialized" → approved
+  "spinout formed", "licensed to company" does NOT imply approved — check clinical signals separately
 - ipType: patent pending|patented|provisional|copyright|trade secret|none|unknown
 - licensingReadiness: available|exclusively licensed|non-exclusively licensed|optioned|startup formed|unknown
 - categories (string[]): therapy/technology areas e.g. ["oncology","immunology"]
@@ -97,12 +104,12 @@ Common fields (ALL types):
 - innovationClaim (string): one-sentence novel claim, or ""
 
 Drug/Biologic ONLY — return null for all other types:
-- target: HGNC gene symbol or standard protein name (e.g. "KRAS", "PD-1", "IL-6"), or null
+- target: the primary molecular target. Use HGNC gene symbol when determinable (e.g. "KRAS", "EGFR", "IL6", "PDCD1"). Infer from contextual language: "mutant RAS signaling" → "KRAS", "PD-L1 checkpoint" → "CD274", "HER2-positive" → "ERBB2", "amyloid beta" → "APP", "androgen receptor" → "AR", "BCR-ABL fusion" → "ABL1". Use best standard name if HGNC symbol unknown (e.g. "PD-1", "VEGF", "Ras"). Return null ONLY when no molecular target is identifiable from the text.
 - modality: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|diagnostic|platform technology|unknown — or null
 - indication: MeSH disease name (e.g. "non-small cell lung cancer", "type 2 diabetes mellitus"), or null
 - mechanismOfAction: brief MOA description, or null
-- comparableDrugs: existing treatments in space, or null
-- unmetNeed: clinical gap addressed, or null
+- comparableDrugs: existing approved or late-stage treatments in this indication/target space, or null
+- unmetNeed: specific clinical gap this addresses vs current standard of care, or null
 
 Medical Device ONLY — return null for other types:
 - deviceAttributes.primaryApplication (string): main clinical use/procedure
@@ -301,6 +308,7 @@ export async function classifyAsset(
 }
 
 export const MIN_CONTENT_CHARS = 120;
+export const MIN_THIN_CHARS = 40;
 
 export async function classifyBatch(
   items: { id: number; title: string; description: string; abstract?: string; ctx?: AssetContext }[],
