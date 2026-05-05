@@ -2716,6 +2716,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [bandPolling, setBandPolling] = React.useState(false);
   const [bandConfirm, setBandConfirm] = React.useState<string | null>(null);
   const [bandSummaryDismissed, setBandSummaryDismissed] = React.useState(false);
+  const [classifyPolling, setClassifyPolling] = React.useState(false);
+  const [classifyConfirm, setClassifyConfirm] = React.useState(false);
 
   const { data: pipelineStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
@@ -2744,6 +2746,69 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
       return res.json();
     },
     staleTime: 60_000,
+  });
+
+  const { data: classifyCount, refetch: refetchClassifyCount } = useQuery<{
+    thick: number; thin: number; tooThin: number; total: number; estCost: number;
+  }>({
+    queryKey: ["/api/admin/enrichment/classify-unclassified/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/classify-unclassified/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: classifyStatus, refetch: refetchClassifyStatus } = useQuery<{
+    running: boolean; processed: number; total: number; succeeded: number; failed: number;
+    skipped: number; liveCostUsd: number;
+    lastSummary: { succeeded: number; failed: number; skipped: number; total: number; costUsd: number; durationMs: number; completedAt: string } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/classify-unclassified/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/classify-unclassified/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: classifyPolling ? 2000 : false,
+  });
+
+  const prevClassifyRunning = useRef(false);
+  useEffect(() => {
+    const nowRunning = classifyStatus?.running ?? false;
+    if (nowRunning && !classifyPolling) setClassifyPolling(true);
+    if (prevClassifyRunning.current && !nowRunning && classifyStatus != null) {
+      setClassifyPolling(false);
+      refetchClassifyCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      const s = classifyStatus.lastSummary;
+      if (s) toast({ title: "Classification complete", description: `${s.succeeded.toLocaleString()} assets classified, ${s.skipped} too thin — $${s.costUsd.toFixed(2)}` });
+    }
+    prevClassifyRunning.current = nowRunning;
+  }, [classifyStatus?.running]);
+
+  const runClassify = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/classify-unclassified", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ cap: 30000 }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => { setClassifyConfirm(false); setClassifyPolling(true); toast({ title: "Classification started", description: `Processing up to ${(classifyCount?.total ?? 0).toLocaleString()} unclassified assets…` }); },
+    onError: (e: Error) => { setClassifyConfirm(false); toast({ title: "Failed to start", description: e.message, variant: "destructive" }); },
+  });
+
+  const stopClassify = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/classify-unclassified/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Stop signal sent", description: "Classification will halt after the current batch" }),
   });
 
   const prevStatusRef = useRef<string | undefined>();
@@ -3107,6 +3172,97 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
                 </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2b: Classify Unclassified Assets */}
+          <div className="border border-sky-200 dark:border-sky-900 rounded-xl bg-sky-50/50 dark:bg-sky-950/20 overflow-hidden" data-testid="card-classify-unclassified">
+            <div className="px-4 py-2.5 border-b border-sky-200 dark:border-sky-900 bg-sky-100/60 dark:bg-sky-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-sky-500 text-white text-xs font-bold shrink-0">2b</span>
+              <span className="text-sm font-semibold text-sky-800 dark:text-sky-300">Classify Unclassified Assets</span>
+              <span className="ml-auto text-xs font-medium text-sky-700 dark:text-sky-400 flex items-center gap-1.5">
+                <span className="bg-sky-100 dark:bg-sky-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o + gpt-4o-mini</span>
+                {classifyCount && <span>~${classifyCount.estCost.toFixed(2)} est.</span>}
+              </span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Sets <span className="font-medium text-foreground">asset_class</span> on all {(classifyCount?.total ?? 28862).toLocaleString()} relevant assets that have never been deep-enriched.
+                Thick text (≥120 chars) uses <span className="font-mono text-[10px] bg-muted px-1 rounded">gpt-4o</span>; thin text (40–119 chars) uses <span className="font-mono text-[10px] bg-muted px-1 rounded">gpt-4o-mini</span> automatically.
+                Assets under 40 chars are skipped until re-scraped with more content.
+              </p>
+              {classifyCount && (
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: "Total", val: classifyCount.total, color: "sky" },
+                    { label: "GPT-4o (thick)", val: classifyCount.thick, color: "violet" },
+                    { label: "Mini (thin)", val: classifyCount.thin, color: "amber" },
+                    { label: "Too thin (skip)", val: classifyCount.tooThin, color: "muted" },
+                  ].map(f => (
+                    <div key={f.label} className="rounded-lg border border-sky-200 dark:border-sky-800 bg-background p-2 text-center">
+                      <div className="text-base font-bold tabular-nums text-sky-700 dark:text-sky-400">{f.val.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{f.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {classifyStatus?.running && (
+                <div className="space-y-2 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600" />
+                    <span className="text-xs font-medium text-sky-700 dark:text-sky-400">Classifying…</span>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">{classifyStatus.processed.toLocaleString()}/{classifyStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopClassify.mutate()} disabled={stopClassify.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-classify-stop">
+                      Stop
+                    </Button>
+                  </div>
+                  <div className="w-full bg-sky-100 dark:bg-sky-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${classifyStatus.total > 0 ? Math.round((classifyStatus.processed / classifyStatus.total) * 100) : 0}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{classifyStatus.succeeded.toLocaleString()} classified · {classifyStatus.skipped.toLocaleString()} thin-skipped · {classifyStatus.failed.toLocaleString()} failed</span>
+                    <span className="font-medium text-sky-700 dark:text-sky-400">${classifyStatus.liveCostUsd.toFixed(4)} so far</span>
+                  </div>
+                </div>
+              )}
+              {!classifyStatus?.running && classifyStatus?.lastSummary && (
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                      Last run: {classifyStatus.lastSummary.succeeded.toLocaleString()} classified, {classifyStatus.lastSummary.skipped} skipped, ${classifyStatus.lastSummary.costUsd.toFixed(2)} spent
+                    </span>
+                    <span className="text-[11px] text-muted-foreground ml-auto">{Math.round(classifyStatus.lastSummary.durationMs / 1000)}s</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                {!classifyConfirm ? (
+                  <Button size="sm"
+                    onClick={() => setClassifyConfirm(true)}
+                    disabled={classifyStatus?.running || (classifyCount?.total ?? 0) === 0 || anyRunning}
+                    className="gap-1.5 bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-classify-run">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Classify all unclassified ({(classifyCount?.total ?? 0).toLocaleString()}) · ~${(classifyCount?.estCost ?? 0).toFixed(2)}
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 px-3 py-2">
+                    <span className="text-xs text-sky-800 dark:text-sky-300 font-medium">
+                      Classify {(classifyCount?.total ?? 0).toLocaleString()} assets for ~${(classifyCount?.estCost ?? 0).toFixed(2)}?
+                    </span>
+                    <Button size="sm" onClick={() => runClassify.mutate()} disabled={runClassify.isPending}
+                      className="h-6 px-3 text-xs bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-classify-confirm">
+                      {runClassify.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setClassifyConfirm(false)}
+                      className="h-6 px-2 text-xs text-muted-foreground" data-testid="button-classify-cancel">
+                      Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

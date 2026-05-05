@@ -4481,6 +4481,178 @@ export async function registerRoutes(
     res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
   });
 
+  // ── Classify Unclassified (Step 2b) ──────────────────────────────────────
+  // Targets all relevant assets where asset_class IS NULL (never deep-enriched).
+  // deepEnrichBatch routes thin-text (40-119 chars) to gpt-4o-mini automatically;
+  // thick-text (>=120 chars) goes to gpt-4o. Skips assets < 40 chars (too thin).
+
+  let classifyRunning = false;
+  let classifyProcessed = 0;
+  let classifyTotal = 0;
+  let classifySucceeded = 0;
+  let classifyFailed = 0;
+  let classifySkipped = 0;
+  let classifyShouldStop = false;
+  let classifyInputTokens = 0;
+  let classifyOutputTokens = 0;
+  let classifyStartMs = 0;
+  let classifyLastSummary: {
+    succeeded: number; failed: number; skipped: number; total: number;
+    inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; completedAt: string;
+  } | null = null;
+
+  app.get("/api/admin/enrichment/classify-unclassified/count", requireAdmin, async (req, res) => {
+    try {
+      const rows = await db.execute<{
+        thick_count: string; thin_count: string; too_thin_count: string; total_processable: string;
+      }>(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) >= 120)::int AS thick_count,
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) BETWEEN 40 AND 119)::int AS thin_count,
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) < 40)::int AS too_thin_count,
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) >= 40)::int AS total_processable
+        FROM ingested_assets
+        WHERE relevant = true AND (asset_class IS NULL OR asset_class = '')
+      `);
+      const r = rows.rows[0] ?? { thick_count: "0", thin_count: "0", too_thin_count: "0", total_processable: "0" };
+      const thick = parseInt(r.thick_count, 10);
+      const thin = parseInt(r.thin_count, 10);
+      const tooThin = parseInt(r.too_thin_count, 10);
+      const total = parseInt(r.total_processable, 10);
+      // Cost: thick → gpt-4o ($2.50/1M input, $10/1M output, ~853 in + 400 out tokens)
+      //       thin  → gpt-4o-mini ($0.15/1M input, $0.60/1M output, ~732 in + 200 out tokens)
+      const estCost = parseFloat((
+        thick * (853 * 2.50 + 400 * 10.0) / 1_000_000 +
+        thin  * (732 * 0.15 + 200 *  0.60) / 1_000_000
+      ).toFixed(2));
+      res.json({ thick, thin, tooThin, total, estCost });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/classify-unclassified/status", requireAdmin, async (req, res) => {
+    const GPT4O_INPUT_PER_M = 2.50;
+    const GPT4O_OUTPUT_PER_M = 10.0;
+    const liveCostUsd = (classifyInputTokens * GPT4O_INPUT_PER_M + classifyOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    res.json({
+      running: classifyRunning,
+      processed: classifyProcessed,
+      total: classifyTotal,
+      succeeded: classifySucceeded,
+      failed: classifyFailed,
+      skipped: classifySkipped,
+      liveCostUsd: parseFloat(liveCostUsd.toFixed(4)),
+      lastSummary: classifyLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/classify-unclassified/stop", requireAdmin, async (req, res) => {
+    if (!classifyRunning) return res.json({ message: "No classify run in progress" });
+    classifyShouldStop = true;
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/classify-unclassified", requireAdmin, async (req, res) => {
+    if (classifyRunning) return res.status(409).json({ error: "Classify run already in progress" });
+    if (bandRunning) return res.status(409).json({ error: "Band enrichment is running — stop it first" });
+    if (edenRunning) return res.status(409).json({ error: "Eden deep enrichment is running — stop it first" });
+
+    try {
+      const { cap: rawCap = 30000 } = req.body as { cap?: number };
+      const cap = Math.min(50000, Math.max(10, Number(rawCap) || 30000));
+
+      const rows = await db.execute<{
+        id: number; asset_name: string; summary: string; abstract: string | null;
+        categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
+        inventors: string[] | null; source_url: string | null;
+      }>(sql`
+        SELECT id, asset_name, summary, abstract, categories, patent_status,
+               licensing_readiness, inventors, source_url
+        FROM ingested_assets
+        WHERE relevant = true
+          AND (asset_class IS NULL OR asset_class = '')
+          AND length(COALESCE(summary, asset_name, '')) >= 40
+        ORDER BY
+          CASE WHEN length(COALESCE(summary, '')) >= 120 THEN 0 ELSE 1 END,
+          first_seen_at DESC NULLS LAST
+        LIMIT ${cap}
+      `);
+
+      const assets = rows.rows.map((r) => ({
+        id: r.id,
+        assetName: r.asset_name,
+        summary: r.summary,
+        abstract: r.abstract,
+        ctx: {
+          categories: r.categories,
+          patentStatus: r.patent_status,
+          licensingStatus: r.licensing_readiness,
+          inventors: r.inventors,
+          sourceUrl: r.source_url,
+        },
+      }));
+
+      if (assets.length === 0) {
+        return res.json({ message: "No unclassified assets to process", total: 0 });
+      }
+
+      classifyRunning = true;
+      classifyProcessed = 0;
+      classifyTotal = assets.length;
+      classifySucceeded = 0;
+      classifyFailed = 0;
+      classifySkipped = 0;
+      classifyShouldStop = false;
+      classifyInputTokens = 0;
+      classifyOutputTokens = 0;
+      classifyStartMs = Date.now();
+
+      res.json({ message: "Classify unclassified started", total: assets.length });
+
+      deepEnrichBatch(
+        assets,
+        20,
+        async (batch) => storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "classify"),
+        (processed, _total, succeeded, failed, skipped) => {
+          classifyProcessed = processed;
+          classifySucceeded = succeeded;
+          classifyFailed = failed;
+          classifySkipped = skipped;
+        },
+        () => classifyShouldStop,
+        (inTok, outTok) => {
+          classifyInputTokens += inTok;
+          classifyOutputTokens += outTok;
+        },
+      ).then((result) => {
+        classifyRunning = false;
+        const durationMs = Date.now() - classifyStartMs;
+        const GPT4O_INPUT_PER_M = 2.50;
+        const GPT4O_OUTPUT_PER_M = 10.0;
+        const costUsd = (result.inputTokens * GPT4O_INPUT_PER_M + result.outputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
+        classifyLastSummary = {
+          succeeded: result.succeeded,
+          failed: result.failed,
+          skipped: result.skipped,
+          total: classifyTotal,
+          inputTokens: result.inputTokens,
+          outputTokens: result.outputTokens,
+          costUsd: parseFloat(costUsd.toFixed(4)),
+          durationMs,
+          completedAt: new Date().toISOString(),
+        };
+        console.log(`[classify] Complete: ${result.succeeded} classified, ${result.skipped} thin-skipped, ${result.failed} failed — $${costUsd.toFixed(4)}`);
+      }).catch((e) => {
+        classifyRunning = false;
+        console.error("[classify] Failed:", e);
+      });
+    } catch (err: any) {
+      classifyRunning = false;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Surgical band enrichment (Step 3 GPT-4o) ─────────────────────────────
 
   let bandRunning = false;
