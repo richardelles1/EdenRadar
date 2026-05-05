@@ -163,6 +163,24 @@ const INDUSTRY_TILES = [
   },
 ];
 
+const EDENMARKET_TILES = [
+  {
+    icon: ShoppingBag,
+    title: "Blind Asset Marketplace",
+    desc: "Browse licensable biotech assets anonymously — therapeutic area, modality, stage, and IP profile visible upfront. Seller identity revealed only after NDA.",
+  },
+  {
+    icon: Lock,
+    title: "NDA-gated Deal Rooms",
+    desc: "Once both sides engage, a secure deal room opens: document vault, encrypted messaging, and a full audit trail inside EdenRadar.",
+  },
+  {
+    icon: Handshake,
+    title: "Success-fee Aligned",
+    desc: "Listing is free. EdenMarket earns only when a deal closes — our incentives stay perfectly aligned with your outcome.",
+  },
+];
+
 const RESEARCH_TILES = [
   {
     icon: Layers,
@@ -261,47 +279,139 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6" key={active}>
-        {tiles.map((tile, i) => (
-          <div
-            key={tile.title}
-            className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md ${accent.hover}`}
-            style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
-            data-testid={`tile-${active}-${i}`}
-          >
-            <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${accent.iconBg} ${accent.iconBgHover}`}>
-              <tile.icon className={`w-5 h-5 ${accent.iconColor}`} />
+      {active === "industry" ? (
+        <div className="space-y-6" key="industry">
+          {/* EdenScout sub-section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
+                style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)", border: "1px solid hsl(142 52% 36% / 0.3)" }}
+              >
+                EdenScout — Pipeline Intelligence
+              </span>
             </div>
-            <div>
-              <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {INDUSTRY_TILES.map((tile, i) => (
+                <div
+                  key={tile.title}
+                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md hover:border-primary/40"
+                  style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                  data-testid={`tile-industry-scout-${i}`}
+                >
+                  <div className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 bg-primary/10 group-hover:bg-primary/20">
+                    <tile.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
-        ))}
-      </div>
 
-      <div className="text-center mt-10">
-        {active === "discovery" ? (
-          <a
-            href="/discovery"
-            className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 mx-auto w-fit"
-            style={{ color: "hsl(38 92% 50%)" }}
-            data-testid="button-discovery-cta"
-          >
-            Browse EdenDiscovery
-            <ArrowRight className="w-3.5 h-3.5" />
-          </a>
-        ) : (
-          <button
-            onClick={onLogin}
-            className="text-sm text-primary hover:text-primary/80 font-medium transition-colors duration-150 flex items-center gap-1 mx-auto"
-            data-testid="button-toggle-cta"
-          >
-            Explore the {active === "industry" ? "Industry" : "Research"} portal
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
+          {/* EdenMarket sub-section */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
+                style={{ background: "hsl(234 80% 58% / 0.10)", color: "hsl(234 80% 58%)", border: "1px solid hsl(234 80% 58% / 0.25)" }}
+              >
+                EdenMarket — Blind Asset Marketplace
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              {EDENMARKET_TILES.map((tile, i) => (
+                <div
+                  key={tile.title}
+                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md"
+                  style={{ borderColor: "hsl(234 80% 58% / 0.15)", animationDelay: `${(i + 4) * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                  data-testid={`tile-industry-market-${i}`}
+                >
+                  <div
+                    className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200"
+                    style={{ background: "hsl(234 80% 58% / 0.10)" }}
+                  >
+                    <tile.icon className="w-5 h-5" style={{ color: "hsl(234 80% 58%)" }} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Dual CTA */}
+          <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
+            <button
+              onClick={onLogin}
+              className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors duration-150 flex items-center gap-1"
+              data-testid="button-toggle-scout-cta"
+            >
+              Explore EdenScout
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <span className="hidden sm:block text-border">|</span>
+            <Link href="/market">
+              <span
+                className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 cursor-pointer"
+                style={{ color: "hsl(234 80% 58%)" }}
+                data-testid="button-toggle-market-cta"
+              >
+                Browse EdenMarket
+                <ArrowRight className="w-3.5 h-3.5" />
+              </span>
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6" key={active}>
+            {tiles.map((tile, i) => (
+              <div
+                key={tile.title}
+                className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md ${accent.hover}`}
+                style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                data-testid={`tile-${active}-${i}`}
+              >
+                <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${accent.iconBg} ${accent.iconBgHover}`}>
+                  <tile.icon className={`w-5 h-5 ${accent.iconColor}`} />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center mt-10">
+            {active === "discovery" ? (
+              <a
+                href="/discovery"
+                className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 mx-auto w-fit"
+                style={{ color: "hsl(38 92% 50%)" }}
+                data-testid="button-discovery-cta"
+              >
+                Browse EdenDiscovery
+                <ArrowRight className="w-3.5 h-3.5" />
+              </a>
+            ) : (
+              <button
+                onClick={onLogin}
+                className="text-sm text-primary hover:text-primary/80 font-medium transition-colors duration-150 flex items-center gap-1 mx-auto"
+                data-testid="button-toggle-cta"
+              >
+                Explore the Research portal
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </section>
   );
 }
@@ -373,7 +483,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
           The platform where world-class university research meets the industry teams ready to build the next breakthrough therapy.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap">
           <Button
             size="lg"
             onClick={onLogin}
@@ -386,8 +496,23 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             }}
           >
             <Building2 className="w-4 h-4" />
-            For Industry
+            EdenScout
           </Button>
+          <Link href="/market" className="w-full sm:w-auto">
+            <Button
+              size="lg"
+              data-testid="cta-bottom-edenmarket"
+              className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
+              style={{
+                background: "hsl(234 80% 58%)",
+                color: "white",
+                border: "none",
+              }}
+            >
+              <ShoppingBag className="w-4 h-4" />
+              EdenMarket
+            </Button>
+          </Link>
           <Button
             size="lg"
             variant="outline"
