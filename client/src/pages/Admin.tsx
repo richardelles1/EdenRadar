@@ -9654,9 +9654,9 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
     job: { status: string; completedAt: string | null } | null; staleJobDetected: boolean; staleJobId: number | null;
     lastSummary: { succeeded: number; failed: number; skipped: number; total: number; deferred: number; durationMs: number; bandMovements: Record<string, number>; completedAt: string; } | null;
   }>({
-    queryKey: ["/api/admin/eden/status"],
+    queryKey: ["/api/admin/eden/enrich/status", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load eden status");
       return res.json();
     },
@@ -9664,7 +9664,7 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
   });
 
   const { data: edenStats, refetch: refetchEdenStats } = useQuery<EdenStatsResponse>({
-    queryKey: ["/api/admin/eden/stats"],
+    queryKey: ["/api/admin/eden/stats", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load eden stats");
