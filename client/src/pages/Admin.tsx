@@ -9867,6 +9867,27 @@ function DataQualityTab({ pw }: { pw: string }) {
     },
   });
 
+  // Fire a completion toast when a run transitions from running → done.
+  const edenWasRunningRef = useRef(false);
+  useEffect(() => {
+    const nowRunning = edenStatus?.running ?? false;
+    if (edenWasRunningRef.current && !nowRunning && edenStatus != null) {
+      const enriched = edenStatus.succeeded ?? 0;
+      const skipped = edenStatus.skipped ?? 0;
+      const failed = edenStatus.failed ?? 0;
+      const parts: string[] = [];
+      if (enriched > 0) parts.push(`${enriched.toLocaleString()} enriched`);
+      if (skipped > 0) parts.push(`${skipped.toLocaleString()} thin content`);
+      if (failed > 0) parts.push(`${failed.toLocaleString()} failed`);
+      toast({
+        title: "Deep Enrichment complete",
+        description: parts.length > 0 ? parts.join(" · ") : "No assets were written this cycle",
+      });
+      refetchStats();
+    }
+    edenWasRunningRef.current = nowRunning;
+  }, [edenStatus?.running]);
+
   const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
 
   const cov = stats?.coverage;
