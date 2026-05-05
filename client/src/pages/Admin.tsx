@@ -2663,9 +2663,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [open, setOpen] = useState(false);
 
   // ── EDEN auto-enrichment state ──
-  const [staleDismissed, setStaleDismissed] = useState(false);
   const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
-    running: boolean; paused: boolean; capPerCycle: number; processed: number; total: number;
+    running: boolean; capPerCycle: number; processed: number; total: number;
     succeeded: number; failed: number; skipped: number; lastCycleCount: number; lastCycleDeferred: number;
     job: { status: string; completedAt: string | null } | null; staleJobDetected: boolean; staleJobId: number | null;
     lastSummary: { succeeded: number; failed: number; skipped: number; total: number; deferred: number; durationMs: number; bandMovements: Record<string, number>; completedAt: string; } | null;
@@ -2690,26 +2689,6 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     refetchInterval: 5000,
   });
 
-  const resumeEnrichMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to resume"); }
-      return res.json();
-    },
-    onSuccess: (data) => { setStaleDismissed(true); toast({ title: "Deep Enrichment resumed", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` }); refetchEdenStatus(); },
-    onError: (e: Error) => toast({ title: "Failed to resume", description: e.message, variant: "destructive" }),
-  });
-
-  const enrichTogglePauseMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/toggle-pause", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to toggle enrichment pause");
-      return res.json();
-    },
-    onSuccess: () => refetchEdenStatus(),
-    onError: (err: Error) => toast({ title: "Toggle failed", description: err.message, variant: "destructive" }),
-  });
-
   const edenWasRunningRef = useRef(false);
   useEffect(() => {
     const nowRunning = edenStatus?.running ?? false;
@@ -2727,8 +2706,6 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     }
     edenWasRunningRef.current = nowRunning;
   }, [edenStatus?.running]);
-
-  const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
 
   // ── Steps 1/2/3 pipeline state ──
   const [polling, setPolling] = useState(false);
@@ -2957,15 +2934,6 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
             <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />Running
           </span>
         )}
-        {!anyRunning && edenStatus && (edenStatus.paused ? (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Auto-run paused
-          </span>
-        ) : (
-          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Auto-run active
-          </span>
-        ))}
         {(edenStatus?.lastCycleCount ?? 0) > 0 && (
           <span className="text-xs text-muted-foreground hidden sm:inline">
             Last cycle: <span className="text-foreground font-medium">{edenStatus!.lastCycleCount.toLocaleString()}</span> enriched
@@ -2973,14 +2941,6 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
           </span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => enrichTogglePauseMutation.mutate()}
-            disabled={enrichTogglePauseMutation.isPending || edenStatus?.running}
-            data-testid="button-pipeline-toggle-enrichment-pause"
-            className={`inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${edenStatus?.paused ? "border-emerald-400/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50" : "border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50"}`}
-          >
-            {enrichTogglePauseMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : edenStatus?.paused ? <><Zap className="w-3 h-3" /><span>Resume</span></> : <><AlertCircle className="w-3 h-3" /><span>Pause Auto-run</span></>}
-          </button>
           <button onClick={() => setOpen(o => !o)}
             className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-muted/40 transition-colors"
             data-testid="button-toggle-enrichment-controls">
@@ -2992,23 +2952,6 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
 
       {open && (
         <div className="px-5 py-4 space-y-5 border-t border-border">
-
-          {showStaleBanner && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
-              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
-                <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">Deep enrichment job #{edenStatus?.staleJobId} was in progress when the server restarted and has not been resumed.</p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <button onClick={() => resumeEnrichMutation.mutate()} disabled={resumeEnrichMutation.isPending}
-                  className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50" data-testid="button-stale-resume">
-                  {resumeEnrichMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}Resume
-                </button>
-                <button onClick={() => setStaleDismissed(true)} className="text-muted-foreground hover:text-foreground transition-colors" data-testid="button-stale-dismiss" aria-label="Dismiss"><X className="h-4 w-4" /></button>
-              </div>
-            </div>
-          )}
 
           {/* Coverage summary */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -9654,7 +9597,7 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
   const [readinessOpen, setReadinessOpen] = useState(false);
 
   const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
-    running: boolean; paused: boolean; capPerCycle: number; processed: number; total: number;
+    running: boolean; capPerCycle: number; processed: number; total: number;
     succeeded: number; failed: number; skipped: number; lastCycleCount: number; lastCycleDeferred: number;
     job: { status: string; completedAt: string | null } | null; staleJobDetected: boolean; staleJobId: number | null;
     lastSummary: { succeeded: number; failed: number; skipped: number; total: number; deferred: number; durationMs: number; bandMovements: Record<string, number>; completedAt: string; } | null;

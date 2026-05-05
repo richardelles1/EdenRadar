@@ -4276,7 +4276,6 @@ export async function registerRoutes(
   let edenFailed = 0;
   let edenSkipped = 0;
   let edenShouldStop = false;
-  let edenPaused = false;
   const _rawCap = parseInt(process.env.ENRICH_MAX_PER_CYCLE ?? "500", 10);
   const ENRICH_MAX_PER_CYCLE = Number.isFinite(_rawCap) && _rawCap > 0 ? _rawCap : 500;
   let edenLastCycleCount = 0;
@@ -4310,7 +4309,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/eden/enrich", async (req, res) => {
-    if (edenPaused) return res.status(409).json({ error: "Deep enrichment is paused — resume it first" });
     if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
     try {
       const [assets, breakdown] = await Promise.all([
@@ -4452,7 +4450,6 @@ export async function registerRoutes(
       }
       res.json({
         running: edenRunning,
-        paused: edenPaused,
         capPerCycle: ENRICH_MAX_PER_CYCLE,
         processed: edenProcessed,
         total: edenTotal,
@@ -4471,12 +4468,6 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/eden/enrich/toggle-pause", async (req, res) => {
-    if (edenRunning) return res.status(409).json({ error: "Cannot toggle pause while enrichment is running — stop it first" });
-    edenPaused = !edenPaused;
-    console.log(`[EDEN] Deep enrichment ${edenPaused ? "paused" : "resumed"} by admin`);
-    res.json({ paused: edenPaused });
-  });
 
   app.post("/api/admin/eden/enrich/stop", async (req, res) => {
     if (!edenRunning) return res.json({ message: "No EDEN enrichment running" });
