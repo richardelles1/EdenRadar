@@ -2680,7 +2680,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: edenStats, refetch: refetchEdenStats } = useQuery<EdenStatsResponse>({
-    queryKey: ["/api/admin/eden/stats"],
+    queryKey: ["/api/admin/eden/stats", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load EDEN stats");
@@ -6203,7 +6203,7 @@ function EdenTab({ pw }: { pw: string }) {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { data: stats } = useQuery<EdenStatsResponse>({
-    queryKey: ["/api/admin/eden/stats"],
+    queryKey: ["/api/admin/eden/stats", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load EDEN stats");
