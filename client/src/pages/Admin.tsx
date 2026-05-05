@@ -1872,6 +1872,7 @@ interface BandInfo {
   estCostFull: number;
   estCostGapFill: number;
   needsRescrape: boolean;
+  populationB: number;
 }
 
 interface BandStatusResponse {
@@ -2656,7 +2657,7 @@ function FillBar({ pct, color }: { pct: number | null; color: string }) {
 
 function Enrichment({ pw }: { pw: string }) {
   const [polling, setPolling] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(true);
   const [ruleFillPolling, setRuleFillPolling] = useState(false);
   const [institutionFilter, setInstitutionFilter] = useState("");
   const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
@@ -2901,7 +2902,7 @@ function Enrichment({ pw }: { pw: string }) {
       if (bandStatus?.lastSummary) {
         toast({
           title: "Band enrichment complete",
-          description: `${bandStatus.lastSummary.succeeded} assets improved · $${bandStatus.lastSummary.costUsd.toFixed(4)} spent`,
+          description: `${bandStatus.lastSummary.succeeded} assets written · $${bandStatus.lastSummary.costUsd.toFixed(4)} spent`,
         });
       }
     }
@@ -3737,7 +3738,7 @@ function Enrichment({ pw }: { pw: string }) {
                     <div className="grid grid-cols-4 gap-2">
                       <div className="text-center">
                         <p className="text-sm font-bold text-foreground" data-testid="summary-succeeded">{bandStatus.lastSummary.succeeded.toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground">improved</p>
+                        <p className="text-[10px] text-muted-foreground">written</p>
                       </div>
                       <div className="text-center">
                         <p className="text-sm font-bold text-foreground">{bandStatus.lastSummary.failed.toLocaleString()}</p>
@@ -3814,11 +3815,11 @@ function Enrichment({ pw }: { pw: string }) {
                 {/* Band rows */}
                 <div className="space-y-2" data-testid="band-rows">
                   {(bandsData?.bands ?? [
-                    { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false },
-                    { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true },
+                    { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                    { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                    { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                    { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true, populationB: 0 },
                   ]).map((band) => {
                     const isBare = band.id === "bare";
                     const isGapFill = bandGapFill[band.id] ?? !isBare;
@@ -3976,19 +3977,61 @@ function Enrichment({ pw }: { pw: string }) {
                             )}
                           </div>
                         ) : (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-6 px-2.5 text-[11px] border-border text-muted-foreground opacity-50 cursor-not-allowed"
-                              disabled
-                              data-testid="button-band-run-bare"
-                              title="Bare assets have no content — run a scrape pass first to gather text before enriching"
-                            >
-                              <Sparkles className="h-3 w-3 mr-1" />
-                              Run full pass
-                            </Button>
-                            <span className="text-[11px] text-muted-foreground">Re-scrape first</span>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {(band.populationB ?? 0) > 0 ? (
+                              isConfirming ? (() => {
+                                const capValue = bandCap[band.id] ?? 500;
+                                const effective = Math.min(band.populationB ?? 0, capValue);
+                                const perAssetCost = 0.011;
+                                return (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-[11px] font-semibold text-amber-600" data-testid="button-band-confirm-bare-text">
+                                      Enrich {effective.toLocaleString()} bare assets (~${(effective * perAssetCost).toFixed(2)})?
+                                    </span>
+                                    <Button
+                                      size="sm"
+                                      className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
+                                      disabled={runBand.isPending}
+                                      onClick={() => runBand.mutate({ band: band.id, gapFill: false, cap: capValue, newestFirst: false })}
+                                      data-testid="button-band-confirm-bare"
+                                    >
+                                      {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
+                                    </Button>
+                                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setBandConfirm(null)} data-testid="button-band-cancel-bare">
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                );
+                              })() : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className={`h-6 px-2.5 text-[11px] ${m.border} ${m.text} hover:bg-white/60 dark:hover:bg-white/5`}
+                                  disabled={anyRunning || runBand.isPending}
+                                  onClick={() => setBandConfirm(band.id)}
+                                  data-testid="button-band-run-bare"
+                                  title={`Enrich ${(band.populationB ?? 0).toLocaleString()} bare assets with ≥120 chars of content`}
+                                >
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Run pop B ({(band.populationB ?? 0).toLocaleString()})
+                                </Button>
+                              )
+                            ) : (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 px-2.5 text-[11px] border-border text-muted-foreground opacity-50 cursor-not-allowed"
+                                  disabled
+                                  data-testid="button-band-run-bare"
+                                  title="No bare assets with ≥120 chars — re-scrape first"
+                                >
+                                  <Sparkles className="h-3 w-3 mr-1" />
+                                  Run full pass
+                                </Button>
+                                <span className="text-[11px] text-muted-foreground">Re-scrape first</span>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -9933,13 +9976,11 @@ function DataQualityTab({ pw }: { pw: string }) {
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
 
-      <Enrichment pw={pw} />
-
-      {/* EDEN Deep Enrichment Controls */}
+      {/* Auto-Enrichment Controls */}
       <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-pipeline-enrich-controls">
         <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-3">
           <BrainCircuit className="h-4 w-4 text-violet-500" />
-          <span className="text-sm font-semibold text-foreground">Deep Enrichment (EDEN)</span>
+          <span className="text-sm font-semibold text-foreground">Auto-Enrichment (GPT-4o)</span>
           {edenStatus ? (
             edenStatus.running ? (
               <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-running">
@@ -9995,6 +10036,8 @@ function DataQualityTab({ pw }: { pw: string }) {
           </button>
         </div>
       </div>
+
+      <Enrichment pw={pw} />
 
       {/* EDEN Readiness (collapsible) */}
       <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-readiness">
@@ -10204,64 +10247,6 @@ function DataQualityTab({ pw }: { pw: string }) {
           </div>
         )}
       </div>
-
-      {/* EDEN last-run post-run summary (persisted, survives restarts) */}
-      {!edenStatus?.running && edenStatus?.lastSummary && (() => {
-        const s = edenStatus.lastSummary;
-        const movements = Object.entries(s.bandMovements ?? {}).sort((a, b) => b[1] - a[1]);
-        const completedAt = s.completedAt ? new Date(s.completedAt).toLocaleString() : null;
-        return (
-          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 overflow-hidden" data-testid="card-eden-last-run">
-            <div className="px-5 py-3 bg-emerald-100/60 dark:bg-emerald-900/30 border-b border-emerald-200 dark:border-emerald-800 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-              <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Last EDEN Run</span>
-              {completedAt && <span className="text-[11px] text-muted-foreground ml-1">{completedAt}</span>}
-              {s.durationMs > 0 && <span className="text-[11px] text-muted-foreground">· {Math.round(s.durationMs / 1000)}s</span>}
-            </div>
-            <div className="p-5 space-y-3">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-enriched">
-                  <p className="text-xl font-bold text-emerald-600">{s.succeeded.toLocaleString()}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">enriched</p>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-skipped">
-                  <p className="text-xl font-bold text-amber-500">{s.skipped.toLocaleString()}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">thin content</p>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-failed">
-                  <p className="text-xl font-bold text-red-500">{s.failed.toLocaleString()}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">failed</p>
-                </div>
-                <div className="rounded-lg border border-border bg-card p-3 text-center" data-testid="eden-run-deferred">
-                  <p className="text-xl font-bold text-foreground">{s.deferred.toLocaleString()}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">deferred</p>
-                </div>
-              </div>
-              {movements.length > 0 && (
-                <div data-testid="eden-run-movements">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Band movements</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {movements.map(([key, n]) => {
-                      const [from, to] = key.split("→");
-                      const isUp = ["bare","very_sparse","sparse","decent","rich"].indexOf(to) > ["bare","very_sparse","sparse","decent","rich"].indexOf(from);
-                      return (
-                        <span key={key} className={`rounded-full text-[11px] px-2.5 py-0.5 font-medium border ${isUp ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"}`} data-testid={`eden-movement-${key}`}>
-                          {from.replace("_", " ")} → {to.replace("_", " ")} <span className="opacity-70">×{n}</span>
-                        </span>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-              {s.deferred > 0 && (
-                <p className="text-[11px] text-muted-foreground">
-                  <span className="font-medium text-foreground">{s.deferred.toLocaleString()}</span> assets were deferred (per-cycle cap reached) and will be processed on the next run.
-                </p>
-              )}
-            </div>
-          </div>
-        );
-      })()}
 
       {/* Stale-job resume banner */}
       {showStaleBanner && (

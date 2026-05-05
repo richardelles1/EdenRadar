@@ -4344,7 +4344,7 @@ export async function registerRoutes(
           SELECT id, completeness_score FROM ingested_assets WHERE id = ANY(${cappedIds}::int[])
         `);
         for (const r of snapRows.rows) edenSnapshotBefore[r.id] = scoreToBand(r.completeness_score);
-      } catch { /* non-fatal */ }
+      } catch (snapErr: any) { console.error("[EDEN] pre-run band snapshot failed:", snapErr?.message); }
 
       const job = await storage.createDeepEnrichmentJob(capped.length);
       edenJobId = job.id;
@@ -4555,6 +4555,7 @@ export async function registerRoutes(
       const rows = await db.execute<{
         band: string; total: string; gap_fill_count: string;
         missing_moa: string; missing_unmet: string; missing_comparable: string; missing_innovation: string;
+        pop_b_count: string;
       }>(sql`
         SELECT
           CASE
@@ -4578,7 +4579,8 @@ export async function registerRoutes(
           COUNT(CASE WHEN asset_class = 'drug_biologic' AND (mechanism_of_action IS NULL OR mechanism_of_action = '') THEN 1 END) AS missing_moa,
           COUNT(CASE WHEN asset_class = 'drug_biologic' AND (unmet_need IS NULL OR unmet_need = '') THEN 1 END) AS missing_unmet,
           COUNT(CASE WHEN asset_class = 'drug_biologic' AND (comparable_drugs IS NULL OR comparable_drugs = '') THEN 1 END) AS missing_comparable,
-          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (innovation_claim IS NULL OR innovation_claim = '') THEN 1 END) AS missing_innovation
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (innovation_claim IS NULL OR innovation_claim = '') THEN 1 END) AS missing_innovation,
+          COUNT(CASE WHEN summary IS NOT NULL AND LENGTH(summary) >= 120 THEN 1 END) AS pop_b_count
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY band
@@ -4586,6 +4588,7 @@ export async function registerRoutes(
       const bandMap: Record<string, {
         count: number; gapFillCount: number;
         missingMoa: number; missingUnmet: number; missingComparable: number; missingInnovation: number;
+        popBCount: number;
       }> = {};
       for (const r of rows.rows) {
         bandMap[r.band] = {
@@ -4595,6 +4598,7 @@ export async function registerRoutes(
           missingUnmet: parseInt(r.missing_unmet, 10),
           missingComparable: parseInt(r.missing_comparable, 10),
           missingInnovation: parseInt(r.missing_innovation, 10),
+          popBCount: parseInt(r.pop_b_count, 10),
         };
       }
       const GPT4O_INPUT_PER_M = 2.50;
@@ -4604,7 +4608,7 @@ export async function registerRoutes(
       // Gap-fill: cost per targeted field-fill (4 fields split evenly across 1000 input + 300 output)
       const costPerFieldFill = ((1000 / 4) * GPT4O_INPUT_PER_M + (300 / 4) * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
-        const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0 };
+        const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, popBCount: 0 };
         const isBare = id === "bare";
         // Formula-based gap-fill cost: total missing field-fills across all gap-fill eligible assets
         // (sum of per-field missing counts for drug_biologic in this band)
@@ -4623,6 +4627,8 @@ export async function registerRoutes(
           // Gap-fill cost = avg missing fields per asset × per-field-fill cost × eligible asset count
           estCostGapFill: isBare ? 0 : parseFloat((totalMissingFields * costPerFieldFill).toFixed(2)),
           needsRescrape: isBare,
+          // Population B: bare assets with summary >= 120 chars (can be enriched without re-scraping)
+          populationB: isBare ? d.popBCount : 0,
         };
       });
       res.json({ bands });
@@ -4676,8 +4682,6 @@ export async function registerRoutes(
     const cap = Math.min(5000, Math.max(10, Number(rawCap) || 500));
     const range = BAND_SCORE_RANGES[band];
     if (!range) return res.status(400).json({ error: `Unknown band: ${band}` });
-    if (band === "bare") return res.status(400).json({ error: "Bare assets lack content — re-scrape first" });
-
     try {
       // Fetch assets in the target score band
       let assets: Array<{
@@ -4783,7 +4787,7 @@ export async function registerRoutes(
         for (const r of scoreRow.rows) bandSnapshotBefore[r.id] = scoreToBand(r.completeness_score);
         const raw = scoreRow.rows[0]?.avg_score;
         avgScoreBefore = raw != null ? parseFloat(parseFloat(raw).toFixed(1)) : null;
-      } catch { /* non-fatal */ }
+      } catch (snapErr: any) { console.error("[band-enrich] pre-run snapshot failed:", snapErr?.message); }
 
       // ── Canonical gap-fill target fields (overridable) ───────────────────
       const ALL_GAP_FILL_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
@@ -4889,7 +4893,7 @@ export async function registerRoutes(
           `);
           const rawPost = postRow.rows[0]?.avg_score;
           avgScoreAfter = rawPost != null ? parseFloat(parseFloat(rawPost).toFixed(1)) : null;
-        } catch { /* non-fatal */ }
+        } catch (scoreErr: any) { console.error("[band-enrich] post-run avg score query failed:", scoreErr?.message); }
 
         // Compute band movements by re-querying the same asset IDs post-run
         let bandMovements: Record<string, number> = {};
@@ -4898,7 +4902,7 @@ export async function registerRoutes(
             SELECT id, completeness_score FROM ingested_assets WHERE id = ANY(${bandAssetIds}::int[])
           `);
           bandMovements = computeBandMovements(bandSnapshotBefore, postRows.rows);
-        } catch { /* non-fatal */ }
+        } catch (movErr: any) { console.error("[band-enrich] band movement computation failed:", movErr?.message); }
 
         bandLastSummary = {
           band, gapFill, total: assets.length, succeeded: result.succeeded, failed: result.failed,
