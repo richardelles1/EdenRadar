@@ -1846,6 +1846,7 @@ function DataHealth({ pw }: { pw: string }) {
 
 interface EnrichmentStats {
   total: number;
+  relevantAssets: number;
   unknownCount: number;
   byField: { target: number; modality: number; indication: number; developmentStage: number };
 }
@@ -3010,10 +3011,14 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
           )}
 
           {/* Coverage summary */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <div className="rounded-xl border border-border bg-background p-3 text-center">
               <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
               <div className="text-xs text-muted-foreground mt-0.5">Total Assets</div>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3 text-center">
+              <div className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="stat-relevant-assets">{(pipelineStats?.relevantAssets ?? 0).toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Relevant Assets</div>
             </div>
             <div className="rounded-xl border border-border bg-background p-3 text-center">
               <div className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>

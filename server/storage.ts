@@ -224,6 +224,7 @@ export interface IStorage {
 
   getEnrichmentStats(): Promise<{
     total: number;
+    relevantAssets: number;
     unknownCount: number;
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
@@ -1518,11 +1519,18 @@ export class DatabaseStorage implements IStorage {
 
   async getEnrichmentStats(): Promise<{
     total: number;
+    relevantAssets: number;
     unknownCount: number;
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }> {
     const [totalRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets);
     const total = totalRow?.count ?? 0;
+
+    const [relevantRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.relevant, true));
+    const relevantAssets = relevantRow?.count ?? 0;
 
     const [unknownRow] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -1539,6 +1547,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       total,
+      relevantAssets,
       unknownCount,
       byField: {
         target: targetRow?.count ?? 0,
