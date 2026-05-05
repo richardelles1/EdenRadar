@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
-import { Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake } from "lucide-react";
+import { Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake, ExternalLink } from "lucide-react";
 import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
@@ -133,6 +133,7 @@ function PlanCTA({
   org: OrgContext | null | undefined;
 }) {
   const [loading, setLoading] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -141,6 +142,30 @@ function PlanCTA({
   const isActiveOrTrialing = currentStatus === "active" || currentStatus === "trialing";
   const isPastDue = currentStatus === "past_due";
   const isThisPlan = currentPlan === plan.id;
+
+  async function handleOpenPortal() {
+    if (!session?.access_token) {
+      navigate("/login?mode=signup&redirect=/pricing");
+      return;
+    }
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Could not open billing portal", description: data.error ?? "Please try again.", variant: "destructive" });
+        return;
+      }
+      if (data.url) window.open(data.url, "_blank");
+    } catch {
+      toast({ title: "Network error", description: "Failed to connect. Please try again.", variant: "destructive" });
+    } finally {
+      setPortalLoading(false);
+    }
+  }
 
   // ── Active or trialing subscriber ───────────────────────────────────────────
   if (isActiveOrTrialing) {
@@ -155,52 +180,55 @@ function PlanCTA({
             <Check className="w-3.5 h-3.5" />
             Current plan
           </div>
-          <Link href="/industry/settings">
-            <p className="text-center text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex items-center justify-center gap-1">
-              <Settings className="w-2.5 h-2.5" />
-              Manage billing in Settings
-            </p>
-          </Link>
+          <button
+            onClick={handleOpenPortal}
+            disabled={portalLoading}
+            className="w-full text-center text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex items-center justify-center gap-1"
+            data-testid={`button-pricing-portal-${plan.id}`}
+          >
+            {portalLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <ExternalLink className="w-2.5 h-2.5" />}
+            {portalLoading ? "Opening…" : "Manage billing"}
+          </button>
         </div>
       );
     }
 
-    // Upgrade path: team5 → team10 (self-service via upgrade route in Settings)
+    // Upgrade path: team5 → team10 (self-service via the Stripe billing portal)
     const currentOrder = PLAN_ORDER[currentPlan ?? ""] ?? 0;
     const thisOrder = PLAN_ORDER[plan.id] ?? 0;
     if (thisOrder > currentOrder) {
       return (
         <div className="space-y-1.5">
-          <Link href="/industry/settings">
-            <Button
-              className="w-full font-semibold h-9 text-sm"
-              variant={plan.highlighted ? "default" : "outline"}
-              style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
-              data-testid={`button-pricing-upgrade-${plan.id}`}
-            >
-              Upgrade plan
-              <ArrowRight className="w-3.5 h-3.5 ml-1 order-last" />
-            </Button>
-          </Link>
-          <p className="text-center text-[10px] text-muted-foreground">Upgrade or switch plans in Settings</p>
+          <Button
+            className="w-full font-semibold h-9 text-sm"
+            variant={plan.highlighted ? "default" : "outline"}
+            style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
+            onClick={handleOpenPortal}
+            disabled={portalLoading}
+            data-testid={`button-pricing-upgrade-${plan.id}`}
+          >
+            {portalLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5 mr-1" />}
+            {portalLoading ? "Opening…" : "Upgrade plan"}
+          </Button>
+          <p className="text-center text-[10px] text-muted-foreground">Opens your billing portal to switch plans</p>
         </div>
       );
     }
 
-    // Downgrade or cross-tier: direct to Settings / billing portal
+    // Downgrade or cross-tier: open billing portal directly
     return (
       <div className="space-y-1.5">
-        <Link href="/industry/settings">
-          <Button
-            className="w-full font-semibold h-9 text-sm"
-            variant="outline"
-            data-testid={`button-pricing-manage-${plan.id}`}
-          >
-            <Settings className="w-3.5 h-3.5 mr-1" />
-            Manage billing
-          </Button>
-        </Link>
-        <p className="text-center text-[10px] text-muted-foreground">Change or cancel your plan in Settings</p>
+        <Button
+          className="w-full font-semibold h-9 text-sm"
+          variant="outline"
+          onClick={handleOpenPortal}
+          disabled={portalLoading}
+          data-testid={`button-pricing-manage-${plan.id}`}
+        >
+          {portalLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5 mr-1" />}
+          {portalLoading ? "Opening…" : "Manage billing"}
+        </Button>
+        <p className="text-center text-[10px] text-muted-foreground">Change or cancel your plan in the billing portal</p>
       </div>
     );
   }
@@ -209,18 +237,18 @@ function PlanCTA({
   if (isPastDue && isThisPlan) {
     return (
       <div className="space-y-1.5">
-        <Link href="/industry/settings">
-          <Button
-            className="w-full font-semibold h-9 text-sm"
-            variant="outline"
-            style={{ borderColor: "hsl(38 92% 50% / 0.5)", color: "hsl(38 92% 50%)" }}
-            data-testid={`button-pricing-pastdue-${plan.id}`}
-          >
-            Update payment method
-            <ArrowRight className="w-3.5 h-3.5 ml-1 order-last" />
-          </Button>
-        </Link>
-        <p className="text-center text-[10px] text-muted-foreground">Your last payment failed — update billing in Settings</p>
+        <Button
+          className="w-full font-semibold h-9 text-sm"
+          variant="outline"
+          style={{ borderColor: "hsl(38 92% 50% / 0.5)", color: "hsl(38 92% 50%)" }}
+          onClick={handleOpenPortal}
+          disabled={portalLoading}
+          data-testid={`button-pricing-pastdue-${plan.id}`}
+        >
+          {portalLoading ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <ExternalLink className="w-3.5 h-3.5 mr-1" />}
+          {portalLoading ? "Opening…" : "Update payment method"}
+        </Button>
+        <p className="text-center text-[10px] text-muted-foreground">Your last payment failed — update billing in the portal</p>
       </div>
     );
   }
@@ -441,6 +469,79 @@ function EdenMarketTier({ session }: { session: Session | null }) {
   );
 }
 
+function SubscriptionBanner({ isPastDue, session }: { isPastDue: boolean; session: Session | null }) {
+  const [portalLoading, setPortalLoading] = useState(false);
+  const { toast } = useToast();
+
+  async function handleOpenPortal() {
+    if (!session?.access_token) return;
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Could not open billing portal", description: data.error ?? "Please try again.", variant: "destructive" });
+        return;
+      }
+      if (data.url) window.open(data.url, "_blank");
+    } catch {
+      toast({ title: "Network error", description: "Failed to connect. Please try again.", variant: "destructive" });
+    } finally {
+      setPortalLoading(false);
+    }
+  }
+
+  return (
+    <div
+      className="rounded-lg px-4 py-3 flex items-start gap-3"
+      style={
+        isPastDue
+          ? { background: "hsl(38 92% 50% / 0.06)", border: "1px solid hsl(38 92% 50% / 0.2)" }
+          : { background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }
+      }
+      data-testid="banner-subscription-status"
+    >
+      <div
+        className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
+        style={isPastDue ? { background: "hsl(38 92% 50% / 0.15)" } : { background: "hsl(142 52% 36% / 0.15)" }}
+      >
+        {isPastDue
+          ? <Settings className="w-3 h-3" style={{ color: "hsl(38 92% 50%)" }} />
+          : <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+        }
+      </div>
+      <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
+        <p className="text-xs text-muted-foreground leading-relaxed flex-1 min-w-0">
+          {isPastDue ? (
+            <>
+              <span className="font-semibold text-foreground">Payment issue on your account.</span>{" "}
+              Your last payment failed. Update your payment method to restore full access.
+            </>
+          ) : (
+            <>
+              <span className="font-semibold text-foreground">You have an active EdenScout subscription.</span>{" "}
+              Your current plan is highlighted below. Manage billing, upgrade, or cancel in your billing portal.
+            </>
+          )}
+        </p>
+        <button
+          onClick={handleOpenPortal}
+          disabled={portalLoading}
+          className="text-xs font-semibold flex items-center gap-1 shrink-0 underline-offset-2 hover:underline transition-colors"
+          style={{ color: isPastDue ? "hsl(38 92% 50%)" : "hsl(142 52% 36%)" }}
+          data-testid="button-banner-open-portal"
+        >
+          {portalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
+          {portalLoading ? "Opening…" : isPastDue ? "Update payment" : "Open billing portal"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function Pricing() {
   useDocumentMeta({
     title: "Pricing — EdenRadar Plans for Industry, Research & Discovery",
@@ -652,50 +753,7 @@ export default function Pricing() {
 
         {/* Active subscription banner */}
         {(isSubscribed || isPastDue) && (
-          <div
-            className="rounded-lg px-4 py-3 flex items-start gap-3"
-            style={
-              isPastDue
-                ? { background: "hsl(38 92% 50% / 0.06)", border: "1px solid hsl(38 92% 50% / 0.2)" }
-                : { background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }
-            }
-            data-testid="banner-subscription-status"
-          >
-            <div
-              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
-              style={
-                isPastDue
-                  ? { background: "hsl(38 92% 50% / 0.15)" }
-                  : { background: "hsl(142 52% 36% / 0.15)" }
-              }
-            >
-              {isPastDue
-                ? <Settings className="w-3 h-3" style={{ color: "hsl(38 92% 50%)" }} />
-                : <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
-              }
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {isPastDue ? (
-                  <>
-                    <span className="font-semibold text-foreground">Payment issue on your account.</span>{" "}
-                    Your last payment failed. Update your payment method to restore full access.{" "}
-                    <Link href="/industry/settings">
-                      <span className="underline cursor-pointer" style={{ color: "hsl(38 92% 50%)" }}>Go to Settings →</span>
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <span className="font-semibold text-foreground">You have an active EdenScout subscription.</span>{" "}
-                    Your current plan is highlighted below. Manage billing, upgrade, or cancel from{" "}
-                    <Link href="/industry/settings">
-                      <span className="underline cursor-pointer" style={{ color: "hsl(142 52% 36%)" }}>Settings →</span>
-                    </Link>
-                  </>
-                )}
-              </p>
-            </div>
-          </div>
+          <SubscriptionBanner isPastDue={isPastDue} session={session} />
         )}
 
         {/* ACH payment notice */}
