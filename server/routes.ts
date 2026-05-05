@@ -3645,9 +3645,10 @@ export async function registerRoutes(
   app.get("/api/admin/dataset-quality", async (req, res) => {
     try {
 
-      const globalResult = await db.execute(sql`
+      const [totalRelevant, globalResult, institutionResult] = await Promise.all([
+        storage.getTotalRelevantCount(),
+        db.execute(sql`
         SELECT
-          COUNT(*)::int AS total_relevant,
           COUNT(completeness_score)::int AS scored_count,
           ROUND(AVG(completeness_score)::numeric, 1) AS avg_score,
           COUNT(CASE WHEN completeness_score >= 80 THEN 1 END)::int AS tier_excellent,
@@ -3665,9 +3666,8 @@ export async function registerRoutes(
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int AS added_30d
         FROM ingested_assets
         WHERE relevant = true
-      `);
-
-      const institutionResult = await db.execute(sql`
+      `),
+        db.execute(sql`
         SELECT
           COALESCE(institution, 'Unknown') AS institution,
           COUNT(*)::int AS relevant_count,
@@ -3679,10 +3679,11 @@ export async function registerRoutes(
         GROUP BY institution
         ORDER BY COUNT(*) DESC
         LIMIT 500
-      `);
+      `),
+      ]);
 
       res.json({
-        global: globalResult.rows[0],
+        global: { ...globalResult.rows[0], total_relevant: totalRelevant },
         institutions: institutionResult.rows,
       });
     } catch (err: any) {

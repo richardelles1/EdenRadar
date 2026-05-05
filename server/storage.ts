@@ -222,6 +222,13 @@ export interface IStorage {
   getQuarantineSummary(): Promise<Array<{ institution: string; count: number }>>;
   getInstitutionIndexedCount(institution: string): Promise<number>;
 
+  /**
+   * Canonical single source-of-truth for the total count of relevant assets.
+   * All stat endpoints (enrichment, platform, dataset-quality, embedding coverage)
+   * must call this instead of replicating the WHERE clause independently.
+   */
+  getTotalRelevantCount(): Promise<number>;
+
   getEnrichmentStats(): Promise<{
     total: number;
     relevantAssets: number;
@@ -1517,6 +1524,14 @@ export class DatabaseStorage implements IStorage {
     return row?.count ?? 0;
   }
 
+  async getTotalRelevantCount(): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.relevant, true));
+    return row?.count ?? 0;
+  }
+
   async getEnrichmentStats(): Promise<{
     total: number;
     relevantAssets: number;
@@ -1526,11 +1541,7 @@ export class DatabaseStorage implements IStorage {
     const [totalRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets);
     const total = totalRow?.count ?? 0;
 
-    const [relevantRow] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(ingestedAssets)
-      .where(eq(ingestedAssets.relevant, true));
-    const relevantAssets = relevantRow?.count ?? 0;
+    const relevantAssets = await this.getTotalRelevantCount();
 
     const [unknownRow] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -1624,11 +1635,7 @@ export class DatabaseStorage implements IStorage {
     withComparableDrugs: number;
     avgCompletenessScore: number | null;
   }> {
-    const [totalRow] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(ingestedAssets)
-      .where(eq(ingestedAssets.relevant, true));
-    const totalRelevant = totalRow?.count ?? 0;
+    const totalRelevant = await this.getTotalRelevantCount();
 
     const [deepRow] = await db
       .select({ count: sql<number>`count(*)::int` })
@@ -2466,15 +2473,16 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
-    const result = await db.execute(sql`
-      SELECT
-        COUNT(*) FILTER (WHERE relevant = true) AS total_relevant,
-        COUNT(*) FILTER (WHERE relevant = true AND embedding IS NOT NULL) AS total_embedded
-      FROM ingested_assets
-    `);
-    const row = result.rows[0] as Record<string, unknown>;
+    const [totalRelevant, embeddedResult] = await Promise.all([
+      this.getTotalRelevantCount(),
+      db.execute(sql`
+        SELECT COUNT(*) FILTER (WHERE relevant = true AND embedding IS NOT NULL) AS total_embedded
+        FROM ingested_assets
+      `),
+    ]);
+    const row = embeddedResult.rows[0] as Record<string, unknown>;
     return {
-      totalRelevant: parseInt(String(row.total_relevant ?? "0"), 10),
+      totalRelevant,
       totalEmbedded: parseInt(String(row.total_embedded ?? "0"), 10),
     };
   }
@@ -3223,11 +3231,12 @@ export class DatabaseStorage implements IStorage {
     const ago7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const ago30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const result = await db.execute(sql`
+    const [relevantAssets, result] = await Promise.all([
+      this.getTotalRelevantCount(),
+      db.execute(sql`
       SELECT
         (SELECT count(*)::int FROM users)                                                         AS total_users,
         (SELECT count(*)::int FROM ingested_assets)                                              AS total_assets,
-        (SELECT count(*)::int FROM ingested_assets WHERE relevant = true)                        AS relevant_assets,
         (SELECT count(DISTINCT institution)::int FROM ingested_assets)                           AS total_institutions,
         (SELECT count(*)::int FROM eden_sessions)                                                AS eden_sessions_all,
         (SELECT count(*)::int FROM eden_sessions WHERE created_at >= ${ago24h})                 AS eden_sessions_24h,
@@ -3238,13 +3247,14 @@ export class DatabaseStorage implements IStorage {
         (SELECT count(*)::int FROM discovery_cards WHERE published = true)                       AS published_discovery_cards,
         (SELECT count(*)::int FROM saved_assets)                                                 AS saved_assets,
         (SELECT coalesce(sum(processed), 0)::int FROM enrichment_jobs)                          AS enrichment_processed
-    `);
+    `),
+    ]);
     const row = result.rows[0] as Record<string, unknown>;
 
     return {
       totalUsers: Number(row?.total_users ?? 0),
       totalAssets: Number(row?.total_assets ?? 0),
-      relevantAssets: Number(row?.relevant_assets ?? 0),
+      relevantAssets,
       totalInstitutions: Number(row?.total_institutions ?? 0),
       edenSessionsAllTime: Number(row?.eden_sessions_all ?? 0),
       edenSessions24h: Number(row?.eden_sessions_24h ?? 0),
