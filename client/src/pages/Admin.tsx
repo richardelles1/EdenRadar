@@ -2655,10 +2655,903 @@ function FillBar({ pct, color }: { pct: number | null; color: string }) {
   );
 }
 
-function Enrichment({ pw }: { pw: string }) {
+// ── Enrichment Pipeline Panel ──────────────────────────────────────────────
+// All enrichment controls in one collapsible card: EDEN auto-run + Steps 1/2/3.
+function EnrichmentPipelinePanel({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+
+  // ── EDEN auto-enrichment state ──
+  const [staleDismissed, setStaleDismissed] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [embedConfirming, setEmbedConfirming] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+
+  const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
+    running: boolean; paused: boolean; capPerCycle: number; processed: number; total: number;
+    succeeded: number; failed: number; skipped: number; lastCycleCount: number; lastCycleDeferred: number;
+    job: { status: string; completedAt: string | null } | null; staleJobDetected: boolean; staleJobId: number | null;
+    lastSummary: { succeeded: number; failed: number; skipped: number; total: number; deferred: number; durationMs: number; bandMovements: Record<string, number>; completedAt: string; } | null;
+  }>({
+    queryKey: ["/api/admin/eden/enrich/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load enrichment status");
+      return res.json();
+    },
+    refetchInterval: 5000,
+    retry: 2,
+  });
+
+  const { data: edenStats, refetch: refetchEdenStats } = useQuery<EdenStatsResponse>({
+    queryKey: ["/api/admin/eden/stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load EDEN stats");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: embedStatus } = useQuery<EdenEmbedStatusResponse>({
+    queryKey: ["/api/admin/eden/embed/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/embed/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load embed status");
+      return res.json();
+    },
+    refetchInterval: 3000,
+  });
+
+  const resumeEnrichMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to resume"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setStaleDismissed(true); toast({ title: "Deep Enrichment resumed", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` }); refetchEdenStatus(); },
+    onError: (e: Error) => toast({ title: "Failed to resume", description: e.message, variant: "destructive" }),
+  });
+
+  const enrichTogglePauseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/toggle-pause", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to toggle enrichment pause");
+      return res.json();
+    },
+    onSuccess: () => refetchEdenStatus(),
+    onError: (err: Error) => toast({ title: "Toggle failed", description: err.message, variant: "destructive" }),
+  });
+
+  const startEdenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setConfirming(false); toast({ title: "EDEN Deep Enrichment started", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` }); refetchEdenStats(); refetchEdenStatus(); },
+    onError: (e: Error) => { setConfirming(false); toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" }); },
+  });
+
+  const stopEdenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/stop", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Stop signal sent", description: "EDEN Deep Enrichment will halt after the current batch finishes" }); refetchEdenStatus(); },
+    onError: (e: Error) => toast({ title: "Failed to stop", description: e.message, variant: "destructive" }),
+  });
+
+  const embedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/embed", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to start embedding"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setEmbedConfirming(false); toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` }); refetchEdenStats(); },
+    onError: (e: Error) => { setEmbedConfirming(false); toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" }); },
+  });
+
+  const edenWasRunningRef = useRef(false);
+  useEffect(() => {
+    const nowRunning = edenStatus?.running ?? false;
+    if (edenWasRunningRef.current && !nowRunning && edenStatus != null) {
+      const enriched = edenStatus.succeeded ?? 0;
+      const skipped = edenStatus.skipped ?? 0;
+      const failed = edenStatus.failed ?? 0;
+      const parts: string[] = [];
+      if (enriched > 0) parts.push(`${enriched.toLocaleString()} enriched`);
+      if (skipped > 0) parts.push(`${skipped.toLocaleString()} thin content`);
+      if (failed > 0) parts.push(`${failed.toLocaleString()} failed`);
+      toast({ title: "Deep Enrichment complete", description: parts.length > 0 ? parts.join(" · ") : "No assets were written this cycle" });
+      refetchEdenStats();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+    }
+    edenWasRunningRef.current = nowRunning;
+  }, [edenStatus?.running]);
+
+  const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
+  const cov = edenStats?.coverage;
+  const emb = edenStats?.embeddingCoverage;
+  const edenLive = edenStatus?.running ? edenStatus : edenStats?.live ? { running: true, processed: edenStats.live.processed, total: edenStats.live.total } : null;
+  const edenPct = edenLive && edenLive.total > 0 ? Math.round((edenLive.processed / edenLive.total) * 100) : null;
+  const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
+  const edenBreakdown = edenStats?.breakdown;
+  const edenRemaining = edenBreakdown?.total ?? edenStats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
+  const estCostUsd = edenRemaining > 0 ? (edenRemaining * 0.01).toFixed(2) : "0.00";
+  const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
+  const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
+  const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
+  const embedLive = embedStatus?.running ? embedStatus : null;
+  const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
+
+  // ── Steps 1/2/3 pipeline state ──
   const [polling, setPolling] = useState(false);
-  const [controlsOpen, setControlsOpen] = useState(true);
   const [ruleFillPolling, setRuleFillPolling] = useState(false);
+  const [bandGapFill, setBandGapFill] = React.useState<Record<string, boolean>>({});
+  const [bandNewestFirst, setBandNewestFirst] = React.useState<Record<string, boolean>>({});
+  const [bandCap, setBandCap] = React.useState<Record<string, number>>({});
+  const [bandPolling, setBandPolling] = React.useState(false);
+  const [bandConfirm, setBandConfirm] = React.useState<string | null>(null);
+  const [bandSummaryDismissed, setBandSummaryDismissed] = React.useState(false);
+
+  const { data: pipelineStats } = useQuery<EnrichmentStats>({
+    queryKey: ["/api/admin/enrichment/stats", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load enrichment stats");
+      return res.json();
+    },
+  });
+
+  const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
+    queryKey: ["/api/admin/enrichment/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load enrichment status");
+      return res.json();
+    },
+    refetchInterval: polling ? 1500 : false,
+  });
+
+  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number }>({
+    queryKey: ["/api/admin/enrichment/mini-queue", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load mini-queue");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const prevStatusRef = useRef<string | undefined>();
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status?.status;
+    if (status?.status === "running" && !polling) setPolling(true);
+    if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
+      setPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      if (status.status === "done") {
+        toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed` });
+      } else {
+        toast({ title: "Enrichment failed", description: status.error ?? "Unknown error", variant: "destructive" });
+      }
+    }
+  }, [status?.status]);
+
+  const runEnrichment = useMutation({
+    mutationFn: async (opts?: { all?: boolean }) => {
+      const url = opts?.all ? "/api/admin/enrichment/run?all=1" : "/api/admin/enrichment/run";
+      const res = await fetch(url, { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: (_data, vars) => {
+      setPolling(true); refetchStatus();
+      toast({ title: vars?.all ? "Drain enrichment started" : "Step 2 started", description: vars?.all ? "Running GPT-4o-mini on every un-scanned asset until the queue is empty..." : "Running GPT-4o-mini pass on incomplete assets..." });
+    },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
+  });
+
+  const stopEnrichment = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to stop"); }
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Stop signal sent", description: "Field enrichment will halt after current batch" }); refetchStatus(); },
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
+  const dismissError = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/reset", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to dismiss"); }
+      return res.json();
+    },
+    onSuccess: () => { refetchStatus(); toast({ title: "Error dismissed", description: "Enrichment status cleared" }); },
+    onError: (err: Error) => toast({ title: "Failed to dismiss", description: err.message, variant: "destructive" }),
+  });
+
+  const { data: ruleFillStatus, refetch: refetchRuleFillStatus } = useQuery<{
+    running: boolean;
+    progress: { processed: number; total: number; filled: number } | null;
+    result: { processed: number; filled: number; fieldsWritten: number; byField: Record<string, number>; dataSparseTagged: number } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/rule-fill/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: ruleFillPolling ? 1500 : false,
+  });
+
+  const { data: ruleFillEstimate, refetch: refetchRuleFillEstimate, isFetching: estimateFetching } = useQuery<{
+    total: number; fillable: number; byField: Record<string, number>; dataSparseCount: number;
+  }>({
+    queryKey: ["/api/admin/enrichment/rule-fill/estimate", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill/estimate", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to estimate");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (ruleFillStatus?.running && !ruleFillPolling) setRuleFillPolling(true);
+    if (!ruleFillStatus?.running && ruleFillPolling) {
+      setRuleFillPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+    }
+  }, [ruleFillStatus?.running]);
+
+  const runRuleFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => { setRuleFillPolling(true); refetchRuleFillStatus(); toast({ title: "Step 1 started", description: "Rule-based fill running (no AI cost)" }); },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
+  });
+
+  const stopRuleFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Stop signal sent" }),
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
+  const { data: bandsData, refetch: refetchBands } = useQuery<{ bands: BandInfo[] }>({
+    queryKey: ["/api/admin/enrichment/bands", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/bands", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load band data");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const { data: bandStatus, refetch: refetchBandStatus } = useQuery<BandStatusResponse>({
+    queryKey: ["/api/admin/enrichment/band/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/band/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load band status");
+      return res.json();
+    },
+    refetchInterval: bandPolling ? 1500 : false,
+  });
+
+  const prevBandRunningRef = React.useRef<boolean>(false);
+  React.useEffect(() => {
+    const wasRunning = prevBandRunningRef.current;
+    prevBandRunningRef.current = bandStatus?.running ?? false;
+    if (bandStatus?.running && !bandPolling) setBandPolling(true);
+    if (wasRunning && !bandStatus?.running) {
+      setBandPolling(false);
+      refetchBands();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      if (bandStatus?.lastSummary) {
+        toast({ title: "Band enrichment complete", description: `${bandStatus.lastSummary.succeeded} assets written · $${bandStatus.lastSummary.costUsd.toFixed(4)} spent` });
+      }
+    }
+  }, [bandStatus?.running]);
+
+  const runBand = useMutation({
+    mutationFn: async ({ band, gapFill, cap, newestFirst }: { band: string; gapFill: boolean; cap: number; newestFirst: boolean }) => {
+      const res = await fetch("/api/admin/enrichment/run-band", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ band, gapFill, cap, newestFirst }),
+      });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: (_d, vars) => {
+      setBandPolling(true); setBandConfirm(null); setBandSummaryDismissed(false); refetchBandStatus();
+      toast({ title: `Band run started`, description: `GPT-4o running on ${vars.band.replace("_", " ")} band${vars.gapFill ? " (gap-fill)" : ""}…` });
+    },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
+  });
+
+  const stopBand = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/band/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Stop signal sent" }); refetchBandStatus(); },
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
+  const isRunning = status?.status === "running";
+  const isResumed = status?.resumed === true;
+  const unknownCount = pipelineStats?.unknownCount ?? 0;
+  const totalAssets = pipelineStats?.total ?? 0;
+  const costEstimate = miniQueue?.costEstimate ?? (unknownCount * 0.0003);
+  const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+  const ruleFillProgressPct = ruleFillStatus?.progress && ruleFillStatus.progress.total > 0
+    ? Math.round((ruleFillStatus.progress.processed / ruleFillStatus.progress.total) * 100) : 0;
+
+  const anyRunning = isRunning || ruleFillStatus?.running || bandStatus?.running || edenStatus?.running;
+
+  return (
+    <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-enrichment-pipeline">
+      {/* Header */}
+      <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-3 flex-wrap">
+        <Sparkles className="h-4 w-4 text-violet-500 shrink-0" />
+        <span className="text-sm font-semibold text-foreground">Enrichment Controls</span>
+        {anyRunning && (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />Running
+          </span>
+        )}
+        {!anyRunning && edenStatus && (edenStatus.paused ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />Auto-run paused
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />Auto-run active
+          </span>
+        ))}
+        {(edenStatus?.lastCycleCount ?? 0) > 0 && (
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            Last cycle: <span className="text-foreground font-medium">{edenStatus!.lastCycleCount.toLocaleString()}</span> enriched
+            {(edenStatus?.lastCycleDeferred ?? 0) > 0 && <span className="text-amber-600 dark:text-amber-400 ml-1">({edenStatus!.lastCycleDeferred.toLocaleString()} deferred)</span>}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => enrichTogglePauseMutation.mutate()}
+            disabled={enrichTogglePauseMutation.isPending || edenStatus?.running}
+            data-testid="button-pipeline-toggle-enrichment-pause"
+            className={`inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${edenStatus?.paused ? "border-emerald-400/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50" : "border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50"}`}
+          >
+            {enrichTogglePauseMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : edenStatus?.paused ? <><Zap className="w-3 h-3" /><span>Resume</span></> : <><AlertCircle className="w-3 h-3" /><span>Pause Auto-run</span></>}
+          </button>
+          <button onClick={() => setOpen(o => !o)}
+            className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-border hover:bg-muted/40 transition-colors"
+            data-testid="button-toggle-enrichment-controls">
+            {open ? "Collapse" : "Open Controls"}
+            <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="px-5 py-4 space-y-5 border-t border-border">
+
+          {showStaleBanner && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
+              <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
+                <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">Deep enrichment job #{edenStatus?.staleJobId} was in progress when the server restarted and has not been resumed.</p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => resumeEnrichMutation.mutate()} disabled={resumeEnrichMutation.isPending}
+                  className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50" data-testid="button-stale-resume">
+                  {resumeEnrichMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}Resume
+                </button>
+                <button onClick={() => setStaleDismissed(true)} className="text-muted-foreground hover:text-foreground transition-colors" data-testid="button-stale-dismiss" aria-label="Dismiss"><X className="h-4 w-4" /></button>
+              </div>
+            </div>
+          )}
+
+          {/* Coverage summary */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-border bg-background p-3 text-center">
+              <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Total Assets</div>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3 text-center">
+              <div className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Unknown Fields</div>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3 text-center">
+              <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Fully Enriched</div>
+            </div>
+            <div className="rounded-xl border border-border bg-background p-3 text-center">
+              <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">{totalAssets > 0 ? Math.round(((totalAssets - unknownCount) / totalAssets) * 100) : 0}%</div>
+              <div className="text-xs text-muted-foreground mt-0.5">Completion Rate</div>
+            </div>
+          </div>
+
+          {/* Step 1: Rule-Based Fill */}
+          <div className="border border-emerald-200 dark:border-emerald-900 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-100/60 dark:bg-emerald-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-xs font-bold shrink-0">1</span>
+              <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Rule-Based Fill</span>
+              <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Applies regex pattern rules to fill <em>developmentStage</em>, <em>ipType</em>, <em>licensingReadiness</em>, and <em>indication</em> from asset text. Also tags data-sparse assets (description &lt; 150 chars). Respects human-verified locks.</p>
+              {ruleFillEstimate && (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {Object.entries(ruleFillEstimate.byField).map(([field, count]) => (
+                    <div key={field} className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-background p-2 text-center">
+                      <div className="text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{(count as number).toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground capitalize">{field}</div>
+                    </div>
+                  ))}
+                  <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
+                    <div className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{ruleFillEstimate.dataSparseCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground">Sparse</div>
+                  </div>
+                </div>
+              )}
+              {ruleFillStatus?.running && ruleFillStatus.progress && (
+                <div className="space-y-2" data-testid="rule-fill-progress">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Running…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto">{ruleFillStatus.progress.processed.toLocaleString()}/{ruleFillStatus.progress.total.toLocaleString()} ({ruleFillProgressPct}%)</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopRuleFill.mutate()} disabled={stopRuleFill.isPending} className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-rule-fill-stop">Stop</Button>
+                  </div>
+                  <div className="w-full bg-emerald-100 dark:bg-emerald-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${ruleFillProgressPct}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{ruleFillStatus.progress.filled.toLocaleString()} fields filled so far</p>
+                </div>
+              )}
+              {!ruleFillStatus?.running && ruleFillStatus?.result && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="rule-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Done — {ruleFillStatus.result.fieldsWritten.toLocaleString()} fields written across {ruleFillStatus.result.filled.toLocaleString()} assets{ruleFillStatus.result.dataSparseTagged > 0 && `, ${ruleFillStatus.result.dataSparseTagged} sparse-flagged`}</p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      {Object.entries(ruleFillStatus.result.byField).map(([f, n]) => (
+                        <span key={f} className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">{f}: {(n as number).toLocaleString()}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchRuleFillEstimate()} disabled={estimateFetching}
+                  className="gap-1.5 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30" data-testid="button-rule-fill-estimate">
+                  {estimateFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}Estimate
+                </Button>
+                <Button size="sm" onClick={() => runRuleFill.mutate()} disabled={ruleFillStatus?.running || runRuleFill.isPending}
+                  className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-run-rule-fill">
+                  {ruleFillStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}Run Rule Fill
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2: GPT-4o-mini Re-enrich */}
+          <div className="border border-amber-200 dark:border-amber-900 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">2</span>
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">GPT-4o-mini Re-enrich</span>
+              <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <span className="bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o-mini</span>
+                <span>~$0.15/1k assets</span><span className="text-amber-500">·</span><span>~${costEstimate.toFixed(2)} est.</span>
+              </span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Runs GPT-4o-mini on assets that still have unknown fields after rule fill. Type-aware classification: nulls returned for non-applicable fields. Resumable.</p>
+              {pipelineStats && unknownCount > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {[{ label: "Target", val: pipelineStats.byField.target }, { label: "Modality", val: pipelineStats.byField.modality }, { label: "Indication", val: pipelineStats.byField.indication }, { label: "Dev Stage", val: pipelineStats.byField.developmentStage }].map(f => (
+                    <div key={f.label} className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
+                      <div className="text-base font-bold tabular-nums text-amber-700 dark:text-amber-400">{f.val.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{f.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {isRunning && status && (
+                <div className="space-y-2" data-testid="enrichment-progress">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                    <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Running{isResumed ? " (resumed)" : ""}…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">{status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopEnrichment.mutate()} disabled={stopEnrichment.isPending} className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-enrichment-stop">
+                      {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
+                  </div>
+                  <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} data-testid="enrichment-progress-bar" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{status.improved.toLocaleString()} assets improved so far</p>
+                </div>
+              )}
+              {status?.status === "done" && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="enrichment-done">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Complete — {status.improved} of {status.total} assets improved</p>
+                </div>
+              )}
+              {status?.status === "error" && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
+                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-red-700 dark:text-red-400">Job failed</p>
+                    <p className="text-xs text-red-600 dark:text-red-500">{status.error ?? "Dismiss to return to idle."}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs text-red-600 dark:text-red-400 hover:text-red-800 shrink-0" onClick={() => dismissError.mutate()} disabled={dismissError.isPending} data-testid="button-dismiss-enrichment-error">
+                    {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+                  </Button>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
+                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Run 500 batch
+                </Button>
+                <Button size="sm" variant="outline"
+                  onClick={() => { const rem = miniQueue?.count ?? 0; const cost = miniQueue?.costEstimate ?? 0; const ok = window.confirm(`Run mini-40 enrichment on ALL ${rem.toLocaleString()} un-scanned assets?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job will keep pulling the next 500 until the queue is empty. You can stop it at any time.`); if (ok) runEnrichment.mutate({ all: true }); }}
+                  disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue?.count ?? 0) === 0}
+                  className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30" data-testid="button-run-enrichment-all">
+                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3: GPT-4o Surgical Band Enrichment */}
+          <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden" data-testid="card-band-enrichment">
+            <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">3</span>
+              <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">GPT-4o Surgical Deep Pass</span>
+              <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400">~$0.01/asset</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Target a specific quality band for GPT-4o deep enrichment. Enable <span className="font-medium text-foreground">gap-fill</span> to only generate missing MoA/unmet-need fields on drug assets — minimising cost. <span className="font-medium text-foreground">Newest first</span> processes recently ingested assets before older ones.</p>
+              {bandStatus?.running && (
+                <div className="space-y-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 p-3" data-testid="band-live-progress">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-600" />
+                    <span className="text-xs font-medium text-violet-700 dark:text-violet-400">{bandStatus.band?.replace("_", " ")} band{bandStatus.gapFill ? " (gap-fill)" : ""} running…</span>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground" data-testid="band-progress-text">{bandStatus.processed.toLocaleString()}/{bandStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopBand.mutate()} disabled={stopBand.isPending} className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-band-stop">
+                      {stopBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
+                  </div>
+                  <div className="w-full bg-violet-100 dark:bg-violet-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-violet-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${bandStatus.total > 0 ? Math.round((bandStatus.processed / bandStatus.total) * 100) : 0}%` }} data-testid="band-progress-bar" />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
+                    <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">${bandStatus.liveCostUsd.toFixed(4)} of ~${bandStatus.liveProjectedTotalUsd?.toFixed(2) ?? "?"} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (actual)</span>
+                  </div>
+                </div>
+              )}
+              {!bandStatus?.running && !bandSummaryDismissed && bandStatus?.lastSummary && (
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-2" data-testid="band-last-summary">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Last run: {bandStatus.lastSummary.band.replace("_", " ")} band{bandStatus.lastSummary.gapFill ? " gap-fill" : ""}</span>
+                    <span className="text-[11px] text-muted-foreground">{Math.round(bandStatus.lastSummary.durationMs / 1000)}s</span>
+                    <button onClick={() => setBandSummaryDismissed(true)} className="ml-auto text-[11px] text-muted-foreground hover:text-foreground" data-testid="button-band-dismiss-summary" aria-label="Dismiss summary">✕</button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center"><p className="text-sm font-bold text-foreground" data-testid="summary-succeeded">{bandStatus.lastSummary.succeeded.toLocaleString()}</p><p className="text-[10px] text-muted-foreground">written</p></div>
+                    <div className="text-center"><p className="text-sm font-bold text-foreground">{bandStatus.lastSummary.failed.toLocaleString()}</p><p className="text-[10px] text-muted-foreground">failed</p></div>
+                    <div className="text-center"><p className="text-sm font-bold text-violet-600" data-testid="summary-cost">${bandStatus.lastSummary.costUsd.toFixed(4)}</p><p className="text-[10px] text-muted-foreground">cost</p></div>
+                    <div className="text-center"><p className="text-sm font-bold text-foreground">{(bandStatus.lastSummary.inputTokens + bandStatus.lastSummary.outputTokens).toLocaleString()}</p><p className="text-[10px] text-muted-foreground">tokens (actual)</p></div>
+                  </div>
+                  {bandStatus.lastSummary.avgScoreBefore != null && bandStatus.lastSummary.avgScoreAfter != null && (
+                    <div className="flex items-center gap-1.5 text-[11px]" data-testid="summary-score-delta">
+                      <span className="text-muted-foreground">Avg score:</span>
+                      <span className="font-medium text-foreground">{bandStatus.lastSummary.avgScoreBefore}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className={`font-semibold ${bandStatus.lastSummary.avgScoreAfter > bandStatus.lastSummary.avgScoreBefore ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>{bandStatus.lastSummary.avgScoreAfter}</span>
+                      {bandStatus.lastSummary.avgScoreAfter > bandStatus.lastSummary.avgScoreBefore && <span className="text-emerald-600 dark:text-emerald-400">(+{(bandStatus.lastSummary.avgScoreAfter - bandStatus.lastSummary.avgScoreBefore).toFixed(1)})</span>}
+                    </div>
+                  )}
+                  {bandStatus.lastSummary.gapFill && Object.keys(bandStatus.lastSummary.fieldFillCounts ?? {}).length > 0 && (
+                    <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
+                      {Object.entries(bandStatus.lastSummary.fieldFillCounts).map(([f, n]) => (
+                        <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium">{f.replace(/([A-Z])/g, " $1").toLowerCase()} ×{n}</span>
+                      ))}
+                    </div>
+                  )}
+                  {!bandStatus.lastSummary.gapFill && bandStatus.lastSummary.fieldsFilledNames.length > 0 && (
+                    <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
+                      {bandStatus.lastSummary.fieldsFilledNames.map((f) => (
+                        <span key={f} className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-[10px] px-2 py-0.5 font-medium">{f.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
+                      ))}
+                    </div>
+                  )}
+                  {Object.keys(bandStatus.lastSummary.bandMovements ?? {}).length > 0 && (() => {
+                    const bandOrder = ["bare", "very_sparse", "sparse", "decent", "rich"];
+                    return (
+                      <div data-testid="summary-band-movements">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Band movements</p>
+                        <div className="flex flex-wrap gap-1">
+                          {Object.entries(bandStatus.lastSummary!.bandMovements).sort((a, b) => b[1] - a[1]).map(([key, n]) => {
+                            const [from, to] = key.split("→");
+                            const isUp = bandOrder.indexOf(to) > bandOrder.indexOf(from);
+                            return <span key={key} className={`rounded-full text-[10px] px-2 py-0.5 font-medium border ${isUp ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"}`}>{from.replace("_", " ")} → {to.replace("_", " ")} ×{n}</span>;
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              )}
+              <div className="space-y-2" data-testid="band-rows">
+                {(bandsData?.bands ?? [
+                  { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true, populationB: 0 },
+                ]).map((band) => {
+                  const isBare = band.id === "bare";
+                  const isGapFill = bandGapFill[band.id] ?? !isBare;
+                  const isNewest = bandNewestFirst[band.id] ?? false;
+                  const targetCount = isGapFill ? band.gapFillCount : band.count;
+                  const estCost = isGapFill ? band.estCostGapFill : band.estCostFull;
+                  const isThisRunning = bandStatus?.running && bandStatus.band === band.id;
+                  const anyRunningBand = bandStatus?.running;
+                  const isConfirming = bandConfirm === band.id;
+                  const bandMeta: Record<string, { label: string; range: string; dot: string; bg: string; border: string; text: string }> = {
+                    rich:        { label: "Rich",        range: "80–100", dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/20",  border: "border-emerald-200 dark:border-emerald-900", text: "text-emerald-700 dark:text-emerald-400" },
+                    decent:      { label: "Decent",      range: "60–79",  dot: "bg-teal-500",    bg: "bg-teal-50 dark:bg-teal-950/20",        border: "border-teal-200 dark:border-teal-900",    text: "text-teal-700 dark:text-teal-400" },
+                    sparse:      { label: "Sparse",      range: "40–59",  dot: "bg-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/20",      border: "border-amber-200 dark:border-amber-900",  text: "text-amber-700 dark:text-amber-400" },
+                    very_sparse: { label: "Very Sparse", range: "1–39",   dot: "bg-orange-500",  bg: "bg-orange-50 dark:bg-orange-950/20",    border: "border-orange-200 dark:border-orange-900", text: "text-orange-700 dark:text-orange-400" },
+                    bare:        { label: "Bare",        range: "0/null", dot: "bg-muted-foreground/40", bg: "bg-muted/20", border: "border-border", text: "text-muted-foreground" },
+                  };
+                  const m = bandMeta[band.id];
+                  const gapPills = !isBare ? [
+                    { key: "moa", label: "MoA", count: band.missingMoa },
+                    { key: "unmet", label: "Unmet need", count: band.missingUnmet },
+                    { key: "comparable", label: "Comparables", count: band.missingComparable },
+                    { key: "innovation", label: "Innovation", count: band.missingInnovation },
+                  ].filter((p) => p.count > 0) : [];
+                  return (
+                    <div key={band.id} className={`rounded-lg border ${m.border} ${m.bg} p-3 space-y-2`} data-testid={`band-row-${band.id}`}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className={`h-2 w-2 rounded-full ${m.dot} shrink-0`} />
+                        <span className={`text-xs font-semibold ${m.text}`}>{m.label}</span>
+                        <span className="text-[11px] text-muted-foreground">score {m.range}</span>
+                        <span className="text-[11px] font-medium text-foreground tabular-nums" data-testid={`band-count-${band.id}`}>{band.count.toLocaleString()} assets</span>
+                        {!isBare && band.gapFillCount > 0 && <span className="text-[11px] text-muted-foreground">· {band.gapFillCount.toLocaleString()} gap-fillable</span>}
+                        <span className="ml-auto text-[11px] font-medium text-violet-600 dark:text-violet-400 tabular-nums" data-testid={`band-cost-${band.id}`}>{isBare ? "—" : `~$${estCost.toFixed(2)}`}</span>
+                      </div>
+                      {gapPills.length > 0 && (
+                        <div className="flex flex-wrap gap-1" data-testid={`band-gap-pills-${band.id}`}>
+                          {gapPills.map((p) => <span key={p.key} className="rounded-full bg-white/60 dark:bg-white/5 border border-current/10 text-[10px] px-1.5 py-0.5 text-muted-foreground">{p.count.toLocaleString()} missing {p.label}</span>)}
+                        </div>
+                      )}
+                      {!isBare ? (
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-gapfill-toggle-${band.id}`}>
+                            <div onClick={() => setBandGapFill((prev) => ({ ...prev, [band.id]: !prev[band.id] }))} className={`relative h-4 w-7 rounded-full transition-colors cursor-pointer ${isGapFill ? "bg-violet-500" : "bg-muted-foreground/30"}`}>
+                              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${isGapFill ? "translate-x-3" : "translate-x-0.5"}`} />
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">Gap-fill{isGapFill && band.gapFillCount > 0 ? ` (${band.gapFillCount.toLocaleString()})` : ""}</span>
+                          </label>
+                          <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-newest-toggle-${band.id}`}>
+                            <div onClick={() => setBandNewestFirst((prev) => ({ ...prev, [band.id]: !prev[band.id] }))} className={`relative h-4 w-7 rounded-full transition-colors cursor-pointer ${isNewest ? "bg-violet-400" : "bg-muted-foreground/30"}`}>
+                              <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${isNewest ? "translate-x-3" : "translate-x-0.5"}`} />
+                            </div>
+                            <span className="text-[11px] text-muted-foreground">Newest first</span>
+                          </label>
+                          <label className="flex items-center gap-1 text-[11px] text-muted-foreground" data-testid={`band-cap-label-${band.id}`}>
+                            <span>Cap:</span>
+                            <input type="number" min={10} max={5000} step={50} value={bandCap[band.id] ?? 500}
+                              onChange={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
+                              onBlur={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
+                              className="w-16 h-5 rounded border border-input bg-background px-1 text-[11px] text-foreground tabular-nums" data-testid={`band-cap-input-${band.id}`} />
+                            <span className="text-[10px] text-muted-foreground/60">(10–5k)</span>
+                          </label>
+                          {isConfirming ? (() => {
+                            const capValue = bandCap[band.id] ?? 500;
+                            const effectiveCount = Math.min(targetCount, capValue);
+                            const perAssetCost = targetCount > 0 ? estCost / targetCount : 0;
+                            const effectiveCost = effectiveCount * perAssetCost;
+                            return (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[11px] font-semibold text-amber-600" data-testid={`band-confirm-text-${band.id}`}>
+                                  Run {effectiveCount.toLocaleString()} assets (~${effectiveCost.toFixed(2)})?{effectiveCount < targetCount && <span className="text-amber-500 font-normal"> (capped from {targetCount.toLocaleString()})</span>}
+                                </span>
+                                <Button size="sm" className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white" disabled={runBand.isPending}
+                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: capValue, newestFirst: isNewest })} data-testid={`button-band-confirm-${band.id}`}>
+                                  {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setBandConfirm(null)} data-testid={`button-band-cancel-${band.id}`}>Cancel</Button>
+                              </div>
+                            );
+                          })() : (
+                            <Button size="sm" variant="outline" className={`h-6 px-2.5 text-[11px] ${m.border} ${m.text} hover:bg-white/60 dark:hover:bg-white/5`}
+                              disabled={anyRunningBand || targetCount === 0 || runBand.isPending} onClick={() => setBandConfirm(band.id)} data-testid={`button-band-run-${band.id}`}
+                              title={isThisRunning ? "Running…" : targetCount === 0 ? "No assets to process" : `Run GPT-4o on ${targetCount.toLocaleString()} assets`}>
+                              {isThisRunning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}Run {isGapFill ? "gap-fill" : "full pass"}
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(band.populationB ?? 0) > 0 ? (
+                            isConfirming ? (() => {
+                              const capValue = bandCap[band.id] ?? 500;
+                              const effective = Math.min(band.populationB ?? 0, capValue);
+                              const perAssetCost = 0.011;
+                              return (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[11px] font-semibold text-amber-600" data-testid="button-band-confirm-bare-text">Enrich {effective.toLocaleString()} bare assets (~${(effective * perAssetCost).toFixed(2)})?</span>
+                                  <Button size="sm" className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white" disabled={runBand.isPending}
+                                    onClick={() => runBand.mutate({ band: band.id, gapFill: false, cap: capValue, newestFirst: false })} data-testid="button-band-confirm-bare">
+                                    {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
+                                  </Button>
+                                  <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setBandConfirm(null)} data-testid="button-band-cancel-bare">Cancel</Button>
+                                </div>
+                              );
+                            })() : (
+                              <Button size="sm" variant="outline" className={`h-6 px-2.5 text-[11px] ${m.border} ${m.text} hover:bg-white/60 dark:hover:bg-white/5`}
+                                disabled={anyRunningBand || runBand.isPending} onClick={() => setBandConfirm(band.id)} data-testid="button-band-run-bare"
+                                title={`Enrich ${(band.populationB ?? 0).toLocaleString()} bare assets with ≥120 chars of content`}>
+                                <Sparkles className="h-3 w-3 mr-1" />Run pop B ({(band.populationB ?? 0).toLocaleString()})
+                              </Button>
+                            )
+                          ) : (
+                            <>
+                              <Button size="sm" variant="outline" className="h-6 px-2.5 text-[11px] border-border text-muted-foreground opacity-50 cursor-not-allowed" disabled data-testid="button-band-run-bare" title="No bare assets with ≥120 chars — re-scrape first">
+                                <Sparkles className="h-3 w-3 mr-1" />Run full pass
+                              </Button>
+                              <span className="text-[11px] text-muted-foreground">Re-scrape first</span>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {unknownCount === 0 && totalAssets > 0 && (
+                <div className="text-center py-4 text-muted-foreground" data-testid="enrichment-all-complete">
+                  <CheckCircle2 className="h-7 w-7 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm font-medium">All assets fully enriched</p>
+                  <p className="text-xs mt-1">No unknown fields remaining.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* EDEN Readiness (collapsible sub-section) */}
+          <div className="rounded-lg border border-border bg-muted/10 overflow-hidden" data-testid="card-eden-readiness">
+            <button className="w-full flex items-center justify-between px-4 py-3 hover:bg-muted/40 transition-colors" onClick={() => setReadinessOpen((v) => !v)} data-testid="button-toggle-readiness">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">EDEN Readiness</span>
+                {embPct >= 100 && deepPct >= 90 ? (
+                  <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 ml-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"/>Active</span>
+                ) : (
+                  <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block"/>Indexing</span>
+                )}
+              </div>
+              {readinessOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+            </button>
+            {readinessOpen && (
+              <div className="border-t border-border p-4 space-y-5">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                  <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Corpus</p><p className="text-xl font-bold text-foreground mt-0.5">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">relevant assets</p></div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Enriched</p><p className="text-xl font-bold text-emerald-600 mt-0.5">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">{deepPct}% with GPT-4o</p></div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Embedded</p><p className="text-xl font-bold text-violet-600 mt-0.5">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">{embPct}% vectorized</p></div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">With MoA</p><p className="text-xl font-bold text-foreground mt-0.5">{cov?.withMoa?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">mechanism of action</p></div>
+                  <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Completeness</p><p className="text-xl font-bold text-foreground mt-0.5">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}` : "—"}</p><p className="text-[11px] text-muted-foreground">avg / 100 pts</p></div>
+                </div>
+                <div className="space-y-3">
+                  <div><div className="flex justify-between text-xs text-muted-foreground mb-1"><span>Deep Enrichment</span><span>{deepPct}%</span></div><Progress value={deepPct} className="h-1.5" /></div>
+                  <div><div className="flex justify-between text-xs text-muted-foreground mb-1"><span>Vector Embeddings</span><span>{embPct}%</span></div><Progress value={embPct} className="h-1.5" /></div>
+                </div>
+                {edenLive && (
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="card-eden-live">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">EDEN Deep Enrichment (GPT-4o): {edenLive.processed.toLocaleString()} / {edenLive.total.toLocaleString()}</span>
+                      <span className="text-sm font-bold text-emerald-600">{edenPct}%</span>
+                      <Button variant="ghost" size="sm" onClick={() => stopEdenMutation.mutate()} disabled={stopEdenMutation.isPending} className="ml-auto h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-eden-stop">
+                        {stopEdenMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                      </Button>
+                    </div>
+                    <Progress value={edenPct ?? 0} className="h-1.5" />
+                    {(edenStatus?.succeeded != null || edenStatus?.failed != null || edenStatus?.skipped != null) && (
+                      <div className="flex items-center gap-3 mt-2 text-[11px]" data-testid="eden-live-counters">
+                        {(edenStatus?.succeeded ?? 0) > 0 && <span className="text-emerald-700 dark:text-emerald-400 font-medium" data-testid="eden-live-enriched">{edenStatus!.succeeded.toLocaleString()} enriched</span>}
+                        {(edenStatus?.skipped ?? 0) > 0 && <span className="text-muted-foreground" data-testid="eden-live-skipped">{edenStatus!.skipped.toLocaleString()} thin content</span>}
+                        {(edenStatus?.failed ?? 0) > 0 && <span className="text-red-600 dark:text-red-400" data-testid="eden-live-failed">{edenStatus!.failed.toLocaleString()} failed</span>}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {embedLive && (
+                  <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
+                      <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">Embedding running: {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}</span>
+                      <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
+                    </div>
+                    <Progress value={embedPct ?? 0} className="h-1.5" />
+                  </div>
+                )}
+                <div data-testid="card-eden-run">
+                  <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
+                  <p className="text-xs text-muted-foreground mb-2">GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs and Licensing Readiness. <span className="ml-1 font-semibold text-foreground">{edenRemaining.toLocaleString()} assets</span> queued{edenRemaining > 0 && <> at <span className="font-semibold text-foreground">~$0.01/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.</p>
+                  {edenBreakdown && edenRemaining > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {edenBreakdown.fresh > 0 && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-blue-500/8 border-blue-500/20 text-blue-700 dark:text-blue-400"><span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />{edenBreakdown.fresh.toLocaleString()} fresh</span>}
+                      {edenBreakdown.legacy > 0 && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-amber-500/8 border-amber-500/20 text-amber-700 dark:text-amber-400"><span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />{edenBreakdown.legacy.toLocaleString()} legacy</span>}
+                      {edenBreakdown.lowQualityRetry > 0 && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400"><span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />{edenBreakdown.lowQualityRetry.toLocaleString()} low-score retry</span>}
+                      {(edenBreakdown.nullCategory ?? 0) > 0 && <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-red-500/8 border-red-500/20 text-red-700 dark:text-red-400"><span className="h-1.5 w-1.5 rounded-full bg-red-400 inline-block" />{edenBreakdown.nullCategory!.toLocaleString()} missing category</span>}
+                    </div>
+                  )}
+                  {!confirming ? (
+                    <Button onClick={() => setConfirming(true)} disabled={edenLive != null || edenRemaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">
+                      <PlayCircle className="h-3.5 w-3.5 mr-1.5" />{edenRemaining === 0 ? "All Enriched" : `Enrich ${edenRemaining.toLocaleString()} Assets`}
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-semibold text-amber-600">Use ~${estCostUsd} of GPT-4o budget?</p>
+                      <Button onClick={() => startEdenMutation.mutate()} disabled={startEdenMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-confirm">
+                        {startEdenMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Yes, Run
+                      </Button>
+                      <Button variant="outline" onClick={() => setConfirming(false)} className="h-8 text-xs" data-testid="button-eden-cancel">Cancel</Button>
+                    </div>
+                  )}
+                </div>
+                <div data-testid="card-eden-embeddings">
+                  <h4 className="text-xs font-semibold text-foreground mb-1">Vector Embeddings</h4>
+                  <p className="text-xs text-muted-foreground mb-3">{emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} assets embedded with text-embedding-3-small.{embRemaining > 0 && <> Remaining cost: <span className="font-semibold text-foreground">${embEstCost}</span>.</>}</p>
+                  {!embedConfirming ? (
+                    <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-run">
+                      <Sparkles className="h-3.5 w-3.5 mr-1.5" />{embRemaining === 0 ? "All Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-xs font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})?</p>
+                      <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-confirm">
+                        {embedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Yes, Embed
+                      </Button>
+                      <Button variant="outline" onClick={() => setEmbedConfirming(false)} className="h-8 text-xs" data-testid="button-embed-cancel">Cancel</Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Enrichment({ pw }: { pw: string }) {
   const [institutionFilter, setInstitutionFilter] = useState("");
   const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
   const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
@@ -2671,15 +3564,6 @@ function Enrichment({ pw }: { pw: string }) {
     setBrowserPreFilter({ dim, value });
     setTimeout(() => browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };
-
-  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
-    queryKey: ["/api/admin/enrichment/stats", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load enrichment stats");
-      return res.json();
-    },
-  });
 
   const { data: quality, isLoading: qualityLoading, refetch: refetchQuality } = useQuery<DatasetQualityResponse>({
     queryKey: ["/api/admin/dataset-quality", pw],
@@ -2729,226 +3613,6 @@ function Enrichment({ pw }: { pw: string }) {
     enabled: showConfidence,
     staleTime: 120_000,
   });
-
-  const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
-    queryKey: ["/api/admin/enrichment/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load enrichment status");
-      return res.json();
-    },
-    refetchInterval: polling ? 1500 : false,
-  });
-
-  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number }>({
-    queryKey: ["/api/admin/enrichment/mini-queue", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load mini-queue");
-      return res.json();
-    },
-    staleTime: 60_000,
-  });
-
-  const prevStatusRef = useRef<string | undefined>();
-  useEffect(() => {
-    const prev = prevStatusRef.current;
-    prevStatusRef.current = status?.status;
-    if (status?.status === "running" && !polling) setPolling(true);
-    if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
-      setPolling(false);
-      refetchStats();
-      refetchQuality();
-      if (status.status === "done") {
-        toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed` });
-      } else {
-        toast({ title: "Enrichment failed", description: status.error ?? "Unknown error", variant: "destructive" });
-      }
-    }
-  }, [status?.status]);
-
-  const runEnrichment = useMutation({
-    mutationFn: async (opts?: { all?: boolean }) => {
-      const url = opts?.all ? "/api/admin/enrichment/run?all=1" : "/api/admin/enrichment/run";
-      const res = await fetch(url, { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
-      return res.json();
-    },
-    onSuccess: (_data, vars) => {
-      setPolling(true);
-      refetchStatus();
-      toast({
-        title: vars?.all ? "Drain enrichment started" : "Step 2 started",
-        description: vars?.all
-          ? "Running GPT-4o-mini on every un-scanned asset until the queue is empty..."
-          : "Running GPT-4o-mini pass on incomplete assets...",
-      });
-    },
-    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
-  });
-
-  const stopEnrichment = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to stop"); }
-      return res.json();
-    },
-    onSuccess: () => { toast({ title: "Stop signal sent", description: "Field enrichment will halt after current batch" }); refetchStatus(); },
-    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
-  });
-
-  const dismissError = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/reset", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to dismiss"); }
-      return res.json();
-    },
-    onSuccess: () => { refetchStatus(); toast({ title: "Error dismissed", description: "Enrichment status cleared" }); },
-    onError: (err: Error) => toast({ title: "Failed to dismiss", description: err.message, variant: "destructive" }),
-  });
-
-  // ── Rule-Based Fill state ──────────────────────────────────────────────────
-  const { data: ruleFillStatus, refetch: refetchRuleFillStatus } = useQuery<{
-    running: boolean;
-    progress: { processed: number; total: number; filled: number } | null;
-    result: { processed: number; filled: number; fieldsWritten: number; byField: Record<string, number>; dataSparseTagged: number } | null;
-  }>({
-    queryKey: ["/api/admin/enrichment/rule-fill/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    refetchInterval: ruleFillPolling ? 1500 : false,
-  });
-
-  const { data: ruleFillEstimate, refetch: refetchRuleFillEstimate, isFetching: estimateFetching } = useQuery<{
-    total: number; fillable: number; byField: Record<string, number>; dataSparseCount: number;
-  }>({
-    queryKey: ["/api/admin/enrichment/rule-fill/estimate", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill/estimate", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to estimate");
-      return res.json();
-    },
-    staleTime: 60_000,
-  });
-
-  useEffect(() => {
-    if (ruleFillStatus?.running && !ruleFillPolling) setRuleFillPolling(true);
-    if (!ruleFillStatus?.running && ruleFillPolling) {
-      setRuleFillPolling(false);
-      refetchStats();
-      refetchQuality();
-    }
-  }, [ruleFillStatus?.running]);
-
-  const runRuleFill = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
-      return res.json();
-    },
-    onSuccess: () => { setRuleFillPolling(true); refetchRuleFillStatus(); toast({ title: "Step 1 started", description: "Rule-based fill running (no AI cost)" }); },
-    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
-  });
-
-  const stopRuleFill = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
-      return res.json();
-    },
-    onSuccess: () => toast({ title: "Stop signal sent" }),
-    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
-  });
-
-  // ── Surgical Band Enrichment (Step 3) state ──────────────────────────────
-  const [bandGapFill, setBandGapFill] = React.useState<Record<string, boolean>>({});
-  const [bandNewestFirst, setBandNewestFirst] = React.useState<Record<string, boolean>>({});
-  const [bandCap, setBandCap] = React.useState<Record<string, number>>({});
-  const [bandPolling, setBandPolling] = React.useState(false);
-  const [bandConfirm, setBandConfirm] = React.useState<string | null>(null);
-  const [bandSummaryDismissed, setBandSummaryDismissed] = React.useState(false);
-
-  const { data: bandsData, refetch: refetchBands } = useQuery<{ bands: BandInfo[] }>({
-    queryKey: ["/api/admin/enrichment/bands", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/bands", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load band data");
-      return res.json();
-    },
-    staleTime: 60_000,
-  });
-
-  const { data: bandStatus, refetch: refetchBandStatus } = useQuery<BandStatusResponse>({
-    queryKey: ["/api/admin/enrichment/band/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/band/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load band status");
-      return res.json();
-    },
-    refetchInterval: bandPolling ? 1500 : false,
-  });
-
-  const prevBandRunningRef = React.useRef<boolean>(false);
-  React.useEffect(() => {
-    const wasRunning = prevBandRunningRef.current;
-    prevBandRunningRef.current = bandStatus?.running ?? false;
-    if (bandStatus?.running && !bandPolling) setBandPolling(true);
-    if (wasRunning && !bandStatus?.running) {
-      setBandPolling(false);
-      refetchBands();
-      if (bandStatus?.lastSummary) {
-        toast({
-          title: "Band enrichment complete",
-          description: `${bandStatus.lastSummary.succeeded} assets written · $${bandStatus.lastSummary.costUsd.toFixed(4)} spent`,
-        });
-      }
-    }
-  }, [bandStatus?.running]);
-
-  const runBand = useMutation({
-    mutationFn: async ({ band, gapFill, cap, newestFirst }: { band: string; gapFill: boolean; cap: number; newestFirst: boolean }) => {
-      const res = await fetch("/api/admin/enrichment/run-band", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-        body: JSON.stringify({ band, gapFill, cap, newestFirst }),
-      });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
-      return res.json();
-    },
-    onSuccess: (_d, vars) => {
-      setBandPolling(true);
-      setBandConfirm(null);
-      setBandSummaryDismissed(false);
-      refetchBandStatus();
-      toast({
-        title: `Band run started`,
-        description: `GPT-4o running on ${vars.band.replace("_", " ")} band${vars.gapFill ? " (gap-fill)" : ""}…`,
-      });
-    },
-    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
-  });
-
-  const stopBand = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/band/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
-      return res.json();
-    },
-    onSuccess: () => { toast({ title: "Stop signal sent" }); refetchBandStatus(); },
-    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
-  });
-
-  const isRunning = status?.status === "running";
-  const isResumed = status?.resumed === true;
-  const unknownCount = stats?.unknownCount ?? 0;
-  const totalAssets = stats?.total ?? 0;
-  const costEstimate = miniQueue?.costEstimate ?? (unknownCount * 0.0003);
-  const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
-  const ruleFillProgressPct = ruleFillStatus?.progress && ruleFillStatus.progress.total > 0
-    ? Math.round((ruleFillStatus.progress.processed / ruleFillStatus.progress.total) * 100) : 0;
 
   const g = quality?.global;
   const totalRelevant = g?.total_relevant ?? 0;
@@ -3010,7 +3674,7 @@ function Enrichment({ pw }: { pw: string }) {
     URL.revokeObjectURL(url);
   };
 
-  if (statsLoading || qualityLoading) {
+  if (qualityLoading) {
     return (
       <div className="flex items-center justify-center py-20" data-testid="enrichment-loading">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -3401,656 +4065,6 @@ function Enrichment({ pw }: { pw: string }) {
           />
         </div>
       )}
-
-      {/* ── Enrichment Pipeline (3-step) ── */}
-      <div className="border border-border rounded-xl bg-card overflow-hidden">
-        <button
-          className="w-full px-5 py-3 flex items-center justify-between bg-muted/20 hover:bg-muted/40 transition-colors text-left"
-          onClick={() => setControlsOpen(o => !o)}
-          data-testid="button-toggle-controls"
-        >
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Sparkles className="h-4 w-4" />
-            Enrichment Pipeline
-            {(isRunning || ruleFillStatus?.running) && (
-              <span className="text-xs font-normal text-primary ml-1">(running...)</span>
-            )}
-          </h3>
-          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${controlsOpen ? "rotate-180" : ""}`} />
-        </button>
-        {controlsOpen && (
-          <div className="px-5 py-4 space-y-5 border-t border-border">
-
-            {/* ── Coverage summary ── */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="rounded-xl border border-border bg-background p-3 text-center">
-                <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Total Assets</div>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3 text-center">
-                <div className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Unknown Fields</div>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3 text-center">
-                <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-0.5">Fully Enriched</div>
-              </div>
-              <div className="rounded-xl border border-border bg-background p-3 text-center">
-                <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">
-                  {totalAssets > 0 ? Math.round(((totalAssets - unknownCount) / totalAssets) * 100) : 0}%
-                </div>
-                <div className="text-xs text-muted-foreground mt-0.5">Completion Rate</div>
-              </div>
-            </div>
-
-            {/* ── Step 1: Rule-Based Fill ── */}
-            <div className="border border-emerald-200 dark:border-emerald-900 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-100/60 dark:bg-emerald-950/40 flex items-center gap-2">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-xs font-bold shrink-0">1</span>
-                <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Rule-Based Fill</span>
-                <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
-              </div>
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Applies regex pattern rules to fill <em>developmentStage</em>, <em>ipType</em>, <em>licensingReadiness</em>, and <em>indication</em> from asset text.
-                  Also tags data-sparse assets (description &lt; 150 chars). Respects human-verified locks.
-                </p>
-
-                {ruleFillEstimate && (
-                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                    {Object.entries(ruleFillEstimate.byField).map(([field, count]) => (
-                      <div key={field} className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-background p-2 text-center">
-                        <div className="text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{(count as number).toLocaleString()}</div>
-                        <div className="text-xs text-muted-foreground capitalize">{field}</div>
-                      </div>
-                    ))}
-                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
-                      <div className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{ruleFillEstimate.dataSparseCount.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">Sparse</div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Rule fill progress */}
-                {ruleFillStatus?.running && ruleFillStatus.progress && (
-                  <div className="space-y-2" data-testid="rule-fill-progress">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
-                      <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Running…</span>
-                      <span className="text-xs tabular-nums text-muted-foreground ml-auto">
-                        {ruleFillStatus.progress.processed.toLocaleString()}/{ruleFillStatus.progress.total.toLocaleString()} ({ruleFillProgressPct}%)
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => stopRuleFill.mutate()}
-                        disabled={stopRuleFill.isPending}
-                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        data-testid="button-rule-fill-stop"
-                      >
-                        Stop
-                      </Button>
-                    </div>
-                    <div className="w-full bg-emerald-100 dark:bg-emerald-900/40 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${ruleFillProgressPct}%` }} />
-                    </div>
-                    <p className="text-xs text-muted-foreground">{ruleFillStatus.progress.filled.toLocaleString()} fields filled so far</p>
-                  </div>
-                )}
-
-                {/* Rule fill result */}
-                {!ruleFillStatus?.running && ruleFillStatus?.result && (
-                  <div className="flex items-start gap-2 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="rule-fill-result">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                        Done — {ruleFillStatus.result.fieldsWritten.toLocaleString()} fields written across {ruleFillStatus.result.filled.toLocaleString()} assets
-                        {ruleFillStatus.result.dataSparseTagged > 0 && `, ${ruleFillStatus.result.dataSparseTagged} sparse-flagged`}
-                      </p>
-                      <div className="flex flex-wrap gap-1.5 mt-1.5">
-                        {Object.entries(ruleFillStatus.result.byField).map(([f, n]) => (
-                          <span key={f} className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
-                            {f}: {(n as number).toLocaleString()}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => refetchRuleFillEstimate()}
-                    disabled={estimateFetching}
-                    className="gap-1.5 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
-                    data-testid="button-rule-fill-estimate"
-                  >
-                    {estimateFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                    Estimate
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => runRuleFill.mutate()}
-                    disabled={ruleFillStatus?.running || runRuleFill.isPending}
-                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    data-testid="button-run-rule-fill"
-                  >
-                    {ruleFillStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                    Run Rule Fill
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Step 2: GPT-4o-mini Re-enrich ── */}
-            <div className="border border-amber-200 dark:border-amber-900 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
-              <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">2</span>
-                <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">GPT-4o-mini Re-enrich</span>
-                <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
-                  <span className="bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o-mini</span>
-                  <span>~$0.15/1k assets</span>
-                  <span className="text-amber-500">·</span>
-                  <span>~${costEstimate.toFixed(2)} est.</span>
-                </span>
-              </div>
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Runs GPT-4o-mini on assets that still have unknown fields after rule fill.
-                  Type-aware classification: nulls returned for non-applicable fields (e.g. indication on a research tool). Resumable.
-                </p>
-
-                {stats && unknownCount > 0 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {[
-                      { label: "Target", val: stats.byField.target },
-                      { label: "Modality", val: stats.byField.modality },
-                      { label: "Indication", val: stats.byField.indication },
-                      { label: "Dev Stage", val: stats.byField.developmentStage },
-                    ].map(f => (
-                      <div key={f.label} className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
-                        <div className="text-base font-bold tabular-nums text-amber-700 dark:text-amber-400">{f.val.toLocaleString()}</div>
-                        <div className="text-xs text-muted-foreground">{f.label}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {isRunning && status && (
-                  <div className="space-y-2" data-testid="enrichment-progress">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
-                      <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
-                        Running{isResumed ? " (resumed)" : ""}…
-                      </span>
-                      <span className="text-xs tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
-                        {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => stopEnrichment.mutate()}
-                        disabled={stopEnrichment.isPending}
-                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        data-testid="button-enrichment-stop"
-                      >
-                        {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
-                      </Button>
-                    </div>
-                    <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} data-testid="enrichment-progress-bar" />
-                    </div>
-                    <p className="text-xs text-muted-foreground">{status.improved.toLocaleString()} assets improved so far</p>
-                  </div>
-                )}
-
-                {status?.status === "done" && (
-                  <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="enrichment-done">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                      Complete — {status.improved} of {status.total} assets improved
-                    </p>
-                  </div>
-                )}
-
-                {status?.status === "error" && (
-                  <div className="flex items-start gap-2 p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
-                    <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-red-700 dark:text-red-400">Job failed</p>
-                      <p className="text-xs text-red-600 dark:text-red-500">{status.error ?? "Dismiss to return to idle."}</p>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="h-6 text-xs text-red-600 dark:text-red-400 hover:text-red-800 shrink-0"
-                      onClick={() => dismissError.mutate()}
-                      disabled={dismissError.isPending}
-                      data-testid="button-dismiss-enrichment-error"
-                    >
-                      {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
-                    </Button>
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() => runEnrichment.mutate(undefined)}
-                    disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
-                    className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
-                    data-testid="button-run-enrichment"
-                  >
-                    {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                    Run 500 batch
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => {
-                      const remaining = miniQueue?.count ?? 0;
-                      const cost = miniQueue?.costEstimate ?? 0;
-                      const ok = window.confirm(
-                        `Run mini-40 enrichment on ALL ${remaining.toLocaleString()} un-scanned assets in the mini-queue?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job will keep pulling the next 500 until the queue is empty. You can stop it at any time.`,
-                      );
-                      if (ok) runEnrichment.mutate({ all: true });
-                    }}
-                    disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue?.count ?? 0) === 0}
-                    className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
-                    data-testid="button-run-enrichment-all"
-                    title="Drain the entire mini-queue under one job. Only un-scanned assets are spent on."
-                  >
-                    {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                    Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* ── Step 3: GPT-4o Surgical Band Enrichment ── */}
-            <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden" data-testid="card-band-enrichment">
-              <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
-                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">3</span>
-                <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">GPT-4o Surgical Deep Pass</span>
-                <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400">~$0.01/asset</span>
-              </div>
-              <div className="p-4 space-y-3">
-                <p className="text-xs text-muted-foreground">
-                  Target a specific quality band for GPT-4o deep enrichment. Enable <span className="font-medium text-foreground">gap-fill</span> to only generate missing MoA/unmet-need fields on drug assets — minimising cost. <span className="font-medium text-foreground">Newest first</span> processes recently ingested assets before older ones.
-                </p>
-
-                {/* Live progress */}
-                {bandStatus?.running && (
-                  <div className="space-y-2 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/40 p-3" data-testid="band-live-progress">
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-600" />
-                      <span className="text-xs font-medium text-violet-700 dark:text-violet-400">
-                        {bandStatus.band?.replace("_", " ")} band{bandStatus.gapFill ? " (gap-fill)" : ""} running…
-                      </span>
-                      <span className="ml-auto text-xs tabular-nums text-muted-foreground" data-testid="band-progress-text">
-                        {bandStatus.processed.toLocaleString()}/{bandStatus.total.toLocaleString()}
-                      </span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => stopBand.mutate()}
-                        disabled={stopBand.isPending}
-                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                        data-testid="button-band-stop"
-                      >
-                        {stopBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
-                      </Button>
-                    </div>
-                    <div className="w-full bg-violet-100 dark:bg-violet-900/40 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
-                        style={{ width: `${bandStatus.total > 0 ? Math.round((bandStatus.processed / bandStatus.total) * 100) : 0}%` }}
-                        data-testid="band-progress-bar"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                      <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
-                      <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">
-                        ${bandStatus.liveCostUsd.toFixed(4)} of ~${bandStatus.liveProjectedTotalUsd?.toFixed(2) ?? "?"} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (actual)
-                      </span>
-                    </div>
-                  </div>
-                )}
-
-                {/* Last run summary */}
-                {!bandStatus?.running && !bandSummaryDismissed && bandStatus?.lastSummary && (
-                  <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-2" data-testid="band-last-summary">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                      <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                        Last run: {bandStatus.lastSummary.band.replace("_", " ")} band{bandStatus.lastSummary.gapFill ? " gap-fill" : ""}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">{Math.round(bandStatus.lastSummary.durationMs / 1000)}s</span>
-                      <button
-                        onClick={() => setBandSummaryDismissed(true)}
-                        className="ml-auto text-[11px] text-muted-foreground hover:text-foreground"
-                        data-testid="button-band-dismiss-summary"
-                        aria-label="Dismiss summary"
-                      >✕</button>
-                    </div>
-                    <div className="grid grid-cols-4 gap-2">
-                      <div className="text-center">
-                        <p className="text-sm font-bold text-foreground" data-testid="summary-succeeded">{bandStatus.lastSummary.succeeded.toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground">written</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-bold text-foreground">{bandStatus.lastSummary.failed.toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground">failed</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-bold text-violet-600" data-testid="summary-cost">${bandStatus.lastSummary.costUsd.toFixed(4)}</p>
-                        <p className="text-[10px] text-muted-foreground">cost</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-sm font-bold text-foreground">{(bandStatus.lastSummary.inputTokens + bandStatus.lastSummary.outputTokens).toLocaleString()}</p>
-                        <p className="text-[10px] text-muted-foreground">tokens (actual)</p>
-                      </div>
-                    </div>
-                    {/* Score delta */}
-                    {bandStatus.lastSummary.avgScoreBefore != null && bandStatus.lastSummary.avgScoreAfter != null && (
-                      <div className="flex items-center gap-1.5 text-[11px]" data-testid="summary-score-delta">
-                        <span className="text-muted-foreground">Avg score:</span>
-                        <span className="font-medium text-foreground">{bandStatus.lastSummary.avgScoreBefore}</span>
-                        <span className="text-muted-foreground">→</span>
-                        <span className={`font-semibold ${bandStatus.lastSummary.avgScoreAfter > bandStatus.lastSummary.avgScoreBefore ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`}>
-                          {bandStatus.lastSummary.avgScoreAfter}
-                        </span>
-                        {bandStatus.lastSummary.avgScoreAfter > bandStatus.lastSummary.avgScoreBefore && (
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            (+{(bandStatus.lastSummary.avgScoreAfter - bandStatus.lastSummary.avgScoreBefore).toFixed(1)})
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {/* Field fill counts (gap-fill mode) */}
-                    {bandStatus.lastSummary.gapFill && Object.keys(bandStatus.lastSummary.fieldFillCounts ?? {}).length > 0 && (
-                      <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
-                        {Object.entries(bandStatus.lastSummary.fieldFillCounts).map(([f, n]) => (
-                          <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium">
-                            {f.replace(/([A-Z])/g, " $1").toLowerCase()} ×{n}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {/* Full-pass: just show field names */}
-                    {!bandStatus.lastSummary.gapFill && bandStatus.lastSummary.fieldsFilledNames.length > 0 && (
-                      <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
-                        {bandStatus.lastSummary.fieldsFilledNames.map((f) => (
-                          <span key={f} className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-[10px] px-2 py-0.5 font-medium">
-                            {f.replace(/([A-Z])/g, " $1").toLowerCase()}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {/* Band movements */}
-                    {Object.keys(bandStatus.lastSummary.bandMovements ?? {}).length > 0 && (() => {
-                      const bandOrder = ["bare", "very_sparse", "sparse", "decent", "rich"];
-                      return (
-                        <div data-testid="summary-band-movements">
-                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Band movements</p>
-                          <div className="flex flex-wrap gap-1">
-                            {Object.entries(bandStatus.lastSummary!.bandMovements).sort((a, b) => b[1] - a[1]).map(([key, n]) => {
-                              const [from, to] = key.split("→");
-                              const isUp = bandOrder.indexOf(to) > bandOrder.indexOf(from);
-                              return (
-                                <span key={key} className={`rounded-full text-[10px] px-2 py-0.5 font-medium border ${isUp ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-muted text-muted-foreground border-border"}`}>
-                                  {from.replace("_", " ")} → {to.replace("_", " ")} ×{n}
-                                </span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-
-                {/* Band rows */}
-                <div className="space-y-2" data-testid="band-rows">
-                  {(bandsData?.bands ?? [
-                    { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                    { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                    { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                    { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                    { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true, populationB: 0 },
-                  ]).map((band) => {
-                    const isBare = band.id === "bare";
-                    const isGapFill = bandGapFill[band.id] ?? !isBare;
-                    const isNewest = bandNewestFirst[band.id] ?? false;
-                    const targetCount = isGapFill ? band.gapFillCount : band.count;
-                    const estCost = isGapFill ? band.estCostGapFill : band.estCostFull;
-                    const isThisRunning = bandStatus?.running && bandStatus.band === band.id;
-                    const anyRunning = bandStatus?.running;
-                    const isConfirming = bandConfirm === band.id;
-
-                    const bandMeta: Record<string, { label: string; range: string; dot: string; bg: string; border: string; text: string }> = {
-                      rich:        { label: "Rich",        range: "80–100", dot: "bg-emerald-500", bg: "bg-emerald-50 dark:bg-emerald-950/20",  border: "border-emerald-200 dark:border-emerald-900", text: "text-emerald-700 dark:text-emerald-400" },
-                      decent:      { label: "Decent",      range: "60–79",  dot: "bg-teal-500",    bg: "bg-teal-50 dark:bg-teal-950/20",        border: "border-teal-200 dark:border-teal-900",    text: "text-teal-700 dark:text-teal-400" },
-                      sparse:      { label: "Sparse",      range: "40–59",  dot: "bg-amber-500",   bg: "bg-amber-50 dark:bg-amber-950/20",      border: "border-amber-200 dark:border-amber-900",  text: "text-amber-700 dark:text-amber-400" },
-                      very_sparse: { label: "Very Sparse", range: "1–39",   dot: "bg-orange-500",  bg: "bg-orange-50 dark:bg-orange-950/20",    border: "border-orange-200 dark:border-orange-900", text: "text-orange-700 dark:text-orange-400" },
-                      bare:        { label: "Bare",        range: "0/null", dot: "bg-muted-foreground/40", bg: "bg-muted/20", border: "border-border", text: "text-muted-foreground" },
-                    };
-                    const m = bandMeta[band.id];
-
-                    // Per-field gap pills for non-bare bands
-                    const gapPills = !isBare ? [
-                      { key: "moa", label: "MoA", count: band.missingMoa },
-                      { key: "unmet", label: "Unmet need", count: band.missingUnmet },
-                      { key: "comparable", label: "Comparables", count: band.missingComparable },
-                      { key: "innovation", label: "Innovation", count: band.missingInnovation },
-                    ].filter((p) => p.count > 0) : [];
-
-                    return (
-                      <div
-                        key={band.id}
-                        className={`rounded-lg border ${m.border} ${m.bg} p-3 space-y-2`}
-                        data-testid={`band-row-${band.id}`}
-                      >
-                        {/* Header row: dot + label + count + cost */}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`h-2 w-2 rounded-full ${m.dot} shrink-0`} />
-                          <span className={`text-xs font-semibold ${m.text}`}>{m.label}</span>
-                          <span className="text-[11px] text-muted-foreground">score {m.range}</span>
-                          <span className="text-[11px] font-medium text-foreground tabular-nums" data-testid={`band-count-${band.id}`}>
-                            {band.count.toLocaleString()} assets
-                          </span>
-                          {!isBare && band.gapFillCount > 0 && (
-                            <span className="text-[11px] text-muted-foreground">
-                              · {band.gapFillCount.toLocaleString()} gap-fillable
-                            </span>
-                          )}
-                          <span className="ml-auto text-[11px] font-medium text-violet-600 dark:text-violet-400 tabular-nums" data-testid={`band-cost-${band.id}`}>
-                            {isBare ? "—" : `~$${estCost.toFixed(2)}`}
-                          </span>
-                        </div>
-
-                        {/* Per-field gap pills */}
-                        {gapPills.length > 0 && (
-                          <div className="flex flex-wrap gap-1" data-testid={`band-gap-pills-${band.id}`}>
-                            {gapPills.map((p) => (
-                              <span key={p.key} className="rounded-full bg-white/60 dark:bg-white/5 border border-current/10 text-[10px] px-1.5 py-0.5 text-muted-foreground">
-                                {p.count.toLocaleString()} missing {p.label}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Controls */}
-                        {!isBare ? (
-                          <div className="flex items-center gap-3 flex-wrap">
-                            {/* Gap-fill toggle */}
-                            <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-gapfill-toggle-${band.id}`}>
-                              <div
-                                onClick={() => setBandGapFill((prev) => ({ ...prev, [band.id]: !prev[band.id] }))}
-                                className={`relative h-4 w-7 rounded-full transition-colors cursor-pointer ${isGapFill ? "bg-violet-500" : "bg-muted-foreground/30"}`}
-                              >
-                                <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${isGapFill ? "translate-x-3" : "translate-x-0.5"}`} />
-                              </div>
-                              <span className="text-[11px] text-muted-foreground">
-                                Gap-fill{isGapFill && band.gapFillCount > 0 ? ` (${band.gapFillCount.toLocaleString()})` : ""}
-                              </span>
-                            </label>
-
-                            {/* Newest first toggle */}
-                            <label className="flex items-center gap-1.5 cursor-pointer select-none" data-testid={`band-newest-toggle-${band.id}`}>
-                              <div
-                                onClick={() => setBandNewestFirst((prev) => ({ ...prev, [band.id]: !prev[band.id] }))}
-                                className={`relative h-4 w-7 rounded-full transition-colors cursor-pointer ${isNewest ? "bg-violet-400" : "bg-muted-foreground/30"}`}
-                              >
-                                <span className={`absolute top-0.5 h-3 w-3 rounded-full bg-white shadow transition-transform ${isNewest ? "translate-x-3" : "translate-x-0.5"}`} />
-                              </div>
-                              <span className="text-[11px] text-muted-foreground">Newest first</span>
-                            </label>
-
-                            {/* Per-band cap */}
-                            <label className="flex items-center gap-1 text-[11px] text-muted-foreground" data-testid={`band-cap-label-${band.id}`}>
-                              <span>Cap:</span>
-                              <input
-                                type="number"
-                                min={10}
-                                max={5000}
-                                step={50}
-                                value={bandCap[band.id] ?? 500}
-                                onChange={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
-                                onBlur={(e) => setBandCap((prev) => ({ ...prev, [band.id]: Math.min(5000, Math.max(10, parseInt(e.target.value) || 500)) }))}
-                                className="w-16 h-5 rounded border border-input bg-background px-1 text-[11px] text-foreground tabular-nums"
-                                data-testid={`band-cap-input-${band.id}`}
-                              />
-                              <span className="text-[10px] text-muted-foreground/60">(10–5k)</span>
-                            </label>
-
-                            {/* Run / Confirm */}
-                            {isConfirming ? (() => {
-                              const capValue = bandCap[band.id] ?? 500;
-                              const effectiveCount = Math.min(targetCount, capValue);
-                              // Per-asset average cost: for gap-fill use formula cost ÷ eligible assets; for full use band average
-                              const perAssetCost = targetCount > 0 ? estCost / targetCount : 0;
-                              const effectiveCost = effectiveCount * perAssetCost;
-                              return (
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[11px] font-semibold text-amber-600" data-testid={`band-confirm-text-${band.id}`}>
-                                  Run {effectiveCount.toLocaleString()} assets (~${effectiveCost.toFixed(2)})?
-                                  {effectiveCount < targetCount && (
-                                    <span className="text-amber-500 font-normal"> (capped from {targetCount.toLocaleString()})</span>
-                                  )}
-                                </span>
-                                <Button
-                                  size="sm"
-                                  className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
-                                  disabled={runBand.isPending}
-                                  onClick={() => runBand.mutate({ band: band.id, gapFill: isGapFill, cap: capValue, newestFirst: isNewest })}
-                                  data-testid={`button-band-confirm-${band.id}`}
-                                >
-                                  {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-6 px-2 text-[11px]"
-                                  onClick={() => setBandConfirm(null)}
-                                  data-testid={`button-band-cancel-${band.id}`}
-                                >
-                                  Cancel
-                                </Button>
-                              </div>
-                              );
-                            })() : (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className={`h-6 px-2.5 text-[11px] ${m.border} ${m.text} hover:bg-white/60 dark:hover:bg-white/5`}
-                                disabled={anyRunning || targetCount === 0 || runBand.isPending}
-                                onClick={() => setBandConfirm(band.id)}
-                                data-testid={`button-band-run-${band.id}`}
-                                title={isThisRunning ? "Running…" : targetCount === 0 ? "No assets to process" : `Run GPT-4o on ${targetCount.toLocaleString()} assets`}
-                              >
-                                {isThisRunning ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sparkles className="h-3 w-3 mr-1" />}
-                                Run {isGapFill ? "gap-fill" : "full pass"}
-                              </Button>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {(band.populationB ?? 0) > 0 ? (
-                              isConfirming ? (() => {
-                                const capValue = bandCap[band.id] ?? 500;
-                                const effective = Math.min(band.populationB ?? 0, capValue);
-                                const perAssetCost = 0.011;
-                                return (
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[11px] font-semibold text-amber-600" data-testid="button-band-confirm-bare-text">
-                                      Enrich {effective.toLocaleString()} bare assets (~${(effective * perAssetCost).toFixed(2)})?
-                                    </span>
-                                    <Button
-                                      size="sm"
-                                      className="h-6 px-2.5 text-[11px] bg-violet-600 hover:bg-violet-700 text-white"
-                                      disabled={runBand.isPending}
-                                      onClick={() => runBand.mutate({ band: band.id, gapFill: false, cap: capValue, newestFirst: false })}
-                                      data-testid="button-band-confirm-bare"
-                                    >
-                                      {runBand.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Yes, Run"}
-                                    </Button>
-                                    <Button size="sm" variant="ghost" className="h-6 px-2 text-[11px]" onClick={() => setBandConfirm(null)} data-testid="button-band-cancel-bare">
-                                      Cancel
-                                    </Button>
-                                  </div>
-                                );
-                              })() : (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className={`h-6 px-2.5 text-[11px] ${m.border} ${m.text} hover:bg-white/60 dark:hover:bg-white/5`}
-                                  disabled={anyRunning || runBand.isPending}
-                                  onClick={() => setBandConfirm(band.id)}
-                                  data-testid="button-band-run-bare"
-                                  title={`Enrich ${(band.populationB ?? 0).toLocaleString()} bare assets with ≥120 chars of content`}
-                                >
-                                  <Sparkles className="h-3 w-3 mr-1" />
-                                  Run pop B ({(band.populationB ?? 0).toLocaleString()})
-                                </Button>
-                              )
-                            ) : (
-                              <>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-6 px-2.5 text-[11px] border-border text-muted-foreground opacity-50 cursor-not-allowed"
-                                  disabled
-                                  data-testid="button-band-run-bare"
-                                  title="No bare assets with ≥120 chars — re-scrape first"
-                                >
-                                  <Sparkles className="h-3 w-3 mr-1" />
-                                  Run full pass
-                                </Button>
-                                <span className="text-[11px] text-muted-foreground">Re-scrape first</span>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-
-            {unknownCount === 0 && totalAssets > 0 && (
-              <div className="text-center py-4 text-muted-foreground" data-testid="enrichment-all-complete">
-                <CheckCircle2 className="h-7 w-7 mx-auto mb-2 opacity-40" />
-                <p className="text-sm font-medium">All assets fully enriched</p>
-                <p className="text-xs mt-1">No unknown fields remaining.</p>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
     </div>
   );
@@ -9788,498 +9802,10 @@ function DataPipeline({ pw }: { pw: string }) {
 // ── Data Quality Tab ─────────────────────────────────────────────────────────
 
 function DataQualityTab({ pw }: { pw: string }) {
-  const { toast } = useToast();
-  const [staleDismissed, setStaleDismissed] = useState(false);
-  const [confirming, setConfirming] = useState(false);
-  const [embedConfirming, setEmbedConfirming] = useState(false);
-  const [readinessOpen, setReadinessOpen] = useState(false);
-
-  const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
-    running: boolean;
-    paused: boolean;
-    capPerCycle: number;
-    processed: number;
-    total: number;
-    succeeded: number;
-    failed: number;
-    skipped: number;
-    lastCycleCount: number;
-    lastCycleDeferred: number;
-    job: { status: string; completedAt: string | null } | null;
-    staleJobDetected: boolean;
-    staleJobId: number | null;
-    lastSummary: {
-      succeeded: number; failed: number; skipped: number; total: number; deferred: number;
-      durationMs: number; bandMovements: Record<string, number>; completedAt: string;
-    } | null;
-  }>({
-    queryKey: ["/api/admin/eden/enrich/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load enrichment status");
-      return res.json();
-    },
-    refetchInterval: 5000,
-    retry: 2,
-  });
-
-  const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
-    queryKey: ["/api/admin/eden/stats"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load EDEN stats");
-      return res.json();
-    },
-    refetchInterval: 5000,
-  });
-
-  const { data: embedStatus } = useQuery<EdenEmbedStatusResponse>({
-    queryKey: ["/api/admin/eden/embed/status"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/eden/embed/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) throw new Error("Failed to load embed status");
-      return res.json();
-    },
-    refetchInterval: 3000,
-  });
-
-  const resumeEnrichMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to resume"); }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setStaleDismissed(true);
-      toast({ title: "Deep Enrichment resumed", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` });
-      refetchEdenStatus();
-    },
-    onError: (e: Error) => toast({ title: "Failed to resume", description: e.message, variant: "destructive" }),
-  });
-
-  const enrichTogglePauseMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/toggle-pause", {
-        method: "POST",
-        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) throw new Error("Failed to toggle enrichment pause");
-      return res.json();
-    },
-    onSuccess: () => refetchEdenStatus(),
-    onError: (err: Error) => toast({ title: "Toggle failed", description: err.message, variant: "destructive" }),
-  });
-
-  const startMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error ?? "Failed to start");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setConfirming(false);
-      toast({ title: "EDEN Deep Enrichment started", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` });
-      refetchStats();
-      refetchEdenStatus();
-    },
-    onError: (e: Error) => {
-      setConfirming(false);
-      toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" });
-    },
-  });
-
-  const stopEdenMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/stop", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Stop signal sent", description: "EDEN Deep Enrichment will halt after the current batch finishes" });
-      refetchEdenStatus();
-    },
-    onError: (e: Error) => toast({ title: "Failed to stop", description: e.message, variant: "destructive" }),
-  });
-
-  const embedMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/embed", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-      });
-      if (!res.ok) {
-        const e = await res.json();
-        throw new Error(e.error ?? "Failed to start embedding");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      setEmbedConfirming(false);
-      toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` });
-      refetchStats();
-    },
-    onError: (e: Error) => {
-      setEmbedConfirming(false);
-      toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" });
-    },
-  });
-
-  // Fire a completion toast when a run transitions from running → done.
-  const edenWasRunningRef = useRef(false);
-  useEffect(() => {
-    const nowRunning = edenStatus?.running ?? false;
-    if (edenWasRunningRef.current && !nowRunning && edenStatus != null) {
-      const enriched = edenStatus.succeeded ?? 0;
-      const skipped = edenStatus.skipped ?? 0;
-      const failed = edenStatus.failed ?? 0;
-      const parts: string[] = [];
-      if (enriched > 0) parts.push(`${enriched.toLocaleString()} enriched`);
-      if (skipped > 0) parts.push(`${skipped.toLocaleString()} thin content`);
-      if (failed > 0) parts.push(`${failed.toLocaleString()} failed`);
-      toast({
-        title: "Deep Enrichment complete",
-        description: parts.length > 0 ? parts.join(" · ") : "No assets were written this cycle",
-      });
-      refetchStats();
-    }
-    edenWasRunningRef.current = nowRunning;
-  }, [edenStatus?.running]);
-
-  const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
-
-  const cov = stats?.coverage;
-  const emb = stats?.embeddingCoverage;
-  const live = edenStatus?.running ? edenStatus : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total } : null;
-  const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
-  const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
-  const breakdown = stats?.breakdown;
-  const remaining = breakdown?.total ?? stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
-  const estCostUsd = remaining > 0 ? (remaining * 0.01).toFixed(2) : "0.00";
-  const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
-  const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
-  const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
-  const embedLive = embedStatus?.running ? embedStatus : null;
-  const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
-
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
-
-      {/* Auto-Enrichment Controls */}
-      <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-pipeline-enrich-controls">
-        <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-3">
-          <BrainCircuit className="h-4 w-4 text-violet-500" />
-          <span className="text-sm font-semibold text-foreground">Auto-Enrichment (GPT-4o)</span>
-          {edenStatus ? (
-            edenStatus.running ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-running">
-                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                Running ({edenStatus.processed.toLocaleString()}/{edenStatus.total.toLocaleString()})
-              </span>
-            ) : edenStatus.paused ? (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-paused">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                Paused
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-active">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                Active
-              </span>
-            )
-          ) : null}
-        </div>
-        <div className="px-5 py-3 flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-            <span data-testid="text-pipeline-enrich-cap">
-              Cap: <span className="text-foreground font-medium">{edenStatus?.capPerCycle?.toLocaleString() ?? 500}</span>/cycle
-            </span>
-            <span data-testid="text-pipeline-enrich-cost">
-              Est. cost: <span className="text-foreground font-medium">${((edenStatus?.capPerCycle ?? 500) * 0.01).toFixed(2)}</span>/cycle (GPT-4o)
-            </span>
-            {(edenStatus?.lastCycleCount ?? 0) > 0 && (
-              <span data-testid="text-pipeline-enrich-last-cycle">
-                Last cycle: <span className="text-foreground font-medium">{edenStatus!.lastCycleCount.toLocaleString()}</span> enriched
-                {(edenStatus?.lastCycleDeferred ?? 0) > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400 ml-1">({edenStatus!.lastCycleDeferred.toLocaleString()} deferred)</span>
-                )}
-              </span>
-            )}
-          </div>
-          <button
-            onClick={() => enrichTogglePauseMutation.mutate()}
-            disabled={enrichTogglePauseMutation.isPending || edenStatus?.running}
-            data-testid="button-pipeline-toggle-enrichment-pause"
-            className={`ml-auto inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
-              edenStatus?.paused
-                ? "border-emerald-400/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
-                : "border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50"
-            }`}
-          >
-            {enrichTogglePauseMutation.isPending
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : edenStatus?.paused
-              ? <><Zap className="w-3 h-3" /><span>Resume Enrichment</span></>
-              : <><AlertCircle className="w-3 h-3" /><span>Pause Enrichment</span></>
-            }
-          </button>
-        </div>
-      </div>
-
+      <EnrichmentPipelinePanel pw={pw} />
       <Enrichment pw={pw} />
-
-      {/* EDEN Readiness (collapsible) */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-readiness">
-        <button
-          className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/40 transition-colors"
-          onClick={() => setReadinessOpen((v) => !v)}
-          data-testid="button-toggle-readiness"
-        >
-          <div className="flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">EDEN Readiness</span>
-            {embPct >= 100 && deepPct >= 90 ? (
-              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 ml-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"/>
-                Active
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-1">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block"/>
-                Indexing
-              </span>
-            )}
-          </div>
-          {readinessOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
-        </button>
-
-        {readinessOpen && (
-          <div className="border-t border-border p-5 space-y-6">
-            {/* Coverage stat cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-total">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Corpus</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">relevant assets</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-enriched">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Enriched</p>
-                <p className="text-xl font-bold text-emerald-600 mt-0.5">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">{deepPct}% with GPT-4o</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-embedded">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Embedded</p>
-                <p className="text-xl font-bold text-violet-600 mt-0.5">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">{embPct}% vectorized</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-moa">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">With MoA</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.withMoa?.toLocaleString() ?? "—"}</p>
-                <p className="text-[11px] text-muted-foreground">mechanism of action</p>
-              </div>
-              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-score">
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Completeness</p>
-                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}` : "—"}</p>
-                <p className="text-[11px] text-muted-foreground">avg / 100 pts</p>
-              </div>
-            </div>
-
-            {/* Coverage bars */}
-            <div className="space-y-3">
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>Deep Enrichment</span><span>{deepPct}%</span>
-                </div>
-                <Progress value={deepPct} className="h-1.5" />
-              </div>
-              <div>
-                <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>Vector Embeddings</span><span>{embPct}%</span>
-                </div>
-                <Progress value={embPct} className="h-1.5" />
-              </div>
-            </div>
-
-            {/* Live EDEN deep enrichment status */}
-            {live && (
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="card-eden-live">
-                <div className="flex items-center gap-2 mb-2">
-                  <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
-                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                    EDEN Deep Enrichment (GPT-4o): {live.processed.toLocaleString()} / {live.total.toLocaleString()}
-                  </span>
-                  <span className="text-sm font-bold text-emerald-600">{pct}%</span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => stopEdenMutation.mutate()}
-                    disabled={stopEdenMutation.isPending}
-                    className="ml-auto h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                    data-testid="button-eden-stop"
-                  >
-                    {stopEdenMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
-                  </Button>
-                </div>
-                <Progress value={pct ?? 0} className="h-1.5" />
-                {(edenStatus?.succeeded != null || edenStatus?.failed != null || edenStatus?.skipped != null) && (
-                  <div className="flex items-center gap-3 mt-2 text-[11px]" data-testid="eden-live-counters">
-                    {(edenStatus?.succeeded ?? 0) > 0 && (
-                      <span className="text-emerald-700 dark:text-emerald-400 font-medium" data-testid="eden-live-enriched">
-                        {edenStatus!.succeeded.toLocaleString()} enriched
-                      </span>
-                    )}
-                    {(edenStatus?.skipped ?? 0) > 0 && (
-                      <span className="text-muted-foreground" data-testid="eden-live-skipped">
-                        {edenStatus!.skipped.toLocaleString()} thin content
-                      </span>
-                    )}
-                    {(edenStatus?.failed ?? 0) > 0 && (
-                      <span className="text-red-600 dark:text-red-400" data-testid="eden-live-failed">
-                        {edenStatus!.failed.toLocaleString()} failed
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Live embedding status */}
-            {embedLive && (
-              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
-                <div className="flex items-center gap-2 mb-2">
-                  <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
-                  <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
-                    Embedding running: {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
-                  </span>
-                  <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
-                </div>
-                <Progress value={embedPct ?? 0} className="h-1.5" />
-              </div>
-            )}
-
-            {/* Run enrichment */}
-            <div data-testid="card-eden-run">
-              <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
-              <p className="text-xs text-muted-foreground mb-2">
-                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs and Licensing Readiness.
-                <span className="ml-1 font-semibold text-foreground">{remaining.toLocaleString()} assets</span> queued
-                {remaining > 0 && <> at <span className="font-semibold text-foreground">~$0.01/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.
-              </p>
-              {breakdown && remaining > 0 && (
-                <div className="flex flex-wrap gap-2 mb-3" data-testid="enrich-breakdown">
-                  {breakdown.fresh > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-blue-500/8 border-blue-500/20 text-blue-700 dark:text-blue-400" data-testid="breakdown-fresh">
-                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
-                      {breakdown.fresh.toLocaleString()} fresh
-                    </span>
-                  )}
-                  {breakdown.legacy > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-amber-500/8 border-amber-500/20 text-amber-700 dark:text-amber-400" data-testid="breakdown-legacy">
-                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
-                      {breakdown.legacy.toLocaleString()} legacy
-                    </span>
-                  )}
-                  {breakdown.lowQualityRetry > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400" data-testid="breakdown-low-quality">
-                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
-                      {breakdown.lowQualityRetry.toLocaleString()} low-score retry
-                    </span>
-                  )}
-                  {(breakdown.nullCategory ?? 0) > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-red-500/8 border-red-500/20 text-red-700 dark:text-red-400" data-testid="breakdown-null-category">
-                      <span className="h-1.5 w-1.5 rounded-full bg-red-400 inline-block" />
-                      {breakdown.nullCategory!.toLocaleString()} missing category
-                    </span>
-                  )}
-                </div>
-              )}
-              {!confirming ? (
-                <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">
-                  <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
-                  {remaining === 0 ? "All Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-amber-600">Use ~${estCostUsd} of GPT-4o budget?</p>
-                  <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-confirm">
-                    {startMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                    Yes, Run
-                  </Button>
-                  <Button variant="outline" onClick={() => setConfirming(false)} className="h-8 text-xs" data-testid="button-eden-cancel">Cancel</Button>
-                </div>
-              )}
-            </div>
-
-            {/* Run embeddings */}
-            <div data-testid="card-eden-embeddings">
-              <h4 className="text-xs font-semibold text-foreground mb-1">Vector Embeddings</h4>
-              <p className="text-xs text-muted-foreground mb-3">
-                {emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} assets embedded with text-embedding-3-small.
-                {embRemaining > 0 && <> Remaining cost: <span className="font-semibold text-foreground">${embEstCost}</span>.</>}
-              </p>
-              {!embedConfirming ? (
-                <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-run">
-                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
-                  {embRemaining === 0 ? "All Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
-                </Button>
-              ) : (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})?</p>
-                  <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-confirm">
-                    {embedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-                    Yes, Embed
-                  </Button>
-                  <Button variant="outline" onClick={() => setEmbedConfirming(false)} className="h-8 text-xs" data-testid="button-embed-cancel">Cancel</Button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Stale-job resume banner */}
-      {showStaleBanner && (
-        <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
-          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
-            <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-              Deep enrichment job #{edenStatus?.staleJobId} was in progress when the server restarted and has not been resumed.
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={() => resumeEnrichMutation.mutate()}
-              disabled={resumeEnrichMutation.isPending}
-              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
-              data-testid="button-stale-resume"
-            >
-              {resumeEnrichMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-              Resume
-            </button>
-            <button
-              onClick={() => setStaleDismissed(true)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="button-stale-dismiss"
-              aria-label="Dismiss"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      )}
-
       <RelevancePanel pw={pw} />
       <PotentialDuplicates pw={pw} />
     </div>

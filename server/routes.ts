@@ -3664,7 +3664,7 @@ export async function registerRoutes(
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '7 days' THEN 1 END)::int AS added_7d,
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int AS added_30d
         FROM ingested_assets
-        WHERE relevant = true AND (data_sparse IS NULL OR data_sparse = false)
+        WHERE relevant = true
       `);
 
       const institutionResult = await db.execute(sql`
@@ -3675,7 +3675,7 @@ export async function registerRoutes(
           ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
           ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
         FROM ingested_assets
-        WHERE relevant = true AND (data_sparse IS NULL OR data_sparse = false)
+        WHERE relevant = true
         GROUP BY institution
         ORDER BY COUNT(*) DESC
         LIMIT 500
@@ -3695,22 +3695,20 @@ export async function registerRoutes(
   app.get("/api/admin/dataset-quality/by-class", async (req, res) => {
     try {
 
-      // Include ALL relevant rows so sparse_count reflects real sparse assets per class.
-      // Fill-rate metrics are scoped to non-sparse rows via CASE guards.
       const result = await db.execute(sql`
         SELECT
           COALESCE(asset_class, 'unclassified') AS asset_class,
-          COUNT(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN 1 END)::int AS count,
-          ROUND(AVG(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN completeness_score END)::numeric, 1) AS avg_score,
-          ROUND(100.0 * COUNT(CASE WHEN (data_sparse IS NULL OR data_sparse = false) AND target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN 1 END), 0), 1) AS fill_target,
-          ROUND(100.0 * COUNT(CASE WHEN (data_sparse IS NULL OR data_sparse = false) AND modality IS NOT NULL AND modality NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN 1 END), 0), 1) AS fill_modality,
-          ROUND(100.0 * COUNT(CASE WHEN (data_sparse IS NULL OR data_sparse = false) AND indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN 1 END), 0), 1) AS fill_indication,
-          ROUND(100.0 * COUNT(CASE WHEN (data_sparse IS NULL OR data_sparse = false) AND development_stage IS NOT NULL AND development_stage NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN 1 END), 0), 1) AS fill_stage,
+          COUNT(*)::int AS count,
+          ROUND(AVG(completeness_score)::numeric, 1) AS avg_score,
+          ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS fill_target,
+          ROUND(100.0 * COUNT(CASE WHEN modality IS NOT NULL AND modality NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS fill_modality,
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS fill_indication,
+          ROUND(100.0 * COUNT(CASE WHEN development_stage IS NOT NULL AND development_stage NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*), 0), 1) AS fill_stage,
           COUNT(CASE WHEN data_sparse = true THEN 1 END)::int AS sparse_count
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY asset_class
-        ORDER BY COUNT(CASE WHEN data_sparse IS NULL OR data_sparse = false THEN 1 END) DESC
+        ORDER BY COUNT(*) DESC
       `);
 
       res.json(result.rows);
