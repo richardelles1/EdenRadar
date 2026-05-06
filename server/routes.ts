@@ -5267,74 +5267,41 @@ export async function registerRoutes(
       `);
       cuTotal = rows.rows.length;
 
-      function stripCuHtml(html: string): string {
-        return html
-          .replace(/<[^>]+>/g, " ")
-          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
-          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
-          .replace(/\s+/g, " ").trim();
-      }
-
       for (let batchStart = 0; batchStart < rows.rows.length; batchStart += CU_RE_CONCURRENCY) {
         if (signal.aborted) break;
         const batch = rows.rows.slice(batchStart, batchStart + CU_RE_CONCURRENCY);
         await Promise.all(batch.map(async (row) => {
           if (!row?.source_url) { cuProcessed++; cuSkipped++; return; }
 
-          // Extract file number from slug (part after --)
+          // Extract file number from slug (part after --) and remap to canonical URL
           const slug = row.source_url.split("/technologies/")[1] ?? "";
           const fileNumMatch = slug.match(/--([A-Z0-9]+)$/i);
           const fileNum = fileNumMatch ? fileNumMatch[1].toUpperCase() : null;
-
-          // Resolve the current canonical URL (stale slugs get remapped)
           const canonicalUrl = fileNum
             ? (fileNumToUrl.get(fileNum) ?? row.source_url)
             : row.source_url;
 
           try {
-            const fetchRes = await fetch(`${canonicalUrl}.json`, {
-              headers: {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-                Accept: "application/json",
-              },
-              signal: AbortSignal.timeout(CU_RE_TIMEOUT),
-            });
-            if (!fetchRes.ok) { cuProcessed++; cuSkipped++; return; }
-            const json = await fetchRes.json() as any;
-            const src = json?.source;
-            if (!src) { cuProcessed++; cuSkipped++; return; }
+            // Use typed helpers — no any casts, no duplicated parsing logic
+            const json = await fetchColumbiaJson(canonicalUrl, CU_RE_TIMEOUT);
+            if (!json) { cuProcessed++; cuSkipped++; return; }
 
-            const descHtml = src.description_ ?? "";
-            const descText = stripCuHtml(descHtml).slice(0, 5000);
-            const abstract = src.meta_description?.trim() ?? "";
-            const summary = descText || abstract;
+            const listing = columbiaJsonToListing(canonicalUrl, json);
+            if (!listing || listing.description.length < 50) { cuProcessed++; cuSkipped++; return; }
 
-            if (summary.length >= 50) {
-              const inventors: string[] = (src.inventors ?? []).filter(Boolean);
-
-              const patentM = descHtml.match(/Patent Information[:\s]*<\/h2>\s*<p>(.*?)<\/p>/is);
-              const patentInline = descHtml.match(/(Patent\s+(?:Pending|Issued|Filed|Application|Granted)[^<]{0,200})/i);
-              const patentStatus = patentM
-                ? stripCuHtml(patentM[1]).slice(0, 300)
-                : patentInline ? stripCuHtml(patentInline[1]).slice(0, 300) : null;
-
-              const technologyId = src.file_number ?? src.id ?? null;
-
-              await db.execute(sql`
-                UPDATE ingested_assets
-                SET summary      = ${summary},
-                    abstract     = ${abstract || null},
-                    inventors    = ${inventors.length > 0 ? inventors : null},
-                    patent_status = COALESCE(${patentStatus}, patent_status),
-                    technology_id = COALESCE(${technologyId}, technology_id),
-                    source_url   = ${canonicalUrl},
-                    enriched_at  = NULL
-                WHERE id = ${row.id}
-              `);
-              cuEnriched++;
-            } else {
-              cuSkipped++;
-            }
+            await db.execute(sql`
+              UPDATE ingested_assets
+              SET summary          = ${listing.description},
+                  abstract         = ${listing.abstract ?? null},
+                  inventors        = ${listing.inventors && listing.inventors.length > 0 ? listing.inventors : null},
+                  patent_status    = COALESCE(${listing.patentStatus ?? null}, patent_status),
+                  licensing_status = COALESCE(${listing.licensingStatus ?? null}, licensing_status),
+                  technology_id    = COALESCE(${listing.technologyId ?? null}, technology_id),
+                  source_url       = ${canonicalUrl},
+                  enriched_at      = NULL
+              WHERE id = ${row.id}
+            `);
+            cuEnriched++;
           } catch {
             cuSkipped++;
           }

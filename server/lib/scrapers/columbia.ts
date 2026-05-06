@@ -4,7 +4,7 @@ const INST = "Columbia University";
 const BASE = "https://inventions.techventures.columbia.edu";
 const SITEMAP_URL = `${BASE}/sitemap.xml`;
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]+>/g, " ")
     .replace(/&amp;/g, "&")
@@ -17,7 +17,7 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-function extractPatentStatus(descriptionHtml: string): string {
+function extractPatentStatus(descriptionHtml: string): string | undefined {
   const m = descriptionHtml.match(
     /Patent Information[:\s]*<\/h2>\s*<p>(.*?)<\/p>/is,
   );
@@ -26,22 +26,47 @@ function extractPatentStatus(descriptionHtml: string): string {
     /(Patent\s+(?:Pending|Issued|Filed|Application|Granted)[^<]{0,200})/i,
   );
   if (inline) return stripHtml(inline[1]).slice(0, 300);
-  return "";
+  return undefined;
 }
 
-interface ColumbiaJsonResponse {
+function extractLicensingStatus(
+  descriptionHtml: string,
+  rawLicensingStatus?: string,
+): string | undefined {
+  // Prefer an explicit field from the API response if present
+  if (rawLicensingStatus && rawLicensingStatus.trim().length > 0) {
+    return rawLicensingStatus.trim().slice(0, 200);
+  }
+  // Fall back to parsing the HTML description for licensing section headings
+  const sectionM = descriptionHtml.match(
+    /Licensing\s+(?:Status|Information|Opportunity)[:\s]*<\/h[23]>\s*<p>(.*?)<\/p>/is,
+  );
+  if (sectionM) return stripHtml(sectionM[1]).slice(0, 200);
+  // Inline "Available for licensing" / "Seeking partners" patterns
+  const inlineM = descriptionHtml.match(
+    /(Available\s+for\s+(?:licensing|partnership|commercialization)[^<]{0,150}|Seeking\s+(?:licensees?|partners?|investors?)[^<]{0,150})/i,
+  );
+  if (inlineM) return stripHtml(inlineM[1]).slice(0, 200);
+  return undefined;
+}
+
+export interface ColumbiaSource {
+  id?: string;
+  title?: string;
+  description_?: string;
+  meta_description?: string;
+  inventors?: string[];
+  file_number?: string;
+  licensing_status?: string;
+  license_status?: string;
+  tags?: string[];
+  date_released?: string;
+}
+
+export interface ColumbiaJsonResponse {
   id?: string;
   slug?: string;
-  source?: {
-    id?: string;
-    title?: string;
-    description_?: string;
-    meta_description?: string;
-    inventors?: string[];
-    file_number?: string;
-    tags?: string[];
-    date_released?: string;
-  };
+  source?: ColumbiaSource;
 }
 
 export async function fetchColumbiaJson(
@@ -77,7 +102,11 @@ export function columbiaJsonToListing(
   const descText = stripHtml(descHtml).slice(0, 5000);
   const abstract = src.meta_description?.trim() ?? "";
   const inventors = (src.inventors ?? []).filter(Boolean);
-  const patentStatus = extractPatentStatus(descHtml) || undefined;
+  const patentStatus = extractPatentStatus(descHtml);
+  const licensingStatus = extractLicensingStatus(
+    descHtml,
+    src.licensing_status ?? src.license_status,
+  );
   const technologyId = src.file_number ?? src.id ?? undefined;
 
   return {
@@ -88,6 +117,7 @@ export function columbiaJsonToListing(
     abstract: abstract || undefined,
     inventors: inventors.length > 0 ? inventors : undefined,
     patentStatus,
+    licensingStatus,
     technologyId,
   };
 }
@@ -107,7 +137,9 @@ export async function fetchColumbiaSitemapUrls(): Promise<string[] | null> {
       signal: AbortSignal.timeout(20_000),
     });
     if (res.status === 429) {
-      console.warn(`[scraper] ${INST}: sitemap rate-limited (429) — will use DB slugs directly`);
+      console.warn(
+        `[scraper] ${INST}: sitemap rate-limited (429) — will use DB slugs directly`,
+      );
       return null;
     }
     if (!res.ok) throw new Error(`Sitemap HTTP ${res.status}`);
@@ -121,7 +153,9 @@ export async function fetchColumbiaSitemapUrls(): Promise<string[] | null> {
     }
     return urls;
   } catch (err: any) {
-    console.warn(`[scraper] ${INST}: sitemap fetch failed (${err?.message}) — will use DB slugs directly`);
+    console.warn(
+      `[scraper] ${INST}: sitemap fetch failed (${err?.message}) — will use DB slugs directly`,
+    );
     return null;
   }
 }
@@ -134,7 +168,9 @@ export const columbiaScraper: InstitutionScraper = {
     try {
       const techUrls = await fetchColumbiaSitemapUrls();
       if (!techUrls || techUrls.length === 0) {
-        console.warn(`[scraper] ${INST}: sitemap unavailable — skipping full scrape this cycle`);
+        console.warn(
+          `[scraper] ${INST}: sitemap unavailable — skipping full scrape this cycle`,
+        );
         return [];
       }
       console.log(
