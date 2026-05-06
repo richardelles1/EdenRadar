@@ -4836,7 +4836,10 @@ export async function registerRoutes(
         await Promise.all(workers);
 
         if (batchStart + DR_BATCH < rows.rows.length && !signal.aborted) {
-          await new Promise((r) => setTimeout(r, DR_BATCH_PAUSE_MS));
+          await Promise.race([
+            new Promise((r) => setTimeout(r, DR_BATCH_PAUSE_MS)),
+            new Promise((r) => signal.addEventListener("abort", r, { once: true })),
+          ]);
         }
       }
 
