@@ -4745,6 +4745,7 @@ export async function registerRoutes(
   let drEnriched = 0;
   let drSkipped = 0;
   let drAbortController: AbortController | null = null;
+  let drStartMs = 0;
   let drLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
 
   app.get("/api/admin/enrichment/detail-refetch/count", requireAdmin, async (_req, res) => {
@@ -4755,6 +4756,7 @@ export async function registerRoutes(
         WHERE relevant = true
           AND source_name = 'tech_transfer'
           AND length(COALESCE(summary, '')) < 120
+          AND source_url IS NOT NULL
       `);
       res.json({ total: parseInt((result.rows[0] as any).total ?? "0", 10) });
     } catch (err: any) {
@@ -4769,6 +4771,7 @@ export async function registerRoutes(
       total: drTotal,
       enriched: drEnriched,
       skipped: drSkipped,
+      elapsedMs: drRunning ? Date.now() - drStartMs : 0,
       lastSummary: drLastSummary,
     });
   });
@@ -4788,12 +4791,12 @@ export async function registerRoutes(
     drSkipped = 0;
     drAbortController = new AbortController();
     const { signal } = drAbortController;
-    const startMs = Date.now();
+    drStartMs = Date.now();
     res.json({ message: "Detail re-fetch started" });
 
     try {
-      const rows = await db.execute<{ id: number; source_url: string | null; summary: string | null }>(sql`
-        SELECT id, source_url, summary
+      const rows = await db.execute<{ id: number; asset_name: string | null; source_url: string | null }>(sql`
+        SELECT id, asset_name, source_url
         FROM ingested_assets
         WHERE relevant = true
           AND source_name = 'tech_transfer'
@@ -4824,7 +4827,7 @@ export async function registerRoutes(
               if (!$) { drProcessed++; drSkipped++; continue; }
               const content = extractText($, DETAIL_REFETCH_SELECTORS);
               if (content && content.length > 120) {
-                const newHash = computeContentHash(row.summary ?? "", content, "");
+                const newHash = computeContentHash(row.asset_name ?? "", content, "");
                 await db.execute(sql`
                   UPDATE ingested_assets
                   SET summary = ${content.slice(0, 5000)},
@@ -4855,10 +4858,10 @@ export async function registerRoutes(
         enriched: drEnriched,
         skipped: drSkipped,
         total: drTotal,
-        durationMs: Date.now() - startMs,
+        durationMs: Date.now() - drStartMs,
         completedAt: new Date().toISOString(),
       };
-      console.log(`[detail-refetch] Complete: ${drEnriched} enriched, ${drSkipped} skipped of ${drTotal} thin TTO assets in ${Date.now() - startMs}ms`);
+      console.log(`[detail-refetch] Complete: ${drEnriched} enriched, ${drSkipped} skipped of ${drTotal} thin TTO assets in ${Date.now() - drStartMs}ms`);
     } catch (err: any) {
       console.error("[detail-refetch] Error:", err.message);
     } finally {

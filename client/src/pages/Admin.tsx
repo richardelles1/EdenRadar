@@ -2847,7 +2847,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: detailRefetchStatus, refetch: refetchDetailRefetchStatus } = useQuery<{
-    running: boolean; processed: number; total: number; enriched: number; skipped: number;
+    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
     lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
     queryKey: ["/api/admin/enrichment/detail-refetch/status", pw],
