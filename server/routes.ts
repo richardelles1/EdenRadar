@@ -4861,6 +4861,158 @@ export async function registerRoutes(
     }
   });
 
+  // ── InPart Retroactive Re-fetch (__NEXT_DATA__ description upgrade) ──────
+  // Visits existing thin InPart assets' source_url pages and extracts
+  // precis / contentV2 from __NEXT_DATA__ — the same logic as enrichInPartListings.
+
+  const INPART_RE_CONCURRENCY = 5;
+  const INPART_RE_TIMEOUT = 12_000;
+  const INPART_NEXT_DATA_RE = /<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/;
+
+  let irRunning = false;
+  let irProcessed = 0;
+  let irTotal = 0;
+  let irEnriched = 0;
+  let irSkipped = 0;
+  let irAbortController: AbortController | null = null;
+  let irStartMs = 0;
+  let irLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/inpart-refetch/count", requireAdmin, async (_req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE source_url LIKE '%.portals.in-part.com%'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+      `);
+      res.json({ total: Number(result.rows[0]?.total ?? 0) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/inpart-refetch/status", requireAdmin, (_req, res) => {
+    res.json({
+      running: irRunning,
+      processed: irProcessed,
+      total: irTotal,
+      enriched: irEnriched,
+      skipped: irSkipped,
+      elapsedMs: irRunning ? Date.now() - irStartMs : 0,
+      lastSummary: irLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/inpart-refetch/stop", requireAdmin, (_req, res) => {
+    if (!irRunning) return res.status(409).json({ error: "Not running" });
+    irAbortController?.abort();
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/inpart-refetch", requireAdmin, async (_req, res) => {
+    if (irRunning) return res.status(409).json({ error: "InPart re-fetch already running" });
+    irRunning = true;
+    irProcessed = 0;
+    irTotal = 0;
+    irEnriched = 0;
+    irSkipped = 0;
+    irAbortController = new AbortController();
+    const { signal } = irAbortController;
+    irStartMs = Date.now();
+    res.json({ message: "InPart re-fetch started" });
+
+    try {
+      const rows = await db.execute<{ id: number; source_url: string }>(sql`
+        SELECT id, source_url
+        FROM ingested_assets
+        WHERE source_url LIKE '%.portals.in-part.com%'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+        ORDER BY COALESCE(completeness_score, 0) DESC
+      `);
+
+      irTotal = rows.rows.length;
+      let idx = 0;
+
+      async function irWorker() {
+        while (idx < rows.rows.length) {
+          if (signal.aborted) break;
+          const row = rows.rows[idx++];
+          if (!row?.source_url) { irProcessed++; irSkipped++; continue; }
+          try {
+            const fetchRes = await fetch(row.source_url, {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+              signal: AbortSignal.timeout(INPART_RE_TIMEOUT),
+            });
+            if (!fetchRes.ok) { irProcessed++; irSkipped++; continue; }
+            const html = await fetchRes.text();
+            if (html.length < 1_000) { irProcessed++; irSkipped++; continue; }
+
+            const m = INPART_NEXT_DATA_RE.exec(html);
+            if (!m) { irProcessed++; irSkipped++; continue; }
+
+            const nd = JSON.parse(m[1]);
+            const queries: any[] = nd?.props?.pageProps?.dehydratedState?.queries ?? [];
+            if (queries.length === 0) { irProcessed++; irSkipped++; continue; }
+
+            const data: any = queries[0]?.state?.data;
+            const details: any = data?.details ?? {};
+
+            const precis = typeof details.precis === "string" ? details.precis.trim() : "";
+            let bodyText = "";
+            if (Array.isArray(details.contentV2)) {
+              bodyText = (details.contentV2 as any[])
+                .map((block: any) =>
+                  typeof block.value === "string"
+                    ? block.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+                    : ""
+                )
+                .filter((s: string) => s.length > 0)
+                .join(" ")
+                .slice(0, 1_000);
+            }
+
+            const description = precis || bodyText;
+            if (description.length >= 50) {
+              const newSummary = description.slice(0, 5_000);
+              await db.execute(sql`
+                UPDATE ingested_assets
+                SET summary = ${newSummary},
+                    enriched_at = NULL
+                WHERE id = ${row.id}
+              `);
+              irEnriched++;
+            } else {
+              irSkipped++;
+            }
+          } catch {
+            irSkipped++;
+          }
+          irProcessed++;
+        }
+      }
+
+      const workers = Array.from({ length: INPART_RE_CONCURRENCY }, irWorker);
+      await Promise.all(workers);
+
+      irLastSummary = {
+        enriched: irEnriched,
+        skipped: irSkipped,
+        total: irTotal,
+        durationMs: Date.now() - irStartMs,
+        completedAt: new Date().toISOString(),
+      };
+      console.log(`[inpart-refetch] Complete: ${irEnriched} enriched, ${irSkipped} skipped of ${irTotal} thin InPart assets in ${Date.now() - irStartMs}ms`);
+    } catch (err: any) {
+      console.error("[inpart-refetch] Error:", err.message);
+    } finally {
+      irRunning = false;
+      irAbortController = null;
+    }
+  });
+
   // ── Rescore All (recomputes completeness_score for every enriched asset) ──
 
   let rescoreRunning = false;
