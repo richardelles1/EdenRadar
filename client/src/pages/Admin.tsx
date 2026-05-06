@@ -3297,6 +3297,16 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                     <span>{bandStatus.succeeded.toLocaleString()} assets improved</span>
                     <span className="font-medium text-violet-700 dark:text-violet-400" data-testid="band-live-cost">${bandStatus.liveCostUsd.toFixed(4)} of ~${bandStatus.liveProjectedTotalUsd?.toFixed(2) ?? "?"} · {(bandStatus.liveInputTokens + bandStatus.liveOutputTokens).toLocaleString()} tok (actual)</span>
                   </div>
+                  {bandStatus.gapFill && Object.keys(bandStatus.liveFieldCounts ?? {}).length > 0 && (
+                    <div data-testid="band-live-field-counts">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Fields filled so far</p>
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(bandStatus.liveFieldCounts).sort((a, b) => b[1] - a[1]).map(([f, n]) => (
+                          <span key={f} className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-[10px] px-2 py-0.5 font-medium" data-testid={`live-field-count-${f}`}>{f.replace(/([A-Z])/g, " $1").toLowerCase()} ×{n}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
               {!bandStatus?.running && !bandSummaryDismissed && bandStatus?.lastSummary && (
@@ -3323,17 +3333,23 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                     </div>
                   )}
                   {bandStatus.lastSummary.gapFill && Object.keys(bandStatus.lastSummary.fieldFillCounts ?? {}).length > 0 && (
-                    <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
-                      {Object.entries(bandStatus.lastSummary.fieldFillCounts).map(([f, n]) => (
-                        <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium">{f.replace(/([A-Z])/g, " $1").toLowerCase()} ×{n}</span>
-                      ))}
+                    <div data-testid="summary-fields-filled">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Fields populated per asset</p>
+                      <div className="flex flex-wrap gap-1">
+                        {Object.entries(bandStatus.lastSummary.fieldFillCounts).sort((a, b) => b[1] - a[1]).map(([f, n]) => (
+                          <span key={f} className="rounded-full bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[10px] px-2 py-0.5 font-medium" data-testid={`summary-field-count-${f}`}>{f.replace(/([A-Z])/g, " $1").toLowerCase()} <span className="font-bold">×{n}</span></span>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {!bandStatus.lastSummary.gapFill && bandStatus.lastSummary.fieldsFilledNames.length > 0 && (
-                    <div className="flex flex-wrap gap-1" data-testid="summary-fields-filled">
-                      {bandStatus.lastSummary.fieldsFilledNames.map((f) => (
-                        <span key={f} className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-[10px] px-2 py-0.5 font-medium">{f.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
-                      ))}
+                    <div data-testid="summary-fields-filled">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1">Fields targeted</p>
+                      <div className="flex flex-wrap gap-1">
+                        {bandStatus.lastSummary.fieldsFilledNames.map((f) => (
+                          <span key={f} className="rounded-full bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-400 text-[10px] px-2 py-0.5 font-medium">{f.replace(/([A-Z])/g, " $1").toLowerCase()}</span>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {Object.keys(bandStatus.lastSummary.bandMovements ?? {}).length > 0 && (() => {
