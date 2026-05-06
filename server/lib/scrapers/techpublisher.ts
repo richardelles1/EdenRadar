@@ -290,13 +290,22 @@ export function createTechPublisherScraper(
               ".abstract",
             ],
             inventors: [
-              // TechPublisher renders inventors via JS into #inventorLinks;
-              // CSS-selector extraction is a best-effort fallback for static HTML.
+              // TechPublisher embeds inventor links as <a href="...type=i">Name</a>
+              // in the static HTML sidebar — no JS rendering required.
+              'a[href*="type=i"]',
+              // Legacy/variant selectors for non-standard TechPublisher deployments:
               "#inventorLinks",
               ".field--name-field-inventors li",
               ".field--name-field-inventors .field__item",
               ".inventors li",
               ".inventor-name",
+            ],
+            contactEmail: [
+              'a[href^="mailto:"]',
+            ],
+            categories: [
+              // TechPublisher category links: <a href="...type=c">Category</a>
+              'a[href*="type=c"]',
             ],
             patentStatus: [
               ".c_tp_patent",

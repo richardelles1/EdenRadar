@@ -202,6 +202,18 @@ export async function enrichWithDetailPages(
           const email = extractText($, selectors.contactEmail);
           if (email) listing.contactEmail = email.slice(0, 200);
         }
+
+        if (selectors.categories && (!listing.categories || listing.categories.length === 0)) {
+          const catEls: string[] = [];
+          for (const sel of selectors.categories) {
+            $(sel).each((_, el) => {
+              const t = cleanText($(el).text());
+              if (t && t.length > 1) catEls.push(t);
+            });
+            if (catEls.length > 0) break;
+          }
+          if (catEls.length > 0) listing.categories = catEls;
+        }
       } catch {}
     }
   }
