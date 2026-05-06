@@ -5175,6 +5175,169 @@ export async function registerRoutes(
     }
   });
 
+  // ── TechPublisher Retroactive HTML Re-fetch ───────────────────────────────
+  // Fetches detail pages for thin TechPublisher assets (~3,793 records across JHU,
+  // UArizona, SUNY and 50+ institutions). Extracts description from .c_tp_description,
+  // patent status from .c_tp_patent table rows, and inventors from the inline
+  // finalPathInventors JS variable rendered on each page.
+
+  const TP_RE_CONCURRENCY = 5;
+  const TP_RE_TIMEOUT = 15_000;
+  const TP_RE_DELAY = 300;
+
+  let tpRunning = false;
+  let tpProcessed = 0;
+  let tpTotal = 0;
+  let tpEnriched = 0;
+  let tpSkipped = 0;
+  let tpAbortController: AbortController | null = null;
+  let tpStartMs = 0;
+  let tpLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/techpublisher-refetch/count", requireAdmin, async (_req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE source_url ILIKE '%technologypublisher.com%'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+      `);
+      res.json({ total: Number(result.rows[0]?.total ?? 0) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/techpublisher-refetch/status", requireAdmin, (_req, res) => {
+    res.json({
+      running: tpRunning,
+      processed: tpProcessed,
+      total: tpTotal,
+      enriched: tpEnriched,
+      skipped: tpSkipped,
+      elapsedMs: tpRunning ? Date.now() - tpStartMs : 0,
+      lastSummary: tpLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/techpublisher-refetch/stop", requireAdmin, (_req, res) => {
+    if (!tpRunning) return res.status(409).json({ error: "Not running" });
+    tpAbortController?.abort();
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/techpublisher-refetch", requireAdmin, async (_req, res) => {
+    if (tpRunning) return res.status(409).json({ error: "TechPublisher re-fetch already running" });
+    tpRunning = true;
+    tpProcessed = 0;
+    tpTotal = 0;
+    tpEnriched = 0;
+    tpSkipped = 0;
+    tpAbortController = new AbortController();
+    const { signal } = tpAbortController;
+    tpStartMs = Date.now();
+    res.json({ message: "TechPublisher re-fetch started" });
+
+    try {
+      const { load } = await import("cheerio");
+
+      function stripHtmlTp(raw: string): string {
+        return raw
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+          .replace(/\s+/g, " ").trim();
+      }
+
+      const rows = await db.execute<{ id: number; source_url: string; institution: string }>(sql`
+        SELECT id, source_url, institution
+        FROM ingested_assets
+        WHERE source_url ILIKE '%technologypublisher.com%'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+        ORDER BY COALESCE(completeness_score, 0) DESC
+      `);
+      tpTotal = rows.rows.length;
+
+      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += TP_RE_CONCURRENCY) {
+        if (signal.aborted) break;
+        const batch = rows.rows.slice(batchStart, batchStart + TP_RE_CONCURRENCY);
+        await Promise.all(batch.map(async (row) => {
+          if (!row?.source_url) { tpProcessed++; tpSkipped++; return; }
+
+          try {
+            const pageRes = await fetch(row.source_url, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                Accept: "text/html,application/xhtml+xml",
+              },
+              signal: AbortSignal.timeout(TP_RE_TIMEOUT),
+            });
+            if (!pageRes.ok) { tpProcessed++; tpSkipped++; return; }
+            const html = await pageRes.text();
+            if (html.length < 1_000) { tpProcessed++; tpSkipped++; return; }
+
+            const $ = load(html);
+
+            // Description: .c_tp_description contains rich HTML — strip tags for plain text
+            const descHtml = $(".c_tp_description").first().html() ?? "";
+            const summary = stripHtmlTp(descHtml).slice(0, 5_000);
+            if (summary.length < 50) { tpProcessed++; tpSkipped++; return; }
+
+            // Patent status from .c_tp_patent table (first data row after header)
+            let patentStatus: string | null = null;
+            const patentRows = $(".c_tp_patent tr").slice(1);
+            if (patentRows.length > 0) {
+              const cells = patentRows.first().find("td");
+              const appType = cells.eq(1).text().trim();
+              const patTitle = cells.eq(0).text().trim();
+              if (appType || patTitle) {
+                patentStatus = [appType, patTitle].filter(Boolean).join(" — ").slice(0, 200);
+              }
+            }
+
+            // Inventors from inline JS: finalPathInventors: 'Name1, Name2, '
+            const invMatch = html.match(/finalPathInventors:\s*'([^']+)'/);
+            const inventors: string[] = invMatch
+              ? invMatch[1].split(",").map((s) => s.trim()).filter((s) => s.length > 2)
+              : [];
+
+            await db.execute(sql`
+              UPDATE ingested_assets
+              SET summary       = ${summary},
+                  patent_status = COALESCE(${patentStatus}, patent_status),
+                  inventors     = COALESCE(${inventors.length > 0 ? inventors : null}, inventors),
+                  enriched_at   = NULL
+              WHERE id = ${row.id}
+            `);
+            tpEnriched++;
+          } catch {
+            tpSkipped++;
+          }
+          tpProcessed++;
+        }));
+        if (batchStart + TP_RE_CONCURRENCY < rows.rows.length && !signal.aborted) {
+          await new Promise((r) => setTimeout(r, TP_RE_DELAY));
+        }
+      }
+
+      tpLastSummary = {
+        enriched: tpEnriched,
+        skipped: tpSkipped,
+        total: tpTotal,
+        durationMs: Date.now() - tpStartMs,
+        completedAt: new Date().toISOString(),
+      };
+      console.log(`[tp-refetch] Complete: ${tpEnriched} enriched, ${tpSkipped} skipped of ${tpTotal} thin TechPublisher assets in ${Date.now() - tpStartMs}ms`);
+    } catch (err: any) {
+      console.error("[tp-refetch] Error:", err.message);
+    } finally {
+      tpRunning = false;
+      tpAbortController = null;
+    }
+  });
+
   // ── Columbia University JSON Re-fetch ────────────────────────────────────
   // Fetches the c8e.ai JSON endpoint ({slug}.json) for each thin Columbia record.
   // Rebuilds slug→URL map from sitemap so stale DB slugs are matched by file number.

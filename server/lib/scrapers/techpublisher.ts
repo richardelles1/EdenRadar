@@ -296,6 +296,7 @@ export function createTechPublisherScraper(
               ".inventor-name",
             ],
             patentStatus: [
+              ".c_tp_patent",
               ".field--name-field-patent-status .field__item",
               ".field--name-field-patent-status",
               ".patent-status",
