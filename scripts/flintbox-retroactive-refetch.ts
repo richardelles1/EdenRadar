@@ -63,7 +63,7 @@ async function main() {
   const before = await db.execute<{ total: string }>(sql`
     SELECT COUNT(*)::int AS total
     FROM ingested_assets
-    WHERE source_url LIKE '%.flintbox.com%'
+    WHERE source_url ILIKE '%.flintbox.com%'
       AND length(COALESCE(summary, '')) < 50
   `);
   const beforeCount = Number(before.rows[0]?.total ?? 0);
@@ -73,7 +73,7 @@ async function main() {
   const rows = await db.execute<{ id: number; source_url: string; asset_name: string | null; institution: string }>(sql`
     SELECT id, source_url, asset_name, institution
     FROM ingested_assets
-    WHERE source_url LIKE '%.flintbox.com%'
+    WHERE source_url ILIKE '%.flintbox.com%'
       AND length(COALESCE(summary, '')) < 50
       AND source_url IS NOT NULL
     ORDER BY institution, COALESCE(completeness_score, 0) DESC
@@ -175,7 +175,7 @@ async function main() {
   const after = await db.execute<{ total: string }>(sql`
     SELECT COUNT(*)::int AS total
     FROM ingested_assets
-    WHERE source_url LIKE '%.flintbox.com%'
+    WHERE source_url ILIKE '%.flintbox.com%'
       AND length(COALESCE(summary, '')) < 50
   `);
   const afterCount = Number(after.rows[0]?.total ?? 0);
@@ -187,7 +187,7 @@ async function main() {
     const remaining = await db.execute<{ institution: string; thin: string }>(sql`
       SELECT institution, COUNT(*)::int AS thin
       FROM ingested_assets
-      WHERE source_url LIKE '%.flintbox.com%'
+      WHERE source_url ILIKE '%.flintbox.com%'
         AND length(COALESCE(summary, '')) < 50
       GROUP BY institution
       ORDER BY thin DESC
@@ -203,7 +203,7 @@ async function main() {
   const samples = await db.execute<{ asset_name: string | null; summary: string | null; institution: string }>(sql`
     SELECT asset_name, LEFT(summary, 200) AS summary, institution
     FROM ingested_assets
-    WHERE source_url LIKE '%.flintbox.com%'
+    WHERE source_url ILIKE '%.flintbox.com%'
       AND length(COALESCE(summary, '')) >= 50
       AND enriched_at IS NULL
     ORDER BY last_seen_at DESC NULLS LAST

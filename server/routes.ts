@@ -5034,7 +5034,7 @@ export async function registerRoutes(
       const result = await db.execute<{ total: string }>(sql`
         SELECT COUNT(*)::int AS total
         FROM ingested_assets
-        WHERE source_url LIKE '%.flintbox.com%'
+        WHERE source_url ILIKE '%.flintbox.com%'
           AND length(COALESCE(summary, '')) < 50
           AND source_url IS NOT NULL
       `);
@@ -5078,7 +5078,7 @@ export async function registerRoutes(
       const rows = await db.execute<{ id: number; source_url: string }>(sql`
         SELECT id, source_url
         FROM ingested_assets
-        WHERE source_url LIKE '%.flintbox.com%'
+        WHERE source_url ILIKE '%.flintbox.com%'
           AND length(COALESCE(summary, '')) < 50
           AND source_url IS NOT NULL
         ORDER BY COALESCE(completeness_score, 0) DESC
