@@ -290,6 +290,9 @@ export function createTechPublisherScraper(
               ".abstract",
             ],
             inventors: [
+              // TechPublisher renders inventors via JS into #inventorLinks;
+              // CSS-selector extraction is a best-effort fallback for static HTML.
+              "#inventorLinks",
               ".field--name-field-inventors li",
               ".field--name-field-inventors .field__item",
               ".inventors li",

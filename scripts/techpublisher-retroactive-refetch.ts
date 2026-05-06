@@ -134,6 +134,7 @@ async function main() {
         await db.execute(sql`
           UPDATE ingested_assets
           SET summary       = ${summary},
+              abstract      = ${summary},
               patent_status = COALESCE(${patentStatus}, patent_status),
               inventors     = COALESCE(${inventors.length > 0 ? inventors : null}, inventors),
               enriched_at   = NULL
