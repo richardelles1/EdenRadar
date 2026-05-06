@@ -126,10 +126,13 @@ export const mitScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings total, enriching details...`);
 
       // Step 3: enrich detail pages for listings that lack a good description.
-      // Cap at 150: at DETAIL_CONCURRENCY=5 and 12s timeout, 150 pages ≈ 6 min.
-      // Capping at 1000 caused 420+ detail fetches ≈ 17 min — exceeding 20-min limit.
-      // MIT list pages include a short description snippet, so most listings won't
-      // reach this cap; it only fires when many listings have no/short description.
+      // Cap at 500: at DETAIL_CONCURRENCY=5 and ~5s avg per page:
+      //   500 ÷ 5 workers = 100 steps × 5s ≈ 500s (~8 min) + list time = ~14 min.
+      //   Well within the 20-min scraperTimeoutMs.
+      // MIT list pages include a short description snippet, so most listings that
+      // already have good descriptions (≥30 chars) are skipped automatically by
+      // enrichWithDetailPages — the cap only bounds worst-case thin-description runs.
+      // Prior cap of 150 left 94%+ of listings thin when the list snippet was short.
       await enrichWithDetailPages(results, {
         description: [
           ".tech-brief-body__inner",
@@ -150,7 +153,7 @@ export const mitScraper: InstitutionScraper = {
           ".tech-brief-details__ip .accordion__content",
           ".field--name-field-patent-status",
         ],
-      }, 150, signal);
+      }, 500, signal);
 
       console.log(`[scraper] ${INST}: complete — ${results.length} listings`);
       return results;

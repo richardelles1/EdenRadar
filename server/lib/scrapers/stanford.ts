@@ -120,9 +120,15 @@ export const stanfordScraper: InstitutionScraper = {
         console.warn(`[scraper] ${INST}: ${skipped} list page(s) skipped due to timeout/error`);
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings total, fetching details (cap 25)...`);
+      console.log(`[scraper] ${INST}: ${results.length} listings total, fetching details (cap 500)...`);
 
-      // Step 3: enrich detail pages with Drupal 11 selectors — cap 25.
+      // Step 3: enrich detail pages with Drupal 11 selectors — cap 500.
+      // Only listings with missing/thin descriptions (<30 chars) are fetched.
+      // Stanford list pages do NOT include descriptions, so most listings need
+      // detail fetching. At DETAIL_CONCURRENCY=5 and ~5s avg per page:
+      //   500 ÷ 5 workers = 100 steps × 5s ≈ 500s (~8 min) + 6 min list = ~14 min.
+      //   Well within the 20-min scraperTimeoutMs.
+      // Prior cap of 25 was far too low — left 94%+ of listings description-less.
       // Confirmed selectors on live pages (Drupal 11 upgrade, Apr 2026):
       //   description/abstract: .docket__text (main body container)
       //   inventors: .docket__related-people a (Innovators section links)
@@ -143,7 +149,7 @@ export const stanfordScraper: InstitutionScraper = {
           ],
           patentStatus: [],
         },
-        25,
+        500,
         signal
       );
 
