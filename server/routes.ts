@@ -4782,8 +4782,8 @@ export async function registerRoutes(
       const GPT4O_OUTPUT_PER_M = 10.0;
       // Full-pass: fixed cost per asset (all fields)
       const costPerAsset = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
-      // Gap-fill: cost per targeted field-fill (4 fields split evenly across 1000 input + 300 output)
-      const costPerFieldFill = ((1000 / 4) * GPT4O_INPUT_PER_M + (300 / 4) * GPT4O_OUTPUT_PER_M) / 1_000_000;
+      // Gap-fill: cost per targeted field-fill (8 fields split evenly across 1000 input + 500 output)
+      const costPerFieldFill = ((1000 / 8) * GPT4O_INPUT_PER_M + (500 / 8) * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
         const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, popBCount: 0 };
         const isBare = id === "bare";

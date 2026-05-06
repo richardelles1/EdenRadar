@@ -241,7 +241,7 @@ export async function classifyAsset(
       temperature: 0,
       // Gap-fill: much shorter response (only 1-4 short string fields) so reduce max_tokens.
       // Full pass: full drug_biologic JSON with categories[], deviceAttributes etc.
-      max_tokens: gapFillFields ? 300 : 1000,
+      max_tokens: gapFillFields ? 500 : 1000,
       response_format: gapFillSchema,
       messages: [
         { role: "system", content: gapFillFields ? buildGapFillSystemPrompt(gapFillFields) : SYSTEM_PROMPT },
