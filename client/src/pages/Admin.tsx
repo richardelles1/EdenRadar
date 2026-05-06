@@ -3277,6 +3277,16 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
   });
 
+  const clearSparse = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/clear-sparse", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
+      return res.json() as Promise<{ cleared: number }>;
+    },
+    onSuccess: (data) => toast({ title: "Data-sparse flags cleared", description: `${data.cleared.toLocaleString()} assets unlocked for AI enrichment` }),
+    onError: (err: Error) => toast({ title: "Failed to clear sparse flags", description: err.message, variant: "destructive" }),
+  });
+
   const { data: bandsData, refetch: refetchBands } = useQuery<{ bands: BandInfo[] }>({
     queryKey: ["/api/admin/enrichment/bands", pw],
     queryFn: async () => {
@@ -3412,7 +3422,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
             </div>
             <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">Applies regex pattern rules to fill <em>developmentStage</em>, <em>ipType</em>, <em>licensingReadiness</em>, and <em>indication</em> from asset text. Also tags data-sparse assets (description &lt; 150 chars). Respects human-verified locks.</p>
+              <p className="text-xs text-muted-foreground">Applies regex pattern rules to fill <em>modality</em>, <em>target</em>, <em>indication</em>, <em>developmentStage</em>, <em>ipType</em>, and <em>licensingReadiness</em> from asset text and stored categories. Also tags data-sparse assets (description &lt; 150 chars). Respects human-verified locks.</p>
               {ruleFillEstimate && (
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                   {Object.entries(ruleFillEstimate.byField).map(([field, count]) => (
@@ -3462,6 +3472,37 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 <Button size="sm" onClick={() => runRuleFill.mutate()} disabled={ruleFillStatus?.running || runRuleFill.isPending}
                   className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-run-rule-fill">
                   {ruleFillStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}Run Rule Fill
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 1b: Clear Data-Sparse Flags */}
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">1b</span>
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-300">Clear Data-Sparse Flags</span>
+              <span className="ml-auto text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Unlocks assets that were previously flagged as data-sparse but have since gained enough text (≥ 150 chars combined title + summary + abstract).
+                Resets <em>enriched_at</em> so the AI enrichment queue picks them up again.
+                Run this after any retroactive refetch to maximize the deep-enrichment queue.
+              </p>
+              {clearSparse.isSuccess && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30" data-testid="clear-sparse-result">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    {((clearSparse.data as any)?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => clearSparse.mutate()} disabled={clearSparse.isPending}
+                  className="gap-1.5 bg-slate-600 hover:bg-slate-700 text-white" data-testid="button-clear-sparse">
+                  {clearSparse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Clear Data-Sparse Flags
                 </Button>
               </div>
             </div>

@@ -33,6 +33,199 @@ const LICENSING_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bavailable\s+for\s+licens\w+\b|\bseeking\s+licens\w+\b|\bopen\s+for\s+licens\w+\b|\blicensing\s+opportunit\w+\b/i, value: "available" },
 ];
 
+// ── Modality rules — order matters: most specific first ───────────────────────
+const MODALITY_RULES: Array<{ pattern: RegExp; value: string }> = [
+  // Gene editing (CRISPR, base editing)
+  { pattern: /\bCRISPR[\s-]?Cas\b|\bCRISPR[\s-]?based\b|\bbase[\s-]?edit(?:ing)?\b|\bprime[\s-]?edit(?:ing)?\b|\bgene[\s-]?edit(?:ing)?\b/i, value: "gene editing" },
+  // CAR-T / CAR-NK
+  { pattern: /\bCAR[\s-]?T\b|\bCAR[\s-]?NK\b|\bCAR[\s-]?cell\b|\bchimeric\s+antigen\s+receptor/i, value: "car-t" },
+  // Cell therapies (adoptive, TIL, NK)
+  { pattern: /\badoptive\s+cell\s+therap|\bTIL\s+therap|\bT[\s-]?cell\s+therap|\bNK\s+cell\s+therap|\bcell-?based\s+immuno|\bstem\s+cell\s+therap/i, value: "cell therapy" },
+  // Gene therapy (AAV/lentiviral)
+  { pattern: /\bgene\s+therap|\bAAV\b|\blentiviral\s+(?:vector|delivery)\b|\badeno[\s-]?associated\s+virus|\badenoviral\s+(?:vector|gene)\b/i, value: "gene therapy" },
+  // mRNA therapeutics
+  { pattern: /\bmRNA\s+(?:vaccine|therap|platform|delivery|encod)\b|\blipid[\s-]?nanoparticle\s+mRNA\b/i, value: "mrna" },
+  // RNA therapeutics (siRNA, ASO, RNAi)
+  { pattern: /\bsiRNA\b|\bshRNA\b|\bRNAi\b|\bmiRNA\s+(?:mimic|inhibitor|therap)\b|\bASO\b|\bantisense\s+oligon|\bRNA[\s-]?interferenc|\boligonucleotide\s+therap/i, value: "rna therapy" },
+  // Vaccines
+  { pattern: /\bvaccine\b|\bimmuniz(?:ation|ing)\b|\bimmunogen\b|\bvaccination\b|\badjuvant[\s-]?(?:based|system|formulation)\b/i, value: "vaccine" },
+  // ADC and complex antibody formats first
+  { pattern: /\bbispecific\s+antibod|\bantibody[\s-]?drug\s+conjug|\bADC\b(?:\s+therap|\s+platform)|\bnanobod|\bscFv\b|\bIgG\b/i, value: "antibody" },
+  // Antibody (broad)
+  { pattern: /\bmonoclonal\s+antibod|\bantibod(?:y|ies)\b/i, value: "antibody" },
+  // Stapled / therapeutic peptides
+  { pattern: /\bstapled\s+peptide\b|\bcyclic\s+peptide\b|\bpeptide\s+therap|\bpeptidomimetic|\bcell[\s-]?penetrating\s+peptide/i, value: "peptide" },
+  // Nanoparticles / delivery systems
+  { pattern: /\bnanoparticle\b|\bliposome\b|\bliposomal\b|\bnano[\s-]?medicine\b|\bnano[\s-]?carrier\b|\blipid[\s-]?nanoparticle\b|\bpolymeric\s+nano|\bexosome[\s-]?(?:based|delivery)/i, value: "nanoparticle" },
+  // PROTAC / molecular glue / degraders
+  { pattern: /\bPROTAC\b|\bmolecular\s+glue\b|\btargeted\s+protein\s+degrad|\bTPD\b/i, value: "small molecule" },
+  // Small molecule (broad)
+  { pattern: /\bsmall[\s-]?molecule\b|\bkinase\s+inhibitor\b|\bprotease\s+inhibitor\b|\breceptor\s+(?:antagonist|agonist)\b|\ballosteric\s+(?:inhibitor|modulator)\b/i, value: "small molecule" },
+  // Compound / drug candidate catch-all (likely small molecule)
+  { pattern: /\blead\s+compound\b|\bdrug\s+candidate\b|\bcompound\s+\d+[a-z]?\b/i, value: "small molecule" },
+  // Diagnostics
+  { pattern: /\bdiagnostic\s+(?:test|kit|assay|platform|tool|device|marker)\b|\bbiomarker\s+(?:test|assay|panel|platform)\b|\bimaging\s+agent\b|\bcontrast\s+agent\b|\bin\s+vitro\s+diagnostic\b|\bIVD\b/i, value: "diagnostic" },
+  // Peptide (broad fallback)
+  { pattern: /\bpeptide\b/i, value: "peptide" },
+  // Biologic / protein / recombinant (broad catch-all after antibody)
+  { pattern: /\brecombinant\s+(?:protein|enzyme|hormone|cytokine|growth\s+factor)\b|\bfusion\s+protein\b|\bgrowth\s+factor\b(?:\s+therap|\s+protein)|\bcytokine\s+therap|\bbiologic(?:s)?\b/i, value: "biologic" },
+];
+
+// ── Target rules — biotech gene/protein target vocabulary ─────────────────────
+// Applied only when target is null/'unknown' and not human-verified.
+const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
+  // Checkpoint / IO
+  { pattern: /\bPD[\s-]?L1\b|\bCD274\b/i, value: "PD-L1" },
+  { pattern: /\bPD[\s-]?1\b|\bPDCD1\b/i, value: "PD-1" },
+  { pattern: /\bCTLA[\s-]?4\b/i, value: "CTLA-4" },
+  { pattern: /\bLAG[\s-]?3\b/i, value: "LAG-3" },
+  { pattern: /\bTIM[\s-]?3\b/i, value: "TIM-3" },
+  { pattern: /\bTIGIT\b/i, value: "TIGIT" },
+  { pattern: /\b4[\s-]?1BB\b|\bCD137\b/i, value: "4-1BB" },
+  { pattern: /\bOX40\b|\bCD134\b/i, value: "OX40" },
+  { pattern: /\bPD[\s-]?L2\b/i, value: "PD-L2" },
+  // RTK receptors
+  { pattern: /\bEGFR\b/i, value: "EGFR" },
+  { pattern: /\bHER2\b|\bERBB2\b/i, value: "HER2" },
+  { pattern: /\bHER3\b|\bERBB3\b/i, value: "HER3" },
+  { pattern: /\bVEGFR\b/i, value: "VEGFR" },
+  { pattern: /\bVEGF\b(?!R)/i, value: "VEGF" },
+  { pattern: /\bFGFR[0-9]?\b/i, value: "FGFR" },
+  { pattern: /\bMET\b(?:\s+(?:kinase|receptor|tyrosine|proto|inhibitor|amplification|exon))/i, value: "MET" },
+  { pattern: /\bIGF[\s-]?1R\b/i, value: "IGF-1R" },
+  // RAS/RAF/MAPK pathway
+  { pattern: /\bKRAS\b/i, value: "KRAS" },
+  { pattern: /\bBRAF\b/i, value: "BRAF" },
+  { pattern: /\bNRAS\b/i, value: "NRAS" },
+  { pattern: /\bMEK[0-9]?\b/i, value: "MEK" },
+  { pattern: /\bERK[0-9]?\b(?:\s+(?:kinase|pathway|inhibitor|phospho))/i, value: "ERK" },
+  // Fusion/rearrangement targets
+  { pattern: /\bALK\b(?:\s+(?:kinase|receptor|inhibitor|fusion|rearrangement|mutation|positive))/i, value: "ALK" },
+  { pattern: /\bRET\b(?:\s+(?:kinase|proto|fusion|rearrangement|mutation|inhibitor))/i, value: "RET" },
+  { pattern: /\bROS1\b/i, value: "ROS1" },
+  { pattern: /\bNTRK[0-9]?\b/i, value: "NTRK" },
+  { pattern: /\bBCR[\s-]?ABL\b/i, value: "BCR-ABL" },
+  // Oncogenes
+  { pattern: /\bKRAS\b/i, value: "KRAS" },
+  { pattern: /\bMYC\b|\bc[\s-]?Myc\b|\bN[\s-]?Myc\b/i, value: "MYC" },
+  // Tumor suppressors
+  { pattern: /\bTP53\b|\bp53\b/i, value: "TP53/p53" },
+  { pattern: /\bBRCA1\b/i, value: "BRCA1" },
+  { pattern: /\bBRCA2\b/i, value: "BRCA2" },
+  { pattern: /\bPTEN\b/i, value: "PTEN" },
+  // Epigenetic
+  { pattern: /\bEZH2\b/i, value: "EZH2" },
+  { pattern: /\bHDAC[0-9]?\b/i, value: "HDAC" },
+  { pattern: /\bBRD4\b|\bBET\b(?:\s+bromodomain)/i, value: "BET/BRD4" },
+  { pattern: /\bDNMT[0-9]?\b/i, value: "DNMT" },
+  // Cell cycle
+  { pattern: /\bCDK4\/6\b|\bCDK4\b|\bCDK6\b/i, value: "CDK4/6" },
+  { pattern: /\bCDK[0-9]+\b(?:\s+(?:inhibitor|kinase|pathway))/i, value: "CDK" },
+  // PI3K/AKT/mTOR
+  { pattern: /\bPI3K\b|\bPI3K[αβγδ]\b/i, value: "PI3K" },
+  { pattern: /\bmTOR\b|\bmTORC[12]\b/i, value: "mTOR" },
+  { pattern: /\bAKT[0-9]?\b/i, value: "AKT" },
+  // JAK/STAT
+  { pattern: /\bJAK1\b/i, value: "JAK1" },
+  { pattern: /\bJAK2\b/i, value: "JAK2" },
+  { pattern: /\bJAK3\b/i, value: "JAK3" },
+  { pattern: /\bSTAT3\b/i, value: "STAT3" },
+  // Heme/leukemia
+  { pattern: /\bBTK\b/i, value: "BTK" },
+  { pattern: /\bIDH1\b/i, value: "IDH1" },
+  { pattern: /\bIDH2\b/i, value: "IDH2" },
+  { pattern: /\bFLT3\b/i, value: "FLT3" },
+  // DNA damage response
+  { pattern: /\bPARP[0-9]?\b/i, value: "PARP" },
+  { pattern: /\bATR\b(?:\s+(?:kinase|inhibitor|pathway))/i, value: "ATR" },
+  { pattern: /\bATM\b(?:\s+(?:kinase|inhibitor|pathway))/i, value: "ATM" },
+  // Apoptosis
+  { pattern: /\bBCL[\s-]?2\b/i, value: "BCL-2" },
+  { pattern: /\bBCL[\s-]?XL\b/i, value: "BCL-XL" },
+  { pattern: /\bMDM2\b/i, value: "MDM2" },
+  // Cytokines / inflammation
+  { pattern: /\bTNF[\s-]?(?:α|alpha)\b|\bTNF\b(?:\s+(?:alpha|receptor|inhibitor|pathway))/i, value: "TNF-alpha" },
+  { pattern: /\bIL[\s-]?6\b/i, value: "IL-6" },
+  { pattern: /\bIL[\s-]?1[βB]\b|\bIL[\s-]?1\b(?:\s+(?:beta|receptor|inhibitor))/i, value: "IL-1" },
+  { pattern: /\bIL[\s-]?17\b/i, value: "IL-17" },
+  { pattern: /\bIL[\s-]?23\b/i, value: "IL-23" },
+  { pattern: /\bIL[\s-]?4\b/i, value: "IL-4" },
+  { pattern: /\bIL[\s-]?13\b/i, value: "IL-13" },
+  { pattern: /\bIL[\s-]?33\b/i, value: "IL-33" },
+  { pattern: /\bTGF[\s-]?(?:β|beta)\b/i, value: "TGF-beta" },
+  { pattern: /\bNF[\s-]?(?:κB|kB)\b/i, value: "NF-kB" },
+  // CD antigens
+  { pattern: /\bCD19\b/i, value: "CD19" },
+  { pattern: /\bCD20\b/i, value: "CD20" },
+  { pattern: /\bCD22\b/i, value: "CD22" },
+  { pattern: /\bCD33\b/i, value: "CD33" },
+  { pattern: /\bCD38\b/i, value: "CD38" },
+  { pattern: /\bCD47\b/i, value: "CD47" },
+  { pattern: /\bCD3\b(?:\s+(?:T[\s-]?cell|receptor|complex|antibody|agonist))/i, value: "CD3" },
+  // Metabolic
+  { pattern: /\bGLP[\s-]?1R\b|\bGLP[\s-]?1\s+receptor\b/i, value: "GLP-1R" },
+  { pattern: /\bGLP[\s-]?1\b|\bGlucagon[\s-]?like\s+peptide/i, value: "GLP-1" },
+  { pattern: /\bPCSK9\b/i, value: "PCSK9" },
+  { pattern: /\bAMPK\b/i, value: "AMPK" },
+  // Signaling pathways
+  { pattern: /\bWnt\b(?:\s+(?:pathway|signaling|receptor|target))/i, value: "Wnt" },
+  { pattern: /\bNotch\b(?:\s+(?:pathway|signaling|receptor))/i, value: "Notch" },
+  { pattern: /\bHedgehog\b|\bSHH\b(?:\s+(?:pathway|inhibitor))|\bSMO\b(?:\s+(?:receptor|inhibitor))/i, value: "Hedgehog/SHH" },
+  // Chemokine receptors
+  { pattern: /\bCXCR4\b/i, value: "CXCR4" },
+  { pattern: /\bCCR5\b/i, value: "CCR5" },
+  // Viral/infectious disease targets
+  { pattern: /\bACE2\b/i, value: "ACE2" },
+  { pattern: /\bNSP14\b/i, value: "NSP14" },
+  { pattern: /\bSpike\s+(?:protein|glycoprotein)\b/i, value: "Spike protein" },
+  // Hormone receptors
+  { pattern: /\bandrogen\s+receptor\b|\bAR\b(?:\s+(?:splice|variant|pathway|signaling|v7|inhibitor|antagonist|LBD))/i, value: "androgen receptor" },
+  { pattern: /\bestrogen\s+receptor\b|\bER[αβ]\b|\bESR1\b/i, value: "estrogen receptor" },
+  // HIF
+  { pattern: /\bHIF[\s-]?1[αa]\b|\bHIF[\s-]?2[αa]\b|\bHIF\b(?:\s+(?:pathway|inhibitor|alpha))/i, value: "HIF" },
+  // SRC kinase
+  { pattern: /\bSRC\b(?:\s+(?:kinase|pathway|family|inhibitor))/i, value: "SRC" },
+];
+
+// ── Category → Modality map ───────────────────────────────────────────────────
+// Uses stored categories[] to provide structured modality signal before text rules.
+const CATEGORY_MODALITY_MAP: Array<{ keywords: RegExp; value: string }> = [
+  { keywords: /\bgene[\s-]?edit|\bcrispr/i, value: "gene editing" },
+  { keywords: /\bCAR[\s-]?T|car-t/i, value: "car-t" },
+  { keywords: /\bcell[\s-]?therap/i, value: "cell therapy" },
+  { keywords: /\bgene[\s-]?therap/i, value: "gene therapy" },
+  { keywords: /\bsiRNA\b|RNAi\b|\bantisense/i, value: "rna therapy" },
+  { keywords: /\bmRNA\b/i, value: "mrna" },
+  { keywords: /\bvaccine/i, value: "vaccine" },
+  { keywords: /\bantibod|\bmAb\b|monoclonal/i, value: "antibody" },
+  { keywords: /\bsmall[\s-]?molecule/i, value: "small molecule" },
+  { keywords: /\bnanoparticle|nanotechnology|nanomedicine/i, value: "nanoparticle" },
+  { keywords: /\bpeptide/i, value: "peptide" },
+  { keywords: /\bdiagnostic|biomarker|imaging\s+agent/i, value: "diagnostic" },
+  { keywords: /\bmedical\s+device|device\s+(?:technology|platform)/i, value: "medical device" },
+  { keywords: /\bsoftware\b|algorithm\b|machine\s+learning|artificial\s+intelligence/i, value: "software/algorithm" },
+];
+
+// ── Category → Indication map ─────────────────────────────────────────────────
+// Provides coarse indication from categories when no specific disease text is found.
+const CATEGORY_INDICATION_MAP: Array<{ keywords: RegExp; value: string }> = [
+  { keywords: /\boncology|\bcancer/i, value: "cancer" },
+  { keywords: /\bneurology|\bneuroscience|\bneurological|\bneurodegenera/i, value: "neurological disorder" },
+  { keywords: /\bcardiovascular|\bcardiology|\bcardiac/i, value: "cardiovascular disease" },
+  { keywords: /\binfectious[\s-]?disease|\bvirology|\bbacteriology|\bantimicrobial/i, value: "infectious disease" },
+  { keywords: /\bmetabolic[\s-]?disease|\bdiabetes|\bendocrinology/i, value: "metabolic disease" },
+  { keywords: /\bimmunology|\bautoimmune|\brheumatology|\binflammation/i, value: "autoimmune disease" },
+  { keywords: /\bpulmonary|\brespiratory/i, value: "respiratory disease" },
+  { keywords: /\bophthalmology|\bocular/i, value: "ocular disease" },
+  { keywords: /\bdermatology/i, value: "dermatological condition" },
+  { keywords: /\bmusculoskeletal|\borthopedic/i, value: "musculoskeletal disorder" },
+  { keywords: /\bnephrology|\brenal[\s-]?disease|\bkidney[\s-]?disease/i, value: "renal disease" },
+  { keywords: /\bgastrointestinal|\bgastroenterology/i, value: "gastrointestinal disease" },
+  { keywords: /\bhematology|\bblood[\s-]?disease/i, value: "hematological disorder" },
+  { keywords: /\bwound[\s-]?heal|\bregenerative\s+medicine|\btissue\s+engineer/i, value: "wound healing" },
+  { keywords: /\bpsychiatry|\bmental\s+health|\bpsychiatric/i, value: "psychiatric disorder" },
+];
+
 // ── Indication keyword rules ──────────────────────────────────────────────────
 const INDICATION_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bnon-small\s+cell\s+lung\s+cancer\b|\bnsclc\b/i, value: "non-small cell lung cancer" },
@@ -100,7 +293,6 @@ const INDICATION_RULES: Array<{ pattern: RegExp; value: string }> = [
 ];
 
 // Heuristic: does the text look like it describes a drug/biologic?
-// Only apply indication rules to drug-like assets to avoid false positives on devices/tools.
 const DRUG_SIGNALS = /\bdrug\b|\btherapeu\w+\b|\btreatment\b|\btherapy\b|\bclinical\s+trial\b|\bIND\b|\bsmall\s+molecule\b|\bantibody\b|\bbiologic\b|\bvaccine\b|\bRNAi\b|\bsiRNA\b|\bgene\s+therapy\b|\bcell\s+therapy\b|\bCAR.T\b|\bmodality\b|\bpharmaceu\w+\b/i;
 
 function looksLikeDrug(text: string): boolean {
@@ -110,6 +302,22 @@ function looksLikeDrug(text: string): boolean {
 function applyRules(rules: Array<{ pattern: RegExp; value: string }>, text: string): string | null {
   for (const rule of rules) {
     if (rule.pattern.test(text)) return rule.value;
+  }
+  return null;
+}
+
+function applyCategoriesToModality(categories: string[]): string | null {
+  const joined = categories.join(" ");
+  for (const rule of CATEGORY_MODALITY_MAP) {
+    if (rule.keywords.test(joined)) return rule.value;
+  }
+  return null;
+}
+
+function applyCategoriesToIndication(categories: string[]): string | null {
+  const joined = categories.join(" ");
+  for (const rule of CATEGORY_INDICATION_MAP) {
+    if (rule.keywords.test(joined)) return rule.value;
   }
   return null;
 }
@@ -133,15 +341,17 @@ export function applyRulesToAsset(asset: {
   ipType: string | null;
   licensingReadiness: string | null;
   indication: string | null;
+  modality?: string | null;
+  target?: string | null;
+  categories?: string[] | null;
   humanVerified: Record<string, boolean> | null;
 }): { fields: Record<string, string>; dataSparse: boolean } {
-  // Include asset name in text so title-level cues (e.g. "Phase 2 trial of X")
-  // contribute to rule matching alongside summary and abstract.
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
   const fields: Record<string, string> = {};
   const isDrug = looksLikeDrug(text);
   const dataSparse = text.trim().length < SPARSE_THRESHOLD;
+  const cats = asset.categories ?? [];
 
   if (!dataSparse) {
     if (!humanV.developmentStage && asset.developmentStage === "unknown") {
@@ -156,10 +366,26 @@ export function applyRulesToAsset(asset: {
       const val = applyRules(LICENSING_RULES, text);
       if (val) fields.licensingReadiness = val;
     }
-    // Handle both null and "unknown" — null arises from schema default after migration
+
+    // ── Modality: categories first (structured signal), then text rules ──────
+    if (!humanV.modality && (!asset.modality || asset.modality === "unknown")) {
+      const fromCats = cats.length > 0 ? applyCategoriesToModality(cats) : null;
+      const val = fromCats ?? applyRules(MODALITY_RULES, text);
+      if (val) fields.modality = val;
+    }
+
+    // ── Indication: specific text rules first, category map as broad fallback ─
     if (isDrug && !humanV.indication && (!asset.indication || asset.indication === "unknown")) {
-      const val = applyRules(INDICATION_RULES, text);
+      const fromText = applyRules(INDICATION_RULES, text);
+      const fromCats = cats.length > 0 ? applyCategoriesToIndication(cats) : null;
+      const val = fromText ?? fromCats;
       if (val) fields.indication = val;
+    }
+
+    // ── Target: gene/protein name vocabulary scan ─────────────────────────────
+    if (!humanV.target && (!asset.target || asset.target === "unknown")) {
+      const val = applyRules(TARGET_RULES, text);
+      if (val) fields.target = val;
     }
   }
 
@@ -179,9 +405,13 @@ export async function runRuleBasedFill(
     ip_type: string | null;
     licensing_readiness: string | null;
     indication: string;
+    modality: string | null;
+    target: string | null;
+    categories: string[] | null;
     human_verified: Record<string, boolean> | null;
   }>(sql`
-    SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness, indication, human_verified
+    SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
+           indication, modality, target, categories, human_verified
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -189,6 +419,8 @@ export async function runRuleBasedFill(
         OR ip_type IS NULL OR ip_type = 'unknown'
         OR licensing_readiness IS NULL OR licensing_readiness = 'unknown'
         OR indication IS NULL OR indication = 'unknown'
+        OR modality IS NULL OR modality = 'unknown'
+        OR target IS NULL OR target = 'unknown'
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -214,6 +446,9 @@ export async function runRuleBasedFill(
       ipType: row.ip_type,
       licensingReadiness: row.licensing_readiness,
       indication: row.indication,
+      modality: row.modality,
+      target: row.target,
+      categories: row.categories,
       humanVerified: row.human_verified,
     });
 
@@ -243,6 +478,8 @@ type RuleFillUpdateSet = {
   ipType?: string;
   licensingReadiness?: string;
   indication?: string;
+  modality?: string;
+  target?: string;
   enrichmentSources?: SQL;
 };
 
@@ -258,10 +495,11 @@ async function flushWrites(
       if (item.fields.ipType) updates.ipType = item.fields.ipType;
       if (item.fields.licensingReadiness) updates.licensingReadiness = item.fields.licensingReadiness;
       if (item.fields.indication) updates.indication = item.fields.indication;
+      if (item.fields.modality) updates.modality = item.fields.modality;
+      if (item.fields.target) updates.target = item.fields.target;
 
       if (fieldKeys.length > 0) {
         const sourcesJson = JSON.stringify(Object.fromEntries(fieldKeys.map(k => [k, "rule"])));
-        // Merge rule sources into existing JSONB, preserving other pipeline sources
         updates.enrichmentSources = sql`COALESCE(${ingestedAssets.enrichmentSources}, '{}'::jsonb) || ${sourcesJson}::jsonb`;
       }
 
@@ -287,9 +525,13 @@ export async function estimateRuleBasedFill(): Promise<{
     ip_type: string | null;
     licensing_readiness: string | null;
     indication: string;
+    modality: string | null;
+    target: string | null;
+    categories: string[] | null;
     human_verified: Record<string, boolean> | null;
   }>(sql`
-    SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness, indication, human_verified
+    SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
+           indication, modality, target, categories, human_verified
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -297,6 +539,8 @@ export async function estimateRuleBasedFill(): Promise<{
         OR ip_type IS NULL OR ip_type = 'unknown'
         OR licensing_readiness IS NULL OR licensing_readiness = 'unknown'
         OR indication IS NULL OR indication = 'unknown'
+        OR modality IS NULL OR modality = 'unknown'
+        OR target IS NULL OR target = 'unknown'
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -316,6 +560,9 @@ export async function estimateRuleBasedFill(): Promise<{
       ipType: row.ip_type,
       licensingReadiness: row.licensing_readiness,
       indication: row.indication,
+      modality: row.modality,
+      target: row.target,
+      categories: row.categories,
       humanVerified: row.human_verified,
     });
     if (Object.keys(fields).length > 0) fillable++;
@@ -324,4 +571,30 @@ export async function estimateRuleBasedFill(): Promise<{
   }
 
   return { total: rows.rows.length, fillable, byField, dataSparseCount };
+}
+
+/**
+ * Clears data_sparse=true for relevant assets whose combined text (title +
+ * summary + abstract) is now ≥ 150 chars, and resets enriched_at + attempts
+ * so the deep-enrichment queue picks them up again.
+ *
+ * Returns the count of rows updated.
+ */
+export async function resetDataSparseFlags(): Promise<number> {
+  const result = await db.execute(sql`
+    UPDATE ingested_assets
+    SET data_sparse = false,
+        enriched_at = NULL,
+        deep_enrich_attempts = 0
+    WHERE relevant = true
+      AND data_sparse = true
+      AND length(
+        COALESCE(asset_name, '') ||
+        COALESCE(summary, '') ||
+        COALESCE(abstract, '')
+      ) >= ${SPARSE_THRESHOLD}
+  `);
+  const count = (result as any).rowCount ?? 0;
+  console.log(`[ruleBasedFill] Cleared data_sparse flag for ${count} assets with sufficient text`);
+  return count;
 }

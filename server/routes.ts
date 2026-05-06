@@ -3618,6 +3618,18 @@ export async function registerRoutes(
     }
   });
 
+  // ── Data-Sparse Flag Reset ─────────────────────────────────────────────────
+
+  app.post("/api/admin/enrichment/clear-sparse", async (req, res) => {
+    try {
+      const { resetDataSparseFlags } = await import("./lib/pipeline/ruleBasedFill");
+      const count = await resetDataSparseFlags();
+      res.json({ cleared: count });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to clear sparse flags" });
+    }
+  });
+
   // ── Human-Verified Field Locking ──────────────────────────────────────────
 
   app.post("/api/admin/assets/:id/verify-field", async (req, res) => {
