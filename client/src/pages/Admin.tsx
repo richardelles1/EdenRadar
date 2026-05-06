@@ -2805,7 +2805,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     refetchInterval: polling ? 1500 : false,
   });
 
-  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number }>({
+  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number; exhaustedCount: number }>({
     queryKey: ["/api/admin/enrichment/mini-queue", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
@@ -3619,8 +3619,14 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   </Button>
                 </div>
               )}
+              {(miniQueue?.exhaustedCount ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="text-mini-exhausted">
+                  <span className="text-red-500 font-medium">{miniQueue!.exhaustedCount.toLocaleString()} gave up</span>
+                  <span className="ml-1">— reached 3-attempt cap with fields still unknown. Content change will reset.</span>
+                </p>
+              )}
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
+                <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue?.count ?? 0) === 0} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
                   {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Run {Math.min(500, miniQueue?.count ?? 500).toLocaleString()} batch
                 </Button>
                 <Button size="sm" variant="outline"
@@ -3630,6 +3636,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
                 </Button>
+                <MiniBackfillButton pw={pw} onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/mini-queue"] })} />
               </div>
             </div>
           </div>
@@ -7782,6 +7789,40 @@ function EdenTab({ pw }: { pw: string }) {
       </div>
 
     </div>
+  );
+}
+
+function MiniBackfillButton({ pw, onDone }: { pw: string; onDone: () => void }) {
+  const [pending, setPending] = useState(false);
+  const [done, setDone] = useState(false);
+
+  async function run() {
+    if (!window.confirm("Seed mini_enrich_attempts=1 for assets already processed but still having unknown fields?\n\nThis prevents them from getting a fresh 3-attempt slate — they will still receive 2 more tries with the improved prompts.")) return;
+    setPending(true);
+    try {
+      const res = await fetch("/api/admin/enrichment/mini-backfill", {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      const json = await res.json();
+      setDone(true);
+      onDone();
+      window.alert(`Backfill complete — ${json.updated?.toLocaleString() ?? 0} assets seeded.`);
+    } catch {
+      window.alert("Backfill failed. Check server logs.");
+    } finally {
+      setPending(false);
+    }
+  }
+
+  if (done) return null;
+  return (
+    <Button size="sm" variant="ghost"
+      className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+      onClick={run} disabled={pending} data-testid="button-mini-backfill">
+      {pending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+      Seed past attempts
+    </Button>
   );
 }
 

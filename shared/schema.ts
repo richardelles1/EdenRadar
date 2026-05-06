@@ -221,6 +221,11 @@ export const ingestedAssets = pgTable("ingested_assets", {
   //   - The retry increments 1 → 2, permanently excluding the asset (2 > 1).
   //   - Maximum 2 GPT-4o calls per asset; reset to 0 on content change.
   deepEnrichAttempts: integer("deep_enrich_attempts").default(0).notNull(),
+  // Tracks how many times the GPT-4o-mini mini-enrich job (Step 2) has processed this asset.
+  // Assets with miniEnrichAttempts >= 3 are excluded from the queue permanently
+  // (unless content changes reset it to 0, same as deepEnrichAttempts).
+  // This prevents endlessly retrying assets GPT-4o-mini cannot resolve.
+  miniEnrichAttempts: integer("mini_enrich_attempts").default(0).notNull(),
   // Asset class detected by the type-aware classifier (managed via db:push)
   assetClass: text("asset_class"),
   // Device/tool/software-specific attributes stored as JSONB (managed via db:push)

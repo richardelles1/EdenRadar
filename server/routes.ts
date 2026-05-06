@@ -3539,6 +3539,9 @@ export async function registerRoutes(
           if (improved) liveEnrichment!.improved++;
         } catch (e) {
           console.error(`[enrichment] failed for asset ${asset.id}:`, e);
+          // Hard GPT failure: still count toward the attempt cap so the asset is not retried
+          // indefinitely. This is a thin atomic increment (no full enrichment write needed).
+          await storage.incrementMiniEnrichAttempts(asset.id);
         }
         await storage.stampEnrichedAt(asset.id);
         liveEnrichment!.processed++;
@@ -3689,6 +3692,20 @@ export async function registerRoutes(
       res.json(queue);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  // One-time backfill: seeds mini_enrich_attempts = 1 for assets that were already
+  // processed (enriched_at IS NOT NULL) but still have 3+ unknowns. Prevents the new
+  // attempt cap from immediately giving them a fresh 3-attempt slate when the new column
+  // defaults to 0 — they still get 2 more attempts (1 → 3) with the improved prompts.
+  app.post("/api/admin/enrichment/mini-backfill", requireAdmin, async (req, res) => {
+    try {
+      const updated = await storage.backfillMiniEnrichAttempts();
+      console.log(`[enrichment] mini-backfill: seeded mini_enrich_attempts=1 for ${updated} assets`);
+      res.json({ updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Backfill failed" });
     }
   });
 

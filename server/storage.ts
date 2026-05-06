@@ -237,6 +237,9 @@ export interface IStorage {
   }>;
   getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
   getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>>;
+  getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number }>;
+  incrementMiniEnrichAttempts(assetId: number): Promise<void>;
+  backfillMiniEnrichAttempts(): Promise<number>;
 
   createEnrichmentJob(total: number): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void>;
@@ -873,7 +876,8 @@ export class DatabaseStorage implements IStorage {
             // Reset enrichedAt when content changes so re-enrichment is triggered.
             // Also reset deepEnrichAttempts so the asset is eligible for bucket-C
             // low-quality retry again if the fresh deep-enrich result is still thin.
-            ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0 } : {}),
+            // miniEnrichAttempts is also reset so the fresh content gets a clean mini pass.
+            ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0, miniEnrichAttempts: 0 } : {}),
           })
           .where(eq(ingestedAssets.id, existing.id));
       }
@@ -977,9 +981,10 @@ export class DatabaseStorage implements IStorage {
             // Heal sourceUrl if it was previously null and we now have a real URL
             ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
             // Reset enrichedAt so the asset gets re-enriched with improved content.
-            // Also reset deepEnrichAttempts so bucket-C low-quality retry is available again.
+            // Also reset deepEnrichAttempts and miniEnrichAttempts so retry buckets are available again.
             enrichedAt: null,
             deepEnrichAttempts: 0,
+            miniEnrichAttempts: 0,
           })
           .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
       }
@@ -1053,6 +1058,9 @@ export class DatabaseStorage implements IStorage {
     if (data.deviceAttributes !== undefined) updateData.deviceAttributes = data.deviceAttributes ?? null;
 
     updateData.enrichmentSources = newSources;
+    // Atomically increment attempt counter on every successful GPT call.
+    // Using COALESCE so NULL values are treated as 0 (safe for legacy rows).
+    updateData.miniEnrichAttempts = sql`COALESCE(${ingestedAssets.miniEnrichAttempts}, 0) + 1` as unknown as number;
 
     await db.update(ingestedAssets).set(updateData).where(eq(ingestedAssets.id, id));
   }
@@ -2276,6 +2284,7 @@ export class DatabaseStorage implements IStorage {
       WHERE relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND COALESCE(mini_enrich_attempts, 0) < 3
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
@@ -2291,13 +2300,11 @@ export class DatabaseStorage implements IStorage {
     return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>;
   }
 
-  async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number }> {
+  async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number }> {
     // Select relevant, non-sparse assets that are either unscored OR have 3+ unknown key fields,
     // with sufficient description length (>150 chars) to be worth a mini pass.
-    const [row] = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(ingestedAssets)
-      .where(sql`
+    // Assets with mini_enrich_attempts >= 3 are excluded from actionable queue but counted separately as exhausted.
+    const FIELD_UNKNOWN_PREDICATE = sql`(
         relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
@@ -2310,9 +2317,51 @@ export class DatabaseStorage implements IStorage {
             (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
           ) >= 3
         )
-      `);
+      )`;
+
+    const [row] = await db
+      .select({
+        count: sql<number>`COUNT(*) FILTER (WHERE ${FIELD_UNKNOWN_PREDICATE} AND COALESCE(mini_enrich_attempts, 0) < 3)::int`,
+        exhaustedCount: sql<number>`COUNT(*) FILTER (WHERE ${FIELD_UNKNOWN_PREDICATE} AND COALESCE(mini_enrich_attempts, 0) >= 3)::int`,
+      })
+      .from(ingestedAssets);
+
     const count = row?.count ?? 0;
-    return { count, costEstimate: count * 0.0003 };
+    const exhaustedCount = row?.exhaustedCount ?? 0;
+    return { count, costEstimate: count * 0.0003, exhaustedCount };
+  }
+
+  async incrementMiniEnrichAttempts(assetId: number): Promise<void> {
+    await db
+      .update(ingestedAssets)
+      .set({ miniEnrichAttempts: sql`COALESCE(${ingestedAssets.miniEnrichAttempts}, 0) + 1` as unknown as number })
+      .where(eq(ingestedAssets.id, assetId));
+  }
+
+  async backfillMiniEnrichAttempts(): Promise<number> {
+    // Seed mini_enrich_attempts = 1 for assets that have already been through a mini pass
+    // (enriched_at IS NOT NULL) but still have 3+ unknown fields. This prevents them from
+    // being re-queued with a fresh 0 counter — they still get one more clean attempt (1 < 3).
+    // Assets that are already fully resolved or have mini_enrich_attempts > 0 are unchanged.
+    const result = await db.execute(sql`
+      UPDATE ingested_assets
+      SET mini_enrich_attempts = 1
+      WHERE mini_enrich_attempts = 0
+        AND enriched_at IS NOT NULL
+        AND relevant = true
+        AND (data_sparse IS NULL OR data_sparse = false)
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND (
+          (completeness_score IS NULL OR completeness_score = 0)
+          OR (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+          ) >= 3
+        )
+    `);
+    return (result as any).rowCount ?? 0;
   }
 
   async flagDataSparse(): Promise<number> {
