@@ -231,47 +231,131 @@ export async function enrichWithDetailPages(
 // ---------------------------------------------------------------------------
 // TechPublisher-specific structured extraction
 // ---------------------------------------------------------------------------
-// TechPublisher sites (Rochester, Tufts, Brown, Princeton, UC campuses, etc.)
-// serve rich inventor data in the static HTML response. Inventor names appear
-// as anchor elements whose href contains `type=i` — TechPublisher's own
-// internal search parameter convention. Categories follow the same pattern
-// with `type=c`, and the <meta name="keywords"> tag carries a comma-separated
-// category list on many deployments.
+// TechPublisher-specific structured extraction
+// ---------------------------------------------------------------------------
+// TechPublisher is an ASP.NET-based licensing platform used by ~70 institutions.
+// This dedicated enrichment function (mirroring enrichInPartListings for InPart)
+// uses a three-pass strategy per detail page:
 //
-// This function mirrors enrichInPartListings: a dedicated platform-specific
-// extraction pass that uses TechPublisher's native HTML conventions as the
-// primary strategy, with standard CSS-selector fallbacks for non-standard
-// deployments.
+//   Pass 1 — JSON data island: parse any <script type="application/json"> tags
+//             and __NEXT_DATA__ (Next.js). Newer or customised TechPublisher
+//             deployments may embed structured payloads here; field names are
+//             normalised across common variants.
 //
-// Filter scope: listings that are thin (no description) OR that already have
-// a description but are still missing inventors — ensuring inventor fill
-// regardless of whether the listing had a description from another source.
+//   Pass 2 — TechPublisher HTML conventions: inventor names as anchor links
+//             with `type=i` in href, categories in <meta name="keywords">,
+//             and mailto links for contact — all present in static HTML
+//             across observed deployments (Rochester, Tufts, Brown, etc.).
+//
+//   Pass 3 — Generic CSS selectors: standard TTO class names (#inventorLinks,
+//             .field--name-field-inventors, .patent-status, etc.) as last-resort
+//             fallback for non-standard or future deployments.
+//
+// Filter scope: thin listings AND listings with descriptions but missing
+// inventors — so inventor fill is not blocked by pre-existing descriptions.
 // ---------------------------------------------------------------------------
 
 const TP_CONCURRENCY = 5;
 const TP_TIMEOUT = 14_000;
 
-// Matches TechPublisher reference numbers embedded as plain text, e.g.
-// "URV Reference Number: 1-18137" or "Case No. 2024-ABC-001".
+// Matches TechPublisher reference numbers in body text, e.g. "URV Reference Number: 1-18137".
 const TP_REF_RE =
   /(?:Reference\s*(?:Number|No\.?)|Docket\s*(?:Number|No\.?)|Case\s*(?:Number|No\.?))[\s:]+([A-Z0-9][\w\-\/\.]{1,30})/i;
 
-// CSS-selector fallbacks for inventor extraction on non-standard TechPublisher
-// deployments that may not follow the type=i anchor convention.
-const TP_INVENTOR_FALLBACK_SELS = [
-  "#inventorLinks",
-  ".field--name-field-inventors li",
-  ".field--name-field-inventors .field__item",
-  ".inventors li",
-  ".inventor-name",
-];
+/** Structured fields that may be extracted from a JSON data island. */
+interface TpJsonIsland {
+  inventors?: string[];
+  patentStatus?: string;
+  licensingStatus?: string;
+  technologyId?: string;
+  categories?: string[];
+  description?: string;
+  abstract?: string;
+}
+
+/**
+ * Pass 1 — try to extract structured fields from embedded JSON.
+ * Checks <script type="application/json"> tags and __NEXT_DATA__ (Next.js).
+ * Returns an empty object when no usable JSON is found.
+ */
+function parseTechPublisherJsonIsland(
+  html: string,
+  $: ReturnType<typeof load>,
+): TpJsonIsland {
+  const result: TpJsonIsland = {};
+
+  function applyJsonObject(data: Record<string, unknown>): boolean {
+    let found = false;
+
+    // Inventor field name variants used by different TechPublisher versions.
+    const invRaw =
+      data["inventors"] ?? data["Inventors"] ?? data["inventorNames"] ??
+      data["inventor_list"] ?? data["inventorList"];
+    if (Array.isArray(invRaw) && invRaw.length > 0) {
+      result.inventors = (invRaw as unknown[])
+        .map((i) => (typeof i === "string" ? i : (i as Record<string,string>)?.name ?? ""))
+        .filter((s) => s.length > 2);
+      if (result.inventors.length > 0) found = true;
+    }
+
+    const psRaw = data["patentStatus"] ?? data["patent_status"] ??
+      data["PatentStatus"] ?? data["ipStatus"];
+    if (typeof psRaw === "string" && psRaw) { result.patentStatus = psRaw; found = true; }
+
+    const lsRaw = data["licensingStatus"] ?? data["licensing_status"] ??
+      data["LicensingStatus"];
+    if (typeof lsRaw === "string" && lsRaw) { result.licensingStatus = lsRaw; found = true; }
+
+    const tidRaw =
+      data["technologyId"] ?? data["technology_id"] ?? data["caseNumber"] ??
+      data["docketNumber"] ?? data["referenceNumber"];
+    if (typeof tidRaw === "string" && tidRaw) { result.technologyId = tidRaw; found = true; }
+
+    const catsRaw = data["categories"] ?? data["Keywords"] ?? data["keywords"] ?? data["tags"];
+    if (Array.isArray(catsRaw) && catsRaw.length > 0) {
+      result.categories = (catsRaw as unknown[]).map((c) => String(c)).filter((s) => s.length > 0);
+      if (result.categories.length > 0) found = true;
+    }
+
+    return found;
+  }
+
+  // 1a. <script type="application/json"> embedded data blobs.
+  $('script[type="application/json"]').each((_, el) => {
+    if (result.inventors) return;
+    try {
+      const data = JSON.parse($(el).text()) as Record<string, unknown>;
+      if (data && typeof data === "object") applyJsonObject(data);
+    } catch {}
+  });
+
+  // 1b. __NEXT_DATA__ (Next.js SPA shell) — dehydrated query state.
+  if (!result.inventors) {
+    const ndm = NEXT_DATA_RE.exec(html);
+    if (ndm) {
+      try {
+        const nd = JSON.parse(ndm[1]) as Record<string, unknown>;
+        const queries: Record<string, unknown>[] =
+          (((nd?.props as Record<string, unknown>)?.pageProps as Record<string, unknown>)
+            ?.dehydratedState as Record<string, unknown>)?.queries as Record<string, unknown>[] ?? [];
+        for (const q of queries) {
+          const data = (q?.state as Record<string, unknown>)?.data as Record<string, unknown>;
+          if (!data) continue;
+          if (applyJsonObject(data)) break;
+          const details = data?.details as Record<string, unknown>;
+          if (details && applyJsonObject(details)) break;
+        }
+      } catch {}
+    }
+  }
+
+  return result;
+}
 
 export async function enrichTechPublisherListings(
   results: ScrapedListing[],
   signal?: AbortSignal,
 ): Promise<void> {
-  // Fetch detail pages for thin listings AND for any listing still missing
-  // inventors, so inventor fill is not blocked by pre-existing descriptions.
   const toEnrich = results.filter(
     (l) =>
       !l.description ||
@@ -298,38 +382,38 @@ export async function enrichTechPublisherListings(
 
       const $ = load(html);
 
-      // 1. Inventors — primary: type=i anchor links (TechPublisher's own convention).
-      //    Fallback: standard CSS selectors for non-standard deployments.
+      // ── Pass 1: JSON data island ──────────────────────────────────────────
+      const island = parseTechPublisherJsonIsland(html, $);
+
+      if (!listing.inventors && island.inventors && island.inventors.length > 0)
+        listing.inventors = island.inventors;
+      if (!listing.patentStatus && island.patentStatus)
+        listing.patentStatus = island.patentStatus.slice(0, 200);
+      if (!listing.licensingStatus && island.licensingStatus)
+        listing.licensingStatus = island.licensingStatus.slice(0, 200);
+      if (!listing.technologyId && island.technologyId)
+        listing.technologyId = island.technologyId.slice(0, 100);
+      if ((!listing.categories || listing.categories.length === 0) && island.categories)
+        listing.categories = island.categories;
+
+      // ── Pass 2: TechPublisher HTML conventions ────────────────────────────
+      // Inventor links: each inventor is an anchor whose href contains `type=i`.
       if (!listing.inventors || listing.inventors.length === 0) {
         const inventors: string[] = [];
         $('a[href*="type=i"]').each((_, el) => {
           const name = cleanText($(el).text());
           if (name && name.length > 2) inventors.push(name);
         });
-        if (inventors.length > 0) {
-          listing.inventors = inventors;
-        } else {
-          // CSS fallbacks for non-standard TechPublisher deployments.
-          for (const sel of TP_INVENTOR_FALLBACK_SELS) {
-            const fallbackInvs: string[] = [];
-            $(sel).each((_, el) => {
-              const t = cleanText($(el).text());
-              if (t && t.length > 2) fallbackInvs.push(t);
-            });
-            if (fallbackInvs.length > 0) { listing.inventors = fallbackInvs; break; }
-          }
-        }
+        if (inventors.length > 0) listing.inventors = inventors;
       }
 
-      // 2. Categories — prefer the `<meta name="keywords">` tag (machine-readable,
-      //    comma-separated); fall back to `type=c` category anchor links.
+      // Categories: <meta name="keywords"> (machine-readable, preferred)
+      // or type=c anchor links (fallback).
       if (!listing.categories || listing.categories.length === 0) {
         const kwContent = $('meta[name="keywords"]').attr("content");
         if (kwContent) {
           const cats = kwContent.split(",").map((c) => c.trim()).filter((c) => c.length > 0);
-          if (cats.length > 0) {
-            listing.categories = cats;
-          }
+          if (cats.length > 0) listing.categories = cats;
         }
         if (!listing.categories || listing.categories.length === 0) {
           const catEls: string[] = [];
@@ -341,64 +425,64 @@ export async function enrichTechPublisherListings(
         }
       }
 
-      // 3. Contact email — first mailto link on the page.
+      // Contact email.
       if (!listing.contactEmail) {
         const href = $('a[href^="mailto:"]').first().attr("href");
         if (href) listing.contactEmail = href.replace(/^mailto:/i, "").trim().slice(0, 200);
       }
 
-      // 4. Description — TechPublisher-specific class hierarchy.
+      // ── Pass 3: Generic CSS selectors (last-resort fallback) ──────────────
+      // Inventors.
+      if (!listing.inventors || listing.inventors.length === 0) {
+        const cssInvSels = [
+          "#inventorLinks",
+          ".field--name-field-inventors li",
+          ".field--name-field-inventors .field__item",
+          ".inventors li",
+          ".inventor-name",
+        ];
+        for (const sel of cssInvSels) {
+          const invs: string[] = [];
+          $(sel).each((_, el) => {
+            const t = cleanText($(el).text());
+            if (t && t.length > 2) invs.push(t);
+          });
+          if (invs.length > 0) { listing.inventors = invs; break; }
+        }
+      }
+
+      // Description.
       if (!listing.description || listing.description.length < 30) {
-        const descSelectors = [
-          ".c_tp_description",
-          ".tech-description",
-          ".field--name-body .field__item",
-          ".field--name-body",
-          ".technology-listing-description",
-          "#field-description",
-          ".views-field-body .field-content",
-          ".tech-detail__description",
-          ".technology-description",
-          "#description",
-          ".description",
-          "article .content",
-          ".entry-content",
-          "main p",
+        const descSels = [
+          ".c_tp_description", ".tech-description",
+          ".field--name-body .field__item", ".field--name-body",
+          ".technology-listing-description", "#field-description",
+          ".views-field-body .field-content", ".tech-detail__description",
+          ".technology-description", "#description", ".description",
+          "article .content", ".entry-content", "main p",
         ];
-        for (const sel of descSelectors) {
+        for (const sel of descSels) {
           const text = cleanText($(sel).text());
-          if (text && text.length > 30) {
-            listing.description = text.slice(0, 5_000);
-            break;
-          }
+          if (text && text.length > 30) { listing.description = text.slice(0, 5_000); break; }
         }
       }
 
-      // 5. Abstract.
+      // Abstract.
       if (!listing.abstract) {
-        const absSelectors = [
-          ".field--name-field-abstract .field__item",
-          ".field--name-field-abstract",
-          ".abstract",
-          "#abstract",
+        const absSels = [
+          ".field--name-field-abstract .field__item", ".field--name-field-abstract",
+          ".abstract", "#abstract",
         ];
-        for (const sel of absSelectors) {
+        for (const sel of absSels) {
           const text = cleanText($(sel).text());
-          if (text && text.length > 20) {
-            listing.abstract = text.slice(0, 5_000);
-            break;
-          }
+          if (text && text.length > 20) { listing.abstract = text.slice(0, 5_000); break; }
         }
       }
 
-      // 6. Technology ID — try CSS selectors first, then regex on raw HTML.
+      // Technology ID.
       if (!listing.technologyId) {
-        const tidSelectors = [
-          ".field--name-field-technology-id .field__item",
-          ".tech-id",
-          ".docket-number",
-        ];
-        for (const sel of tidSelectors) {
+        const tidSels = [".field--name-field-technology-id .field__item", ".tech-id", ".docket-number"];
+        for (const sel of tidSels) {
           const text = cleanText($(sel).text());
           if (text) { listing.technologyId = text.slice(0, 100); break; }
         }
@@ -408,12 +492,10 @@ export async function enrichTechPublisherListings(
         }
       }
 
-      // 7. Patent / licensing status — CSS selectors only (no reliable text pattern).
+      // Patent status.
       if (!listing.patentStatus) {
         const psSels = [
-          ".c_tp_patent",
-          ".field--name-field-patent-status .field__item",
-          ".patent-status",
+          ".c_tp_patent", ".field--name-field-patent-status .field__item", ".patent-status",
         ];
         for (const sel of psSels) {
           const text = cleanText($(sel).text());
@@ -421,10 +503,10 @@ export async function enrichTechPublisherListings(
         }
       }
 
+      // Licensing status.
       if (!listing.licensingStatus) {
         const lsSels = [
-          ".field--name-field-licensing-status .field__item",
-          ".licensing-status",
+          ".field--name-field-licensing-status .field__item", ".licensing-status",
         ];
         for (const sel of lsSels) {
           const text = cleanText($(sel).text());
