@@ -4982,8 +4982,8 @@ export async function registerRoutes(
           AND (
             (target IS NULL OR target = '' OR target = 'unknown')
             OR (indication IS NULL OR indication = '' OR indication = 'unknown')
-            OR (mechanism_of_action IS NULL OR mechanism_of_action = '')
-            OR (comparable_drugs IS NULL OR comparable_drugs = '')
+            OR (mechanism_of_action IS NULL OR mechanism_of_action = '' OR mechanism_of_action = 'unknown')
+            OR (comparable_drugs IS NULL OR comparable_drugs = '' OR comparable_drugs = 'unknown')
           )
       `);
       const total = Number(result.rows[0]?.total ?? 0);
@@ -5016,6 +5016,9 @@ export async function registerRoutes(
   app.post("/api/admin/enrichment/drug-biologic-gap-fill", requireAdmin, async (req, res) => {
     if (dbgRunning) return res.status(409).json({ error: "Drug-biologic gap-fill already running" });
     if (bandRunning) return res.status(409).json({ error: "Band enrichment is running — stop it first" });
+    if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is running — stop it first" });
+    if (classifyRunning) return res.status(409).json({ error: "Asset classification is running — stop it first" });
+    if (drRunning) return res.status(409).json({ error: "Detail re-fetch is running — stop it first" });
 
     const { cap: rawCap = 500 } = req.body as { cap?: number };
     const cap = Math.min(5000, Math.max(10, Number(rawCap) || 500));
@@ -5039,8 +5042,8 @@ export async function registerRoutes(
           AND (
             (target IS NULL OR target = '' OR target = 'unknown')
             OR (indication IS NULL OR indication = '' OR indication = 'unknown')
-            OR (mechanism_of_action IS NULL OR mechanism_of_action = '')
-            OR (comparable_drugs IS NULL OR comparable_drugs = '')
+            OR (mechanism_of_action IS NULL OR mechanism_of_action = '' OR mechanism_of_action = 'unknown')
+            OR (comparable_drugs IS NULL OR comparable_drugs = '' OR comparable_drugs = 'unknown')
           )
         ORDER BY COALESCE(completeness_score, 0) DESC
         LIMIT ${cap}
