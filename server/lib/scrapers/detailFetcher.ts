@@ -3,7 +3,7 @@ import { fetchHtml, cleanText, extractText } from "./utils";
 
 const DETAIL_CONCURRENCY = 5;
 const DETAIL_TIMEOUT = 12_000;
-const DETAIL_BATCH_LIMIT = 100;
+const DETAIL_BATCH_LIMIT = 500;
 
 export interface DetailSelectors {
   description?: string[];

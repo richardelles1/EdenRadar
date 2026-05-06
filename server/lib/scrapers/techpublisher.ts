@@ -1,6 +1,7 @@
 import type { CheerioAPI } from "cheerio";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { fetchHtml, cleanText, SiteHttpError } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 export interface TechPublisherOptions {
   baseUrl?: string;
@@ -253,6 +254,70 @@ export function createTechPublisherScraper(
       `[scraper] ${institution}: ${results.length} listings ` +
       `(RSS: ${rssCount}, pages: ${pgCount}, cats: ${catCount}, sitemap-pages: ${sitemapPageCount})`
     );
+
+    if (!signal?.aborted && results.length > 0) {
+      const thinCount = results.filter(
+        (l) => !l.description || l.description === l.title || l.description.length < 30
+      ).length;
+      if (thinCount > 0) {
+        console.log(`[scraper] ${institution}: fetching detail pages for ${thinCount} thin listings...`);
+        await enrichWithDetailPages(
+          results,
+          {
+            description: [
+              ".field--name-body .field__item",
+              ".field--name-body",
+              ".technology-listing-description",
+              "#field-description",
+              ".views-field-body .field-content",
+              ".tech-detail__description",
+              ".technology-description",
+              "#description",
+              ".description",
+              "article .content",
+              ".entry-content",
+              "main p",
+            ],
+            abstract: [
+              ".field--name-field-abstract .field__item",
+              ".field--name-field-abstract",
+              ".tech-detail__abstract",
+              ".technology-abstract",
+              "#abstract",
+              ".abstract",
+            ],
+            inventors: [
+              ".field--name-field-inventors li",
+              ".field--name-field-inventors .field__item",
+              ".inventors li",
+              ".inventor-name",
+            ],
+            patentStatus: [
+              ".field--name-field-patent-status .field__item",
+              ".field--name-field-patent-status",
+              ".patent-status",
+              ".ip-status",
+            ],
+            licensingStatus: [
+              ".field--name-field-licensing-status .field__item",
+              ".field--name-field-licensing-status",
+              ".licensing-status",
+            ],
+            technologyId: [
+              ".field--name-field-technology-id .field__item",
+              ".tech-id",
+              ".docket-number",
+            ],
+          },
+          500,
+          signal
+        );
+        const enriched = results.filter(
+          (l) => l.description && l.description !== l.title && l.description.length >= 30
+        ).length;
+        console.log(`[scraper] ${institution}: ${enriched} listings now have detail content`);
+      }
+    }
 
     return results;
   }
