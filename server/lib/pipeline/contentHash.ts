@@ -161,11 +161,12 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
   score += summaryScore(asset.summary, 10);
   if (hasValue(asset.abstract)) score += 8;
   if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
-  // IP coverage: patentStatus and ipType are complementary signals worth 8 pts combined
+  // IP coverage: patentStatus and/or ipType — either one earns the full 8 pts.
+  // The "/" in the spec means "or", so a patent filing alone or an IP type alone
+  // is sufficient evidence of protectable IP to count as fully covered.
   const hasPatent = hasValue(asset.patentStatus) && asset.patentStatus !== "unknown";
   const hasIpType = hasValue(asset.ipType);
-  if (hasPatent && hasIpType) score += 8;
-  else if (hasPatent || hasIpType) score += 5;
+  if (hasPatent || hasIpType) score += 8;
   if (hasValue(asset.mechanismOfAction)) score += 8;
   if (hasValue(asset.inventors)) score += 4;
   if (hasValue(asset.comparableDrugs)) score += 4;
