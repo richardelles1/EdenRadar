@@ -1,5 +1,6 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { fetchHtml, cleanText } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 export interface FlintboxOrg {
   slug: string;
@@ -141,6 +142,49 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
                   technologyId: attrs.technologyNumber ?? attrs.technology_number ?? (techId ? String(techId) : undefined),
                 });
               }
+              const thinCount = results.filter(
+                (l) => !l.description || l.description === l.title || l.description.length < 30
+              ).length;
+              if (thinCount > 0) {
+                console.log(`[scraper] ${institution}: fetching detail pages for ${thinCount} thin Flintbox listings...`);
+                await enrichWithDetailPages(results, {
+                  description: [
+                    ".technology-summary",
+                    ".field--name-body .field__item",
+                    ".field--name-body",
+                    ".tech-summary",
+                    "#description",
+                    ".description",
+                    "article .content",
+                    ".entry-content",
+                    "main p",
+                  ],
+                  abstract: [
+                    ".technology-abstract",
+                    ".field--name-field-abstract .field__item",
+                    ".field--name-field-abstract",
+                    "#abstract",
+                    ".abstract",
+                  ],
+                  inventors: [
+                    ".inventor-list li",
+                    ".inventors li",
+                    ".field--name-field-inventors li",
+                    ".inventor-name",
+                  ],
+                  patentStatus: [
+                    ".patent-status",
+                    ".field--name-field-patent-status .field__item",
+                    ".field--name-field-patent-status",
+                    ".ip-status",
+                  ],
+                  licensingStatus: [
+                    ".licensing-status",
+                    ".field--name-field-licensing-status .field__item",
+                    ".field--name-field-licensing-status",
+                  ],
+                });
+              }
               console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox API`);
               return results;
             }
@@ -170,7 +214,45 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
         }
 
         if (results.length > 0) {
-          console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox HTML`);
+          console.log(`[scraper] ${institution}: fetching detail pages for ${results.length} Flintbox HTML listings...`);
+          await enrichWithDetailPages(results, {
+            description: [
+              ".technology-summary",
+              ".field--name-body .field__item",
+              ".field--name-body",
+              ".tech-summary",
+              "#description",
+              ".description",
+              "article .content",
+              ".entry-content",
+              "main p",
+            ],
+            abstract: [
+              ".technology-abstract",
+              ".field--name-field-abstract .field__item",
+              ".field--name-field-abstract",
+              "#abstract",
+              ".abstract",
+            ],
+            inventors: [
+              ".inventor-list li",
+              ".inventors li",
+              ".field--name-field-inventors li",
+              ".inventor-name",
+            ],
+            patentStatus: [
+              ".patent-status",
+              ".field--name-field-patent-status .field__item",
+              ".field--name-field-patent-status",
+              ".ip-status",
+            ],
+            licensingStatus: [
+              ".licensing-status",
+              ".field--name-field-licensing-status .field__item",
+              ".field--name-field-licensing-status",
+            ],
+          });
+          console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox HTML (detail-enriched)`);
           return results;
         }
 

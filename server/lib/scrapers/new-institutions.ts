@@ -2,7 +2,7 @@ import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
 import { fetchHtml, fetchJson, cleanText, SiteHttpError } from "./utils";
-import { enrichWithDetailPages } from "./detailFetcher";
+import { enrichWithDetailPages, type DetailSelectors } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
@@ -18,6 +18,38 @@ function createStubScraper(institution: string, reason = "no public TTO listing 
 
 const IN_PART_API = "https://app.in-part.com/api/v3/public/opportunities";
 const IN_PART_LIMIT = 24;
+
+const IN_PART_DETAIL_SELECTORS: DetailSelectors = {
+  description: [
+    "[data-testid='opportunity-description']",
+    ".opportunity-description",
+    ".opportunity-details__description",
+    ".description",
+    ".summary",
+    "main p",
+    "article p",
+  ],
+  abstract: [
+    "[data-testid='opportunity-summary']",
+    ".opportunity-summary",
+    ".summary-text",
+  ],
+  inventors: [
+    "[data-testid='researcher-name']",
+    ".researcher-name",
+    ".inventor",
+    ".researcher",
+  ],
+  patentStatus: [
+    "[data-testid='patent-status']",
+    ".patent-status",
+    ".ip-status",
+  ],
+  licensingStatus: [
+    "[data-testid='licensing-status']",
+    ".licensing-status",
+  ],
+};
 
 function createInPartScraper(subdomain: string, institution: string): InstitutionScraper {
   return {
@@ -87,6 +119,7 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
                 } else {
                   console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR fallback)`);
                 }
+                await enrichWithDetailPages(results, IN_PART_DETAIL_SELECTORS);
                 return results;
               }
             }
@@ -131,7 +164,9 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
           }
         }
 
-        console.log(`[scraper] ${institution}: ${allResults.length} listings (in-part API, ${totalPages} pages)`);
+        console.log(`[scraper] ${institution}: ${allResults.length} listings (in-part API, ${totalPages} pages) — fetching detail pages...`);
+        await enrichWithDetailPages(allResults, IN_PART_DETAIL_SELECTORS);
+        console.log(`[scraper] ${institution}: detail fetch complete`);
         return allResults;
       } catch (err: any) {
         if (err instanceof SiteHttpError) throw err;
