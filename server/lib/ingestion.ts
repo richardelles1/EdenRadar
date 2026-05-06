@@ -706,8 +706,15 @@ export async function runScrapedFieldRefresh(
   const scraperType = (scraper.scraperType === "stub" ? "http" : (scraper.scraperType ?? "http")) as "playwright" | "http" | "api";
   const SCRAPER_TIMEOUT_MS = scraper.scraperTimeoutMs ?? TIMEOUT_BY_TYPE[scraperType] ?? TIMEOUT_BY_TYPE.http;
 
+  // Acquire the sync lock to prevent concurrent scrape/refresh on the same institution.
+  if (!tryAcquireSyncLock(institutionName, scraperType)) {
+    const active = getSyncRunningFor();
+    throw new Error(`Sync lock unavailable — active sync: ${active ?? "unknown"}`);
+  }
+
   console.log(`[refresh-fields] ${institutionName}: starting scraped-field refresh...`);
 
+  try {
   // Run the scraper with an empty knownUrls set so we get the full catalog including
   // already-indexed assets (not just new ones).
   let listings: ScrapedListing[] | undefined;
@@ -764,4 +771,7 @@ export async function runScrapedFieldRefresh(
     }));
 
   return storage.bulkRefreshScrapedFields(institutionName, normalized);
+  } finally {
+    releaseSyncLock(institutionName);
+  }
 }

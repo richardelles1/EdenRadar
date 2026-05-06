@@ -1726,21 +1726,24 @@ export class DatabaseStorage implements IStorage {
       const row = existingByFp.get(listing.fingerprint);
       if (!row) continue;
       const hv = (row.humanVerified as Record<string, boolean> | null) ?? {};
+      // Key-existence check (not truthiness): a stored false still means the
+      // field is human-verified and should not be overwritten by the scraper.
+      const hv_has = (key: string) => Object.prototype.hasOwnProperty.call(hv, key);
 
       // Null-fill only: skip fields already populated or human-verified
-      if (!hv.abstract && !row.abstract && listing.abstract)
+      if (!hv_has("abstract") && !row.abstract && listing.abstract)
         abstractBatch.set(row.id, listing.abstract);
-      if (!hv.patentStatus && !row.patentStatus && listing.patentStatus)
+      if (!hv_has("patentStatus") && !row.patentStatus && listing.patentStatus)
         patentBatch.set(row.id, listing.patentStatus);
-      if (!hv.licensingStatus && !row.licensingStatus && listing.licensingStatus)
+      if (!hv_has("licensingStatus") && !row.licensingStatus && listing.licensingStatus)
         licensingBatch.set(row.id, listing.licensingStatus);
-      if (!hv.contactEmail && !row.contactEmail && listing.contactEmail)
+      if (!hv_has("contactEmail") && !row.contactEmail && listing.contactEmail)
         contactBatch.set(row.id, listing.contactEmail);
-      if (!hv.technologyId && !row.technologyId && listing.technologyId)
+      if (!hv_has("technologyId") && !row.technologyId && listing.technologyId)
         techIdBatch.set(row.id, listing.technologyId);
-      if (!hv.inventors && !(row.inventors as string[] | null)?.length && listing.inventors?.length)
+      if (!hv_has("inventors") && !(row.inventors as string[] | null)?.length && listing.inventors?.length)
         inventorsBatch.set(row.id, listing.inventors);
-      if (!hv.categories && !(row.categories as string[] | null)?.length && listing.categories?.length)
+      if (!hv_has("categories") && !(row.categories as string[] | null)?.length && listing.categories?.length)
         categoriesBatch.set(row.id, listing.categories);
 
       // Queue for LLM re-enrichment when the fresh description is >20% longer than
@@ -1749,6 +1752,8 @@ export class DatabaseStorage implements IStorage {
       const newLen = (listing.description || "").length;
       if (existingLen > 0 && newLen > existingLen * 1.2) reenrichIds.push(row.id);
     }
+    // Deduplicate reenrichIds in case the scraper emitted duplicate fingerprints
+    const uniqueReenrichIds = [...new Set(reenrichIds)];
 
     const CHUNK = 500;
 
@@ -1799,9 +1804,9 @@ export class DatabaseStorage implements IStorage {
     const fieldsUpdated = counts.reduce((a, b) => a + b, 0);
 
     // Batched re-enrichment reset for rows whose description grew substantially.
-    if (reenrichIds.length > 0) {
-      for (let i = 0; i < reenrichIds.length; i += CHUNK) {
-        const chunk = reenrichIds.slice(i, i + CHUNK);
+    if (uniqueReenrichIds.length > 0) {
+      for (let i = 0; i < uniqueReenrichIds.length; i += CHUNK) {
+        const chunk = uniqueReenrichIds.slice(i, i + CHUNK);
         await db
           .update(ingestedAssets)
           .set({ enrichedAt: null, deepEnrichAttempts: 0 })
@@ -1809,7 +1814,7 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const queuedForReenrichment = reenrichIds.length;
+    const queuedForReenrichment = uniqueReenrichIds.length;
     console.log(
       `[storage] bulkRefreshScrapedFields(${institution}): checked=${listings.length} fieldsUpdated=${fieldsUpdated} queued=${queuedForReenrichment}`,
     );
