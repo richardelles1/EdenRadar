@@ -1,7 +1,7 @@
 import type { CheerioAPI } from "cheerio";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { fetchHtml, cleanText, SiteHttpError } from "./utils";
-import { enrichWithDetailPages } from "./detailFetcher";
+import { enrichTechPublisherListings } from "./detailFetcher";
 
 export interface TechPublisherOptions {
   baseUrl?: string;
@@ -262,76 +262,15 @@ export function createTechPublisherScraper(
       const thinCount = thinListings.length;
       if (thinCount > 0) {
         console.log(`[scraper] ${institution}: fetching detail pages for ${thinCount} thin listings...`);
-        await enrichWithDetailPages(
-          results,
-          {
-            description: [
-              ".c_tp_description",
-              ".tech-description",
-              ".field--name-body .field__item",
-              ".field--name-body",
-              ".technology-listing-description",
-              "#field-description",
-              ".views-field-body .field-content",
-              ".tech-detail__description",
-              ".technology-description",
-              "#description",
-              ".description",
-              "article .content",
-              ".entry-content",
-              "main p",
-            ],
-            abstract: [
-              ".field--name-field-abstract .field__item",
-              ".field--name-field-abstract",
-              ".tech-detail__abstract",
-              ".technology-abstract",
-              "#abstract",
-              ".abstract",
-            ],
-            inventors: [
-              // TechPublisher embeds inventor links as <a href="...type=i">Name</a>
-              // in the static HTML sidebar — no JS rendering required.
-              'a[href*="type=i"]',
-              // Legacy/variant selectors for non-standard TechPublisher deployments:
-              "#inventorLinks",
-              ".field--name-field-inventors li",
-              ".field--name-field-inventors .field__item",
-              ".inventors li",
-              ".inventor-name",
-            ],
-            contactEmail: [
-              'a[href^="mailto:"]',
-            ],
-            categories: [
-              // TechPublisher category links: <a href="...type=c">Category</a>
-              'a[href*="type=c"]',
-            ],
-            patentStatus: [
-              ".c_tp_patent",
-              ".field--name-field-patent-status .field__item",
-              ".field--name-field-patent-status",
-              ".patent-status",
-              ".ip-status",
-            ],
-            licensingStatus: [
-              ".field--name-field-licensing-status .field__item",
-              ".field--name-field-licensing-status",
-              ".licensing-status",
-            ],
-            technologyId: [
-              ".field--name-field-technology-id .field__item",
-              ".tech-id",
-              ".docket-number",
-            ],
-          },
-          9999,
-          signal
-        );
+        // enrichTechPublisherListings uses TechPublisher's native static-HTML
+        // conventions (type=i inventor anchors, meta keywords, mailto links,
+        // reference-number regex) rather than generic CSS-selector guessing.
+        await enrichTechPublisherListings(results, signal);
         const enrichedCount = thinListings.filter(
           (l) => l.description && l.description !== l.title && l.description.length >= 50
         ).length;
-        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinCount} enriched`);
+        const inventorCount = results.filter(l => l.inventors && l.inventors.length > 0).length;
+        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinCount} enriched, ${inventorCount} with inventors`);
         const sample = results.find(l => (l.description?.length ?? 0) > 200);
         if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
       }
