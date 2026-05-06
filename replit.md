@@ -8,11 +8,12 @@ AI-powered biotech asset matchmaking platform that ingests signals from various 
 - **Build**: `npm run build`
 - **Typecheck**: `npm run typecheck`
 - **Codegen**: `npm run codegen`
-- **DB Push**: `npx drizzle-kit push:pg` (for schema changes)
+- **DB Push**: `npx drizzle-kit push:pg` (for schema changes — targets `SUPABASE_DATABASE_URL`)
+- **Schema migration (safe, non-interactive)**: `node -e "const {Pool}=require('pg');const p=new Pool({connectionString:process.env.SUPABASE_DATABASE_URL});p.query('ALTER TABLE ...').then(()=>p.end())"`
 
 **Environment Variables**:
-- `DATABASE_URL`
-- `SUPABASE_DATABASE_URL`
+- `DATABASE_URL` — **NEVER USE. This is a local Replit-managed DB. All data lives in Supabase.**
+- `SUPABASE_DATABASE_URL` — **THE real database. Always use this for any direct SQL or migration.**
 - `OPENAI_API_KEY`
 - `SESSION_SECRET`
 - `VITE_SUPABASE_URL`
@@ -90,7 +91,7 @@ AI-powered biotech asset matchmaking platform that ingests signals from various 
 
 ## User preferences
 
-- _Populate as you build_
+- **NEVER use `DATABASE_URL` (local Replit DB) — all data is in Supabase (`SUPABASE_DATABASE_URL`).** Always run direct SQL and migrations against `SUPABASE_DATABASE_URL`.
 
 ## Gotchas
 
