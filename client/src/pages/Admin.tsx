@@ -3626,12 +3626,12 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue?.count ?? 0) === 0} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
+                <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue !== undefined && miniQueue.count === 0)} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
                   {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Run {Math.min(500, miniQueue?.count ?? 500).toLocaleString()} batch
                 </Button>
                 <Button size="sm" variant="outline"
                   onClick={() => { const rem = miniQueue?.count ?? 0; const cost = miniQueue?.costEstimate ?? 0; const ok = window.confirm(`Run mini-40 enrichment on ALL ${rem.toLocaleString()} un-scanned assets?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job will keep pulling the next 500 until the queue is empty. You can stop it at any time.`); if (ok) runEnrichment.mutate({ all: true }); }}
-                  disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue?.count ?? 0) === 0}
+                  disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue !== undefined && miniQueue.count === 0)}
                   className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30" data-testid="button-run-enrichment-all">
                   {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
