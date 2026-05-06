@@ -336,7 +336,7 @@ async function runStartupMigrations() {
     await mdb.execute(sql`ALTER TABLE sync_staging ADD COLUMN IF NOT EXISTS technology_id TEXT`);
     log("[startup] sync_staging rich-field columns ready", "startup");
   } catch (err: any) {
-    log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
+    log(`[startup] sync_staging rich-field column migration failed: ${err?.message}`, "startup");
   }
 
   // ── Impersonation tables (Task #736) ──────────────────────────────────────
