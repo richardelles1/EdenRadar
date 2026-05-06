@@ -258,8 +258,15 @@ export function sanitizeToVocab(value: string | null | undefined, vocab: "indica
   // For indication: allow free-text passthrough when no canonical match exists.
   // Disease names are too diverse to enumerate fully; a plausible free-text value
   // is more useful to buyers than silently discarding it as "unknown".
-  // For target: stay strict — HGNC symbols must match exactly to avoid noise.
   if (vocab === "indication") return normalized;
+
+  // For target: allow passthrough when the value looks like a gene or protein
+  // identifier rather than prose. Guard: ≤ 40 characters AND at most two spaces
+  // (e.g. "NRP1", "P2Y14 receptor", "apolipoprotein B" pass; sentences fail).
+  // Exact-match entries above always take priority; this only fires when no
+  // canonical HGNC symbol matched, preventing a 96% silent-discard rate.
+  const spaceCount = (normalized.match(/ /g) ?? []).length;
+  if (normalized.length <= 40 && spaceCount <= 2) return normalized;
 
   return "unknown";
 }
