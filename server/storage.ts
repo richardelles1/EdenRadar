@@ -237,7 +237,7 @@ export interface IStorage {
   }>;
   getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
   getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>>;
-  getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number }>;
+  getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }>;
   incrementMiniEnrichAttempts(assetId: number): Promise<void>;
   backfillMiniEnrichAttempts(): Promise<number>;
 
@@ -2300,10 +2300,12 @@ export class DatabaseStorage implements IStorage {
     return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>;
   }
 
-  async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number }> {
+  async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }> {
     // Select relevant, non-sparse assets that are either unscored OR have 3+ unknown key fields,
     // with sufficient description length (>150 chars) to be worth a mini pass.
     // Assets with mini_enrich_attempts >= 3 are excluded from actionable queue but counted separately as exhausted.
+    // backfillCount: assets already processed (enriched_at IS NOT NULL) that still have unknowns and mini_enrich_attempts=0.
+    // These are legacy assets that predate the attempt-cap column; the backfill endpoint seeds them to 1.
     const FIELD_UNKNOWN_PREDICATE = sql`(
         relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
@@ -2323,12 +2325,14 @@ export class DatabaseStorage implements IStorage {
       .select({
         count: sql<number>`COUNT(*) FILTER (WHERE ${FIELD_UNKNOWN_PREDICATE} AND COALESCE(mini_enrich_attempts, 0) < 3)::int`,
         exhaustedCount: sql<number>`COUNT(*) FILTER (WHERE ${FIELD_UNKNOWN_PREDICATE} AND COALESCE(mini_enrich_attempts, 0) >= 3)::int`,
+        backfillCount: sql<number>`COUNT(*) FILTER (WHERE ${FIELD_UNKNOWN_PREDICATE} AND COALESCE(mini_enrich_attempts, 0) = 0 AND enriched_at IS NOT NULL)::int`,
       })
       .from(ingestedAssets);
 
     const count = row?.count ?? 0;
     const exhaustedCount = row?.exhaustedCount ?? 0;
-    return { count, costEstimate: count * 0.0003, exhaustedCount };
+    const backfillCount = row?.backfillCount ?? 0;
+    return { count, costEstimate: count * 0.0003, exhaustedCount, backfillCount };
   }
 
   async incrementMiniEnrichAttempts(assetId: number): Promise<void> {

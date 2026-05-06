@@ -2805,7 +2805,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     refetchInterval: polling ? 1500 : false,
   });
 
-  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number; exhaustedCount: number }>({
+  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }>({
     queryKey: ["/api/admin/enrichment/mini-queue", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
@@ -3636,7 +3636,9 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
                 </Button>
-                <MiniBackfillButton pw={pw} onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/mini-queue"] })} />
+                {(miniQueue?.backfillCount ?? 0) > 0 && (
+                  <MiniBackfillButton pw={pw} onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/mini-queue"] })} />
+                )}
               </div>
             </div>
           </div>
