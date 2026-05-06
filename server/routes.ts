@@ -4666,6 +4666,7 @@ export async function registerRoutes(
   let bandInputTokens = 0;
   let bandOutputTokens = 0;
   let bandFieldCounts: Record<string, number> = {};
+  let bandTargetFields: string[] = [];
   let bandAvgScoreBefore: number | null = null;
   let bandAssetIds: number[] = [];
   let bandSnapshotBefore: Record<number, string> = {};
@@ -4845,6 +4846,7 @@ export async function registerRoutes(
       liveInputTokens: bandInputTokens,
       liveOutputTokens: bandOutputTokens,
       liveFieldCounts: bandFieldCounts,
+      targetFields: bandTargetFields,
       lastSummary: bandLastSummary,
     });
   });
@@ -4992,6 +4994,7 @@ export async function registerRoutes(
       bandInputTokens = 0;
       bandOutputTokens = 0;
       bandFieldCounts = {};
+      bandTargetFields = GAP_FILL_FIELDS;
       bandAvgScoreBefore = avgScoreBefore;
       bandAssetIds = assetIdList;
 
