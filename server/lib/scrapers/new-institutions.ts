@@ -1388,7 +1388,63 @@ export const caltechScraper = createStubScraper("California Institute of Technol
 //   labs.federallabs.org/technologies: still HTTP 000
 // Both endpoints remain TCP-refused from Replit cloud IPs. Not implemented.
 // RE-PROBE TRIGGER: revisit if Replit egress IPs change.
-export const asuScraper = createWordPressApiScraper("https://skysonginnovations.com", "technology", "Arizona State University");
+// ASU — skysonginnovations.com WordPress REST API. Content/excerpt fields are empty;
+// descriptions live in acf.skytech_description (HTML). Probed 2026-05-06.
+export const asuScraper: InstitutionScraper = {
+  institution: "Arizona State University",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const BASE = "https://skysonginnovations.com";
+    const INST = "Arizona State University";
+    const results: ScrapedListing[] = [];
+    let page = 1;
+    while (page <= 50) {
+      try {
+        const res = await fetch(
+          `${BASE}/wp-json/wp/v2/technology?per_page=100&page=${page}&_fields=id,slug,link,title,acf`,
+          {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+            signal: AbortSignal.timeout(15000),
+          }
+        );
+        if (!res.ok) {
+          if (page === 1) throw new SiteHttpError(res.status, `${BASE}/wp-json/wp/v2/technology?per_page=100&page=1`);
+          break;
+        }
+        const items: any[] = await res.json();
+        if (!Array.isArray(items) || items.length === 0) break;
+        for (const item of items) {
+          const title = (item.title?.rendered ?? "").replace(/<[^>]+>/g, "").trim();
+          if (!title) continue;
+          const rawDesc = item.acf?.skytech_description ?? "";
+          const description = cleanText(rawDesc.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+          const technologyId = item.acf?.skytech_case_id ?? undefined;
+          const inventorsRaw: any[] = item.acf?.skytech_inventors ?? [];
+          const inventors = inventorsRaw
+            .map((inv: any) => cleanText(inv.skytech_inventors_full_name ?? ""))
+            .filter(Boolean);
+          results.push({
+            title,
+            description: description || "",
+            url: item.link ?? `${BASE}/technology/${item.slug}/`,
+            institution: INST,
+            technologyId: technologyId || undefined,
+            inventors: inventors.length > 0 ? inventors : undefined,
+          });
+        }
+        if (items.length < 100) break;
+        page++;
+      } catch (err: unknown) {
+        if (err instanceof SiteHttpError) throw err;
+        break;
+      }
+    }
+    const thinCount = results.filter(l => !l.description || l.description.length < 50).length;
+    console.log(`[scraper] ${INST}: ${results.length} listings (${thinCount} thin, WordPress API+ACF, ${page} pages)`);
+    const sample = results.find(l => (l.description?.length ?? 0) > 200);
+    if (sample) console.log(`[scraper] ${INST}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
+    return results;
+  },
+};
 
 // ── International: Brazil ────────────────────────────────────────────────
 // Unicamp Inova (University of Campinas) — WordPress REST API, ~1,275 technologies

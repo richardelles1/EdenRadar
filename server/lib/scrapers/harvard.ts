@@ -33,7 +33,7 @@ export const harvardScraper: InstitutionScraper = {
           pageNew++;
           results.push({
             title,
-            description: title,
+            description: "",
             url: fullUrl,
             institution: INST,
           });
@@ -47,13 +47,17 @@ export const harvardScraper: InstitutionScraper = {
 
       console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
 
+      const thinBefore = results.filter(
+        (l) => !l.description || l.description === l.title || l.description.length < 50
+      ).length;
+
       await enrichWithDetailPages(results, {
         description: [
+          "main p",
           ".field--name-body",
           ".technology-description",
           ".content-area p",
           "article p",
-          "main p",
         ],
         inventors: [
           ".field--name-field-inventors li",
@@ -63,9 +67,15 @@ export const harvardScraper: InstitutionScraper = {
           ".field--name-field-patent-status",
           ".ip-status",
         ],
-      });
+      }, 9999);
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      const enrichedCount = results.filter(
+        (l) => l.description && l.description !== l.title && l.description.length >= 50
+      ).length;
+      console.log(`[scraper] ${INST}: detail fetch complete: ${enrichedCount} of ${thinBefore} enriched`);
+      const sample = results.find(l => (l.description?.length ?? 0) > 200);
+      if (sample) console.log(`[scraper] ${INST}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
+
       return results;
     } catch (err: any) {
       if (err instanceof SiteHttpError) throw err;

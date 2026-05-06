@@ -266,6 +266,7 @@ export function createTechPublisherScraper(
           results,
           {
             description: [
+              ".c_tp_description",
               ".tech-description",
               ".field--name-body .field__item",
               ".field--name-body",
@@ -311,7 +312,7 @@ export function createTechPublisherScraper(
               ".docket-number",
             ],
           },
-          500,
+          9999,
           signal
         );
         const enrichedCount = thinListings.filter(
