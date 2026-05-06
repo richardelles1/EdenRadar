@@ -171,7 +171,7 @@ export interface IStorage {
   bulkUpsertIngestedAssets(
     listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
     onProgress?: (done: number, total: number) => void
-  ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number }>;
+  ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number; contentUpdated: number }>;
   updateIngestedAssetEnrichment(id: number, data: {
     target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string | null;
@@ -204,7 +204,7 @@ export interface IStorage {
   }>;
 
   createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession>;
-  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession>;
+  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "contentUpdated" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
   getLatestSyncSessions(): Promise<SyncSession[]>;
   markRunningSessionsFailed(): Promise<number>;
@@ -770,9 +770,10 @@ export class DatabaseStorage implements IStorage {
   async bulkUpsertIngestedAssets(
     listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
     onProgress?: (done: number, total: number) => void
-  ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number }> {
+  ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number; contentUpdated: number }> {
     const CHUNK = 800;
     const total = listings.length;
+    let contentUpdatedCount = 0;
     const allFingerprints = listings.map((l) => l.fingerprint);
 
     // 1. Find which fingerprints already exist (chunked SELECT) — also grab contentHash and sourceUrl for change detection
@@ -837,6 +838,7 @@ export class DatabaseStorage implements IStorage {
         // Only treat as a genuine content change when BOTH hashes exist AND differ.
         // null-stored → new-hash is first-time population, not a real change.
         const contentChanged = !!(listing.contentHash && existing.contentHash && listing.contentHash !== existing.contentHash);
+        if (contentChanged) contentUpdatedCount++;
         await db
           .update(ingestedAssets)
           .set({
@@ -969,7 +971,7 @@ export class DatabaseStorage implements IStorage {
       onProgress?.(total, total);
     }
 
-    return { newAssets, totalProcessed: total };
+    return { newAssets, totalProcessed: total, contentUpdated: contentUpdatedCount };
   }
 
   async updateIngestedAssetEnrichment(id: number, data: {
@@ -1289,7 +1291,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession> {
+  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "contentUpdated" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession> {
     const [row] = await db.update(syncSessions).set(data).where(eq(syncSessions.sessionId, sessionId)).returning();
     return row;
   }

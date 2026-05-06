@@ -3363,7 +3363,7 @@ export async function registerRoutes(
         return res.json({ pushed: 0, message: "No new relevant assets to push" });
       }
 
-      const { newAssets } = await storage.bulkUpsertIngestedAssets(
+      const { newAssets, contentUpdated } = await storage.bulkUpsertIngestedAssets(
         toPush.map((r) => ({
           fingerprint: r.fingerprint,
           assetName: r.assetName,
@@ -3400,12 +3400,14 @@ export async function registerRoutes(
 
       await storage.updateSyncSession(session.sessionId, {
         pushedCount: newAssets.length,
+        contentUpdated,
         status: "pushed",
         lastRefreshedAt: new Date(),
       });
 
       res.json({
         pushed: newAssets.length,
+        contentUpdated,
         skipped: skippedNonRelevant,
         message: `Pushed ${newAssets.length} new assets to index`,
       });

@@ -207,6 +207,7 @@ interface SyncSessionData {
   newCount: number;
   relevantCount: number;
   pushedCount: number;
+  contentUpdated: number;
   currentIndexed: number;
   createdAt: string;
   completedAt: string | null;
@@ -396,6 +397,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                         <span>{s.rawCount} collected</span>
                         <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
                         {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
+                        {(s.contentUpdated ?? 0) > 0 && <span className="text-blue-600 dark:text-blue-400 font-medium">{s.contentUpdated} updated</span>}
                       </div>
                     </div>
                   ))}
@@ -486,7 +488,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
 
           {(isEnriched || isPushed || isFailed) && (
             <div className="px-5 py-4 space-y-4" data-testid="sync-result-details">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                 <div className="rounded-lg border border-border bg-background p-3 text-center">
                   <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-currently-indexed">{currentInDb}</div>
                   <div className="text-xs text-muted-foreground">In DB Now</div>
@@ -503,7 +505,13 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                   <div className={`text-xl font-bold tabular-nums ${session.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`} data-testid="stat-relevant">
                     {session.relevantCount}
                   </div>
-                  <div className="text-xs text-muted-foreground">New + Relevant (Biotech)</div>
+                  <div className="text-xs text-muted-foreground">New + Relevant</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className={`text-xl font-bold tabular-nums ${(session.contentUpdated ?? 0) > 0 ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`} data-testid="stat-content-updated">
+                    {session.contentUpdated ?? 0}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Descriptions Updated</div>
                 </div>
               </div>
 
@@ -694,6 +702,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       <span>{s.rawCount} collected</span>
                       <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
                       {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
+                      {(s.contentUpdated ?? 0) > 0 && <span className="text-blue-600 dark:text-blue-400 font-medium">{s.contentUpdated} updated</span>}
                     </div>
                   </div>
                 ))}
