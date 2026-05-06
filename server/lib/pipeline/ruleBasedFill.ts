@@ -37,9 +37,9 @@ const LICENSING_RULES: Array<{ pattern: RegExp; value: string }> = [
 const MODALITY_RULES: Array<{ pattern: RegExp; value: string }> = [
   // Gene editing (CRISPR, base editing)
   { pattern: /\bCRISPR[\s-]?Cas\b|\bCRISPR[\s-]?based\b|\bbase[\s-]?edit(?:ing)?\b|\bprime[\s-]?edit(?:ing)?\b|\bgene[\s-]?edit(?:ing)?\b/i, value: "gene editing" },
-  // CAR-T / CAR-NK
-  { pattern: /\bCAR[\s-]?T\b|\bCAR[\s-]?NK\b|\bCAR[\s-]?cell\b|\bchimeric\s+antigen\s+receptor/i, value: "car-t" },
-  // Cell therapies (adoptive, TIL, NK)
+  // CAR-T / CAR-NK and all cell therapies (canonical value: "cell therapy")
+  { pattern: /\bCAR[\s-]?T\b|\bCAR[\s-]?NK\b|\bCAR[\s-]?cell\b|\bchimeric\s+antigen\s+receptor/i, value: "cell therapy" },
+  // Adoptive cell therapies (TIL, T cell, NK cell, stem cell)
   { pattern: /\badoptive\s+cell\s+therap|\bTIL\s+therap|\bT[\s-]?cell\s+therap|\bNK\s+cell\s+therap|\bcell-?based\s+immuno|\bstem\s+cell\s+therap/i, value: "cell therapy" },
   // Gene therapy (AAV/lentiviral)
   { pattern: /\bgene\s+therap|\bAAV\b|\blentiviral\s+(?:vector|delivery)\b|\badeno[\s-]?associated\s+virus|\badenoviral\s+(?:vector|gene)\b/i, value: "gene therapy" },
@@ -191,7 +191,7 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
 // Uses stored categories[] to provide structured modality signal before text rules.
 const CATEGORY_MODALITY_MAP: Array<{ keywords: RegExp; value: string }> = [
   { keywords: /\bgene[\s-]?edit|\bcrispr/i, value: "gene editing" },
-  { keywords: /\bCAR[\s-]?T|car-t/i, value: "car-t" },
+  { keywords: /\bCAR[\s-]?T|car-t/i, value: "cell therapy" },
   { keywords: /\bcell[\s-]?therap/i, value: "cell therapy" },
   { keywords: /\bgene[\s-]?therap/i, value: "gene therapy" },
   { keywords: /\bsiRNA\b|RNAi\b|\bantisense/i, value: "rna therapy" },
