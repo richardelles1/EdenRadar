@@ -4947,6 +4947,217 @@ export async function registerRoutes(
     }
   });
 
+  // ── TTO Drug/Biologic GPT-4o gap-fill pass ───────────────────────────────
+  // Targeted second pass: drug_biologic TTO assets with rich content (≥300 chars)
+  // that are still missing target, indication, MoA, or comparable drugs.
+
+  const DBG_GAP_FIELDS = ["target", "indication", "mechanismOfAction", "comparableDrugs"] as const;
+  const DBG_INPUT_COST_PER_M = 2.50;   // GPT-4o input $/1M tokens
+  const DBG_OUTPUT_COST_PER_M = 10.0;  // GPT-4o output $/1M tokens
+  const DBG_EST_COST_PER_ASSET = (500 * DBG_INPUT_COST_PER_M + 150 * DBG_OUTPUT_COST_PER_M) / 1_000_000;
+
+  let dbgRunning = false;
+  let dbgProcessed = 0;
+  let dbgTotal = 0;
+  let dbgSucceeded = 0;
+  let dbgFailed = 0;
+  let dbgShouldStop = false;
+  let dbgInputTokens = 0;
+  let dbgOutputTokens = 0;
+  let dbgFieldCounts: Record<string, number> = {};
+  let dbgLastSummary: {
+    total: number; succeeded: number; failed: number;
+    costUsd: number; durationMs: number; fieldFillCounts: Record<string, number>; completedAt: string;
+  } | null = null;
+
+  app.get("/api/admin/enrichment/drug-biologic-gap-fill/count", requireAdmin, async (_req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE relevant = true
+          AND source_name = 'tech_transfer'
+          AND asset_class = 'drug_biologic'
+          AND length(COALESCE(summary, '')) >= 300
+          AND (
+            (target IS NULL OR target = '' OR target = 'unknown')
+            OR (indication IS NULL OR indication = '' OR indication = 'unknown')
+            OR (mechanism_of_action IS NULL OR mechanism_of_action = '')
+            OR (comparable_drugs IS NULL OR comparable_drugs = '')
+          )
+      `);
+      const total = Number(result.rows[0]?.total ?? 0);
+      res.json({ total, estCost: parseFloat((total * DBG_EST_COST_PER_ASSET).toFixed(2)) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/drug-biologic-gap-fill/status", requireAdmin, (_req, res) => {
+    const costUsd = (dbgInputTokens * DBG_INPUT_COST_PER_M + dbgOutputTokens * DBG_OUTPUT_COST_PER_M) / 1_000_000;
+    res.json({
+      running: dbgRunning,
+      processed: dbgProcessed,
+      total: dbgTotal,
+      succeeded: dbgSucceeded,
+      failed: dbgFailed,
+      liveCostUsd: parseFloat(costUsd.toFixed(4)),
+      fieldCounts: { ...dbgFieldCounts },
+      lastSummary: dbgLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/drug-biologic-gap-fill/stop", requireAdmin, (_req, res) => {
+    if (!dbgRunning) return res.status(409).json({ error: "Not running" });
+    dbgShouldStop = true;
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/drug-biologic-gap-fill", requireAdmin, async (req, res) => {
+    if (dbgRunning) return res.status(409).json({ error: "Drug-biologic gap-fill already running" });
+    if (bandRunning) return res.status(409).json({ error: "Band enrichment is running — stop it first" });
+
+    const { cap: rawCap = 500 } = req.body as { cap?: number };
+    const cap = Math.min(5000, Math.max(10, Number(rawCap) || 500));
+
+    try {
+      const rows = await db.execute<{
+        id: number; asset_name: string; summary: string; abstract: string | null;
+        mechanism_of_action: string | null; comparable_drugs: string | null;
+        categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
+        inventors: string[] | null; source_url: string | null;
+        target: string | null; modality: string | null; indication: string | null; development_stage: string;
+      }>(sql`
+        SELECT id, asset_name, summary, abstract, mechanism_of_action, comparable_drugs,
+               categories, patent_status, licensing_readiness, inventors, source_url,
+               target, modality, indication, development_stage
+        FROM ingested_assets
+        WHERE relevant = true
+          AND source_name = 'tech_transfer'
+          AND asset_class = 'drug_biologic'
+          AND length(COALESCE(summary, '')) >= 300
+          AND (
+            (target IS NULL OR target = '' OR target = 'unknown')
+            OR (indication IS NULL OR indication = '' OR indication = 'unknown')
+            OR (mechanism_of_action IS NULL OR mechanism_of_action = '')
+            OR (comparable_drugs IS NULL OR comparable_drugs = '')
+          )
+        ORDER BY COALESCE(completeness_score, 0) DESC
+        LIMIT ${cap}
+      `);
+
+      if (rows.rows.length === 0) return res.json({ message: "No eligible assets found", total: 0 });
+
+      const assets = rows.rows.map((r) => ({
+        id: r.id,
+        assetName: r.asset_name,
+        summary: r.summary,
+        abstract: r.abstract,
+        mechanismOfAction: r.mechanism_of_action,
+        comparableDrugs: r.comparable_drugs,
+        target: r.target,
+        modality: r.modality,
+        indication: r.indication,
+        developmentStage: r.development_stage,
+        categories: r.categories,
+        patentStatus: r.patent_status,
+        licensingStatus: r.licensing_readiness,
+        inventors: r.inventors,
+        sourceUrl: r.source_url,
+      }));
+
+      dbgRunning = true;
+      dbgProcessed = 0;
+      dbgTotal = assets.length;
+      dbgSucceeded = 0;
+      dbgFailed = 0;
+      dbgShouldStop = false;
+      dbgInputTokens = 0;
+      dbgOutputTokens = 0;
+      dbgFieldCounts = {};
+
+      res.json({ message: "Drug-biologic gap-fill started", total: assets.length });
+
+      const startMs = Date.now();
+
+      const isEmpty = (v: string | null | undefined) => !v || v.trim() === "" || v.trim().toLowerCase() === "unknown";
+
+      deepEnrichBatch(
+        assets.map((a) => {
+          const perAsset = (DBG_GAP_FIELDS as readonly string[]).filter((f) => {
+            if (f === "target") return isEmpty(a.target);
+            if (f === "indication") return isEmpty(a.indication);
+            if (f === "mechanismOfAction") return isEmpty(a.mechanismOfAction);
+            if (f === "comparableDrugs") return isEmpty(a.comparableDrugs);
+            return false;
+          });
+          return {
+            id: a.id,
+            assetName: a.assetName,
+            summary: a.summary,
+            abstract: a.abstract,
+            ctx: {
+              categories: a.categories,
+              patentStatus: a.patentStatus,
+              licensingStatus: a.licensingStatus,
+              inventors: a.inventors,
+              sourceUrl: a.sourceUrl,
+              currentValues: {
+                target: a.target,
+                modality: a.modality,
+                indication: a.indication,
+                developmentStage: a.developmentStage,
+              },
+              fieldsToGenerate: perAsset.length > 0 ? perAsset : null,
+            },
+          };
+        }),
+        20,
+        async (batch) => storage.bulkUpdateIngestedAssetsGapFill(
+          batch.map((r) => ({
+            id: r.id,
+            mechanismOfAction: r.mechanismOfAction ?? "",
+            unmetNeed: r.unmetNeed ?? "",
+            comparableDrugs: r.comparableDrugs ?? "",
+            innovationClaim: r.innovationClaim ?? "",
+            target: r.target,
+            modality: r.modality,
+            indication: r.indication,
+            developmentStage: r.developmentStage,
+          })),
+          "gpt4o",
+          (field) => { dbgFieldCounts[field] = (dbgFieldCounts[field] ?? 0) + 1; },
+        ),
+        (processed, _total, succeeded, failed) => {
+          dbgProcessed = processed;
+          dbgSucceeded = succeeded;
+          dbgFailed = failed;
+        },
+        () => dbgShouldStop,
+        (inTok, outTok) => {
+          dbgInputTokens += inTok;
+          dbgOutputTokens += outTok;
+        },
+      ).then((result) => {
+        dbgRunning = false;
+        const durationMs = Date.now() - startMs;
+        const costUsd = (result.inputTokens * DBG_INPUT_COST_PER_M + result.outputTokens * DBG_OUTPUT_COST_PER_M) / 1_000_000;
+        dbgLastSummary = {
+          total: assets.length, succeeded: result.succeeded, failed: result.failed,
+          costUsd: parseFloat(costUsd.toFixed(4)), durationMs,
+          fieldFillCounts: { ...dbgFieldCounts }, completedAt: new Date().toISOString(),
+        };
+        console.log(`[dbg-gap-fill] Complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, fields: ${JSON.stringify(dbgFieldCounts)}`);
+      }).catch((e) => {
+        dbgRunning = false;
+        console.error("[dbg-gap-fill] failed:", e);
+      });
+    } catch (err: any) {
+      dbgRunning = false;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Surgical band enrichment (Step 3 GPT-4o) ─────────────────────────────
 
   let bandRunning = false;

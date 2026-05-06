@@ -2726,6 +2726,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
+  const [dbgPolling, setDbgPolling] = React.useState(false);
+  const [dbgConfirm, setDbgConfirm] = React.useState(false);
 
   const { data: pipelineStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
@@ -2879,6 +2881,55 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const stopDetailRefetch = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/enrichment/detail-refetch/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
+  });
+
+  const { data: dbgCount, refetch: refetchDbgCount } = useQuery<{ total: number; estCost: number }>({
+    queryKey: ["/api/admin/enrichment/drug-biologic-gap-fill/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/drug-biologic-gap-fill/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load count");
+      return res.json();
+    },
+  });
+
+  const { data: dbgStatus } = useQuery<{
+    running: boolean; processed: number; total: number; succeeded: number; failed: number;
+    liveCostUsd: number; fieldCounts: Record<string, number>;
+    lastSummary: { total: number; succeeded: number; failed: number; costUsd: number; durationMs: number; fieldFillCounts: Record<string, number>; completedAt: string } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/drug-biologic-gap-fill/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/drug-biologic-gap-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load status");
+      return res.json();
+    },
+    refetchInterval: dbgPolling ? 2000 : false,
+  });
+
+  React.useEffect(() => {
+    if (dbgStatus?.running && !dbgPolling) setDbgPolling(true);
+    if (!dbgStatus?.running && dbgPolling) {
+      setDbgPolling(false);
+      setDbgConfirm(false);
+      refetchDbgCount();
+    }
+  }, [dbgStatus?.running]);
+
+  const runDbgGapFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/drug-biologic-gap-fill", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) }, body: JSON.stringify({ cap: 500 }) });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => { setDbgPolling(true); setDbgConfirm(false); },
+  });
+
+  const stopDbgGapFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/drug-biologic-gap-fill/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to stop");
       return res.json();
     },
@@ -3096,7 +3147,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const ruleFillProgressPct = ruleFillStatus?.progress && ruleFillStatus.progress.total > 0
     ? Math.round((ruleFillStatus.progress.processed / ruleFillStatus.progress.total) * 100) : 0;
 
-  const anyRunning = isRunning || ruleFillStatus?.running || bandStatus?.running || edenStatus?.running || detailRefetchStatus?.running;
+  const anyRunning = isRunning || ruleFillStatus?.running || bandStatus?.running || edenStatus?.running || detailRefetchStatus?.running || dbgStatus?.running;
 
   return (
     <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-enrichment-pipeline">
@@ -3526,6 +3577,106 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 {rescoreStatus?.running || runRescore.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                 Rescore all
               </Button>
+            </div>
+          </div>
+
+          {/* Step 2e: TTO Drug/Biologic GPT-4o Gap-Fill */}
+          <div className="border border-rose-200 dark:border-rose-900 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 overflow-hidden" data-testid="card-drug-biologic-gap-fill">
+            <div className="px-4 py-2.5 border-b border-rose-200 dark:border-rose-900 bg-rose-100/60 dark:bg-rose-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-rose-500 text-white text-xs font-bold shrink-0">2e</span>
+              <span className="text-sm font-semibold text-rose-800 dark:text-rose-300">TTO Drug Gap-Fill</span>
+              <span className="ml-auto text-xs font-medium text-rose-600 dark:text-rose-400">~$0.003/asset · GPT-4o</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Targeted GPT-4o pass on <span className="font-medium text-foreground">TTO drug_biologic</span> assets with rich content (≥300 chars) that are still missing
+                <span className="font-medium text-foreground"> target, indication, mechanism of action,</span> or <span className="font-medium text-foreground">comparable drugs</span>.
+                Gap-fill mode only upgrades null/unknown fields — never overwrites human-verified or existing data.
+              </p>
+              {dbgCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-rose-200 dark:border-rose-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-rose-700 dark:text-rose-400" data-testid="text-dbg-count">{dbgCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">TTO drug_biologic assets with gaps · estimated</span>
+                  <span className="text-xs font-semibold text-rose-700 dark:text-rose-400 ml-auto">${dbgCount.estCost.toFixed(2)}</span>
+                </div>
+              )}
+              {dbgStatus?.running && (
+                <div className="space-y-2 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40 p-3" data-testid="dbg-live-progress">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-600" />
+                    <span className="text-xs font-medium text-rose-700 dark:text-rose-400">Gap-fill running…</span>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground" data-testid="dbg-progress-text">{dbgStatus.processed.toLocaleString()}/{dbgStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopDbgGapFill.mutate()} disabled={stopDbgGapFill.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-dbg-stop">Stop</Button>
+                  </div>
+                  <div className="w-full bg-rose-100 dark:bg-rose-900/30 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-rose-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${dbgStatus.total > 0 ? Math.round((dbgStatus.processed / dbgStatus.total) * 100) : 0}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{dbgStatus.succeeded.toLocaleString()} written · {dbgStatus.failed.toLocaleString()} failed</span>
+                    <span className="font-medium text-rose-700 dark:text-rose-400">${dbgStatus.liveCostUsd.toFixed(4)} so far</span>
+                  </div>
+                  {Object.keys(dbgStatus.fieldCounts).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {Object.entries(dbgStatus.fieldCounts).map(([f, n]) => (
+                        <span key={f} className="text-[10px] bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 px-1.5 py-0.5 rounded font-medium">
+                          {f} +{n}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              {!dbgStatus?.running && dbgStatus?.lastSummary && (
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                      Last run: {dbgStatus.lastSummary.succeeded.toLocaleString()} assets updated · ${dbgStatus.lastSummary.costUsd.toFixed(2)} spent
+                    </span>
+                    <span className="text-[11px] text-muted-foreground ml-auto">{Math.round(dbgStatus.lastSummary.durationMs / 1000)}s</span>
+                  </div>
+                  {Object.keys(dbgStatus.lastSummary.fieldFillCounts).length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {Object.entries(dbgStatus.lastSummary.fieldFillCounts).map(([f, n]) => (
+                        <span key={f} className="text-[10px] bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded font-medium">
+                          {f} +{n as number}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchDbgCount()}
+                  className="gap-1.5 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30" data-testid="button-dbg-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                {!dbgConfirm ? (
+                  <Button size="sm"
+                    onClick={() => setDbgConfirm(true)}
+                    disabled={dbgStatus?.running || (dbgCount?.total ?? 0) === 0 || anyRunning}
+                    className="gap-1.5 bg-rose-600 hover:bg-rose-700 text-white" data-testid="button-dbg-run">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Gap-fill TTO drugs ({(dbgCount?.total ?? 0).toLocaleString()}) · ~${(dbgCount?.estCost ?? 0).toFixed(2)}
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg border border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/40 px-3 py-2">
+                    <span className="text-xs text-rose-800 dark:text-rose-300 font-medium">
+                      Run GPT-4o on {(dbgCount?.total ?? 0).toLocaleString()} assets for ~${(dbgCount?.estCost ?? 0).toFixed(2)}?
+                    </span>
+                    <Button size="sm" onClick={() => runDbgGapFill.mutate()} disabled={runDbgGapFill.isPending}
+                      className="h-6 px-3 text-xs bg-rose-600 hover:bg-rose-700 text-white" data-testid="button-dbg-confirm">
+                      {runDbgGapFill.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDbgConfirm(false)}
+                      className="h-6 px-2 text-xs text-muted-foreground" data-testid="button-dbg-cancel">
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
