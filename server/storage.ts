@@ -2000,9 +2000,11 @@ export class DatabaseStorage implements IStorage {
           // 2. Model returned a non-empty, non-"unknown" value
           // 3. Current DB field is null/empty (gap-fill must never overwrite existing good data)
           const isGoodValue = (v: string | null | undefined) => !!v && v.trim() !== "" && v.toLowerCase() !== "unknown" && v.toLowerCase() !== "n/a";
-          const isEmptyInDb = (v: string | null | undefined) => !v || v.trim() === "";
-          // Primary fields treat "unknown" as empty — it means the classifier couldn't determine the value
-          const isEmptyInDbPrimary = (v: string | null | undefined) => !v || v.trim() === "" || v.trim().toLowerCase() === "unknown";
+          // Treat "unknown" as empty for all fields — a literal "unknown" string means the classifier
+          // couldn't determine the value and it should be eligible for gap-fill.
+          const isEmptyInDb = (v: string | null | undefined) => !v || v.trim() === "" || v.trim().toLowerCase() === "unknown";
+          // Primary fields use the same semantics (kept as alias for clarity)
+          const isEmptyInDbPrimary = isEmptyInDb;
 
           for (const field of GAP_FILL_TARGET_FIELDS) {
             const currentDbValue = cur[field as keyof typeof cur] as string | null | undefined;
