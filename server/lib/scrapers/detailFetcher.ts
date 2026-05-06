@@ -231,29 +231,10 @@ export async function enrichWithDetailPages(
 // ---------------------------------------------------------------------------
 // TechPublisher-specific structured extraction
 // ---------------------------------------------------------------------------
-// TechPublisher-specific structured extraction
-// ---------------------------------------------------------------------------
-// TechPublisher is an ASP.NET-based licensing platform used by ~70 institutions.
-// This dedicated enrichment function (mirroring enrichInPartListings for InPart)
-// uses a three-pass strategy per detail page:
-//
-//   Pass 1 — JSON data island: parse any <script type="application/json"> tags
-//             and __NEXT_DATA__ (Next.js). Newer or customised TechPublisher
-//             deployments may embed structured payloads here; field names are
-//             normalised across common variants.
-//
-//   Pass 2 — TechPublisher HTML conventions: inventor names as anchor links
-//             with `type=i` in href, categories in <meta name="keywords">,
-//             and mailto links for contact — all present in static HTML
-//             across observed deployments (Rochester, Tufts, Brown, etc.).
-//
-//   Pass 3 — Generic CSS selectors: standard TTO class names (#inventorLinks,
-//             .field--name-field-inventors, .patent-status, etc.) as last-resort
-//             fallback for non-standard or future deployments.
-//
-// Filter scope: thin listings AND listings with descriptions but missing
-// inventors — so inventor fill is not blocked by pre-existing descriptions.
-// ---------------------------------------------------------------------------
+// Three-pass per-page strategy: (1) JSON data island — script[type=application/json]
+// and __NEXT_DATA__; (2) TechPublisher HTML conventions — type=i inventor anchors,
+// meta keywords, mailto; (3) CSS-selector fallbacks (#inventorLinks etc.).
+// Fetches for both thin listings and listings missing inventors.
 
 const TP_CONCURRENCY = 5;
 const TP_TIMEOUT = 14_000;

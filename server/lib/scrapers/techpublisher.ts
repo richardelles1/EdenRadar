@@ -259,18 +259,24 @@ export function createTechPublisherScraper(
       const thinListings = results.filter(
         (l) => !l.description || l.description === l.title || l.description.length < 30
       );
+      const missingInventors = results.filter(l => !l.inventors || l.inventors.length === 0);
       const thinCount = thinListings.length;
-      if (thinCount > 0) {
-        console.log(`[scraper] ${institution}: fetching detail pages for ${thinCount} thin listings...`);
-        // enrichTechPublisherListings uses TechPublisher's native static-HTML
-        // conventions (type=i inventor anchors, meta keywords, mailto links,
-        // reference-number regex) rather than generic CSS-selector guessing.
+      const missingInventorCount = missingInventors.length;
+      // Run enrichment when any listing needs a description OR is missing inventors.
+      // The outer guard is intentionally broad so inventor fill is not blocked by
+      // listings that already have a description from RSS/sitemap.
+      if (thinCount > 0 || missingInventorCount > 0) {
+        console.log(
+          `[scraper] ${institution}: fetching detail pages — ${thinCount} thin, ${missingInventorCount} missing inventors`
+        );
         await enrichTechPublisherListings(results, signal);
         const enrichedCount = thinListings.filter(
           (l) => l.description && l.description !== l.title && l.description.length >= 50
         ).length;
         const inventorCount = results.filter(l => l.inventors && l.inventors.length > 0).length;
-        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinCount} enriched, ${inventorCount} with inventors`);
+        console.log(
+          `[scraper] ${institution}: detail fetch complete: ${enrichedCount}/${thinCount} desc-enriched, ${inventorCount} with inventors`
+        );
         const sample = results.find(l => (l.description?.length ?? 0) > 200);
         if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
       }
