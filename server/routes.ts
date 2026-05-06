@@ -4724,9 +4724,9 @@ export async function registerRoutes(
 
   // ── Detail Re-fetch (retroactive content upgrade for thin TTO assets) ──
   // Batch/concurrency tunable via env vars with safe defaults.
-  const DR_BATCH = parseInt(process.env.DETAIL_REFETCH_BATCH ?? "300", 10);
-  const DR_BATCH_PAUSE_MS = parseInt(process.env.DETAIL_REFETCH_PAUSE_MS ?? "2000", 10);
-  const DR_CONCURRENCY = parseInt(process.env.DETAIL_REFETCH_CONCURRENCY ?? "5", 10);
+  const DR_BATCH = Math.max(1, parseInt(process.env.DETAIL_REFETCH_BATCH ?? "300", 10) || 300);
+  const DR_BATCH_PAUSE_MS = Math.max(0, parseInt(process.env.DETAIL_REFETCH_PAUSE_MS ?? "2000", 10) || 2000);
+  const DR_CONCURRENCY = Math.max(1, parseInt(process.env.DETAIL_REFETCH_CONCURRENCY ?? "5", 10) || 5);
 
   let drRunning = false;
   let drProcessed = 0;

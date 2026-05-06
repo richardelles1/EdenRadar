@@ -2846,7 +2846,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     },
   });
 
-  const { data: detailRefetchStatus, refetch: refetchDetailRefetchStatus } = useQuery<{
+  const { data: detailRefetchStatus } = useQuery<{
     running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
     lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
@@ -3096,7 +3096,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const ruleFillProgressPct = ruleFillStatus?.progress && ruleFillStatus.progress.total > 0
     ? Math.round((ruleFillStatus.progress.processed / ruleFillStatus.progress.total) * 100) : 0;
 
-  const anyRunning = isRunning || ruleFillStatus?.running || bandStatus?.running || edenStatus?.running;
+  const anyRunning = isRunning || ruleFillStatus?.running || bandStatus?.running || edenStatus?.running || detailRefetchStatus?.running;
 
   return (
     <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="card-enrichment-pipeline">
