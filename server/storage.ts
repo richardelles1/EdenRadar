@@ -997,9 +997,9 @@ export class DatabaseStorage implements IStorage {
       oldStage !== newStage;
 
     // Build strictly-typed update using Drizzle's inferred insert type (no casting needed).
-    const updateData: Partial<typeof ingestedAssets.$inferInsert> = {
-      relevant: data.biotechRelevant,
-    };
+    // NOTE: deep-enrichment paths must never downgrade relevance — only the ingestion
+    // pipeline's markAsIrrelevant() is allowed to flip relevant→false.
+    const updateData: Partial<typeof ingestedAssets.$inferInsert> = {};
     if (stageChanged) {
       updateData.previousStage = oldStage ?? undefined;
       updateData.stageChangedAt = new Date();
@@ -1858,8 +1858,9 @@ export class DatabaseStorage implements IStorage {
     const newSources: Record<string, string> = { ...existingSources };
 
     // Build strictly-typed update using Drizzle's inferred insert type (no casting needed).
+    // NOTE: deep-enrichment paths must never downgrade relevance — only the ingestion
+    // pipeline's markAsIrrelevant() is allowed to flip relevant→false.
     const update: Partial<typeof ingestedAssets.$inferInsert> = {
-      relevant: data.biotechRelevant,
       categories: data.categories,
       categoryConfidence: data.categoryConfidence,
       completenessScore: data.completenessScore,
@@ -1910,8 +1911,9 @@ export class DatabaseStorage implements IStorage {
 
           const newSources: Record<string, string> = { ...existingSources };
           // Strictly-typed update — no Record<string, unknown> or `as any` needed.
+          // NOTE: deep-enrichment paths must never downgrade relevance — only the ingestion
+          // pipeline's markAsIrrelevant() is allowed to flip relevant→false.
           const update: Partial<typeof ingestedAssets.$inferInsert> = {
-            relevant: data.biotechRelevant,
             categories: data.categories,
             categoryConfidence: data.categoryConfidence,
             completenessScore: data.completenessScore,
