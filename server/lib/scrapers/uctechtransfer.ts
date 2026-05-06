@@ -151,8 +151,9 @@ export function createUCTechTransferScraper(
           }
         }
 
-        const thinBefore = allResults.filter(l => !l.description || l.description.length < 50);
-        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages (${thinBefore.length} thin), fetching detail descriptions...`);
+        // Force detail fetch for ALL listings: the list page only provides a short
+        // snippet from .tech-info p — we always want the full NCD detail-page content.
+        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages, fetching NCD detail descriptions (all)...`);
         await enrichWithDetailPages(allResults, {
           description: [
             ".middle-content-sub-block",
@@ -160,9 +161,9 @@ export function createUCTechTransferScraper(
             ".tech-description",
             "main p",
           ],
-        }, 9999);
-        const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
-        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+        }, 9999, undefined, 9999);
+        const enrichedCount = allResults.filter(l => (l.description?.length ?? 0) >= 50).length;
+        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${allResults.length} enriched`);
         const sample = allResults.find(l => (l.description?.length ?? 0) > 200);
         if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
         return allResults;

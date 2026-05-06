@@ -70,10 +70,11 @@ export async function enrichWithDetailPages(
   listings: ScrapedListing[],
   selectors: DetailSelectors = DEFAULT_SELECTORS,
   maxDetail = DETAIL_BATCH_LIMIT,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  minDescLength = 30
 ): Promise<ScrapedListing[]> {
   const needsDetail = listings.filter(
-    (l) => !l.description || l.description === l.title || l.description.length < 30
+    (l) => !l.description || l.description === l.title || l.description.length < minDescLength
   );
 
   const toFetch = needsDetail.slice(0, maxDetail);

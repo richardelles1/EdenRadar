@@ -1324,8 +1324,9 @@ export const warfScraper: InstitutionScraper = {
       throw new SiteHttpError(503, `${WARF_SEARCH_BASE}${WARF_PARENT_CATEGORIES[0]}`);
     }
 
-    const thinBefore = results.filter(l => !l.description || l.description.length < 50);
-    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings (${thinBefore.length} thin), fetching detail descriptions...`);
+    // Force detail fetch for ALL listings: the list page provides only a truncated
+    // entry-summary snippet. We always want the full WARF detail-page sections.
+    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings, fetching detail descriptions (all)...`);
     await enrichWithDetailPages(results, {
       description: [
         ".section-content",
@@ -1333,9 +1334,9 @@ export const warfScraper: InstitutionScraper = {
         ".entry-content",
         "main p",
       ],
-    }, 9999);
-    const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
-    console.log(`[scraper] University of Wisconsin (WARF): detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+    }, 9999, undefined, 9999);
+    const enrichedCount = results.filter(l => (l.description?.length ?? 0) >= 50).length;
+    console.log(`[scraper] University of Wisconsin (WARF): detail fetch complete: ${enrichedCount} of ${results.length} enriched`);
     const sample = results.find(l => (l.description?.length ?? 0) > 200);
     if (sample) console.log(`[scraper] University of Wisconsin (WARF): sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
     return results;
