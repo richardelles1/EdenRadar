@@ -579,6 +579,10 @@ export const arizonaScraper: InstitutionScraper = {
       await Promise.allSettled(
         Array.from({ length: Math.min(DEPTH_CONCURRENCY, needsDepth.length) }, depthWorker)
       );
+      const enrichedCount = needsDepth.filter(({ i }) => (results[i]?.description?.length ?? 0) >= 50).length;
+      console.log(`[scraper] University of Arizona: detail fetch complete: ${enrichedCount} of ${needsDepth.length} enriched`);
+      const sample = results.find(l => (l.description?.length ?? 0) > 200);
+      if (sample) console.log(`[scraper] University of Arizona: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
     }
 
     return results;

@@ -256,9 +256,10 @@ export function createTechPublisherScraper(
     );
 
     if (!signal?.aborted && results.length > 0) {
-      const thinCount = results.filter(
+      const thinListings = results.filter(
         (l) => !l.description || l.description === l.title || l.description.length < 30
-      ).length;
+      );
+      const thinCount = thinListings.length;
       if (thinCount > 0) {
         console.log(`[scraper] ${institution}: fetching detail pages for ${thinCount} thin listings...`);
         await enrichWithDetailPages(
@@ -313,7 +314,7 @@ export function createTechPublisherScraper(
           500,
           signal
         );
-        const enrichedCount = results.filter(
+        const enrichedCount = thinListings.filter(
           (l) => l.description && l.description !== l.title && l.description.length >= 50
         ).length;
         console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinCount} enriched`);
