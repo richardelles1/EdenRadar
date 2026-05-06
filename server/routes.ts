@@ -12,6 +12,7 @@ import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore, computeContentHash } from "./lib/pipeline/contentHash";
 import { fetchHtml, extractText } from "./lib/scrapers/utils";
+import { DESCRIPTION_SELECTORS } from "./lib/scrapers/detailFetcher";
 import { makeFingerprint } from "./lib/ingestion";
 import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
@@ -4722,22 +4723,10 @@ export async function registerRoutes(
   });
 
   // ── Detail Re-fetch (retroactive content upgrade for thin TTO assets) ──
-
-  const DETAIL_REFETCH_SELECTORS = [
-    ".field--name-body",
-    ".tech-detail__description",
-    ".technology-description",
-    "#description",
-    ".description",
-    "article .content",
-    ".entry-content",
-    "main p",
-    ".field--name-field-abstract",
-    ".tech-detail__abstract",
-    ".technology-abstract",
-    "#abstract",
-    ".abstract",
-  ];
+  // Batch/concurrency tunable via env vars with safe defaults.
+  const DR_BATCH = parseInt(process.env.DETAIL_REFETCH_BATCH ?? "300", 10);
+  const DR_BATCH_PAUSE_MS = parseInt(process.env.DETAIL_REFETCH_PAUSE_MS ?? "2000", 10);
+  const DR_CONCURRENCY = parseInt(process.env.DETAIL_REFETCH_CONCURRENCY ?? "5", 10);
 
   let drRunning = false;
   let drProcessed = 0;
@@ -4808,13 +4797,10 @@ export async function registerRoutes(
       `);
 
       drTotal = rows.rows.length;
-      const BATCH = 300;
-      const BATCH_PAUSE_MS = 2000;
-      const CONCURRENCY = 5;
 
-      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += BATCH) {
+      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += DR_BATCH) {
         if (signal.aborted) break;
-        const batch = rows.rows.slice(batchStart, batchStart + BATCH);
+        const batch = rows.rows.slice(batchStart, batchStart + DR_BATCH);
         let batchIdx = 0;
 
         async function drWorker() {
@@ -4825,7 +4811,7 @@ export async function registerRoutes(
             try {
               const $ = await fetchHtml(row.source_url, 12000, signal, 1);
               if (!$) { drProcessed++; drSkipped++; continue; }
-              const content = extractText($, DETAIL_REFETCH_SELECTORS);
+              const content = extractText($, DESCRIPTION_SELECTORS);
               if (content && content.length > 120) {
                 const newHash = computeContentHash(row.asset_name ?? "", content, "");
                 await db.execute(sql`
@@ -4846,11 +4832,11 @@ export async function registerRoutes(
           }
         }
 
-        const workers = Array.from({ length: Math.min(CONCURRENCY, batch.length) }, drWorker);
+        const workers = Array.from({ length: Math.min(DR_CONCURRENCY, batch.length) }, drWorker);
         await Promise.all(workers);
 
-        if (batchStart + BATCH < rows.rows.length && !signal.aborted) {
-          await new Promise((r) => setTimeout(r, BATCH_PAUSE_MS));
+        if (batchStart + DR_BATCH < rows.rows.length && !signal.aborted) {
+          await new Promise((r) => setTimeout(r, DR_BATCH_PAUSE_MS));
         }
       }
 

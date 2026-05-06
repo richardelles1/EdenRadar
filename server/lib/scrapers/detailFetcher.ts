@@ -16,6 +16,25 @@ export interface DetailSelectors {
   technologyId?: string[];
 }
 
+/** Flat list of CSS selectors for extracting the main description/abstract text
+ * from a TTO detail page. Exported so the admin retroactive re-fetch job can
+ * reuse the same selector set without duplicating it. */
+export const DESCRIPTION_SELECTORS: string[] = [
+  ".field--name-body",
+  ".tech-detail__description",
+  ".technology-description",
+  "#description",
+  ".description",
+  "article .content",
+  ".entry-content",
+  "main p",
+  ".field--name-field-abstract",
+  ".tech-detail__abstract",
+  ".technology-abstract",
+  "#abstract",
+  ".abstract",
+];
+
 const DEFAULT_SELECTORS: DetailSelectors = {
   description: [
     ".field--name-body",
