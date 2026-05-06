@@ -2737,6 +2737,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
   const [inpartRefetchPolling, setInpartRefetchPolling] = React.useState(false);
   const [flintboxRefetchPolling, setFlintboxRefetchPolling] = React.useState(false);
+  const [columbiaRefetchPolling, setColumbiaRefetchPolling] = React.useState(false);
   const [dbgPolling, setDbgPolling] = React.useState(false);
   const [dbgConfirm, setDbgConfirm] = React.useState(false);
 
@@ -2986,6 +2987,53 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const stopFlintboxRefetch = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/enrichment/flintbox-refetch/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
+  });
+
+  const { data: columbiaRefetchCount, refetch: refetchColumbiaRefetchCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrichment/columbia-refetch/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/columbia-refetch/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: columbiaRefetchStatus } = useQuery<{
+    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
+    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/columbia-refetch/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/columbia-refetch/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: columbiaRefetchPolling ? 2000 : false,
+  });
+
+  React.useEffect(() => {
+    if (columbiaRefetchStatus?.running && !columbiaRefetchPolling) setColumbiaRefetchPolling(true);
+    if (!columbiaRefetchStatus?.running && columbiaRefetchPolling) {
+      setColumbiaRefetchPolling(false);
+      refetchColumbiaRefetchCount();
+    }
+  }, [columbiaRefetchStatus?.running]);
+
+  const runColumbiaRefetch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/columbia-refetch", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => setColumbiaRefetchPolling(true),
+  });
+
+  const stopColumbiaRefetch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/columbia-refetch/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to stop");
       return res.json();
     },
@@ -3768,6 +3816,70 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-run-flintbox-refetch">
                   {runFlintboxRefetch.isPending || flintboxRefetchStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Re-fetch {flintboxRefetchCount != null ? `(${flintboxRefetchCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Columbia University JSON Re-fetch */}
+          <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden" data-testid="card-columbia-refetch">
+            <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">CU</span>
+              <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Columbia University Description Re-fetch</span>
+              <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fetches descriptions for thin Columbia records using the <span className="font-mono text-[10px] bg-muted px-1 rounded">{"{slug}.json"}</span> API endpoint on the c8e.ai platform.
+                Resolves stale DB slugs via sitemap file-number lookup. Writes <span className="font-medium text-foreground">summary</span>, <span className="font-medium text-foreground">abstract</span>,{" "}
+                <span className="font-medium text-foreground">inventors</span>, <span className="font-medium text-foreground">patent_status</span>, and resets <span className="font-mono text-[10px] bg-muted px-1 rounded">enriched_at</span> for AI re-enrichment.
+              </p>
+              {columbiaRefetchCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-400">{columbiaRefetchCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">thin Columbia assets remaining (&lt;50 chars)</span>
+                </div>
+              )}
+              {columbiaRefetchStatus?.running && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-600" />
+                    <span className="text-xs text-violet-700 dark:text-violet-400 font-medium">Re-fetching Columbia pages…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto">{columbiaRefetchStatus.processed.toLocaleString()}/{columbiaRefetchStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopColumbiaRefetch.mutate()} disabled={stopColumbiaRefetch.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-columbia-refetch-stop">
+                      {stopColumbiaRefetch.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
+                  </div>
+                  <div className="w-full bg-violet-100 dark:bg-violet-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${columbiaRefetchStatus.total > 0 ? Math.round((columbiaRefetchStatus.processed / columbiaRefetchStatus.total) * 100) : 0}%` }}
+                      data-testid="columbia-refetch-progress-bar" />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{columbiaRefetchStatus.enriched.toLocaleString()} upgraded · {columbiaRefetchStatus.skipped.toLocaleString()} skipped</span>
+                  </div>
+                </div>
+              )}
+              {columbiaRefetchStatus?.lastSummary && !columbiaRefetchStatus.running && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30" data-testid="columbia-refetch-result">
+                  <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-violet-700 dark:text-violet-400">
+                    {columbiaRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {columbiaRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    <span className="text-muted-foreground ml-1">({Math.round(columbiaRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchColumbiaRefetchCount()}
+                  className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30" data-testid="button-columbia-refetch-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runColumbiaRefetch.mutate()}
+                  disabled={runColumbiaRefetch.isPending || columbiaRefetchStatus?.running || (columbiaRefetchCount?.total ?? 0) === 0}
+                  className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-run-columbia-refetch">
+                  {runColumbiaRefetch.isPending || columbiaRefetchStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Re-fetch {columbiaRefetchCount != null ? `(${columbiaRefetchCount.total.toLocaleString()})` : ""}
                 </Button>
               </div>
             </div>

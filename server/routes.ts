@@ -5175,6 +5175,192 @@ export async function registerRoutes(
     }
   });
 
+  // ── Columbia University JSON Re-fetch ────────────────────────────────────
+  // Fetches the c8e.ai JSON endpoint ({slug}.json) for each thin Columbia record.
+  // Rebuilds slug→URL map from sitemap so stale DB slugs are matched by file number.
+
+  const CU_RE_CONCURRENCY = 5;
+  const CU_RE_TIMEOUT = 12_000;
+  const CU_RE_DELAY = 300;
+
+  let cuRunning = false;
+  let cuProcessed = 0;
+  let cuTotal = 0;
+  let cuEnriched = 0;
+  let cuSkipped = 0;
+  let cuAbortController: AbortController | null = null;
+  let cuStartMs = 0;
+  let cuLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/columbia-refetch/count", requireAdmin, async (_req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE institution = 'Columbia University'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+      `);
+      res.json({ total: Number(result.rows[0]?.total ?? 0) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/columbia-refetch/status", requireAdmin, (_req, res) => {
+    res.json({
+      running: cuRunning,
+      processed: cuProcessed,
+      total: cuTotal,
+      enriched: cuEnriched,
+      skipped: cuSkipped,
+      elapsedMs: cuRunning ? Date.now() - cuStartMs : 0,
+      lastSummary: cuLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/columbia-refetch/stop", requireAdmin, (_req, res) => {
+    if (!cuRunning) return res.status(409).json({ error: "Not running" });
+    cuAbortController?.abort();
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/columbia-refetch", requireAdmin, async (_req, res) => {
+    if (cuRunning) return res.status(409).json({ error: "Columbia re-fetch already running" });
+    cuRunning = true;
+    cuProcessed = 0;
+    cuTotal = 0;
+    cuEnriched = 0;
+    cuSkipped = 0;
+    cuAbortController = new AbortController();
+    const { signal } = cuAbortController;
+    cuStartMs = Date.now();
+    res.json({ message: "Columbia re-fetch started" });
+
+    try {
+      const { fetchColumbiaSitemapUrls, fetchColumbiaJson, columbiaJsonToListing } =
+        await import("./lib/scrapers/columbia");
+
+      // Build fileNumber → sitemapUrl map from sitemap (optional — may return null on 429)
+      console.log("[columbia-refetch] Fetching sitemap…");
+      const sitemapUrls = await fetchColumbiaSitemapUrls();
+      const fileNumToUrl = new Map<string, string>();
+      if (sitemapUrls) {
+        for (const url of sitemapUrls) {
+          const slug = url.split("/technologies/")[1] ?? "";
+          const m = slug.match(/--([A-Z0-9]+)$/i);
+          if (m) fileNumToUrl.set(m[1].toUpperCase(), url);
+        }
+        console.log(`[columbia-refetch] Sitemap: ${sitemapUrls.length} URLs, ${fileNumToUrl.size} file-number mappings`);
+      } else {
+        console.warn("[columbia-refetch] Sitemap unavailable (rate-limited) — using DB slugs directly, stale slugs will be skipped");
+      }
+
+      // Load all thin Columbia records
+      const rows = await db.execute<{ id: number; source_url: string }>(sql`
+        SELECT id, source_url
+        FROM ingested_assets
+        WHERE institution = 'Columbia University'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+        ORDER BY COALESCE(completeness_score, 0) DESC
+      `);
+      cuTotal = rows.rows.length;
+
+      function stripCuHtml(html: string): string {
+        return html
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+          .replace(/\s+/g, " ").trim();
+      }
+
+      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += CU_RE_CONCURRENCY) {
+        if (signal.aborted) break;
+        const batch = rows.rows.slice(batchStart, batchStart + CU_RE_CONCURRENCY);
+        await Promise.all(batch.map(async (row) => {
+          if (!row?.source_url) { cuProcessed++; cuSkipped++; return; }
+
+          // Extract file number from slug (part after --)
+          const slug = row.source_url.split("/technologies/")[1] ?? "";
+          const fileNumMatch = slug.match(/--([A-Z0-9]+)$/i);
+          const fileNum = fileNumMatch ? fileNumMatch[1].toUpperCase() : null;
+
+          // Resolve the current canonical URL (stale slugs get remapped)
+          const canonicalUrl = fileNum
+            ? (fileNumToUrl.get(fileNum) ?? row.source_url)
+            : row.source_url;
+
+          try {
+            const fetchRes = await fetch(`${canonicalUrl}.json`, {
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+                Accept: "application/json",
+              },
+              signal: AbortSignal.timeout(CU_RE_TIMEOUT),
+            });
+            if (!fetchRes.ok) { cuProcessed++; cuSkipped++; return; }
+            const json = await fetchRes.json() as any;
+            const src = json?.source;
+            if (!src) { cuProcessed++; cuSkipped++; return; }
+
+            const descHtml = src.description_ ?? "";
+            const descText = stripCuHtml(descHtml).slice(0, 5000);
+            const abstract = src.meta_description?.trim() ?? "";
+            const summary = descText || abstract;
+
+            if (summary.length >= 50) {
+              const inventors: string[] = (src.inventors ?? []).filter(Boolean);
+
+              const patentM = descHtml.match(/Patent Information[:\s]*<\/h2>\s*<p>(.*?)<\/p>/is);
+              const patentInline = descHtml.match(/(Patent\s+(?:Pending|Issued|Filed|Application|Granted)[^<]{0,200})/i);
+              const patentStatus = patentM
+                ? stripCuHtml(patentM[1]).slice(0, 300)
+                : patentInline ? stripCuHtml(patentInline[1]).slice(0, 300) : null;
+
+              const technologyId = src.file_number ?? src.id ?? null;
+
+              await db.execute(sql`
+                UPDATE ingested_assets
+                SET summary      = ${summary},
+                    abstract     = ${abstract || null},
+                    inventors    = ${inventors.length > 0 ? inventors : null},
+                    patent_status = COALESCE(${patentStatus}, patent_status),
+                    technology_id = COALESCE(${technologyId}, technology_id),
+                    source_url   = ${canonicalUrl},
+                    enriched_at  = NULL
+                WHERE id = ${row.id}
+              `);
+              cuEnriched++;
+            } else {
+              cuSkipped++;
+            }
+          } catch {
+            cuSkipped++;
+          }
+          cuProcessed++;
+        }));
+        if (batchStart + CU_RE_CONCURRENCY < rows.rows.length && !signal.aborted) {
+          await new Promise((r) => setTimeout(r, CU_RE_DELAY));
+        }
+      }
+
+      cuLastSummary = {
+        enriched: cuEnriched,
+        skipped: cuSkipped,
+        total: cuTotal,
+        durationMs: Date.now() - cuStartMs,
+        completedAt: new Date().toISOString(),
+      };
+      console.log(`[columbia-refetch] Complete: ${cuEnriched} enriched, ${cuSkipped} skipped of ${cuTotal} thin Columbia assets in ${Date.now() - cuStartMs}ms`);
+    } catch (err: any) {
+      console.error("[columbia-refetch] Error:", err.message);
+    } finally {
+      cuRunning = false;
+      cuAbortController = null;
+    }
+  });
+
   // ── Rescore All (recomputes completeness_score for every enriched asset) ──
 
   let rescoreRunning = false;
