@@ -3447,6 +3447,7 @@ export async function registerRoutes(
     total: number;
     resumed: boolean;
     drain: boolean;
+    tokenCost: number;
   } | null = null;
   let standardEnrichShouldStop = false;
 
@@ -3458,7 +3459,9 @@ export async function registerRoutes(
     resumed: boolean,
     drain: boolean = false,
   ) {
-    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain };
+    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain, tokenCost: 0 };
+    const MINI_INPUT_PER_M = 0.15;   // gpt-4o-mini input $/1M tokens
+    const MINI_OUTPUT_PER_M = 0.60;  // gpt-4o-mini output $/1M tokens
     const CONCURRENCY = 30;
     let idx = 0;
 
@@ -3516,6 +3519,11 @@ export async function registerRoutes(
             ...classification,
             completenessScore: score,
           });
+
+          // Accumulate real token cost from the API response
+          const inTok = classification.tokenUsage?.inputTokens ?? 0;
+          const outTok = classification.tokenUsage?.outputTokens ?? 0;
+          liveEnrichment!.tokenCost += (inTok * MINI_INPUT_PER_M + outTok * MINI_OUTPUT_PER_M) / 1_000_000;
 
           const isKnown = (v: string | null | undefined) =>
             v != null && v !== "" && v !== "unknown";
@@ -4214,6 +4222,7 @@ export async function registerRoutes(
         total: liveEnrichment.total,
         improved: liveEnrichment.improved,
         resumed: liveEnrichment.resumed,
+        tokenCost: liveEnrichment.tokenCost,
       });
     }
 

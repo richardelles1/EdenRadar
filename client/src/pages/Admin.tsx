@@ -1911,6 +1911,7 @@ interface EnrichmentStatus {
   resumed?: boolean;
   jobId?: number;
   error?: string;
+  tokenCost?: number;
 }
 
 interface BandInfo {
@@ -3225,7 +3226,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
       if (status.status === "done") {
-        toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed` });
+        const costStr = status.tokenCost != null && status.tokenCost > 0 ? ` · $${status.tokenCost.toFixed(3)} spent` : "";
+        toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed${costStr}` });
       } else {
         toast({ title: "Enrichment failed", description: status.error ?? "Unknown error", variant: "destructive" });
       }
@@ -3586,13 +3588,23 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
                     <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} data-testid="enrichment-progress-bar" />
                   </div>
-                  <p className="text-xs text-muted-foreground">{status.improved.toLocaleString()} assets improved so far</p>
+                  <p className="text-xs text-muted-foreground">
+                    {status.improved.toLocaleString()} assets improved so far
+                    {status.tokenCost != null && status.tokenCost > 0 && (
+                      <span className="ml-1.5 text-amber-600 dark:text-amber-400">${status.tokenCost.toFixed(3)} spent</span>
+                    )}
+                  </p>
                 </div>
               )}
               {status?.status === "done" && (
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="enrichment-done">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">Complete — {status.improved} of {status.total} assets improved</p>
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    Complete — {status.improved} of {status.total} assets improved
+                    {status.tokenCost != null && status.tokenCost > 0 && (
+                      <span className="ml-1.5 font-normal text-emerald-600 dark:text-emerald-500">(${status.tokenCost.toFixed(3)} spent)</span>
+                    )}
+                  </p>
                 </div>
               )}
               {status?.status === "error" && (
@@ -3609,7 +3621,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               )}
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
-                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Run 500 batch
+                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Run {Math.min(500, miniQueue?.count ?? 500).toLocaleString()} batch
                 </Button>
                 <Button size="sm" variant="outline"
                   onClick={() => { const rem = miniQueue?.count ?? 0; const cost = miniQueue?.costEstimate ?? 0; const ok = window.confirm(`Run mini-40 enrichment on ALL ${rem.toLocaleString()} un-scanned assets?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job will keep pulling the next 500 until the queue is empty. You can stop it at any time.`); if (ok) runEnrichment.mutate({ all: true }); }}
