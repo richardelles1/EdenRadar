@@ -876,8 +876,9 @@ export class DatabaseStorage implements IStorage {
             // Reset enrichedAt when content changes so re-enrichment is triggered.
             // Also reset deepEnrichAttempts so the asset is eligible for bucket-C
             // low-quality retry again if the fresh deep-enrich result is still thin.
-            // miniEnrichAttempts is also reset so the fresh content gets a clean mini pass.
-            ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0, miniEnrichAttempts: 0 } : {}),
+            // miniEnrichAttempts and classifyAttempts are also reset so the fresh
+            // content gets a clean mini and classify pass.
+            ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0, miniEnrichAttempts: 0, classifyAttempts: 0 } : {}),
           })
           .where(eq(ingestedAssets.id, existing.id));
       }
@@ -981,10 +982,11 @@ export class DatabaseStorage implements IStorage {
             // Heal sourceUrl if it was previously null and we now have a real URL
             ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
             // Reset enrichedAt so the asset gets re-enriched with improved content.
-            // Also reset deepEnrichAttempts and miniEnrichAttempts so retry buckets are available again.
+            // Also reset deepEnrichAttempts, miniEnrichAttempts, and classifyAttempts so retry buckets are available again.
             enrichedAt: null,
             deepEnrichAttempts: 0,
             miniEnrichAttempts: 0,
+            classifyAttempts: 0,
           })
           .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
       }
@@ -2087,6 +2089,7 @@ export class DatabaseStorage implements IStorage {
             humanVerified: ingestedAssets.humanVerified,
             enrichmentSources: ingestedAssets.enrichmentSources,
             deepEnrichAttempts: ingestedAssets.deepEnrichAttempts,
+            classifyAttempts: ingestedAssets.classifyAttempts,
           }).from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
 
           const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
@@ -2105,6 +2108,7 @@ export class DatabaseStorage implements IStorage {
               : data.completenessScore,
             enrichedAt: now,
             deepEnrichAttempts: (cur?.deepEnrichAttempts ?? 0) + 1,
+            classifyAttempts: source === "classify" ? (cur?.classifyAttempts ?? 0) + 1 : (cur?.classifyAttempts ?? 0),
             dedupeEmbedding: null,
           };
 

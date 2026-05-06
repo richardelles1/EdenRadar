@@ -4577,28 +4577,30 @@ export async function registerRoutes(
   app.get("/api/admin/enrichment/classify-unclassified/count", requireAdmin, async (req, res) => {
     try {
       const rows = await db.execute<{
-        thick_count: string; thin_count: string; too_thin_count: string; total_processable: string;
+        thick_count: string; thin_count: string; too_thin_count: string; total_processable: string; exhausted_count: string;
       }>(sql`
         SELECT
-          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) >= 120)::int AS thick_count,
-          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) BETWEEN 40 AND 119)::int AS thin_count,
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) >= 120 AND classify_attempts < 3)::int AS thick_count,
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) BETWEEN 40 AND 119 AND classify_attempts < 3)::int AS thin_count,
           COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) < 40)::int AS too_thin_count,
-          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) >= 40)::int AS total_processable
+          COUNT(*) FILTER (WHERE length(COALESCE(summary, asset_name, '')) >= 40 AND classify_attempts < 3)::int AS total_processable,
+          COUNT(*) FILTER (WHERE classify_attempts >= 3)::int AS exhausted_count
         FROM ingested_assets
         WHERE relevant = true AND (asset_class IS NULL OR asset_class = '')
       `);
-      const r = rows.rows[0] ?? { thick_count: "0", thin_count: "0", too_thin_count: "0", total_processable: "0" };
+      const r = rows.rows[0] ?? { thick_count: "0", thin_count: "0", too_thin_count: "0", total_processable: "0", exhausted_count: "0" };
       const thick = parseInt(r.thick_count, 10);
       const thin = parseInt(r.thin_count, 10);
       const tooThin = parseInt(r.too_thin_count, 10);
       const total = parseInt(r.total_processable, 10);
+      const exhausted = parseInt(r.exhausted_count, 10);
       // Cost: thick → gpt-4o ($2.50/1M input, $10/1M output, ~853 in + 400 out tokens)
       //       thin  → gpt-4o-mini ($0.15/1M input, $0.60/1M output, ~732 in + 200 out tokens)
       const estCost = parseFloat((
         thick * (853 * 2.50 + 400 * 10.0) / 1_000_000 +
         thin  * (732 * 0.15 + 200 *  0.60) / 1_000_000
       ).toFixed(2));
-      res.json({ thick, thin, tooThin, total, estCost });
+      res.json({ thick, thin, tooThin, total, estCost, exhausted });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -4646,6 +4648,7 @@ export async function registerRoutes(
         WHERE relevant = true
           AND (asset_class IS NULL OR asset_class = '')
           AND length(COALESCE(summary, asset_name, '')) >= 40
+          AND classify_attempts < 3
         ORDER BY
           CASE WHEN length(COALESCE(summary, '')) >= 120 THEN 0 ELSE 1 END,
           first_seen_at DESC NULLS LAST

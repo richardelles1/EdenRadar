@@ -2816,7 +2816,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: classifyCount, refetch: refetchClassifyCount } = useQuery<{
-    thick: number; thin: number; tooThin: number; total: number; estCost: number;
+    thick: number; thin: number; tooThin: number; total: number; estCost: number; exhausted: number;
   }>({
     queryKey: ["/api/admin/enrichment/classify-unclassified/count", pw],
     queryFn: async () => {
@@ -3660,15 +3660,16 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 Assets under 40 chars are skipped until re-scraped with more content.
               </p>
               {classifyCount && (
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
                   {[
                     { label: "Total", val: classifyCount.total, color: "sky" },
                     { label: "GPT-4o (thick)", val: classifyCount.thick, color: "violet" },
                     { label: "Mini (thin)", val: classifyCount.thin, color: "amber" },
                     { label: "Too thin (skip)", val: classifyCount.tooThin, color: "muted" },
+                    { label: "Exhausted (≥3×)", val: classifyCount.exhausted ?? 0, color: "red" },
                   ].map(f => (
                     <div key={f.label} className="rounded-lg border border-sky-200 dark:border-sky-800 bg-background p-2 text-center">
-                      <div className="text-base font-bold tabular-nums text-sky-700 dark:text-sky-400">{f.val.toLocaleString()}</div>
+                      <div className={`text-base font-bold tabular-nums ${f.color === "red" && (classifyCount.exhausted ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-sky-700 dark:text-sky-400"}`}>{f.val.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground">{f.label}</div>
                     </div>
                   ))}

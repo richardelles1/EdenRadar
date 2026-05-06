@@ -226,6 +226,10 @@ export const ingestedAssets = pgTable("ingested_assets", {
   // (unless content changes reset it to 0, same as deepEnrichAttempts).
   // This prevents endlessly retrying assets GPT-4o-mini cannot resolve.
   miniEnrichAttempts: integer("mini_enrich_attempts").default(0).notNull(),
+  // Tracks how many times the classify-unclassified job (Step 2b) has attempted this asset.
+  // Assets with classifyAttempts >= 3 are excluded from the queue permanently
+  // (unless content changes reset it to 0). Prevents infinite cycling on un-classifiable assets.
+  classifyAttempts: integer("classify_attempts").default(0).notNull(),
   // Asset class detected by the type-aware classifier (managed via db:push)
   assetClass: text("asset_class"),
   // Device/tool/software-specific attributes stored as JSONB (managed via db:push)
