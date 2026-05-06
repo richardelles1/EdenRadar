@@ -3449,6 +3449,9 @@ export async function registerRoutes(
     drain: boolean;
     tokenCost: number;
   } | null = null;
+  // Persists the final token cost of the last run so the "done" status response
+  // can include it even after liveEnrichment is set to null on completion.
+  let lastRunTokenCost = 0;
   let standardEnrichShouldStop = false;
 
   async function runEnrichmentWorker(
@@ -3562,8 +3565,9 @@ export async function registerRoutes(
         await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
       }
 
+      lastRunTokenCost = liveEnrichment!.tokenCost;
       await storage.updateEnrichmentJob(jobId, { status: "done", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
-      console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed`);
+      console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed · $${lastRunTokenCost.toFixed(4)} spent`);
     } catch (e: any) {
       await storage.updateEnrichmentJob(jobId, { status: "error", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
       console.error("[enrichment] Job failed:", e);
@@ -4238,6 +4242,8 @@ export async function registerRoutes(
         total: lastJob.total,
         improved: lastJob.improved,
         resumed: false,
+        // Include spend from the last completed run so the "done" banner and toast show cost.
+        tokenCost: lastJob.status === "done" ? lastRunTokenCost : undefined,
       });
     }
 

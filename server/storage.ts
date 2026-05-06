@@ -1003,9 +1003,9 @@ export class DatabaseStorage implements IStorage {
     ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
-    // Fetch existing humanVerified, enrichmentSources, and completenessScore
+    // Fetch existing humanVerified, enrichmentSources, and developmentStage
     const [existing] = await db
-      .select({ developmentStage: ingestedAssets.developmentStage, humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources, completenessScore: ingestedAssets.completenessScore })
+      .select({ developmentStage: ingestedAssets.developmentStage, humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
       .from(ingestedAssets)
       .where(eq(ingestedAssets.id, id))
       .limit(1);
@@ -1044,13 +1044,10 @@ export class DatabaseStorage implements IStorage {
     if (!hv.unmetNeed && data.unmetNeed !== undefined) { updateData.unmetNeed = data.unmetNeed || null; newSources.unmetNeed = "mini"; }
     if (!hv.comparableDrugs && data.comparableDrugs !== undefined) { updateData.comparableDrugs = data.comparableDrugs || null; newSources.comparableDrugs = "mini"; }
     if (!hv.licensingReadiness && data.licensingReadiness) { updateData.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "mini"; }
-    if (data.completenessScore !== undefined) {
-      // Never downgrade: keep the higher of the existing score and the new score.
-      const prev = existing?.completenessScore ?? null;
-      updateData.completenessScore =
-        prev != null && data.completenessScore != null
-          ? Math.max(prev, data.completenessScore)
-          : (data.completenessScore ?? prev);
+    if (data.completenessScore != null) {
+      // Never downgrade: atomic SQL GREATEST so concurrent workers can't race past a high score.
+      // COALESCE handles NULL existing values (treats them as 0 so any non-null score wins).
+      updateData.completenessScore = sql`GREATEST(COALESCE(${ingestedAssets.completenessScore}, 0), ${data.completenessScore})` as unknown as number;
     }
     if (data.assetClass) { updateData.assetClass = data.assetClass; newSources.assetClass = "mini"; }
     if (data.deviceAttributes !== undefined) updateData.deviceAttributes = data.deviceAttributes ?? null;
@@ -2082,7 +2079,6 @@ export class DatabaseStorage implements IStorage {
             humanVerified: ingestedAssets.humanVerified,
             enrichmentSources: ingestedAssets.enrichmentSources,
             deepEnrichAttempts: ingestedAssets.deepEnrichAttempts,
-            completenessScore: ingestedAssets.completenessScore,
           }).from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
 
           const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
@@ -2092,18 +2088,13 @@ export class DatabaseStorage implements IStorage {
           // Strictly-typed update — no Record<string, unknown> or `as any` needed.
           // NOTE: deep-enrichment paths must never downgrade relevance — only the ingestion
           // pipeline's markAsIrrelevant() is allowed to flip relevant→false.
-          // Never downgrade: keep the higher of existing and new completeness score.
-          const prevScore = cur?.completenessScore ?? null;
-          const newScore = data.completenessScore;
-          const finalScore =
-            prevScore != null && newScore != null
-              ? Math.max(prevScore, newScore)
-              : (newScore ?? prevScore);
-
           const update: Partial<typeof ingestedAssets.$inferInsert> = {
             categories: data.categories,
             categoryConfidence: data.categoryConfidence,
-            completenessScore: finalScore,
+            // Atomic SQL GREATEST: never downgrade a score, even under concurrent writes.
+            completenessScore: data.completenessScore != null
+              ? sql`GREATEST(COALESCE(${ingestedAssets.completenessScore}, 0), ${data.completenessScore})` as unknown as number
+              : data.completenessScore,
             enrichedAt: now,
             deepEnrichAttempts: (cur?.deepEnrichAttempts ?? 0) + 1,
             dedupeEmbedding: null,
