@@ -239,8 +239,8 @@ export async function classifyAsset(
     const response = await openai.chat.completions.create({
       model,
       temperature: 0,
-      // Gap-fill: much shorter response (only 1-4 short string fields) so reduce max_tokens.
-      // Full pass: full drug_biologic JSON with categories[], deviceAttributes etc.
+      // Gap-fill: up to 8 short string fields (4 primary + 4 secondary) — 500 tokens is sufficient.
+      // Full pass: full drug_biologic JSON with categories[], deviceAttributes etc. — needs 1000.
       max_tokens: gapFillFields ? 500 : 1000,
       response_format: gapFillSchema,
       messages: [

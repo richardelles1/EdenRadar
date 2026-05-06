@@ -4823,7 +4823,7 @@ export async function registerRoutes(
     const GPT4O_OUTPUT_PER_M = 10.0;
     const liveCostUsd = (bandInputTokens * GPT4O_INPUT_PER_M + bandOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
     const costPerAssetFull = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
-    const costPerAssetGap = (1000 * GPT4O_INPUT_PER_M + 300 * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    const costPerAssetGap = (1000 * GPT4O_INPUT_PER_M + 500 * GPT4O_OUTPUT_PER_M) / 1_000_000;
     const liveProjectedTotalUsd = bandTotal * (bandGapFill ? costPerAssetGap : costPerAssetFull);
     // Lazy-load from DB if in-memory summary was cleared by a server restart
     if (bandLastSummary === null) {
