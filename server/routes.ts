@@ -1064,7 +1064,7 @@ export async function registerRoutes(
           summary, categories, technology_id, stage_changed_at, previous_stage,
           first_seen_at, category_confidence, asset_class
         FROM ingested_assets
-        WHERE relevant = true AND completeness_score >= 0.4
+        WHERE relevant = true AND completeness_score >= 40
         ORDER BY first_seen_at DESC NULLS LAST
         LIMIT 12
       `);
@@ -4650,6 +4650,161 @@ export async function registerRoutes(
     } catch (err: any) {
       classifyRunning = false;
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Modality Fill (Step 2c — rule-based keyword matching, zero API cost) ──
+
+  app.get("/api/admin/enrichment/modality-fill/count", requireAdmin, async (req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE relevant = true
+          AND (modality IS NULL OR modality IN ('unknown', ''))
+          AND (
+            LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,''))
+            ~* 'bispecific.*antibod|antibody.drug.conjugate|car-t|car t cell|chimeric antigen receptor|protac|targeted protein degradation|proteolysis targeting|gene edit|crispr|zinc finger nuclease|talen|gene therap|\ymrna\y|messenger rna|\ysirna\y|\yshrna\y|antisense oligonucleotide|\yrnai\y|cell therap|\ynanoparticle\y|lipid nanoparticle|liposome|\yantibod|\ypeptide\y|\yvaccine\y|\yimmunization\y|diagnostic|\ybiosensor\y|lateral flow|immunoassay|small molecule|platform technolog'
+          )
+      `);
+      res.json({ total: parseInt((result.rows[0] as any).total, 10) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/enrichment/modality-fill", requireAdmin, async (req, res) => {
+    try {
+      // Run as a single SQL CTE: detect modality from title+summary, write only
+      // where the pattern actually matches (new_modality IS NOT NULL).
+      // Also stamps enrichment_sources so we know this field came from rules.
+      const result = await db.execute(sql`
+        WITH fills AS (
+          SELECT id,
+            CASE
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'bispecific.*antibod'                       THEN 'bispecific antibody'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'antibody.drug.conjugate'                   THEN 'adc'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'car-t|car t cell|chimeric antigen receptor' THEN 'car-t'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'protac|targeted protein degradation|proteolysis targeting' THEN 'protac'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'gene edit|crispr|zinc finger nuclease|talen' THEN 'gene editing'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'gene therap'                               THEN 'gene therapy'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* '\ymrna\y|messenger rna'                   THEN 'mrna therapy'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* '\ysirna\y|\yshrna\y|antisense oligonucleotide|\yrnai\y' THEN 'sirna'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'cell therap|cell-based therap'            THEN 'cell therapy'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* '\ynanoparticle\y|lipid nanoparticle|liposome' THEN 'nanoparticle'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* '\yantibod'                                THEN 'antibody'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* '\ypeptide\y'                              THEN 'peptide'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* '\yvaccine\y|\yimmunization\y|\yimmunisation\y' THEN 'vaccine'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'diagnostic|\ybiosensor\y|lateral flow|immunoassay' THEN 'diagnostic'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'small molecule'                           THEN 'small molecule'
+              WHEN LOWER(COALESCE(asset_name,'') || ' ' || COALESCE(summary,'')) ~* 'platform technolog'                      THEN 'platform technology'
+            END AS new_modality
+          FROM ingested_assets
+          WHERE relevant = true
+            AND (modality IS NULL OR modality IN ('unknown', ''))
+        )
+        UPDATE ingested_assets ia
+        SET
+          modality = f.new_modality,
+          enrichment_sources = COALESCE(enrichment_sources, '{}'::jsonb) || '{"modality":"rule"}'::jsonb
+        FROM fills f
+        WHERE ia.id = f.id
+          AND f.new_modality IS NOT NULL
+      `);
+      const filled = result.rowCount ?? 0;
+      console.log(`[modality-fill] Filled modality for ${filled} assets via keyword rules`);
+      res.json({ filled });
+    } catch (err: any) {
+      console.error("[modality-fill] Error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Rescore All (recomputes completeness_score for every enriched asset) ──
+
+  let rescoreRunning = false;
+  let rescoreProcessed = 0;
+  let rescoreTotal = 0;
+  let rescoreUpdated = 0;
+  let rescoreLastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/rescore/status", requireAdmin, (_req, res) => {
+    res.json({
+      running: rescoreRunning,
+      processed: rescoreProcessed,
+      total: rescoreTotal,
+      updated: rescoreUpdated,
+      lastSummary: rescoreLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/rescore", requireAdmin, async (req, res) => {
+    if (rescoreRunning) return res.status(409).json({ error: "Rescore already running" });
+    rescoreRunning = true;
+    rescoreProcessed = 0;
+    rescoreTotal = 0;
+    rescoreUpdated = 0;
+    const startMs = Date.now();
+    res.json({ message: "Rescore started" });
+
+    try {
+      // Fetch all enriched assets — pure TS computation, no API calls needed
+      const rows = await db.execute<{
+        id: number; asset_class: string | null; target: string | null; modality: string | null;
+        indication: string | null; development_stage: string | null; mechanism_of_action: string | null;
+        innovation_claim: string | null; unmet_need: string | null; comparable_drugs: string | null;
+        licensing_readiness: string | null; summary: string | null; abstract: string | null;
+        categories: string[] | null; inventors: string[] | null; patent_status: string | null;
+        device_attributes: Record<string, unknown> | null; completeness_score: number | null;
+      }>(sql`
+        SELECT id, asset_class, target, modality, indication, development_stage, mechanism_of_action,
+               innovation_claim, unmet_need, comparable_drugs, licensing_readiness, summary, abstract,
+               categories, inventors, patent_status, device_attributes, completeness_score
+        FROM ingested_assets
+        WHERE relevant = true AND enriched_at IS NOT NULL
+      `);
+
+      rescoreTotal = rows.rows.length;
+      let written = 0;
+      const CHUNK = 200;
+
+      for (let i = 0; i < rows.rows.length; i += CHUNK) {
+        const chunk = rows.rows.slice(i, i + CHUNK);
+        for (const r of chunk) {
+          const newScore = computeCompletenessScore({
+            assetClass: r.asset_class,
+            target: r.target, modality: r.modality, indication: r.indication,
+            developmentStage: r.development_stage, mechanismOfAction: r.mechanism_of_action,
+            innovationClaim: r.innovation_claim, unmetNeed: r.unmet_need,
+            comparableDrugs: r.comparable_drugs, licensingReadiness: r.licensing_readiness,
+            summary: r.summary, abstract: r.abstract, categories: r.categories,
+            inventors: r.inventors, patentStatus: r.patent_status,
+            deviceAttributes: r.device_attributes,
+          });
+          // Only write if score has changed (avoids unnecessary churn)
+          const current = r.completeness_score != null ? Number(r.completeness_score) : null;
+          if (newScore !== current) {
+            await db.execute(sql`
+              UPDATE ingested_assets SET completeness_score = ${newScore} WHERE id = ${r.id}
+            `);
+            written++;
+          }
+          rescoreProcessed++;
+        }
+      }
+
+      rescoreUpdated = written;
+      rescoreLastSummary = {
+        updated: written,
+        total: rows.rows.length,
+        durationMs: Date.now() - startMs,
+        completedAt: new Date().toISOString(),
+      };
+      console.log(`[rescore] Complete: ${written}/${rows.rows.length} scores updated in ${Date.now() - startMs}ms`);
+    } catch (err: any) {
+      console.error("[rescore] Error:", err.message);
+    } finally {
+      rescoreRunning = false;
     }
   });
 

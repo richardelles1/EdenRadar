@@ -251,7 +251,15 @@ export function sanitizeToVocab(value: string | null | undefined, vocab: "indica
   const lookup = vocab === "indication" ? INDICATION_LOOKUP : TARGET_LOOKUP;
   const normalized = value.toLowerCase().trim();
 
-  // Exact match only — deterministic, no substring ambiguity
+  // Exact match first — always preferred for both vocabs
   const hit = lookup.get(normalized);
-  return hit ?? "unknown";
+  if (hit) return hit;
+
+  // For indication: allow free-text passthrough when no canonical match exists.
+  // Disease names are too diverse to enumerate fully; a plausible free-text value
+  // is more useful to buyers than silently discarding it as "unknown".
+  // For target: stay strict — HGNC symbols must match exactly to avoid noise.
+  if (vocab === "indication") return normalized;
+
+  return "unknown";
 }

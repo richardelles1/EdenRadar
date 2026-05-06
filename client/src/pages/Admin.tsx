@@ -2723,6 +2723,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [bandSummaryDismissed, setBandSummaryDismissed] = React.useState(false);
   const [classifyPolling, setClassifyPolling] = React.useState(false);
   const [classifyConfirm, setClassifyConfirm] = React.useState(false);
+  const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
+  const [rescorePolling, setRescorePolling] = React.useState(false);
 
   const { data: pipelineStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
@@ -2777,6 +2779,61 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
       return res.json();
     },
     refetchInterval: classifyPolling ? 2000 : false,
+  });
+
+  const { data: modalityFillCount, refetch: refetchModalityFillCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrichment/modality-fill/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/modality-fill/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const runModalityFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/modality-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json() as Promise<{ filled: number }>;
+    },
+    onSuccess: (data) => {
+      setModalityFillDone(data);
+      refetchModalityFillCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+    },
+  });
+
+  const { data: rescoreStatus, refetch: refetchRescoreStatus } = useQuery<{
+    running: boolean; processed: number; total: number; updated: number;
+    lastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/rescore/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rescore/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: rescorePolling ? 2000 : false,
+  });
+
+  React.useEffect(() => {
+    if (rescoreStatus?.running && !rescorePolling) setRescorePolling(true);
+    if (!rescoreStatus?.running && rescorePolling) {
+      setRescorePolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/bands"] });
+    }
+  }, [rescoreStatus?.running]);
+
+  const runRescore = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rescore", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => setRescorePolling(true),
   });
 
   const prevClassifyRunning = useRef(false);
@@ -3269,6 +3326,94 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   </div>
                 )}
               </div>
+            </div>
+          </div>
+
+          {/* Step 2c: Modality Fill — rule-based, zero cost */}
+          <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-modality-fill">
+            <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2c</span>
+              <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">Modality Fill from Titles</span>
+              <span className="ml-auto text-xs font-medium text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Keyword pattern matching on asset titles and summaries fills <span className="font-medium text-foreground">modality</span> for assets where it is null or unknown — at zero API cost.
+                Detects antibody, small molecule, diagnostic, nanoparticle, gene therapy, mRNA, CAR-T, siRNA, vaccine, peptide, PROTAC, and more.
+                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">source: rule</span> so AI enrichment can later override with higher confidence.
+              </p>
+              {modalityFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400">{modalityFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">assets with detectable modality still unfilled</span>
+                </div>
+              )}
+              {runModalityFill.isPending && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" />
+                  <span className="text-xs text-teal-700 dark:text-teal-400 font-medium">Running keyword fill…</span>
+                </div>
+              )}
+              {modalityFillDone && !runModalityFill.isPending && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/30" data-testid="modality-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400">Done — {modalityFillDone.filled.toLocaleString()} modality fields written</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchModalityFillCount()}
+                  className="gap-1.5 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30" data-testid="button-modality-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runModalityFill.mutate()}
+                  disabled={runModalityFill.isPending || (modalityFillCount?.total ?? 0) === 0}
+                  className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-modality-fill">
+                  {runModalityFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Fill {modalityFillCount != null ? `(${modalityFillCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Rescore All */}
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden" data-testid="card-rescore">
+            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">↺</span>
+              <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Rescore All Assets</span>
+              <span className="ml-auto text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Recomputes <span className="font-medium text-foreground">completeness_score</span> for all enriched assets using the current scoring formula.
+                Run this after modality fill or any bulk field update to bring the band distribution up to date.
+              </p>
+              {rescoreStatus?.running && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
+                    <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Rescoring…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto">{rescoreStatus.processed.toLocaleString()}/{rescoreStatus.total.toLocaleString()}</span>
+                  </div>
+                  <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-slate-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${rescoreStatus.total > 0 ? Math.round((rescoreStatus.processed / rescoreStatus.total) * 100) : 0}%` }} />
+                  </div>
+                </div>
+              )}
+              {rescoreStatus?.lastSummary && !rescoreStatus.running && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-slate-200 dark:border-slate-800 bg-background" data-testid="rescore-result">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <p className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    {rescoreStatus.lastSummary.updated.toLocaleString()} of {rescoreStatus.lastSummary.total.toLocaleString()} scores updated
+                    <span className="text-muted-foreground ml-1">({Math.round(rescoreStatus.lastSummary.durationMs / 1000)}s)</span>
+                  </p>
+                </div>
+              )}
+              <Button size="sm" onClick={() => runRescore.mutate()} disabled={rescoreStatus?.running || runRescore.isPending}
+                variant="outline" className="gap-1.5 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900/30" data-testid="button-run-rescore">
+                {rescoreStatus?.running || runRescore.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                Rescore all
+              </Button>
             </div>
           </div>
 
