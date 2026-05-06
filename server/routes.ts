@@ -5013,6 +5013,167 @@ export async function registerRoutes(
     }
   });
 
+  // ── Flintbox Retroactive Re-fetch (single-tech API description upgrade) ──
+  // For each thin Flintbox asset, calls /api/v1/technologies/{uuid} to get the
+  // full `abstract` field that the bulk endpoint omits.
+
+  const FB_RE_CONCURRENCY = 10;
+  const FB_RE_TIMEOUT = 10_000;
+
+  let fbRunning = false;
+  let fbProcessed = 0;
+  let fbTotal = 0;
+  let fbEnriched = 0;
+  let fbSkipped = 0;
+  let fbAbortController: AbortController | null = null;
+  let fbStartMs = 0;
+  let fbLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/flintbox-refetch/count", requireAdmin, async (_req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE source_url LIKE '%.flintbox.com%'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+      `);
+      res.json({ total: Number(result.rows[0]?.total ?? 0) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/flintbox-refetch/status", requireAdmin, (_req, res) => {
+    res.json({
+      running: fbRunning,
+      processed: fbProcessed,
+      total: fbTotal,
+      enriched: fbEnriched,
+      skipped: fbSkipped,
+      elapsedMs: fbRunning ? Date.now() - fbStartMs : 0,
+      lastSummary: fbLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/flintbox-refetch/stop", requireAdmin, (_req, res) => {
+    if (!fbRunning) return res.status(409).json({ error: "Not running" });
+    fbAbortController?.abort();
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/flintbox-refetch", requireAdmin, async (_req, res) => {
+    if (fbRunning) return res.status(409).json({ error: "Flintbox re-fetch already running" });
+    fbRunning = true;
+    fbProcessed = 0;
+    fbTotal = 0;
+    fbEnriched = 0;
+    fbSkipped = 0;
+    fbAbortController = new AbortController();
+    const { signal } = fbAbortController;
+    fbStartMs = Date.now();
+    res.json({ message: "Flintbox re-fetch started" });
+
+    try {
+      const rows = await db.execute<{ id: number; source_url: string }>(sql`
+        SELECT id, source_url
+        FROM ingested_assets
+        WHERE source_url LIKE '%.flintbox.com%'
+          AND length(COALESCE(summary, '')) < 50
+          AND source_url IS NOT NULL
+        ORDER BY COALESCE(completeness_score, 0) DESC
+      `);
+
+      fbTotal = rows.rows.length;
+      // Cache credentials per slug so we only fetch each org homepage once
+      const credCache = new Map<string, { orgId: number; accessKey: string } | null>();
+
+      async function getCredentials(slug: string): Promise<{ orgId: number; accessKey: string } | null> {
+        if (credCache.has(slug)) return credCache.get(slug)!;
+        const cred = await (await import("./lib/scrapers/flintbox")).discoverFlintboxCredentials(slug);
+        credCache.set(slug, cred);
+        return cred;
+      }
+
+      function stripFbHtml(s: string): string {
+        return s
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ")
+          .replace(/\s+/g, " ").trim();
+      }
+
+      let idx = 0;
+      async function fbWorker() {
+        while (idx < rows.rows.length) {
+          if (signal.aborted) break;
+          const row = rows.rows[idx++];
+          if (!row?.source_url) { fbProcessed++; fbSkipped++; continue; }
+
+          // Extract slug and UUID from URL: https://{slug}.flintbox.com/technologies/{uuid}
+          const urlMatch = row.source_url.match(/^https?:\/\/([^.]+)\.flintbox\.com\/technologies\/([^/?#]+)/);
+          if (!urlMatch) { fbProcessed++; fbSkipped++; continue; }
+          const [, slug, uuid] = urlMatch;
+
+          const creds = await getCredentials(slug);
+          if (!creds) { fbProcessed++; fbSkipped++; continue; }
+
+          try {
+            const apiUrl =
+              `https://${slug}.flintbox.com/api/v1/technologies/${uuid}` +
+              `?organizationId=${creds.orgId}&organizationAccessKey=${creds.accessKey}`;
+            const fetchRes = await fetch(apiUrl, {
+              headers: {
+                Accept: "application/json",
+                "X-Requested-With": "XMLHttpRequest",
+                "User-Agent": "Mozilla/5.0",
+              },
+              signal: AbortSignal.timeout(FB_RE_TIMEOUT),
+            });
+            if (!fetchRes.ok) { fbProcessed++; fbSkipped++; continue; }
+            const json = await fetchRes.json() as any;
+            const attrs = json?.data?.attributes ?? json?.attributes ?? json;
+            const abstractRaw = stripFbHtml(attrs?.abstract ?? "");
+            const marketRaw = stripFbHtml(attrs?.marketApplication ?? "");
+            const combined = [abstractRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 5_000);
+
+            if (combined.length >= 50) {
+              await db.execute(sql`
+                UPDATE ingested_assets
+                SET summary = ${combined},
+                    enriched_at = NULL
+                WHERE id = ${row.id}
+              `);
+              fbEnriched++;
+            } else {
+              fbSkipped++;
+            }
+          } catch {
+            fbSkipped++;
+          }
+          fbProcessed++;
+        }
+      }
+
+      const workers = Array.from({ length: FB_RE_CONCURRENCY }, fbWorker);
+      await Promise.all(workers);
+
+      fbLastSummary = {
+        enriched: fbEnriched,
+        skipped: fbSkipped,
+        total: fbTotal,
+        durationMs: Date.now() - fbStartMs,
+        completedAt: new Date().toISOString(),
+      };
+      console.log(`[flintbox-refetch] Complete: ${fbEnriched} enriched, ${fbSkipped} skipped of ${fbTotal} thin Flintbox assets in ${Date.now() - fbStartMs}ms`);
+    } catch (err: any) {
+      console.error("[flintbox-refetch] Error:", err.message);
+    } finally {
+      fbRunning = false;
+      fbAbortController = null;
+    }
+  });
+
   // ── Rescore All (recomputes completeness_score for every enriched asset) ──
 
   let rescoreRunning = false;

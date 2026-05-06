@@ -2736,6 +2736,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
   const [inpartRefetchPolling, setInpartRefetchPolling] = React.useState(false);
+  const [flintboxRefetchPolling, setFlintboxRefetchPolling] = React.useState(false);
   const [dbgPolling, setDbgPolling] = React.useState(false);
   const [dbgConfirm, setDbgConfirm] = React.useState(false);
 
@@ -2938,6 +2939,53 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const stopInpartRefetch = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/enrichment/inpart-refetch/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
+  });
+
+  const { data: flintboxRefetchCount, refetch: refetchFlintboxRefetchCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrichment/flintbox-refetch/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/flintbox-refetch/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: flintboxRefetchStatus } = useQuery<{
+    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
+    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/flintbox-refetch/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/flintbox-refetch/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: flintboxRefetchPolling ? 2000 : false,
+  });
+
+  React.useEffect(() => {
+    if (flintboxRefetchStatus?.running && !flintboxRefetchPolling) setFlintboxRefetchPolling(true);
+    if (!flintboxRefetchStatus?.running && flintboxRefetchPolling) {
+      setFlintboxRefetchPolling(false);
+      refetchFlintboxRefetchCount();
+    }
+  }, [flintboxRefetchStatus?.running]);
+
+  const runFlintboxRefetch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/flintbox-refetch", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => setFlintboxRefetchPolling(true),
+  });
+
+  const stopFlintboxRefetch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/flintbox-refetch/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to stop");
       return res.json();
     },
@@ -3654,6 +3702,72 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-run-inpart-refetch">
                   {runInpartRefetch.isPending || inpartRefetchStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Re-fetch {inpartRefetchCount != null ? `(${inpartRefetchCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Flintbox Re-fetch */}
+          <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden" data-testid="card-flintbox-refetch">
+            <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">FB</span>
+              <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">Flintbox Description Re-fetch</span>
+              <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400 bg-violet-100 dark:bg-violet-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fetches descriptions for thin Flintbox assets by calling the per-technology API endpoint
+                (<span className="font-mono text-[10px] bg-muted px-1 rounded">/api/v1/technologies/{"{uuid}"}</span>),
+                which returns the full <span className="font-medium text-foreground">abstract</span> field absent from the bulk listing API.
+                Covers 54 institutions including Penn State, Beth Israel, Cornell, and Rice.
+                Resets <span className="font-mono text-[10px] bg-muted px-1 rounded">enriched_at</span> so upgraded records are re-enriched by the AI pipeline.
+              </p>
+              {flintboxRefetchCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-400">{flintboxRefetchCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">thin Flintbox assets remaining (&lt;50 chars)</span>
+                </div>
+              )}
+              {flintboxRefetchStatus?.running && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-violet-600" />
+                    <span className="text-xs text-violet-700 dark:text-violet-400 font-medium">Re-fetching Flintbox pages…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto">{flintboxRefetchStatus.processed.toLocaleString()}/{flintboxRefetchStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopFlintboxRefetch.mutate()} disabled={stopFlintboxRefetch.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-flintbox-refetch-stop">
+                      {stopFlintboxRefetch.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
+                  </div>
+                  <div className="w-full bg-violet-100 dark:bg-violet-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-violet-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${flintboxRefetchStatus.total > 0 ? Math.round((flintboxRefetchStatus.processed / flintboxRefetchStatus.total) * 100) : 0}%` }}
+                      data-testid="flintbox-refetch-progress-bar" />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{flintboxRefetchStatus.enriched.toLocaleString()} upgraded · {flintboxRefetchStatus.skipped.toLocaleString()} skipped</span>
+                  </div>
+                </div>
+              )}
+              {flintboxRefetchStatus?.lastSummary && !flintboxRefetchStatus.running && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30" data-testid="flintbox-refetch-result">
+                  <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-violet-700 dark:text-violet-400">
+                    {flintboxRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {flintboxRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    <span className="text-muted-foreground ml-1">({Math.round(flintboxRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchFlintboxRefetchCount()}
+                  className="gap-1.5 border-violet-300 dark:border-violet-700 text-violet-700 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/30" data-testid="button-flintbox-refetch-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runFlintboxRefetch.mutate()}
+                  disabled={runFlintboxRefetch.isPending || flintboxRefetchStatus?.running || (flintboxRefetchCount?.total ?? 0) === 0}
+                  className="gap-1.5 bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-run-flintbox-refetch">
+                  {runFlintboxRefetch.isPending || flintboxRefetchStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Re-fetch {flintboxRefetchCount != null ? `(${flintboxRefetchCount.total.toLocaleString()})` : ""}
                 </Button>
               </div>
             </div>

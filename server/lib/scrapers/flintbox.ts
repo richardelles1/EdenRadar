@@ -42,11 +42,11 @@ interface JsonApiTech {
 
 const discoveredCreds = new Map<string, { orgId: number; accessKey: string }>();
 
-async function discoverCredentials(
-  base: string,
+export async function discoverFlintboxCredentials(
   slug: string,
 ): Promise<{ orgId: number; accessKey: string } | null> {
   if (discoveredCreds.has(slug)) return discoveredCreds.get(slug)!;
+  const base = `https://${slug}.flintbox.com`;
   try {
     const $ = await fetchHtml(base, 15000);
     if (!$) return null;
@@ -64,6 +64,72 @@ async function discoverCredentials(
   }
 }
 
+function stripHtml(s: string): string {
+  return s
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Fetches the single-technology Flintbox API endpoint for thin listings
+ * and merges the full `abstract` (+ `marketApplication`) back onto each listing. */
+async function enrichFlintboxThinListings(
+  results: ScrapedListing[],
+  orgId: number,
+  accessKey: string,
+  base: string,
+  concurrency = 10,
+): Promise<void> {
+  const thin = results.filter(
+    (l) => !l.description || l.description.length < 50,
+  );
+  if (thin.length === 0) return;
+
+  let idx = 0;
+  async function worker() {
+    while (idx < thin.length) {
+      const listing = thin[idx++];
+      if (!listing) continue;
+      const uuid = listing.url.split("/technologies/")[1]?.split("?")[0];
+      if (!uuid) continue;
+      try {
+        const apiUrl =
+          `${base}/api/v1/technologies/${uuid}` +
+          `?organizationId=${orgId}&organizationAccessKey=${accessKey}`;
+        const res = await fetch(apiUrl, {
+          headers: {
+            Accept: "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "User-Agent": "Mozilla/5.0",
+          },
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!res.ok) continue;
+        const json = await res.json() as any;
+        const attrs = json?.data?.attributes ?? json?.attributes ?? (json as any);
+        const abstractRaw = cleanText(stripHtml(attrs?.abstract ?? ""));
+        const marketRaw = cleanText(stripHtml(attrs?.marketApplication ?? ""));
+        const combined = [abstractRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 2000);
+        if (combined.length >= 50) {
+          listing.description = combined;
+          if (abstractRaw.length >= 50) listing.abstract = abstractRaw.slice(0, 2000);
+        }
+      } catch {
+        // silently skip
+      }
+    }
+  }
+
+  const workers = Array.from({ length: Math.min(concurrency, thin.length) }, worker);
+  await Promise.all(workers);
+}
+
 export function createFlintboxScraper(org: FlintboxOrg, institution: string): InstitutionScraper {
   const base = `https://${org.slug}.flintbox.com`;
 
@@ -74,7 +140,7 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
         let { orgId, accessKey } = org;
 
         if (orgId === 0) {
-          const discovered = await discoverCredentials(base, org.slug);
+          const discovered = await discoverFlintboxCredentials(org.slug);
           if (discovered) {
             orgId = discovered.orgId;
             accessKey = discovered.accessKey;
@@ -143,47 +209,13 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
                 });
               }
               const thinCount = results.filter(
-                (l) => !l.description || l.description === l.title || l.description.length < 30
+                (l) => !l.description || l.description === l.title || l.description.length < 50
               ).length;
               if (thinCount > 0) {
-                console.log(`[scraper] ${institution}: fetching detail pages for ${thinCount} thin Flintbox listings...`);
-                await enrichWithDetailPages(results, {
-                  description: [
-                    ".technology-summary",
-                    ".field--name-body .field__item",
-                    ".field--name-body",
-                    ".tech-summary",
-                    "#description",
-                    ".description",
-                    "article .content",
-                    ".entry-content",
-                    "main p",
-                  ],
-                  abstract: [
-                    ".technology-abstract",
-                    ".field--name-field-abstract .field__item",
-                    ".field--name-field-abstract",
-                    "#abstract",
-                    ".abstract",
-                  ],
-                  inventors: [
-                    ".inventor-list li",
-                    ".inventors li",
-                    ".field--name-field-inventors li",
-                    ".inventor-name",
-                  ],
-                  patentStatus: [
-                    ".patent-status",
-                    ".field--name-field-patent-status .field__item",
-                    ".field--name-field-patent-status",
-                    ".ip-status",
-                  ],
-                  licensingStatus: [
-                    ".licensing-status",
-                    ".field--name-field-licensing-status .field__item",
-                    ".field--name-field-licensing-status",
-                  ],
-                });
+                console.log(`[scraper] ${institution}: fetching single-tech API for ${thinCount} thin Flintbox listings...`);
+                await enrichFlintboxThinListings(results, orgId, accessKey, base);
+                const enrichedCount = results.filter((l) => (l.description?.length ?? 0) >= 50).length;
+                console.log(`[scraper] ${institution}: single-tech API enriched ${enrichedCount - (results.length - thinCount)} of ${thinCount} thin listings`);
               }
               console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox API`);
               return results;
