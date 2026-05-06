@@ -383,9 +383,16 @@ export function applyRulesToAsset(asset: {
     }
 
     // ── Target: gene/protein name vocabulary scan ─────────────────────────────
+    // Skip for diagnostics, medical devices, and software — target attribution
+    // for those asset types causes false positives (e.g. "EGFR diagnostic assay"
+    // should not have its target set to EGFR).
     if (!humanV.target && (!asset.target || asset.target === "unknown")) {
-      const val = applyRules(TARGET_RULES, text);
-      if (val) fields.target = val;
+      const effectiveModality = (fields.modality ?? asset.modality ?? "").toLowerCase();
+      const isNonTherapeutic = /^(diagnostic|medical device|software\/algorithm|research tool)$/.test(effectiveModality);
+      if (!isNonTherapeutic) {
+        const val = applyRules(TARGET_RULES, text);
+        if (val) fields.target = val;
+      }
     }
   }
 
@@ -581,7 +588,7 @@ export async function estimateRuleBasedFill(): Promise<{
  * Returns the count of rows updated.
  */
 export async function resetDataSparseFlags(): Promise<number> {
-  const result = await db.execute(sql`
+  const result = await db.execute<{ id: number }>(sql`
     UPDATE ingested_assets
     SET data_sparse = false,
         enriched_at = NULL,
@@ -593,8 +600,9 @@ export async function resetDataSparseFlags(): Promise<number> {
         COALESCE(summary, '') ||
         COALESCE(abstract, '')
       ) >= ${SPARSE_THRESHOLD}
+    RETURNING id
   `);
-  const count = (result as any).rowCount ?? 0;
+  const count = result.rows.length;
   console.log(`[ruleBasedFill] Cleared data_sparse flag for ${count} assets with sufficient text`);
   return count;
 }

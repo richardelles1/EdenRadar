@@ -3277,11 +3277,11 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
   });
 
-  const clearSparse = useMutation({
-    mutationFn: async () => {
+  const clearSparse = useMutation<{ cleared: number }, Error, void>({
+    mutationFn: async (): Promise<{ cleared: number }> => {
       const res = await fetch("/api/admin/enrichment/clear-sparse", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
-      return res.json() as Promise<{ cleared: number }>;
+      return res.json();
     },
     onSuccess: (data) => toast({ title: "Data-sparse flags cleared", description: `${data.cleared.toLocaleString()} assets unlocked for AI enrichment` }),
     onError: (err: Error) => toast({ title: "Failed to clear sparse flags", description: err.message, variant: "destructive" }),
@@ -3494,7 +3494,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30" data-testid="clear-sparse-result">
                   <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
                   <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                    {((clearSparse.data as any)?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
+                    {(clearSparse.data?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
                   </p>
                 </div>
               )}
