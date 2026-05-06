@@ -397,7 +397,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                         <span>{s.rawCount} collected</span>
                         <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
                         {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
-                        {(s.contentUpdated ?? 0) > 0 && <span className="text-blue-600 dark:text-blue-400 font-medium">{s.contentUpdated} updated</span>}
+                        <span className={(s.contentUpdated ?? 0) > 0 ? "text-blue-600 dark:text-blue-400 font-medium" : ""}>{s.contentUpdated ?? 0} updated</span>
                       </div>
                     </div>
                   ))}
@@ -702,7 +702,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       <span>{s.rawCount} collected</span>
                       <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
                       {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
-                      {(s.contentUpdated ?? 0) > 0 && <span className="text-blue-600 dark:text-blue-400 font-medium">{s.contentUpdated} updated</span>}
+                      <span className={(s.contentUpdated ?? 0) > 0 ? "text-blue-600 dark:text-blue-400 font-medium" : ""}>{s.contentUpdated ?? 0} updated</span>
                     </div>
                   </div>
                 ))}
