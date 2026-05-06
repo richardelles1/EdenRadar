@@ -17,7 +17,7 @@ const PAGE_TIMEOUT_MS = 30_000;
 
 export const stanfordScraper: InstitutionScraper = {
   institution: INST,
-  scraperTimeoutMs: 20 * 60 * 1000, // 20 min — manual syncs; CDN worst-case is ~320s list scan
+  scraperTimeoutMs: 25 * 60 * 1000, // 25 min — detail fetch for all ~916 thin listings adds ~15 min on top of ~6 min list scan
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
