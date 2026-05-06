@@ -853,6 +853,8 @@ export class DatabaseStorage implements IStorage {
             ...(listing.inventors?.length ? { inventors: listing.inventors } : {}),
             ...(listing.patentStatus ? { patentStatus: listing.patentStatus } : {}),
             ...(listing.licensingStatus ? { licensingStatus: listing.licensingStatus } : {}),
+            ...(listing.contactEmail ? { contactEmail: listing.contactEmail } : {}),
+            ...(listing.technologyId ? { technologyId: listing.technologyId } : {}),
             // Reset enrichedAt when content changes so re-enrichment is triggered.
             // Also reset deepEnrichAttempts so the asset is eligible for bucket-C
             // low-quality retry again if the fresh deep-enrich result is still thin.
@@ -951,6 +953,12 @@ export class DatabaseStorage implements IStorage {
             lastContentChangeAt: now,
             summary: listing.summary || undefined,
             abstract: listing.abstract || undefined,
+            ...(listing.categories?.length ? { categories: listing.categories } : {}),
+            ...(listing.inventors?.length ? { inventors: listing.inventors } : {}),
+            ...(listing.patentStatus ? { patentStatus: listing.patentStatus } : {}),
+            ...(listing.licensingStatus ? { licensingStatus: listing.licensingStatus } : {}),
+            ...(listing.contactEmail ? { contactEmail: listing.contactEmail } : {}),
+            ...(listing.technologyId ? { technologyId: listing.technologyId } : {}),
             // Heal sourceUrl if it was previously null and we now have a real URL
             ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
             // Reset enrichedAt so the asset gets re-enriched with improved content.
