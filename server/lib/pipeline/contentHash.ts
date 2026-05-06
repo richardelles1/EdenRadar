@@ -23,6 +23,7 @@ export type CompletenessAsset = {
   unmetNeed?: string | null;
   comparableDrugs?: string | null;
   licensingReadiness?: string | null;
+  ipType?: string | null;
   // Device/Tool/Software attributes (stored in deviceAttributes JSONB)
   deviceAttributes?: Record<string, unknown> | null;
   // Common
@@ -45,18 +46,53 @@ function deviceAttr(attrs: Record<string, unknown> | null | undefined, key: stri
 }
 
 /**
- * Returns a 0-100 completeness score for the asset, OR null when the asset
- * class is unknown/"other". Returning null avoids surfacing a misleading
- * Drug/Biologic-shaped score for assets the classifier could not place,
- * which previously inflated trust in low-confidence rows.
+ * Tiered summary quality score: awards 0, half, or full points based on text length.
+ * A rich summary (≥150 chars) earns full credit; a thin one (≥50 chars) earns half.
+ */
+function summaryScore(summary: string | null | undefined, maxPts: number): number {
+  const len = (summary ?? "").length;
+  if (len >= 150) return maxPts;
+  if (len >= 50) return Math.round(maxPts * 0.5);
+  return 0;
+}
+
+/**
+ * Returns a 0-100 completeness score for the asset.
+ *
+ * Formula changes (v2):
+ *
+ * Drug/Biologic — target demoted to a +10 bonus applied after the 100-pt base,
+ * then clamped to 100. This stops penalising TTO assets that structurally cannot
+ * provide molecular nomenclature but are otherwise well-described.
+ *
+ *   Base (100 pts max):
+ *     indication=20, modality=15, developmentStage=15, summary=10, abstract=8,
+ *     licensingReadiness=8, (patentStatus+ipType)=8, mechanismOfAction=8,
+ *     inventors=4, comparableDrugs=4
+ *   Bonus (+10): target — can push above 100, clamped to 100.
+ *
+ * Unclassified (null / "other" / "unknown" assetClass) — previously returned null,
+ * leaving 6,457 assets permanently in the "Unscored" tier. Now returns a generic
+ * description-quality score so these assets can be ranked and surfaced to buyers.
+ *
+ *   summaryLen≥300=50, ≥150=35, ≥50=20 + developmentStage=15, indication=15,
+ *   modality=15, inventors=5 — clamped to 100.
  */
 export function computeCompletenessScore(asset: CompletenessAsset): number | null {
   const cls = (asset.assetClass ?? "").toLowerCase();
 
-  // ── Unscored: classifier returned "other" or no class at all ───────────────
-  // (Legacy rows without assetClass are treated the same so we stop guessing.)
+  // ── Generic "description quality" fallback for unclassified assets ──────────
   if (!cls || cls === "other" || cls === "unknown") {
-    return null;
+    let score = 0;
+    const summaryLen = (asset.summary ?? "").length;
+    if (summaryLen >= 300) score += 50;
+    else if (summaryLen >= 150) score += 35;
+    else if (summaryLen >= 50) score += 20;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 15;
+    if (hasValue(asset.indication)) score += 15;
+    if (hasValue(asset.modality)) score += 15;
+    if (hasValue(asset.inventors)) score += 5;
+    return Math.min(100, score);
   }
 
   // ── Medical Device ─────────────────────────────────────────────────────────
@@ -68,12 +104,11 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
     if (hasValue(deviceAttr(da, "regulatoryPathway")) && deviceAttr(da, "regulatoryPathway") !== "unknown") score += 15;
     if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
     if (hasValue(asset.innovationClaim)) score += 8;
-    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 5;
-    if (hasValue(asset.summary)) score += 5;
+    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
+    score += summaryScore(asset.summary, 8);
     if (hasValue(asset.abstract)) score += 5;
-    if (hasValue(asset.categories)) score += 5;
     if (hasValue(asset.inventors)) score += 5;
-    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 7;
+    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 6;
     return Math.min(100, score);
   }
 
@@ -84,13 +119,13 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
     if (hasValue(deviceAttr(da, "applications"))) score += 20;
     if (hasValue(deviceAttr(da, "targetUsers"))) score += 15;
     if (hasValue(asset.innovationClaim)) score += 10;
-    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
-    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 8;
-    if (hasValue(asset.summary)) score += 7;
-    if (hasValue(asset.abstract)) score += 7;
-    if (hasValue(asset.categories)) score += 7;
+    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 10;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
+    score += summaryScore(asset.summary, 10);
+    if (hasValue(asset.abstract)) score += 8;
     if (hasValue(asset.inventors)) score += 5;
-    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 8;
+    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 7;
+    if (hasValue(asset.categories)) score += 5;
     return Math.min(100, score);
   }
 
@@ -101,34 +136,43 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
     if (hasValue(deviceAttr(da, "useCase"))) score += 20;
     if (hasValue(deviceAttr(da, "deploymentModel")) && deviceAttr(da, "deploymentModel") !== "unknown") score += 15;
     if (hasValue(asset.innovationClaim)) score += 10;
-    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
-    if (hasValue(asset.summary)) score += 7;
-    if (hasValue(asset.abstract)) score += 7;
-    if (hasValue(asset.categories)) score += 7;
+    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 10;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
+    score += summaryScore(asset.summary, 10);
+    if (hasValue(asset.abstract)) score += 8;
     if (hasValue(asset.inventors)) score += 5;
-    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 8;
-    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 8;
+    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 7;
+    if (hasValue(asset.categories)) score += 5;
     return Math.min(100, score);
   }
 
-  // ── Drug/Biologic (default for null/unknown/other) ─────────────────────────
-  // Backward-compatible formula so existing scored assets aren't disrupted
+  // ── Drug/Biologic (and all other classified asset types) ───────────────────
+  // Target is demoted to a bonus field (+10) applied after the 100-pt base.
+  // This prevents well-described TTO assets from being permanently capped at 85.
+  //
+  // Base budget: indication=20, modality=15, developmentStage=15, summary=10,
+  //   abstract=8, licensingReadiness=8, (patentStatus+ipType)=8,
+  //   mechanismOfAction=8, inventors=4, comparableDrugs=4 → 100 pts
+  // Bonus: target=+10 (clamped to 100 after)
   let score = 0;
-  if (hasValue(asset.target)) score += 15;
+  if (hasValue(asset.indication)) score += 20;
   if (hasValue(asset.modality)) score += 15;
-  if (hasValue(asset.indication)) score += 15;
-  if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
-  if (hasValue(asset.summary)) score += 5;
-  if (hasValue(asset.abstract)) score += 5;
-  if (hasValue(asset.mechanismOfAction)) score += 10;
-  if (hasValue(asset.innovationClaim)) score += 5;
-  if (hasValue(asset.unmetNeed)) score += 5;
-  if (hasValue(asset.comparableDrugs)) score += 3;
-  if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 2;
-  if (hasValue(asset.categories)) score += 5;
-  if (hasValue(asset.inventors)) score += 3;
-  if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 2;
-  return score;
+  if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 15;
+  score += summaryScore(asset.summary, 10);
+  if (hasValue(asset.abstract)) score += 8;
+  if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
+  // IP coverage: patentStatus and ipType are complementary signals worth 8 pts combined
+  const hasPatent = hasValue(asset.patentStatus) && asset.patentStatus !== "unknown";
+  const hasIpType = hasValue(asset.ipType);
+  if (hasPatent && hasIpType) score += 8;
+  else if (hasPatent || hasIpType) score += 5;
+  if (hasValue(asset.mechanismOfAction)) score += 8;
+  if (hasValue(asset.inventors)) score += 4;
+  if (hasValue(asset.comparableDrugs)) score += 4;
+  // Target bonus: pushes total above 100 then is clamped — rewards assets with
+  // confirmed molecular targets without penalising the majority that don't have one.
+  if (hasValue(asset.target)) score += 10;
+  return Math.min(100, score);
 }
 
 export function normalizeLicensingStatus(raw: string | undefined): string {

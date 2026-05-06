@@ -2487,10 +2487,10 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="__all__">All tiers</SelectItem>
-            <SelectItem value="excellent">Excellent (80+)</SelectItem>
-            <SelectItem value="good">Good (60-79)</SelectItem>
-            <SelectItem value="partial">Partial (40-59)</SelectItem>
-            <SelectItem value="poor">Poor (1-39)</SelectItem>
+            <SelectItem value="excellent">Investment Ready (80+)</SelectItem>
+            <SelectItem value="good">Reviewable (60-79)</SelectItem>
+            <SelectItem value="partial">Developing (40-59)</SelectItem>
+            <SelectItem value="poor">Thin (1-39)</SelectItem>
             <SelectItem value="unscored">Unscored</SelectItem>
           </SelectContent>
         </Select>
@@ -4041,8 +4041,10 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
             </div>
             <div className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Recomputes <span className="font-medium text-foreground">completeness_score</span> for all enriched assets using the current scoring formula.
-                Run this after modality fill or any bulk field update to bring the band distribution up to date.
+                Recomputes <span className="font-medium text-foreground">completeness_score</span> for all enriched assets using the updated v2 formula.
+                Target is now a <span className="font-medium text-foreground">bonus field</span> (+10, capped at 100) rather than a required gate — assets with indication, modality, and dev stage can now reach 80+ without a molecular target.
+                Unclassified assets now receive a description-quality score instead of null.
+                Run this after any bulk field update to apply the new weights.
               </p>
               {rescoreStatus?.running && (
                 <div className="space-y-2">
@@ -4514,20 +4516,20 @@ function Enrichment({ pw }: { pw: string }) {
   const tierTotal = totalRelevant || 1;
 
   const tiers = [
-    { label: "Excellent", key: "tier_excellent" as const, color: "bg-emerald-500", textColor: "text-emerald-700 dark:text-emerald-400", bgColor: "bg-emerald-50 dark:bg-emerald-950/30" },
-    { label: "Good", key: "tier_good" as const, color: "bg-teal-400", textColor: "text-teal-700 dark:text-teal-400", bgColor: "bg-teal-50 dark:bg-teal-950/30" },
-    { label: "Partial", key: "tier_partial" as const, color: "bg-amber-400", textColor: "text-amber-700 dark:text-amber-400", bgColor: "bg-amber-50 dark:bg-amber-950/30" },
-    { label: "Poor", key: "tier_poor" as const, color: "bg-orange-400", textColor: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-50 dark:bg-orange-950/30" },
-    { label: "Unscored", key: "tier_unscored" as const, color: "bg-muted-foreground/30", textColor: "text-muted-foreground", bgColor: "bg-muted/30" },
+    { label: "Investment Ready", key: "tier_excellent" as const, color: "bg-emerald-500", textColor: "text-emerald-700 dark:text-emerald-400", bgColor: "bg-emerald-50 dark:bg-emerald-950/30", range: "80+" },
+    { label: "Reviewable", key: "tier_good" as const, color: "bg-teal-400", textColor: "text-teal-700 dark:text-teal-400", bgColor: "bg-teal-50 dark:bg-teal-950/30", range: "60–79" },
+    { label: "Developing", key: "tier_partial" as const, color: "bg-amber-400", textColor: "text-amber-700 dark:text-amber-400", bgColor: "bg-amber-50 dark:bg-amber-950/30", range: "40–59" },
+    { label: "Thin", key: "tier_poor" as const, color: "bg-orange-400", textColor: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-50 dark:bg-orange-950/30", range: "1–39" },
+    { label: "Unscored", key: "tier_unscored" as const, color: "bg-muted-foreground/30", textColor: "text-muted-foreground", bgColor: "bg-muted/30", range: "null" },
   ];
 
   const fieldRows = [
-    { label: "Target", key: "fill_target" as const, color: "bg-violet-500" },
-    { label: "Indication", key: "fill_indication" as const, color: "bg-blue-500" },
-    { label: "Modality", key: "fill_modality" as const, color: "bg-indigo-500" },
-    { label: "Dev Stage", key: "fill_stage" as const, color: "bg-teal-500" },
-    { label: "Licensing", key: "fill_licensing" as const, color: "bg-amber-500" },
-    { label: "Patent / IP", key: "fill_patent" as const, color: "bg-orange-500" },
+    { label: "Target", key: "fill_target" as const, color: "bg-violet-500", tooltip: "Specific molecular target (e.g. EGFR, PD-1). Often unavailable in early-stage TTO listings — now a bonus field, not required for a high score." },
+    { label: "Indication", key: "fill_indication" as const, color: "bg-blue-500", tooltip: "Therapeutic area or disease indication (e.g. oncology, Alzheimer's). Highest-weight field for pharma buyers." },
+    { label: "Modality", key: "fill_modality" as const, color: "bg-indigo-500", tooltip: "Therapy type (e.g. small molecule, antibody, gene therapy, cell therapy). Critical for portfolio fit." },
+    { label: "Dev Stage", key: "fill_stage" as const, color: "bg-teal-500", tooltip: "Development stage (e.g. preclinical, Phase I/II). Buyers use this to assess time-to-value." },
+    { label: "Licensing", key: "fill_licensing" as const, color: "bg-amber-500", tooltip: "Licensing availability status (e.g. available, exclusively licensed). Indicates commercial accessibility." },
+    { label: "Patent / IP", key: "fill_patent" as const, color: "bg-orange-500", tooltip: "Patent status (e.g. patent pending, patented) and IP type. Buyers need IP clarity before engagement." },
   ];
 
   const filteredInstitutions = (quality?.institutions ?? [])
@@ -4635,7 +4637,8 @@ function Enrichment({ pw }: { pw: string }) {
                 return (
                   <div key={t.key} className={`rounded-lg p-2 text-center ${t.bgColor}`}>
                     <div className={`text-base font-bold tabular-nums ${t.textColor}`} data-testid={`tier-${t.key}`}>{count.toLocaleString()}</div>
-                    <div className={`text-xs ${t.textColor} opacity-80`}>{t.label}</div>
+                    <div className={`text-xs font-medium ${t.textColor}`}>{t.label}</div>
+                    <div className="text-[10px] text-muted-foreground/70">{t.range}</div>
                     <div className="text-xs text-muted-foreground">{pct}%</div>
                   </div>
                 );
@@ -4654,7 +4657,15 @@ function Enrichment({ pw }: { pw: string }) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border">
             {fieldRows.map(f => (
               <div key={f.key} className="bg-card px-4 py-3 space-y-1.5">
-                <div className="text-xs font-medium text-foreground">{f.label}</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-medium text-foreground">{f.label}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-muted-foreground/50 cursor-help text-[10px] leading-none">ⓘ</span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-56 text-xs">{f.tooltip}</TooltipContent>
+                  </Tooltip>
+                </div>
                 <FillBar pct={g[f.key] !== undefined && g[f.key] !== null ? Number(g[f.key]) : null} color={f.color} />
               </div>
             ))}

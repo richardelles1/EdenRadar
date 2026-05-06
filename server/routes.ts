@@ -4142,6 +4142,7 @@ export async function registerRoutes(
         mechanismOfAction: merged.mechanism_of_action,
         inventors: existing.inventors ?? null,
         patentStatus: existing.patent_status ?? null,
+        ipType: merged.ip_type ?? null,
       });
 
       await db.execute(sql`
@@ -5537,12 +5538,12 @@ export async function registerRoutes(
         id: number; asset_class: string | null; target: string | null; modality: string | null;
         indication: string | null; development_stage: string | null; mechanism_of_action: string | null;
         innovation_claim: string | null; unmet_need: string | null; comparable_drugs: string | null;
-        licensing_readiness: string | null; summary: string | null; abstract: string | null;
+        licensing_readiness: string | null; ip_type: string | null; summary: string | null; abstract: string | null;
         categories: string[] | null; inventors: string[] | null; patent_status: string | null;
         device_attributes: Record<string, unknown> | null; completeness_score: number | null;
       }>(sql`
         SELECT id, asset_class, target, modality, indication, development_stage, mechanism_of_action,
-               innovation_claim, unmet_need, comparable_drugs, licensing_readiness, summary, abstract,
+               innovation_claim, unmet_need, comparable_drugs, licensing_readiness, ip_type, summary, abstract,
                categories, inventors, patent_status, device_attributes, completeness_score
         FROM ingested_assets
         WHERE relevant = true AND enriched_at IS NOT NULL
@@ -5561,6 +5562,7 @@ export async function registerRoutes(
             developmentStage: r.development_stage, mechanismOfAction: r.mechanism_of_action,
             innovationClaim: r.innovation_claim, unmetNeed: r.unmet_need,
             comparableDrugs: r.comparable_drugs, licensingReadiness: r.licensing_readiness,
+            ipType: r.ip_type,
             summary: r.summary, abstract: r.abstract, categories: r.categories,
             inventors: r.inventors, patentStatus: r.patent_status,
             deviceAttributes: r.device_attributes,
