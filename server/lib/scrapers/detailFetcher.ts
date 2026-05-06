@@ -301,9 +301,10 @@ function parseTechPublisherJsonIsland(
     return found;
   }
 
-  // 1a. <script type="application/json"> embedded data blobs.
+  // 1a. <script type="application/json"> embedded data blobs — scan all of them
+  //     so non-inventor fields (patentStatus, technologyId, etc.) are captured
+  //     even when inventors are found in an earlier script tag.
   $('script[type="application/json"]').each((_, el) => {
-    if (result.inventors) return;
     try {
       const data = JSON.parse($(el).text()) as Record<string, unknown>;
       if (data && typeof data === "object") applyJsonObject(data);
@@ -311,23 +312,23 @@ function parseTechPublisherJsonIsland(
   });
 
   // 1b. __NEXT_DATA__ (Next.js SPA shell) — dehydrated query state.
-  if (!result.inventors) {
-    const ndm = NEXT_DATA_RE.exec(html);
-    if (ndm) {
-      try {
-        const nd = JSON.parse(ndm[1]) as Record<string, unknown>;
-        const queries: Record<string, unknown>[] =
-          (((nd?.props as Record<string, unknown>)?.pageProps as Record<string, unknown>)
-            ?.dehydratedState as Record<string, unknown>)?.queries as Record<string, unknown>[] ?? [];
-        for (const q of queries) {
-          const data = (q?.state as Record<string, unknown>)?.data as Record<string, unknown>;
-          if (!data) continue;
-          if (applyJsonObject(data)) break;
-          const details = data?.details as Record<string, unknown>;
-          if (details && applyJsonObject(details)) break;
-        }
-      } catch {}
-    }
+  // Always attempted to pick up non-inventor structured fields regardless
+  // of whether Pass 1a already found inventors.
+  const ndm = NEXT_DATA_RE.exec(html);
+  if (ndm) {
+    try {
+      const nd = JSON.parse(ndm[1]) as Record<string, unknown>;
+      const queries: Record<string, unknown>[] =
+        (((nd?.props as Record<string, unknown>)?.pageProps as Record<string, unknown>)
+          ?.dehydratedState as Record<string, unknown>)?.queries as Record<string, unknown>[] ?? [];
+      for (const q of queries) {
+        const data = (q?.state as Record<string, unknown>)?.data as Record<string, unknown>;
+        if (!data) continue;
+        if (applyJsonObject(data)) break;
+        const details = data?.details as Record<string, unknown>;
+        if (details && applyJsonObject(details)) break;
+      }
+    } catch {}
   }
 
   return result;
@@ -366,7 +367,7 @@ export async function enrichTechPublisherListings(
       // ── Pass 1: JSON data island ──────────────────────────────────────────
       const island = parseTechPublisherJsonIsland(html, $);
 
-      if (!listing.inventors && island.inventors && island.inventors.length > 0)
+      if ((!listing.inventors || listing.inventors.length === 0) && island.inventors && island.inventors.length > 0)
         listing.inventors = island.inventors;
       if (!listing.patentStatus && island.patentStatus)
         listing.patentStatus = island.patentStatus.slice(0, 200);
