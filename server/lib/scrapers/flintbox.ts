@@ -91,43 +91,48 @@ async function enrichFlintboxThinListings(
   );
   if (thin.length === 0) return;
 
-  let idx = 0;
-  async function worker() {
-    while (idx < thin.length) {
-      const listing = thin[idx++];
-      if (!listing) continue;
-      const uuid = listing.url.split("/technologies/")[1]?.split("?")[0];
-      if (!uuid) continue;
-      try {
-        const apiUrl =
-          `${base}/api/v1/technologies/${uuid}` +
-          `?organizationId=${orgId}&organizationAccessKey=${accessKey}`;
-        const res = await fetch(apiUrl, {
-          headers: {
-            Accept: "application/json",
-            "X-Requested-With": "XMLHttpRequest",
-            "User-Agent": "Mozilla/5.0",
-          },
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (!res.ok) continue;
-        const json = await res.json() as any;
-        const attrs = json?.data?.attributes ?? json?.attributes ?? (json as any);
-        const abstractRaw = cleanText(stripHtml(attrs?.abstract ?? ""));
-        const marketRaw = cleanText(stripHtml(attrs?.marketApplication ?? ""));
-        const combined = [abstractRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 2000);
-        if (combined.length >= 50) {
-          listing.description = combined;
-          if (abstractRaw.length >= 50) listing.abstract = abstractRaw.slice(0, 2000);
+  // Process in batches of `concurrency` with a 200ms pause between batches
+  for (let batchStart = 0; batchStart < thin.length; batchStart += concurrency) {
+    const batch = thin.slice(batchStart, batchStart + concurrency);
+    await Promise.all(
+      batch.map(async (listing) => {
+        const uuid = listing.url.split("/technologies/")[1]?.split("?")[0];
+        if (!uuid) return;
+        try {
+          const apiUrl =
+            `${base}/api/v1/technologies/${uuid}` +
+            `?organizationId=${orgId}&organizationAccessKey=${accessKey}`;
+          const res = await fetch(apiUrl, {
+            headers: {
+              Accept: "application/json",
+              "X-Requested-With": "XMLHttpRequest",
+              "User-Agent": "Mozilla/5.0",
+            },
+            signal: AbortSignal.timeout(10_000),
+          });
+          if (!res.ok) return;
+          const json = await res.json() as any;
+          const attrs = json?.data?.attributes ?? json?.attributes ?? (json as any);
+          // Prioritised fallback: description → fullDescription → abstract
+          const descRaw = cleanText(stripHtml(
+            attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "",
+          ));
+          const marketRaw = cleanText(stripHtml(attrs?.marketApplication ?? ""));
+          const combined = [descRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 2000);
+          if (combined.length >= 50) {
+            listing.description = combined;
+            if (descRaw.length >= 50) listing.abstract = descRaw.slice(0, 2000);
+          }
+        } catch {
+          // silently skip
         }
-      } catch {
-        // silently skip
-      }
+      }),
+    );
+    // 200ms pause between batches to avoid rate-limiting
+    if (batchStart + concurrency < thin.length) {
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
-
-  const workers = Array.from({ length: Math.min(concurrency, thin.length) }, worker);
-  await Promise.all(workers);
 }
 
 export function createFlintboxScraper(org: FlintboxOrg, institution: string): InstitutionScraper {

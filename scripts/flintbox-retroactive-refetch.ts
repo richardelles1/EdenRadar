@@ -103,20 +103,20 @@ async function main() {
 
   let enriched = 0;
   let skipped = 0;
-  let idx = 0;
   const startMs = Date.now();
 
-  async function worker(workerId: number) {
-    while (idx < rows.rows.length) {
-      const row = rows.rows[idx++];
-      if (!row?.source_url) { skipped++; continue; }
+  // Process in batches of CONCURRENCY with 200ms pause between batches
+  for (let batchStart = 0; batchStart < rows.rows.length; batchStart += CONCURRENCY) {
+    const batch = rows.rows.slice(batchStart, batchStart + CONCURRENCY);
+    await Promise.all(batch.map(async (row) => {
+      if (!row?.source_url) { skipped++; return; }
 
       const urlMatch = row.source_url.match(/^https?:\/\/([^.]+)\.flintbox\.com\/technologies\/([^/?#]+)/);
-      if (!urlMatch) { skipped++; continue; }
+      if (!urlMatch) { skipped++; return; }
       const [, slug, uuid] = urlMatch;
 
       const creds = credCache.get(slug);
-      if (!creds) { skipped++; continue; }
+      if (!creds) { skipped++; return; }
 
       try {
         const apiUrl =
@@ -130,12 +130,13 @@ async function main() {
           },
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
-        if (!res.ok) { skipped++; continue; }
+        if (!res.ok) { skipped++; return; }
         const json = await res.json() as any;
         const attrs = json?.data?.attributes ?? json?.attributes ?? json;
-        const abstractRaw = stripHtml(attrs?.abstract ?? "");
+        // Prioritised fallback: description → fullDescription → abstract
+        const descRaw = stripHtml(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "");
         const marketRaw = stripHtml(attrs?.marketApplication ?? "");
-        const combined = [abstractRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 5_000);
+        const combined = [descRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 5_000);
 
         if (combined.length >= MIN_DESC_LENGTH) {
           await db.execute(sql`
@@ -145,22 +146,24 @@ async function main() {
             WHERE id = ${row.id}
           `);
           enriched++;
-          const processed = enriched + skipped;
-          const pct = Math.round((processed / total) * 100);
-          process.stdout.write(
-            `\r  [W${workerId}] ${processed}/${total} (${pct}%) — ${enriched} upgraded, ${skipped} skipped — "${(row.asset_name ?? "").slice(0, 40)}"`.padEnd(120)
-          );
         } else {
           skipped++;
         }
       } catch {
         skipped++;
       }
+
+      const processed = enriched + skipped;
+      const pct = Math.round((processed / total) * 100);
+      process.stdout.write(
+        `\r  ${processed}/${total} (${pct}%) — ${enriched} upgraded, ${skipped} skipped — batch ${Math.floor(batchStart / CONCURRENCY) + 1}`.padEnd(120)
+      );
+    }));
+    // 200ms pause between batches to avoid rate-limiting
+    if (batchStart + CONCURRENCY < rows.rows.length) {
+      await new Promise((r) => setTimeout(r, 200));
     }
   }
-
-  const workers = Array.from({ length: CONCURRENCY }, (_, i) => worker(i + 1));
-  await Promise.all(workers);
 
   const durationS = ((Date.now() - startMs) / 1000).toFixed(1);
   console.log(`\n\nDone in ${durationS}s`);

@@ -5103,20 +5103,19 @@ export async function registerRoutes(
           .replace(/\s+/g, " ").trim();
       }
 
-      let idx = 0;
-      async function fbWorker() {
-        while (idx < rows.rows.length) {
-          if (signal.aborted) break;
-          const row = rows.rows[idx++];
-          if (!row?.source_url) { fbProcessed++; fbSkipped++; continue; }
+      // Process in batches of FB_RE_CONCURRENCY with 200ms pause between batches
+      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += FB_RE_CONCURRENCY) {
+        if (signal.aborted) break;
+        const batch = rows.rows.slice(batchStart, batchStart + FB_RE_CONCURRENCY);
+        await Promise.all(batch.map(async (row) => {
+          if (!row?.source_url) { fbProcessed++; fbSkipped++; return; }
 
-          // Extract slug and UUID from URL: https://{slug}.flintbox.com/technologies/{uuid}
           const urlMatch = row.source_url.match(/^https?:\/\/([^.]+)\.flintbox\.com\/technologies\/([^/?#]+)/);
-          if (!urlMatch) { fbProcessed++; fbSkipped++; continue; }
+          if (!urlMatch) { fbProcessed++; fbSkipped++; return; }
           const [, slug, uuid] = urlMatch;
 
           const creds = await getCredentials(slug);
-          if (!creds) { fbProcessed++; fbSkipped++; continue; }
+          if (!creds) { fbProcessed++; fbSkipped++; return; }
 
           try {
             const apiUrl =
@@ -5130,12 +5129,13 @@ export async function registerRoutes(
               },
               signal: AbortSignal.timeout(FB_RE_TIMEOUT),
             });
-            if (!fetchRes.ok) { fbProcessed++; fbSkipped++; continue; }
+            if (!fetchRes.ok) { fbProcessed++; fbSkipped++; return; }
             const json = await fetchRes.json() as any;
             const attrs = json?.data?.attributes ?? json?.attributes ?? json;
-            const abstractRaw = stripFbHtml(attrs?.abstract ?? "");
+            // Prioritised fallback: description → fullDescription → abstract
+            const descRaw = stripFbHtml(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "");
             const marketRaw = stripFbHtml(attrs?.marketApplication ?? "");
-            const combined = [abstractRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 5_000);
+            const combined = [descRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 5_000);
 
             if (combined.length >= 50) {
               await db.execute(sql`
@@ -5152,11 +5152,12 @@ export async function registerRoutes(
             fbSkipped++;
           }
           fbProcessed++;
+        }));
+        // 200ms pause between batches to avoid rate-limiting
+        if (batchStart + FB_RE_CONCURRENCY < rows.rows.length && !signal.aborted) {
+          await new Promise((r) => setTimeout(r, 200));
         }
       }
-
-      const workers = Array.from({ length: FB_RE_CONCURRENCY }, fbWorker);
-      await Promise.all(workers);
 
       fbLastSummary = {
         enriched: fbEnriched,
