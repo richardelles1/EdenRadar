@@ -4747,7 +4747,7 @@ export async function registerRoutes(
           AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
       `);
-      res.json({ total: parseInt((result.rows[0] as any).total ?? "0", 10) });
+      res.json({ total: Number(result.rows[0]?.total ?? 0) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
