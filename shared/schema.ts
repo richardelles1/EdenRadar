@@ -292,6 +292,13 @@ export const syncStaging = pgTable("sync_staging", {
   developmentStage: text("development_stage").notNull().default("unknown"),
   status: text("status").notNull().default("scraped"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  abstract: text("abstract"),
+  inventors: jsonb("inventors").$type<string[]>(),
+  patentStatus: text("patent_status"),
+  licensingStatus: text("licensing_status"),
+  categories: jsonb("categories").$type<string[]>(),
+  contactEmail: text("contact_email"),
+  technologyId: text("technology_id"),
 }, (t) => [
   index("sync_staging_institution_status_created_idx").on(t.institution, t.status, t.createdAt),
   index("sync_staging_session_fingerprint_idx").on(t.sessionId, t.fingerprint),

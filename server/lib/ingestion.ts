@@ -563,6 +563,13 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         indication: "unknown",
         developmentStage: l.stage ?? "unknown",
         status: "scraped",
+        abstract: l.abstract || null,
+        inventors: l.inventors && l.inventors.length > 0 ? l.inventors : null,
+        patentStatus: normalizePatentStatus(l.patentStatus) || null,
+        licensingStatus: normalizeLicensingStatus(l.licensingStatus) || null,
+        categories: l.categories && l.categories.length > 0 ? l.categories : null,
+        contactEmail: l.contactEmail || null,
+        technologyId: l.technologyId || null,
       });
     }
 

@@ -3377,6 +3377,13 @@ export async function registerRoutes(
           indication: r.indication,
           relevant: true,
           runId: 0,
+          abstract: r.abstract || null,
+          inventors: r.inventors && r.inventors.length > 0 ? r.inventors : null,
+          patentStatus: r.patentStatus || null,
+          licensingStatus: r.licensingStatus || null,
+          categories: r.categories && r.categories.length > 0 ? r.categories : null,
+          contactEmail: r.contactEmail || null,
+          technologyId: r.technologyId || null,
         }))
       );
 
