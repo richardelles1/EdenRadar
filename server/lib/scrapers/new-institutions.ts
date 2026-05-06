@@ -1324,7 +1324,8 @@ export const warfScraper: InstitutionScraper = {
       throw new SiteHttpError(503, `${WARF_SEARCH_BASE}${WARF_PARENT_CATEGORIES[0]}`);
     }
 
-    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via category search, fetching detail descriptions...`);
+    const thinBefore = results.filter(l => !l.description || l.description.length < 50);
+    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings (${thinBefore.length} thin), fetching detail descriptions...`);
     await enrichWithDetailPages(results, {
       description: [
         ".section-content",
@@ -1333,7 +1334,10 @@ export const warfScraper: InstitutionScraper = {
         "main p",
       ],
     }, 9999);
-    console.log(`[scraper] University of Wisconsin (WARF): detail enrichment complete`);
+    const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
+    console.log(`[scraper] University of Wisconsin (WARF): detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+    const sample = results.find(l => (l.description?.length ?? 0) > 200);
+    if (sample) console.log(`[scraper] University of Wisconsin (WARF): sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
     return results;
   },
 };

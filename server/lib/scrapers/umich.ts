@@ -16,6 +16,8 @@ const flintbox = createFlintboxScraper(
 interface ElucidItem {
   name: string;
   slug: string;
+  description?: string | null;
+  abstract?: string | null;
 }
 
 interface ElucidResponse {
@@ -24,6 +26,14 @@ interface ElucidResponse {
   total: number;
   items: ElucidItem[];
 }
+
+const ELUCID_DETAIL_SELECTORS = {
+  description: [
+    ".product-description-box .section",
+    ".section",
+    ".product-description-box",
+  ],
+};
 
 async function scrapeElucid(): Promise<ScrapedListing[]> {
   const results: ScrapedListing[] = [];
@@ -34,6 +44,8 @@ async function scrapeElucid(): Promise<ScrapedListing[]> {
       const params = new URLSearchParams();
       params.append("columns[]", "name");
       params.append("columns[]", "slug");
+      params.append("columns[]", "description");
+      params.append("columns[]", "abstract");
       params.append("page", String(page));
       params.append("itemsPerPage", String(ELUCID_ITEMS_PER_PAGE));
 
@@ -55,9 +67,10 @@ async function scrapeElucid(): Promise<ScrapedListing[]> {
 
       for (const item of items) {
         if (!item.name || !item.slug) continue;
+        const apiDesc = item.description?.trim() ?? item.abstract?.trim() ?? "";
         results.push({
           title: item.name.trim(),
-          description: "",
+          description: apiDesc || "",
           url: `${ELUCID_BASE}/product/${item.slug}`,
           institution: INST,
         });
@@ -74,15 +87,13 @@ async function scrapeElucid(): Promise<ScrapedListing[]> {
   }
 
   if (results.length > 0) {
-    console.log(`[scraper] ${INST}: ${results.length} listings, fetching detail descriptions...`);
-    await enrichWithDetailPages(results, {
-      description: [
-        ".product-description-box .section",
-        ".section",
-        ".product-description-box",
-      ],
-    }, 9999);
-    console.log(`[scraper] ${INST}: detail enrichment complete`);
+    const thinBefore = results.filter(l => !l.description || l.description.length < 50);
+    console.log(`[scraper] ${INST}: ${results.length} listings (${thinBefore.length} thin), fetching detail descriptions...`);
+    await enrichWithDetailPages(results, ELUCID_DETAIL_SELECTORS, 9999);
+    const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
+    console.log(`[scraper] ${INST}: detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+    const sample = results.find(l => (l.description?.length ?? 0) > 200);
+    if (sample) console.log(`[scraper] ${INST}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
   }
 
   return results;

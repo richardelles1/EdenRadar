@@ -39,7 +39,8 @@ export const wustlScraper: InstitutionScraper = {
         if (pageNew === 0) break;
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+      const thinBefore = results.filter(l => !l.description || l.description.length < 50);
+      console.log(`[scraper] ${INST}: ${results.length} listings (${thinBefore.length} thin), fetching details...`);
 
       await enrichWithDetailPages(results, {
         description: [
@@ -55,7 +56,10 @@ export const wustlScraper: InstitutionScraper = {
         ],
       }, 9999);
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
+      console.log(`[scraper] ${INST}: detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+      const sample = results.find(l => (l.description?.length ?? 0) > 200);
+      if (sample) console.log(`[scraper] ${INST}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
       return results;
     } catch (err: any) {
       if (err instanceof SiteHttpError) throw err;

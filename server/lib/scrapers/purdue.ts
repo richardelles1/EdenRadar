@@ -69,7 +69,8 @@ export const purdueRFScraper: InstitutionScraper = {
         });
       }
 
-      console.log(`[scraper] ${INST}: ${listings.length} listings, fetching detail descriptions...`);
+      const thinBefore = listings.filter(l => !l.description || l.description.length < 50);
+      console.log(`[scraper] ${INST}: ${listings.length} listings (${thinBefore.length} thin), fetching detail descriptions...`);
       await enrichWithDetailPages(listings, {
         description: [
           ".product-description-box .section",
@@ -77,7 +78,10 @@ export const purdueRFScraper: InstitutionScraper = {
           ".product-description-box",
         ],
       }, 9999);
-      console.log(`[scraper] ${INST}: detail enrichment complete`);
+      const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
+      console.log(`[scraper] ${INST}: detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+      const sample = listings.find(l => (l.description?.length ?? 0) > 200);
+      if (sample) console.log(`[scraper] ${INST}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
       return listings;
     } catch (err: any) {
       console.error(`[scraper] ${INST}: error — ${err.message}`);

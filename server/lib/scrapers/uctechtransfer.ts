@@ -151,7 +151,8 @@ export function createUCTechTransferScraper(
           }
         }
 
-        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages, fetching detail descriptions...`);
+        const thinBefore = allResults.filter(l => !l.description || l.description.length < 50);
+        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages (${thinBefore.length} thin), fetching detail descriptions...`);
         await enrichWithDetailPages(allResults, {
           description: [
             ".middle-content-sub-block",
@@ -160,7 +161,10 @@ export function createUCTechTransferScraper(
             "main p",
           ],
         }, 9999);
-        console.log(`[scraper] ${institution}: detail enrichment complete`);
+        const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
+        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinBefore.length} enriched`);
+        const sample = allResults.find(l => (l.description?.length ?? 0) > 200);
+        if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
         return allResults;
       } catch (err: any) {
         console.error(`[scraper] ${institution} failed: ${err?.message}`);

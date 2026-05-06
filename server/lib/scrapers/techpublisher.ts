@@ -313,10 +313,12 @@ export function createTechPublisherScraper(
           500,
           signal
         );
-        const enriched = results.filter(
-          (l) => l.description && l.description !== l.title && l.description.length >= 30
+        const enrichedCount = results.filter(
+          (l) => l.description && l.description !== l.title && l.description.length >= 50
         ).length;
-        console.log(`[scraper] ${institution}: ${enriched} listings now have detail content`);
+        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${thinCount} enriched`);
+        const sample = results.find(l => (l.description?.length ?? 0) > 200);
+        if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
       }
     }
 
