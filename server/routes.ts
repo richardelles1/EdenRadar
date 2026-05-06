@@ -4716,6 +4716,7 @@ export async function registerRoutes(
     try {
       const rows = await db.execute<{
         band: string; total: string; gap_fill_count: string;
+        missing_target: string; missing_modality: string; missing_indication: string; missing_stage: string;
         missing_moa: string; missing_unmet: string; missing_comparable: string; missing_innovation: string;
         pop_b_count: string;
       }>(sql`
@@ -4736,9 +4737,17 @@ export async function registerRoutes(
                 OR (unmet_need IS NULL OR unmet_need = '')
                 OR (comparable_drugs IS NULL OR comparable_drugs = '')
                 OR (innovation_claim IS NULL OR innovation_claim = '')
+                OR (target IS NULL OR target = '' OR target = 'unknown')
+                OR (modality IS NULL OR modality = '' OR modality = 'unknown')
+                OR (indication IS NULL OR indication = '' OR indication = 'unknown')
+                OR (development_stage = 'unknown')
               )
             THEN 1 END
           ) AS gap_fill_count,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (target IS NULL OR target = '' OR target = 'unknown') THEN 1 END) AS missing_target,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (modality IS NULL OR modality = '' OR modality = 'unknown') THEN 1 END) AS missing_modality,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (indication IS NULL OR indication = '' OR indication = 'unknown') THEN 1 END) AS missing_indication,
+          COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (development_stage = 'unknown') THEN 1 END) AS missing_stage,
           COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (mechanism_of_action IS NULL OR mechanism_of_action = '') THEN 1 END) AS missing_moa,
           COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (unmet_need IS NULL OR unmet_need = '') THEN 1 END) AS missing_unmet,
           COUNT(CASE WHEN asset_class = 'drug_biologic' AND (summary IS NOT NULL AND LENGTH(summary) >= 120) AND (comparable_drugs IS NULL OR comparable_drugs = '') THEN 1 END) AS missing_comparable,
@@ -4750,6 +4759,7 @@ export async function registerRoutes(
       `);
       const bandMap: Record<string, {
         count: number; gapFillCount: number;
+        missingTarget: number; missingModality: number; missingIndication: number; missingStage: number;
         missingMoa: number; missingUnmet: number; missingComparable: number; missingInnovation: number;
         popBCount: number;
       }> = {};
@@ -4757,6 +4767,10 @@ export async function registerRoutes(
         bandMap[r.band] = {
           count: parseInt(r.total, 10),
           gapFillCount: parseInt(r.gap_fill_count, 10),
+          missingTarget: parseInt(r.missing_target, 10),
+          missingModality: parseInt(r.missing_modality, 10),
+          missingIndication: parseInt(r.missing_indication, 10),
+          missingStage: parseInt(r.missing_stage, 10),
           missingMoa: parseInt(r.missing_moa, 10),
           missingUnmet: parseInt(r.missing_unmet, 10),
           missingComparable: parseInt(r.missing_comparable, 10),
@@ -4771,15 +4785,19 @@ export async function registerRoutes(
       // Gap-fill: cost per targeted field-fill (4 fields split evenly across 1000 input + 300 output)
       const costPerFieldFill = ((1000 / 4) * GPT4O_INPUT_PER_M + (300 / 4) * GPT4O_OUTPUT_PER_M) / 1_000_000;
       const bands = ["rich", "decent", "sparse", "very_sparse", "bare"].map((id) => {
-        const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, popBCount: 0 };
+        const d = bandMap[id] ?? { count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, popBCount: 0 };
         const isBare = id === "bare";
         // Formula-based gap-fill cost: total missing field-fills across all gap-fill eligible assets
-        // (sum of per-field missing counts for drug_biologic in this band)
-        const totalMissingFields = d.missingMoa + d.missingUnmet + d.missingComparable + d.missingInnovation;
+        // Includes primary fields (target/modality/indication/stage) + secondary (moa/unmet/comparable/innovation)
+        const totalMissingFields = d.missingTarget + d.missingModality + d.missingIndication + d.missingStage + d.missingMoa + d.missingUnmet + d.missingComparable + d.missingInnovation;
         return {
           id,
           count: d.count,
           gapFillCount: d.gapFillCount,
+          missingTarget: d.missingTarget,
+          missingModality: d.missingModality,
+          missingIndication: d.missingIndication,
+          missingStage: d.missingStage,
           missingMoa: d.missingMoa,
           missingUnmet: d.missingUnmet,
           missingComparable: d.missingComparable,
@@ -4880,10 +4898,14 @@ export async function registerRoutes(
           WHERE relevant = true
             AND asset_class = 'drug_biologic'
             AND (
-              mechanism_of_action IS NULL OR mechanism_of_action = ''
-              OR unmet_need IS NULL OR unmet_need = ''
-              OR comparable_drugs IS NULL OR comparable_drugs = ''
-              OR innovation_claim IS NULL OR innovation_claim = ''
+              (mechanism_of_action IS NULL OR mechanism_of_action = '')
+              OR (unmet_need IS NULL OR unmet_need = '')
+              OR (comparable_drugs IS NULL OR comparable_drugs = '')
+              OR (innovation_claim IS NULL OR innovation_claim = '')
+              OR (target IS NULL OR target = '' OR target = 'unknown')
+              OR (modality IS NULL OR modality = '' OR modality = 'unknown')
+              OR (indication IS NULL OR indication = '' OR indication = 'unknown')
+              OR (development_stage = 'unknown')
             )
             AND ${rangeClause}
             AND (summary IS NOT NULL AND LENGTH(summary) >= 120)
@@ -4953,7 +4975,9 @@ export async function registerRoutes(
       } catch (snapErr: any) { console.error("[band-enrich] pre-run snapshot failed:", snapErr?.message); }
 
       // ── Canonical gap-fill target fields (overridable) ───────────────────
-      const ALL_GAP_FILL_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
+      // Primary fields first (target/modality/indication/stage) — these power Scout cards and ranking.
+      // Secondary fields follow (MoA/unmet/comparable/innovation) — these enrich the dossier.
+      const ALL_GAP_FILL_FIELDS = ["target", "modality", "indication", "developmentStage", "mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"];
       const GAP_FILL_FIELDS = (fields && fields.length > 0) ? fields : ALL_GAP_FILL_FIELDS;
       const FULL_PASS_FIELDS = ["target", "modality", "indication", "developmentStage", "mechanismOfAction", "innovationClaim", "unmetNeed", "comparableDrugs", "licensingReadiness"];
 
@@ -4976,9 +5000,13 @@ export async function registerRoutes(
       const startMs = Date.now();
 
       // Helper: compute per-asset missing fields — only include fields that are null/empty for THIS asset
-      const isEmpty = (v: string | null | undefined) => !v || v.trim() === "";
+      const isEmpty = (v: string | null | undefined) => !v || v.trim() === "" || v.trim().toLowerCase() === "unknown";
       const perAssetFields = (a: typeof assets[0]) =>
         GAP_FILL_FIELDS.filter((f) => {
+          if (f === "target") return isEmpty(a.target);
+          if (f === "modality") return isEmpty(a.modality);
+          if (f === "indication") return isEmpty(a.indication);
+          if (f === "developmentStage") return isEmpty(a.developmentStage);
           if (f === "mechanismOfAction") return isEmpty(a.mechanismOfAction);
           if (f === "unmetNeed") return isEmpty(a.unmetNeed);
           if (f === "comparableDrugs") return isEmpty(a.comparableDrugs);
@@ -5014,7 +5042,9 @@ export async function registerRoutes(
         20,
         async (batch) => {
           if (gapFill) {
-            // Gap-fill: selective writer that only writes target fields and merges completeness score
+            // Gap-fill: selective writer that only writes target fields and merges completeness score.
+            // Primary fields (target/modality/indication/developmentStage) are included so the
+            // "only upgrade" logic in storage can promote null/"unknown" → real value.
             return storage.bulkUpdateIngestedAssetsGapFill(
               batch.map((r) => ({
                 id: r.id,
@@ -5022,6 +5052,10 @@ export async function registerRoutes(
                 unmetNeed: r.unmetNeed,
                 comparableDrugs: r.comparableDrugs,
                 innovationClaim: r.innovationClaim,
+                target: r.target,
+                modality: r.modality,
+                indication: r.indication,
+                developmentStage: r.developmentStage,
               })),
               "gpt4o",
               (field) => { bandFieldCounts[field] = (bandFieldCounts[field] ?? 0) + 1; },

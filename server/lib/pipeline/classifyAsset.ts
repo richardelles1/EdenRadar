@@ -128,6 +128,25 @@ export interface ClassifyResult extends AssetClassification {
   tokenUsage: { inputTokens: number; outputTokens: number };
 }
 
+function buildGapFillSystemPrompt(fields: string[]): string {
+  const lines = [
+    `You are a biotech licensing analyst. Return a JSON object with exactly these fields: ${fields.join(", ")}. Provide the best available value for each field based on the text, or null if genuinely not determinable.`,
+  ];
+  if (fields.includes("target")) {
+    lines.push(`target: the primary molecular target using HGNC gene symbol when possible (e.g. "KRAS", "EGFR", "PDCD1", "CD274", "AR"). Infer from contextual language — "mutant RAS" → "KRAS", "PD-L1 checkpoint" → "CD274", "HER2-positive" → "ERBB2". Return null only if no molecular target is identifiable.`);
+  }
+  if (fields.includes("modality")) {
+    lines.push(`modality: MUST be one of exactly: small molecule | antibody | bispecific antibody | car-t | gene therapy | gene editing | mrna therapy | cell therapy | peptide | sirna | adc | protac | vaccine | nanoparticle | diagnostic | platform technology | unknown`);
+  }
+  if (fields.includes("indication")) {
+    lines.push(`indication: the primary disease indication using a MeSH disease name (e.g. "non-small cell lung cancer", "type 2 diabetes mellitus", "glioblastoma"). Return null only if no disease target is mentioned.`);
+  }
+  if (fields.includes("developmentStage")) {
+    lines.push(`developmentStage: MUST be one of exactly: discovery | preclinical | phase 1 | phase 2 | phase 3 | approved | unknown. Infer from context — "animal model efficacy", "in vivo proof of concept" → preclinical; "dose escalation", "enrolled patients" → phase 1 or phase 2; "IND-enabling" → preclinical; "FDA approved" → approved.`);
+  }
+  return lines.join("\n");
+}
+
 export async function classifyAsset(
   title: string,
   description: string,
@@ -225,7 +244,7 @@ export async function classifyAsset(
       max_tokens: gapFillFields ? 300 : 1000,
       response_format: gapFillSchema,
       messages: [
-        { role: "system", content: gapFillFields ? `You are a biotech analyst. Return a JSON object with exactly these fields: ${gapFillFields.join(", ")}. Each field should contain the requested information about the technology, or null if not determinable from the text.` : SYSTEM_PROMPT },
+        { role: "system", content: gapFillFields ? buildGapFillSystemPrompt(gapFillFields) : SYSTEM_PROMPT },
         { role: "user", content: inputText },
       ],
     });

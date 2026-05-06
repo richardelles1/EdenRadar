@@ -1865,6 +1865,10 @@ interface BandInfo {
   id: "rich" | "decent" | "sparse" | "very_sparse" | "bare";
   count: number;
   gapFillCount: number;
+  missingTarget: number;
+  missingModality: number;
+  missingIndication: number;
+  missingStage: number;
   missingMoa: number;
   missingUnmet: number;
   missingComparable: number;
@@ -3351,11 +3355,11 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               )}
               <div className="space-y-2" data-testid="band-rows">
                 {(bandsData?.bands ?? [
-                  { id: "rich" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                  { id: "decent" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                  { id: "sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                  { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
-                  { id: "bare" as const, count: 0, gapFillCount: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true, populationB: 0 },
+                  { id: "rich" as const, count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "decent" as const, count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "sparse" as const, count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "very_sparse" as const, count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: false, populationB: 0 },
+                  { id: "bare" as const, count: 0, gapFillCount: 0, missingTarget: 0, missingModality: 0, missingIndication: 0, missingStage: 0, missingMoa: 0, missingUnmet: 0, missingComparable: 0, missingInnovation: 0, totalMissingFields: 0, estCostFull: 0, estCostGapFill: 0, needsRescrape: true, populationB: 0 },
                 ]).map((band) => {
                   const isBare = band.id === "bare";
                   const isGapFill = bandGapFill[band.id] ?? !isBare;
@@ -3373,12 +3377,19 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                     bare:        { label: "Bare",        range: "0/null", dot: "bg-muted-foreground/40", bg: "bg-muted/20", border: "border-border", text: "text-muted-foreground" },
                   };
                   const m = bandMeta[band.id];
-                  const gapPills = !isBare ? [
+                  const primaryPills = !isBare ? [
+                    { key: "target", label: "Target", count: band.missingTarget },
+                    { key: "modality", label: "Modality", count: band.missingModality },
+                    { key: "indication", label: "Indication", count: band.missingIndication },
+                    { key: "stage", label: "Stage", count: band.missingStage },
+                  ].filter((p) => p.count > 0) : [];
+                  const secondaryPills = !isBare ? [
                     { key: "moa", label: "MoA", count: band.missingMoa },
                     { key: "unmet", label: "Unmet need", count: band.missingUnmet },
                     { key: "comparable", label: "Comparables", count: band.missingComparable },
                     { key: "innovation", label: "Innovation", count: band.missingInnovation },
                   ].filter((p) => p.count > 0) : [];
+                  const gapPills = [...primaryPills, ...secondaryPills];
                   return (
                     <div key={band.id} className={`rounded-lg border ${m.border} ${m.bg} p-3 space-y-2`} data-testid={`band-row-${band.id}`}>
                       <div className="flex items-center gap-2 flex-wrap">
@@ -3391,7 +3402,16 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                       </div>
                       {gapPills.length > 0 && (
                         <div className="flex flex-wrap gap-1" data-testid={`band-gap-pills-${band.id}`}>
-                          {gapPills.map((p) => <span key={p.key} className="rounded-full bg-white/60 dark:bg-white/5 border border-current/10 text-[10px] px-1.5 py-0.5 text-muted-foreground">{p.count.toLocaleString()} missing {p.label}</span>)}
+                          {primaryPills.map((p) => (
+                            <span key={p.key} className="rounded-full bg-rose-100 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-[10px] px-1.5 py-0.5 text-rose-700 dark:text-rose-400 font-medium">
+                              {p.count.toLocaleString()} missing {p.label}
+                            </span>
+                          ))}
+                          {secondaryPills.map((p) => (
+                            <span key={p.key} className="rounded-full bg-white/60 dark:bg-white/5 border border-current/10 text-[10px] px-1.5 py-0.5 text-muted-foreground">
+                              {p.count.toLocaleString()} missing {p.label}
+                            </span>
+                          ))}
                         </div>
                       )}
                       {!isBare ? (

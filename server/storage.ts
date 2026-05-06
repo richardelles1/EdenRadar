@@ -1948,11 +1948,13 @@ export class DatabaseStorage implements IStorage {
 
   async bulkUpdateIngestedAssetsGapFill(batch: Array<{
     id: number; mechanismOfAction: string; unmetNeed: string; comparableDrugs: string; innovationClaim: string;
+    target?: string | null; modality?: string | null; indication?: string | null; developmentStage?: string | null;
   }>, source = "gpt4o", onFieldFilled?: (field: string) => void): Promise<number> {
     if (batch.length === 0) return 0;
     let written = 0;
     const now = new Date();
     const GAP_FILL_TARGET_FIELDS = ["mechanismOfAction", "unmetNeed", "comparableDrugs", "innovationClaim"] as const;
+    const PRIMARY_GAP_FILL_FIELDS = ["target", "modality", "indication", "developmentStage"] as const;
     await db.transaction(async (tx) => {
       for (const data of batch) {
         try {
@@ -1995,8 +1997,10 @@ export class DatabaseStorage implements IStorage {
           // 1. Field is not human-verified
           // 2. Model returned a non-empty, non-"unknown" value
           // 3. Current DB field is null/empty (gap-fill must never overwrite existing good data)
-          const isGoodValue = (v: string) => v && v.trim() !== "" && v.toLowerCase() !== "unknown" && v.toLowerCase() !== "n/a";
+          const isGoodValue = (v: string | null | undefined) => !!v && v.trim() !== "" && v.toLowerCase() !== "unknown" && v.toLowerCase() !== "n/a";
           const isEmptyInDb = (v: string | null | undefined) => !v || v.trim() === "";
+          // Primary fields treat "unknown" as empty — it means the classifier couldn't determine the value
+          const isEmptyInDbPrimary = (v: string | null | undefined) => !v || v.trim() === "" || v.trim().toLowerCase() === "unknown";
 
           for (const field of GAP_FILL_TARGET_FIELDS) {
             const currentDbValue = cur[field as keyof typeof cur] as string | null | undefined;
@@ -2007,13 +2011,24 @@ export class DatabaseStorage implements IStorage {
             }
           }
 
+          // Primary field fill: only upgrade null/"unknown" → a real value, never overwrite good data
+          for (const field of PRIMARY_GAP_FILL_FIELDS) {
+            const newVal = data[field as keyof typeof data] as string | null | undefined;
+            const currentDbValue = cur[field as keyof typeof cur] as string | null | undefined;
+            if (!hv[field] && isGoodValue(newVal) && isEmptyInDbPrimary(currentDbValue)) {
+              (update as Record<string, unknown>)[field] = newVal;
+              newSources[field] = source;
+              onFieldFilled?.(field);
+            }
+          }
+
           // Recompute completenessScore from MERGED state (preserve non-target field values)
           const merged = {
             assetClass: cur.assetClass,
-            target: cur.target,
-            modality: cur.modality,
-            indication: cur.indication,
-            developmentStage: cur.developmentStage ?? "unknown",
+            target: (update.target as string | undefined) ?? cur.target,
+            modality: (update.modality as string | undefined) ?? cur.modality,
+            indication: (update.indication as string | undefined) ?? cur.indication,
+            developmentStage: (update.developmentStage as string | undefined) ?? cur.developmentStage ?? "unknown",
             mechanismOfAction: (update.mechanismOfAction as string | undefined) ?? cur.mechanismOfAction ?? "",
             innovationClaim: (update.innovationClaim as string | undefined) ?? cur.innovationClaim ?? "",
             ipType: cur.ipType ?? "",
@@ -2031,8 +2046,8 @@ export class DatabaseStorage implements IStorage {
           update.enrichmentSources = newSources;
 
           await tx.update(ingestedAssets).set(update).where(eq(ingestedAssets.id, data.id));
-          // Only count as "succeeded/improved" when at least one gap field was actually written
-          const anyFieldFilled = GAP_FILL_TARGET_FIELDS.some(
+          // Count as "succeeded" when at least one field (primary or secondary) was actually written
+          const anyFieldFilled = [...GAP_FILL_TARGET_FIELDS, ...PRIMARY_GAP_FILL_FIELDS].some(
             (f) => f in update && (update as Record<string, unknown>)[f] != null,
           );
           if (anyFieldFilled) written++;
