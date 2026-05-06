@@ -2725,6 +2725,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [classifyConfirm, setClassifyConfirm] = React.useState(false);
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
+  const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
 
   const { data: pipelineStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
@@ -2834,6 +2835,53 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
       return res.json();
     },
     onSuccess: () => setRescorePolling(true),
+  });
+
+  const { data: detailRefetchCount, refetch: refetchDetailRefetchCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrichment/detail-refetch/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/detail-refetch/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const { data: detailRefetchStatus, refetch: refetchDetailRefetchStatus } = useQuery<{
+    running: boolean; processed: number; total: number; enriched: number; skipped: number;
+    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/detail-refetch/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/detail-refetch/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: detailRefetchPolling ? 2000 : false,
+  });
+
+  React.useEffect(() => {
+    if (detailRefetchStatus?.running && !detailRefetchPolling) setDetailRefetchPolling(true);
+    if (!detailRefetchStatus?.running && detailRefetchPolling) {
+      setDetailRefetchPolling(false);
+      refetchDetailRefetchCount();
+    }
+  }, [detailRefetchStatus?.running]);
+
+  const runDetailRefetch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/detail-refetch", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => setDetailRefetchPolling(true),
+  });
+
+  const stopDetailRefetch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/detail-refetch/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
   });
 
   const prevClassifyRunning = useRef(false);
@@ -3370,6 +3418,70 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-modality-fill">
                   {runModalityFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                   Fill {modalityFillCount != null ? `(${modalityFillCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Detail Re-fetch */}
+          <div className="border border-amber-200 dark:border-amber-900 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden" data-testid="card-detail-refetch">
+            <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">2d</span>
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">Detail Re-fetch for Thin TTO Assets</span>
+              <span className="ml-auto text-xs font-medium text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fetches detail pages for TTO assets whose summaries are under 120 characters — title-only records ingested before detail-page scraping was added.
+                Processes <span className="font-medium text-foreground">drug_biologic</span> assets first, then remaining classes by completeness score.
+                Resets <span className="font-mono text-[10px] bg-muted px-1 rounded">enriched_at</span> so the enrichment pipeline re-processes upgraded records automatically.
+              </p>
+              {detailRefetchCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-amber-700 dark:text-amber-400">{detailRefetchCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">thin TTO assets remaining (&lt;120 chars)</span>
+                </div>
+              )}
+              {detailRefetchStatus?.running && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                    <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Re-fetching detail pages…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto">{detailRefetchStatus.processed.toLocaleString()}/{detailRefetchStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopDetailRefetch.mutate()} disabled={stopDetailRefetch.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-detail-refetch-stop">
+                      {stopDetailRefetch.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
+                  </div>
+                  <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${detailRefetchStatus.total > 0 ? Math.round((detailRefetchStatus.processed / detailRefetchStatus.total) * 100) : 0}%` }}
+                      data-testid="detail-refetch-progress-bar" />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{detailRefetchStatus.enriched.toLocaleString()} upgraded · {detailRefetchStatus.skipped.toLocaleString()} skipped</span>
+                  </div>
+                </div>
+              )}
+              {detailRefetchStatus?.lastSummary && !detailRefetchStatus.running && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="detail-refetch-result">
+                  <CheckCircle2 className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                    {detailRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {detailRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    <span className="text-muted-foreground ml-1">({Math.round(detailRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchDetailRefetchCount()}
+                  className="gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30" data-testid="button-detail-refetch-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runDetailRefetch.mutate()}
+                  disabled={runDetailRefetch.isPending || detailRefetchStatus?.running || (detailRefetchCount?.total ?? 0) === 0}
+                  className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white" data-testid="button-run-detail-refetch">
+                  {runDetailRefetch.isPending || detailRefetchStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Re-fetch {detailRefetchCount != null ? `(${detailRefetchCount.total.toLocaleString()})` : ""}
                 </Button>
               </div>
             </div>

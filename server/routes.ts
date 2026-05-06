@@ -10,7 +10,8 @@ import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedRefe
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
-import { computeCompletenessScore } from "./lib/pipeline/contentHash";
+import { computeCompletenessScore, computeContentHash } from "./lib/pipeline/contentHash";
+import { fetchHtml, extractText } from "./lib/scrapers/utils";
 import { makeFingerprint } from "./lib/ingestion";
 import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
@@ -4717,6 +4718,152 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[modality-fill] Error:", err.message);
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Detail Re-fetch (retroactive content upgrade for thin TTO assets) ──
+
+  const DETAIL_REFETCH_SELECTORS = [
+    ".field--name-body",
+    ".tech-detail__description",
+    ".technology-description",
+    "#description",
+    ".description",
+    "article .content",
+    ".entry-content",
+    "main p",
+    ".field--name-field-abstract",
+    ".tech-detail__abstract",
+    ".technology-abstract",
+    "#abstract",
+    ".abstract",
+  ];
+
+  let drRunning = false;
+  let drProcessed = 0;
+  let drTotal = 0;
+  let drEnriched = 0;
+  let drSkipped = 0;
+  let drAbortController: AbortController | null = null;
+  let drLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/detail-refetch/count", requireAdmin, async (_req, res) => {
+    try {
+      const result = await db.execute<{ total: string }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE relevant = true
+          AND source_name = 'tech_transfer'
+          AND length(COALESCE(summary, '')) < 120
+      `);
+      res.json({ total: parseInt((result.rows[0] as any).total ?? "0", 10) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/enrichment/detail-refetch/status", requireAdmin, (_req, res) => {
+    res.json({
+      running: drRunning,
+      processed: drProcessed,
+      total: drTotal,
+      enriched: drEnriched,
+      skipped: drSkipped,
+      lastSummary: drLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/detail-refetch/stop", requireAdmin, (_req, res) => {
+    if (!drRunning) return res.status(409).json({ error: "Not running" });
+    drAbortController?.abort();
+    res.json({ message: "Stop signal sent" });
+  });
+
+  app.post("/api/admin/enrichment/detail-refetch", requireAdmin, async (_req, res) => {
+    if (drRunning) return res.status(409).json({ error: "Detail re-fetch already running" });
+    drRunning = true;
+    drProcessed = 0;
+    drTotal = 0;
+    drEnriched = 0;
+    drSkipped = 0;
+    drAbortController = new AbortController();
+    const { signal } = drAbortController;
+    const startMs = Date.now();
+    res.json({ message: "Detail re-fetch started" });
+
+    try {
+      const rows = await db.execute<{ id: number; source_url: string | null; summary: string | null }>(sql`
+        SELECT id, source_url, summary
+        FROM ingested_assets
+        WHERE relevant = true
+          AND source_name = 'tech_transfer'
+          AND length(COALESCE(summary, '')) < 120
+          AND source_url IS NOT NULL
+        ORDER BY
+          (asset_class = 'drug_biologic') DESC,
+          COALESCE(completeness_score, 0) DESC
+      `);
+
+      drTotal = rows.rows.length;
+      const BATCH = 300;
+      const BATCH_PAUSE_MS = 2000;
+      const CONCURRENCY = 5;
+
+      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += BATCH) {
+        if (signal.aborted) break;
+        const batch = rows.rows.slice(batchStart, batchStart + BATCH);
+        let batchIdx = 0;
+
+        async function drWorker() {
+          while (batchIdx < batch.length) {
+            if (signal.aborted) break;
+            const row = batch[batchIdx++];
+            if (!row?.source_url) { drProcessed++; drSkipped++; continue; }
+            try {
+              const $ = await fetchHtml(row.source_url, 12000, signal, 1);
+              if (!$) { drProcessed++; drSkipped++; continue; }
+              const content = extractText($, DETAIL_REFETCH_SELECTORS);
+              if (content && content.length > 120) {
+                const newHash = computeContentHash(row.summary ?? "", content, "");
+                await db.execute(sql`
+                  UPDATE ingested_assets
+                  SET summary = ${content.slice(0, 5000)},
+                      content_hash = ${newHash},
+                      enriched_at = NULL
+                  WHERE id = ${row.id}
+                `);
+                drEnriched++;
+              } else {
+                drSkipped++;
+              }
+            } catch {
+              drSkipped++;
+            }
+            drProcessed++;
+          }
+        }
+
+        const workers = Array.from({ length: Math.min(CONCURRENCY, batch.length) }, drWorker);
+        await Promise.all(workers);
+
+        if (batchStart + BATCH < rows.rows.length && !signal.aborted) {
+          await new Promise((r) => setTimeout(r, BATCH_PAUSE_MS));
+        }
+      }
+
+      drLastSummary = {
+        enriched: drEnriched,
+        skipped: drSkipped,
+        total: drTotal,
+        durationMs: Date.now() - startMs,
+        completedAt: new Date().toISOString(),
+      };
+      console.log(`[detail-refetch] Complete: ${drEnriched} enriched, ${drSkipped} skipped of ${drTotal} thin TTO assets in ${Date.now() - startMs}ms`);
+    } catch (err: any) {
+      console.error("[detail-refetch] Error:", err.message);
+    } finally {
+      drRunning = false;
+      drAbortController = null;
     }
   });
 
