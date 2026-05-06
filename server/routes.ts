@@ -29,7 +29,7 @@ import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
-import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
+import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "./lib/ingestion";
 import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
@@ -3420,6 +3420,23 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Push failed" });
+    }
+  });
+
+  // ── Refresh scraped fields for an institution (Task #881) ────────────────
+  // Re-runs the scraper and null-fills rich fields on already-indexed assets
+  // without touching the sync staging pipeline or new-asset detection.
+  app.post("/api/ingest/sync/:institution/refresh-scraped-fields", requireAdmin, async (req, res) => {
+    const institution = decodeURIComponent(String(req.params.institution));
+    try {
+      const result = await runScrapedFieldRefresh(institution);
+      res.json({
+        ...result,
+        message: `Checked ${result.checked} assets — updated ${result.fieldsUpdated}, queued ${result.queuedForReenrichment} for re-enrichment`,
+      });
+    } catch (err: any) {
+      console.error(`[refresh-scraped-fields] ${institution}: ${err.message}`);
+      res.status(500).json({ error: err.message });
     }
   });
 

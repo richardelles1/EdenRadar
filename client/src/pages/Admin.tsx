@@ -317,6 +317,29 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     },
   });
 
+  const refreshScrapedFieldsMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/refresh-scraped-fields`, {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Refresh failed");
+      }
+      return res.json() as Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number; message: string }>;
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Fields refreshed",
+        description: data.message,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Refresh failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const session = statusData?.session;
   const newEntries = statusData?.newEntries ?? [];
   const isRunning = session?.status === "running" || syncForThisInst;
@@ -707,6 +730,26 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {!isRunning && (
+            <div className="px-5 pb-3 pt-2 border-t border-border/30 flex items-center gap-2" data-testid="sync-maintenance-tools">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-foreground text-xs h-7 px-2"
+                onClick={() => refreshScrapedFieldsMutation.mutate()}
+                disabled={refreshScrapedFieldsMutation.isPending}
+                data-testid="button-refresh-scraped-fields"
+              >
+                {refreshScrapedFieldsMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1.5" />
+                ) : (
+                  <RefreshCw className="h-3 w-3 mr-1.5" />
+                )}
+                Refresh scraped fields
+              </Button>
             </div>
           )}
         </div>

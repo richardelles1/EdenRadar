@@ -686,3 +686,82 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     activeSyncs.delete(institutionName);
   }
 }
+
+// ── Scraped-field refresh (Task #881) ──────────────────────────────────────
+// Re-runs the scraper for a single institution and fills any null/sparse rich
+// fields (abstract, inventors, patentStatus, licensingStatus, categories,
+// contactEmail, technologyId) on already-indexed rows — without running the
+// full sync pipeline or touching new-asset detection.
+export async function runScrapedFieldRefresh(
+  institutionName: string,
+): Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number }> {
+  if (ingestionRunning) throw new Error("Full ingestion is running — cannot refresh");
+  if (activeSyncs.has(institutionName)) {
+    throw new Error(`A sync is already running for ${institutionName} — wait for it to complete`);
+  }
+
+  const scraper = ALL_SCRAPERS.find((s) => s.institution === institutionName);
+  if (!scraper) throw new Error(`No scraper found for institution: ${institutionName}`);
+
+  const scraperType = (scraper.scraperType === "stub" ? "http" : (scraper.scraperType ?? "http")) as "playwright" | "http" | "api";
+  const SCRAPER_TIMEOUT_MS = scraper.scraperTimeoutMs ?? TIMEOUT_BY_TYPE[scraperType] ?? TIMEOUT_BY_TYPE.http;
+
+  console.log(`[refresh-fields] ${institutionName}: starting scraped-field refresh...`);
+
+  // Run the scraper with an empty knownUrls set so we get the full catalog including
+  // already-indexed assets (not just new ones).
+  let listings: ScrapedListing[] | undefined;
+  let lastScrapeError: Error | null = null;
+  for (let attempt = 1; attempt <= SCRAPE_MAX_ATTEMPTS; attempt++) {
+    const scrapeController = new AbortController();
+    let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+    try {
+      listings = await Promise.race([
+        scraper.scrape(scrapeController.signal, new Set()),
+        new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => {
+            scrapeController.abort();
+            reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s)`));
+          }, SCRAPER_TIMEOUT_MS);
+        }),
+      ]);
+      scrapeController.abort();
+      lastScrapeError = null;
+      break;
+    } catch (err: any) {
+      scrapeController.abort();
+      lastScrapeError = err;
+      const retryable = attempt < SCRAPE_MAX_ATTEMPTS && isScrapeRetryable(err?.message ?? "");
+      if (retryable) {
+        console.log(`[refresh-fields] ${institutionName}: attempt ${attempt} failed — retrying in ${SCRAPE_RETRY_DELAY_MS / 1000}s...`);
+        await new Promise((resolve) => setTimeout(resolve, SCRAPE_RETRY_DELAY_MS));
+      } else {
+        break;
+      }
+    } finally {
+      if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+    }
+  }
+
+  if (lastScrapeError || !listings) {
+    throw new Error(`Scraper failed: ${lastScrapeError?.message ?? "Unknown error"}`);
+  }
+
+  console.log(`[refresh-fields] ${institutionName}: scraped ${listings.length} listings`);
+
+  const normalized = listings
+    .filter((l) => l.title && l.institution)
+    .map((l) => ({
+      fingerprint: makeFingerprint(l.title, l.institution!),
+      abstract: l.abstract || null,
+      inventors: l.inventors && l.inventors.length > 0 ? l.inventors : null,
+      patentStatus: normalizePatentStatus(l.patentStatus) || null,
+      licensingStatus: normalizeLicensingStatus(l.licensingStatus) || null,
+      categories: l.categories && l.categories.length > 0 ? l.categories : null,
+      contactEmail: l.contactEmail || null,
+      technologyId: l.technologyId || null,
+      description: l.description || null,
+    }));
+
+  return storage.bulkRefreshScrapedFields(institutionName, normalized);
+}

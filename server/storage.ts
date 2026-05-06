@@ -245,6 +245,21 @@ export interface IStorage {
   resetLatestEnrichmentJob(): Promise<void>;
   stampEnrichedAt(assetId: number): Promise<void>;
 
+  bulkRefreshScrapedFields(
+    institution: string,
+    listings: Array<{
+      fingerprint: string;
+      abstract: string | null;
+      inventors: string[] | null;
+      patentStatus: string | null;
+      licensingStatus: string | null;
+      categories: string[] | null;
+      contactEmail: string | null;
+      technologyId: string | null;
+      description: string | null;
+    }>,
+  ): Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number }>;
+
   getDeepEnrichmentCoverage(): Promise<{
     totalRelevant: number;
     deepEnriched: number;
@@ -1658,6 +1673,100 @@ export class DatabaseStorage implements IStorage {
 
   async stampEnrichedAt(assetId: number): Promise<void> {
     await db.update(ingestedAssets).set({ enrichedAt: new Date() }).where(eq(ingestedAssets.id, assetId));
+  }
+
+  async bulkRefreshScrapedFields(
+    institution: string,
+    listings: Array<{
+      fingerprint: string;
+      abstract: string | null;
+      inventors: string[] | null;
+      patentStatus: string | null;
+      licensingStatus: string | null;
+      categories: string[] | null;
+      contactEmail: string | null;
+      technologyId: string | null;
+      description: string | null;
+    }>,
+  ): Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number }> {
+    if (!listings.length) return { checked: 0, fieldsUpdated: 0, queuedForReenrichment: 0 };
+
+    // Fetch just the fields we need to compare — avoids pulling full asset rows
+    const existing = await db
+      .select({
+        id: ingestedAssets.id,
+        fingerprint: ingestedAssets.fingerprint,
+        abstract: ingestedAssets.abstract,
+        inventors: ingestedAssets.inventors,
+        patentStatus: ingestedAssets.patentStatus,
+        licensingStatus: ingestedAssets.licensingStatus,
+        categories: ingestedAssets.categories,
+        contactEmail: ingestedAssets.contactEmail,
+        technologyId: ingestedAssets.technologyId,
+        summary: ingestedAssets.summary,
+        humanVerified: ingestedAssets.humanVerified,
+      })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.institution, institution));
+
+    const existingByFp = new Map(existing.map((r) => [r.fingerprint, r]));
+
+    let fieldsUpdated = 0;
+    let queuedForReenrichment = 0;
+
+    for (const listing of listings) {
+      const row = existingByFp.get(listing.fingerprint);
+      if (!row) continue; // new asset — not our concern here
+
+      const hv = (row.humanVerified as Record<string, boolean> | null) ?? {};
+      const updates: Record<string, unknown> = {};
+
+      // Null-fill only: skip fields already populated or human-verified
+      if (!hv.abstract && !row.abstract && listing.abstract) {
+        updates.abstract = listing.abstract;
+      }
+      if (!hv.inventors && (!(row.inventors as string[] | null)?.length) && listing.inventors?.length) {
+        updates.inventors = listing.inventors;
+      }
+      if (!hv.patentStatus && !row.patentStatus && listing.patentStatus) {
+        updates.patentStatus = listing.patentStatus;
+      }
+      if (!hv.licensingStatus && !row.licensingStatus && listing.licensingStatus) {
+        updates.licensingStatus = listing.licensingStatus;
+      }
+      if (!hv.categories && (!(row.categories as string[] | null)?.length) && listing.categories?.length) {
+        updates.categories = listing.categories;
+      }
+      if (!hv.contactEmail && !row.contactEmail && listing.contactEmail) {
+        updates.contactEmail = listing.contactEmail;
+      }
+      if (!hv.technologyId && !row.technologyId && listing.technologyId) {
+        updates.technologyId = listing.technologyId;
+      }
+
+      // If the scraped description is substantially richer (>20% longer), queue
+      // for LLM re-enrichment so the improved text is picked up by deep-enrich.
+      const existingLen = (row.summary || "").length;
+      const newLen = (listing.description || "").length;
+      const descriptionGrewSubstantially = existingLen > 0 && newLen > existingLen * 1.2;
+      if (descriptionGrewSubstantially) {
+        updates.enrichedAt = null;
+        updates.deepEnrichAttempts = 0;
+      }
+
+      if (Object.keys(updates).length === 0) continue;
+
+      await db
+        .update(ingestedAssets)
+        .set(updates as any)
+        .where(eq(ingestedAssets.id, row.id));
+
+      fieldsUpdated++;
+      if (descriptionGrewSubstantially) queuedForReenrichment++;
+    }
+
+    console.log(`[storage] bulkRefreshScrapedFields(${institution}): checked=${listings.length} updated=${fieldsUpdated} queued=${queuedForReenrichment}`);
+    return { checked: listings.length, fieldsUpdated, queuedForReenrichment };
   }
 
   async getDeepEnrichmentCoverage(): Promise<{
