@@ -231,21 +231,21 @@ export async function enrichWithDetailPages(
 // ---------------------------------------------------------------------------
 // TechPublisher-specific structured extraction
 // ---------------------------------------------------------------------------
-// TechPublisher is a classic ASP.NET WebForms platform used by ~70 institutions
-// (Rochester, Tufts, Brown, Princeton, all UC campuses, etc.). It does NOT embed
-// a JSON data island — there is no `__NEXT_DATA__` or `application/json` script.
+// TechPublisher sites (Rochester, Tufts, Brown, Princeton, UC campuses, etc.)
+// serve rich inventor data in the static HTML response. Inventor names appear
+// as anchor elements whose href contains `type=i` — TechPublisher's own
+// internal search parameter convention. Categories follow the same pattern
+// with `type=c`, and the <meta name="keywords"> tag carries a comma-separated
+// category list on many deployments.
 //
-// All rich fields are present in the **static HTML**:
-//   • Inventors  — <a href="...type=i">Inventor Name</a>  (one anchor per person)
-//   • Categories — <meta name="keywords" content="Cat1, Cat2"> (preferred)
-//                  OR <a href="...type=c">Category</a> (fallback)
-//   • Contact    — <a href="mailto:..."> (first mailto link)
-//   • Tech ID    — reference-number pattern in page text (e.g. "1-18137")
-//   • Description — .c_tp_description  (most reliable class across deployments)
+// This function mirrors enrichInPartListings: a dedicated platform-specific
+// extraction pass that uses TechPublisher's native HTML conventions as the
+// primary strategy, with standard CSS-selector fallbacks for non-standard
+// deployments.
 //
-// This function mirrors the pattern of enrichInPartListings: a dedicated
-// structured-extraction pass for a known platform, using its native HTML
-// conventions rather than generic CSS-selector guessing.
+// Filter scope: listings that are thin (no description) OR that already have
+// a description but are still missing inventors — ensuring inventor fill
+// regardless of whether the listing had a description from another source.
 // ---------------------------------------------------------------------------
 
 const TP_CONCURRENCY = 5;
@@ -256,12 +256,29 @@ const TP_TIMEOUT = 14_000;
 const TP_REF_RE =
   /(?:Reference\s*(?:Number|No\.?)|Docket\s*(?:Number|No\.?)|Case\s*(?:Number|No\.?))[\s:]+([A-Z0-9][\w\-\/\.]{1,30})/i;
 
+// CSS-selector fallbacks for inventor extraction on non-standard TechPublisher
+// deployments that may not follow the type=i anchor convention.
+const TP_INVENTOR_FALLBACK_SELS = [
+  "#inventorLinks",
+  ".field--name-field-inventors li",
+  ".field--name-field-inventors .field__item",
+  ".inventors li",
+  ".inventor-name",
+];
+
 export async function enrichTechPublisherListings(
   results: ScrapedListing[],
   signal?: AbortSignal,
 ): Promise<void> {
+  // Fetch detail pages for thin listings AND for any listing still missing
+  // inventors, so inventor fill is not blocked by pre-existing descriptions.
   const toEnrich = results.filter(
-    (l) => !l.description || l.description === l.title || l.description.length < 30,
+    (l) =>
+      !l.description ||
+      l.description === l.title ||
+      l.description.length < 30 ||
+      !l.inventors ||
+      l.inventors.length === 0,
   );
   if (toEnrich.length === 0) return;
 
@@ -281,15 +298,27 @@ export async function enrichTechPublisherListings(
 
       const $ = load(html);
 
-      // 1. Inventors — each inventor is a static anchor with `type=i` in the href.
-      //    This is TechPublisher's own link convention; it never requires JS.
+      // 1. Inventors — primary: type=i anchor links (TechPublisher's own convention).
+      //    Fallback: standard CSS selectors for non-standard deployments.
       if (!listing.inventors || listing.inventors.length === 0) {
         const inventors: string[] = [];
         $('a[href*="type=i"]').each((_, el) => {
           const name = cleanText($(el).text());
           if (name && name.length > 2) inventors.push(name);
         });
-        if (inventors.length > 0) listing.inventors = inventors;
+        if (inventors.length > 0) {
+          listing.inventors = inventors;
+        } else {
+          // CSS fallbacks for non-standard TechPublisher deployments.
+          for (const sel of TP_INVENTOR_FALLBACK_SELS) {
+            const fallbackInvs: string[] = [];
+            $(sel).each((_, el) => {
+              const t = cleanText($(el).text());
+              if (t && t.length > 2) fallbackInvs.push(t);
+            });
+            if (fallbackInvs.length > 0) { listing.inventors = fallbackInvs; break; }
+          }
+        }
       }
 
       // 2. Categories — prefer the `<meta name="keywords">` tag (machine-readable,
