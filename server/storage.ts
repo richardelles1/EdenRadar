@@ -1711,61 +1711,108 @@ export class DatabaseStorage implements IStorage {
 
     const existingByFp = new Map(existing.map((r) => [r.fingerprint, r]));
 
-    let fieldsUpdated = 0;
-    let queuedForReenrichment = 0;
+    // Per-field batches: collect (id, value) pairs for rows that need each field filled.
+    // This allows one batched SQL UPDATE per field rather than one query per row.
+    const abstractBatch   = new Map<number, string>();
+    const patentBatch     = new Map<number, string>();
+    const licensingBatch  = new Map<number, string>();
+    const contactBatch    = new Map<number, string>();
+    const techIdBatch     = new Map<number, string>();
+    const inventorsBatch  = new Map<number, string[]>();
+    const categoriesBatch = new Map<number, string[]>();
+    const reenrichIds: number[] = [];
 
     for (const listing of listings) {
       const row = existingByFp.get(listing.fingerprint);
-      if (!row) continue; // new asset — not our concern here
-
+      if (!row) continue;
       const hv = (row.humanVerified as Record<string, boolean> | null) ?? {};
-      const updates: Record<string, unknown> = {};
 
       // Null-fill only: skip fields already populated or human-verified
-      if (!hv.abstract && !row.abstract && listing.abstract) {
-        updates.abstract = listing.abstract;
-      }
-      if (!hv.inventors && (!(row.inventors as string[] | null)?.length) && listing.inventors?.length) {
-        updates.inventors = listing.inventors;
-      }
-      if (!hv.patentStatus && !row.patentStatus && listing.patentStatus) {
-        updates.patentStatus = listing.patentStatus;
-      }
-      if (!hv.licensingStatus && !row.licensingStatus && listing.licensingStatus) {
-        updates.licensingStatus = listing.licensingStatus;
-      }
-      if (!hv.categories && (!(row.categories as string[] | null)?.length) && listing.categories?.length) {
-        updates.categories = listing.categories;
-      }
-      if (!hv.contactEmail && !row.contactEmail && listing.contactEmail) {
-        updates.contactEmail = listing.contactEmail;
-      }
-      if (!hv.technologyId && !row.technologyId && listing.technologyId) {
-        updates.technologyId = listing.technologyId;
-      }
+      if (!hv.abstract && !row.abstract && listing.abstract)
+        abstractBatch.set(row.id, listing.abstract);
+      if (!hv.patentStatus && !row.patentStatus && listing.patentStatus)
+        patentBatch.set(row.id, listing.patentStatus);
+      if (!hv.licensingStatus && !row.licensingStatus && listing.licensingStatus)
+        licensingBatch.set(row.id, listing.licensingStatus);
+      if (!hv.contactEmail && !row.contactEmail && listing.contactEmail)
+        contactBatch.set(row.id, listing.contactEmail);
+      if (!hv.technologyId && !row.technologyId && listing.technologyId)
+        techIdBatch.set(row.id, listing.technologyId);
+      if (!hv.inventors && !(row.inventors as string[] | null)?.length && listing.inventors?.length)
+        inventorsBatch.set(row.id, listing.inventors);
+      if (!hv.categories && !(row.categories as string[] | null)?.length && listing.categories?.length)
+        categoriesBatch.set(row.id, listing.categories);
 
-      // If the scraped description is substantially richer (>20% longer), queue
-      // for LLM re-enrichment so the improved text is picked up by deep-enrich.
+      // Queue for LLM re-enrichment when the fresh description is >20% longer than
+      // the stored summary — signals substantially richer scraped content.
       const existingLen = (row.summary || "").length;
       const newLen = (listing.description || "").length;
-      const descriptionGrewSubstantially = existingLen > 0 && newLen > existingLen * 1.2;
-      if (descriptionGrewSubstantially) {
-        updates.enrichedAt = null;
-        updates.deepEnrichAttempts = 0;
-      }
-
-      if (Object.keys(updates).length === 0) continue;
-
-      await db
-        .update(ingestedAssets)
-        .set(updates as any)
-        .where(eq(ingestedAssets.id, row.id));
-
-      fieldsUpdated++;
-      if (descriptionGrewSubstantially) queuedForReenrichment++;
+      if (existingLen > 0 && newLen > existingLen * 1.2) reenrichIds.push(row.id);
     }
 
-    console.log(`[storage] bulkRefreshScrapedFields(${institution}): checked=${listings.length} updated=${fieldsUpdated} queued=${queuedForReenrichment}`);
+    const CHUNK = 500;
+
+    // One batched SQL UPDATE per text field, using a VALUES clause so all rows for
+    // that field are written in a single round-trip.
+    async function batchUpdateText(batch: Map<number, string>, colSql: string): Promise<number> {
+      if (!batch.size) return 0;
+      const entries = [...batch.entries()];
+      for (let i = 0; i < entries.length; i += CHUNK) {
+        const chunk = entries.slice(i, i + CHUNK);
+        const values = sql.join(chunk.map(([id, val]) => sql`(${id}, ${val})`), sql`, `);
+        await db.execute(
+          sql`UPDATE ingested_assets ia SET ${sql.raw(colSql)} = v.val
+              FROM (VALUES ${values}) AS v(id, val) WHERE ia.id = v.id::int`,
+        );
+      }
+      return batch.size;
+    }
+
+    // One batched SQL UPDATE per JSONB array field.
+    async function batchUpdateJsonb(batch: Map<number, string[]>, colSql: string): Promise<number> {
+      if (!batch.size) return 0;
+      const entries = [...batch.entries()];
+      for (let i = 0; i < entries.length; i += CHUNK) {
+        const chunk = entries.slice(i, i + CHUNK);
+        const values = sql.join(
+          chunk.map(([id, val]) => sql`(${id}, ${JSON.stringify(val)})`),
+          sql`, `,
+        );
+        await db.execute(
+          sql`UPDATE ingested_assets ia SET ${sql.raw(colSql)} = v.val::jsonb
+              FROM (VALUES ${values}) AS v(id, val) WHERE ia.id = v.id::int`,
+        );
+      }
+      return batch.size;
+    }
+
+    // fieldsUpdated = total field-fill operations across all rows and all fields
+    const counts = await Promise.all([
+      batchUpdateText(abstractBatch,  "abstract"),
+      batchUpdateText(patentBatch,    "patent_status"),
+      batchUpdateText(licensingBatch, "licensing_status"),
+      batchUpdateText(contactBatch,   "contact_email"),
+      batchUpdateText(techIdBatch,    "technology_id"),
+      batchUpdateJsonb(inventorsBatch,  "inventors"),
+      batchUpdateJsonb(categoriesBatch, "categories"),
+    ]);
+    const fieldsUpdated = counts.reduce((a, b) => a + b, 0);
+
+    // Batched re-enrichment reset for rows whose description grew substantially.
+    if (reenrichIds.length > 0) {
+      for (let i = 0; i < reenrichIds.length; i += CHUNK) {
+        const chunk = reenrichIds.slice(i, i + CHUNK);
+        await db
+          .update(ingestedAssets)
+          .set({ enrichedAt: null, deepEnrichAttempts: 0 })
+          .where(inArray(ingestedAssets.id, chunk));
+      }
+    }
+
+    const queuedForReenrichment = reenrichIds.length;
+    console.log(
+      `[storage] bulkRefreshScrapedFields(${institution}): checked=${listings.length} fieldsUpdated=${fieldsUpdated} queued=${queuedForReenrichment}`,
+    );
     return { checked: listings.length, fieldsUpdated, queuedForReenrichment };
   }
 
