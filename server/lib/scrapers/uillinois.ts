@@ -1,4 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://otm.illinois.edu";
 const SITEMAP_URL = `${BASE}/sitemap.xml`;
@@ -48,6 +49,15 @@ export const uillinoisScraper: InstitutionScraper = {
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings from sitemap`);
+      await enrichWithDetailPages(results, {
+        description: [
+          ".public-abstract .field__item",
+          ".applications .field__item",
+          ".benefits .field__item",
+          ".field--name-body .field__item",
+          "main p",
+        ],
+      });
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);

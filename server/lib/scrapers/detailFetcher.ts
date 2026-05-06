@@ -1,6 +1,8 @@
 import type { ScrapedListing } from "./types";
 import { fetchHtml, cleanText, extractText } from "./utils";
 
+const NEXT_DATA_RE = /<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/;
+
 const DETAIL_CONCURRENCY = 5;
 const DETAIL_TIMEOUT = 12_000;
 const DETAIL_BATCH_LIMIT = 500;
@@ -65,6 +67,74 @@ const DEFAULT_SELECTORS: DetailSelectors = {
     ".ip-status",
   ],
 };
+
+/**
+ * Fetches InPart detail pages and extracts tech descriptions from __NEXT_DATA__.
+ * InPart portals are Next.js SPAs; CSS selectors return nothing. The tech
+ * description lives at: queries[0].state.data.details.{precis, contentV2}.
+ */
+export async function enrichInPartListings(
+  results: ScrapedListing[],
+  concurrency = 5,
+): Promise<void> {
+  const toEnrich = results.filter(
+    (r) => !r.description || r.description.length < 30,
+  );
+  if (toEnrich.length === 0) return;
+
+  const enrich = async (listing: ScrapedListing): Promise<void> => {
+    try {
+      const res = await fetch(listing.url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(DETAIL_TIMEOUT),
+      });
+      if (!res.ok) return;
+      const html = await res.text();
+      if (html.length < 1_000) return;
+
+      const m = NEXT_DATA_RE.exec(html);
+      if (!m) return;
+
+      const nd = JSON.parse(m[1]);
+      const queries: any[] =
+        nd?.props?.pageProps?.dehydratedState?.queries ?? [];
+      if (queries.length === 0) return;
+
+      const data: any = queries[0]?.state?.data;
+      if (!data) return;
+      const details: any = data.details ?? {};
+
+      const precis =
+        typeof details.precis === "string" ? details.precis.trim() : "";
+
+      let bodyText = "";
+      if (Array.isArray(details.contentV2)) {
+        bodyText = (details.contentV2 as any[])
+          .map((block: any) =>
+            typeof block.value === "string"
+              ? block.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()
+              : "",
+          )
+          .filter((s: string) => s.length > 0)
+          .join(" ")
+          .slice(0, 1_000);
+      }
+
+      const description = precis || bodyText;
+      if (description.length >= 30) {
+        listing.description = description.slice(0, 1_000);
+      }
+    } catch {
+      // silently skip
+    }
+  };
+
+  for (let i = 0; i < toEnrich.length; i += concurrency) {
+    await Promise.allSettled(
+      toEnrich.slice(i, i + concurrency).map(enrich),
+    );
+  }
+}
 
 export async function enrichWithDetailPages(
   listings: ScrapedListing[],

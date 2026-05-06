@@ -2,7 +2,7 @@ import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
 import { fetchHtml, fetchJson, cleanText, SiteHttpError } from "./utils";
-import { enrichWithDetailPages, type DetailSelectors } from "./detailFetcher";
+import { enrichWithDetailPages, enrichInPartListings, type DetailSelectors } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
@@ -18,38 +18,6 @@ function createStubScraper(institution: string, reason = "no public TTO listing 
 
 const IN_PART_API = "https://app.in-part.com/api/v3/public/opportunities";
 const IN_PART_LIMIT = 24;
-
-const IN_PART_DETAIL_SELECTORS: DetailSelectors = {
-  description: [
-    "[data-testid='opportunity-description']",
-    ".opportunity-description",
-    ".opportunity-details__description",
-    ".description",
-    ".summary",
-    "main p",
-    "article p",
-  ],
-  abstract: [
-    "[data-testid='opportunity-summary']",
-    ".opportunity-summary",
-    ".summary-text",
-  ],
-  inventors: [
-    "[data-testid='researcher-name']",
-    ".researcher-name",
-    ".inventor",
-    ".researcher",
-  ],
-  patentStatus: [
-    "[data-testid='patent-status']",
-    ".patent-status",
-    ".ip-status",
-  ],
-  licensingStatus: [
-    "[data-testid='licensing-status']",
-    ".licensing-status",
-  ],
-};
 
 function createInPartScraper(subdomain: string, institution: string): InstitutionScraper {
   return {
@@ -119,7 +87,7 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
                 } else {
                   console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR fallback)`);
                 }
-                await enrichWithDetailPages(results, IN_PART_DETAIL_SELECTORS);
+                await enrichInPartListings(results);
                 return results;
               }
             }
@@ -165,7 +133,7 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
         }
 
         console.log(`[scraper] ${institution}: ${allResults.length} listings (in-part API, ${totalPages} pages) — fetching detail pages...`);
-        await enrichWithDetailPages(allResults, IN_PART_DETAIL_SELECTORS);
+        await enrichInPartListings(allResults);
         console.log(`[scraper] ${institution}: detail fetch complete`);
         return allResults;
       } catch (err: any) {
@@ -258,9 +226,23 @@ function createMontanaStateScraper(): InstitutionScraper {
               pageHtml.match(/<title>([^<]+)<\/title>/i);
             const title = titleMatch ? titleMatch[1].replace(/\s*[-|].*$/, "").trim() : "";
             if (title.length > 5) {
+              let description = "";
+              const paraRe = /<p[^>]*>([\s\S]{50,}?)<\/p>/g;
+              let pm: RegExpExecArray | null;
+              const descParts: string[] = [];
+              while ((pm = paraRe.exec(pageHtml)) !== null && descParts.length < 2) {
+                const t = pm[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+                if (
+                  t.length >= 50 &&
+                  !/^(home|research|contact|copyright|privacy|skip|navigation|menu|montana)/i.test(t)
+                ) {
+                  descParts.push(t);
+                }
+              }
+              description = descParts.join(" ").slice(0, 800);
               results.push({
                 title,
-                description: "",
+                description,
                 url: `https://tto.montana.edu${href}`,
                 institution,
               });
@@ -1918,6 +1900,9 @@ export const utennesseeScraper: InstitutionScraper = {
     }
 
     console.log(`[scraper] University of Tennessee: ${results.length} listings (UTRF)`);
+    await enrichWithDetailPages(results, {
+      description: [".entry-content p", "main p", ".post-content p", "article p"],
+    });
     return results;
   },
 };
@@ -1940,9 +1925,15 @@ export const ncatScraper: InstitutionScraper = {
       const parentP = $(el).closest("p");
       const patentLink = parentP.find('a[href*="patents.google.com"]').first();
       const patentUrl = patentLink.attr("href") ?? "";
+      const parentText = cleanText(parentP.text());
+      const description = parentText
+        .replace(title, "")
+        .replace(/^[\s\-:,.;]+/, "")
+        .trim()
+        .slice(0, 500);
       results.push({
         title,
-        description: "",
+        description,
         url: patentUrl || url,
         institution: "NC A&T State University",
       });
@@ -3535,6 +3526,9 @@ export const foxChaseScraper: InstitutionScraper = {
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings (${allTechPages.size} tech pages, ${categories.length} categories)`);
+      await enrichWithDetailPages(results, {
+        description: [".node__content p", ".field--name-body p", "main p", "article p"],
+      });
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
@@ -5832,6 +5826,9 @@ export const wehiScraper: InstitutionScraper = {
           }));
         if (results.length > 0) {
           console.log(`[scraper] ${inst}: ${results.length} listings via Algolia`);
+          await enrichWithDetailPages(results, {
+            description: ["main p", ".field p", "article p", ".node__content p"],
+          });
           return results;
         }
         console.warn(`[scraper] ${inst}: Algolia returned 0 hits, falling back to HTML`);
@@ -5858,6 +5855,9 @@ export const wehiScraper: InstitutionScraper = {
         results.push({ title, description: "", url, institution: inst });
       });
       console.log(`[scraper] ${inst}: ${results.length} listings via HTML fallback`);
+      await enrichWithDetailPages(results, {
+        description: ["main p", ".field p", "article p", ".node__content p"],
+      });
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${inst} HTML fallback failed: ${err?.message}`);
