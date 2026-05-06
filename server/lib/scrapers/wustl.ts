@@ -31,7 +31,7 @@ export const wustlScraper: InstitutionScraper = {
           pageNew++;
           results.push({
             title,
-            description: title,
+            description: "",
             url: fullUrl,
             institution: INST,
           });
@@ -43,6 +43,7 @@ export const wustlScraper: InstitutionScraper = {
 
       await enrichWithDetailPages(results, {
         description: [
+          ".et_pb_text_inner",
           ".entry-content",
           ".tech-summary-content",
           "article .content p",
@@ -52,7 +53,7 @@ export const wustlScraper: InstitutionScraper = {
           ".patent-status",
           ".ip-status",
         ],
-      });
+      }, 9999);
 
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;

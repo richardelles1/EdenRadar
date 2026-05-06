@@ -1,4 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const INST = "Purdue University";
 const API_BASE = "https://licensing.prf.org/client/products/search";
@@ -68,7 +69,15 @@ export const purdueRFScraper: InstitutionScraper = {
         });
       }
 
-      console.log(`[scraper] ${INST}: scraped ${listings.length} listings`);
+      console.log(`[scraper] ${INST}: ${listings.length} listings, fetching detail descriptions...`);
+      await enrichWithDetailPages(listings, {
+        description: [
+          ".product-description-box .section",
+          ".section",
+          ".product-description-box",
+        ],
+      }, 9999);
+      console.log(`[scraper] ${INST}: detail enrichment complete`);
       return listings;
     } catch (err: any) {
       console.error(`[scraper] ${INST}: error — ${err.message}`);

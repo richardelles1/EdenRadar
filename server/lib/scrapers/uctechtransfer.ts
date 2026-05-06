@@ -1,5 +1,6 @@
 import * as cheerio from "cheerio";
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://techtransfer.universityofcalifornia.edu";
 const UA = "Mozilla/5.0 (compatible; EdenRadar/2.0)";
@@ -150,7 +151,16 @@ export function createUCTechTransferScraper(
           }
         }
 
-        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages`);
+        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages, fetching detail descriptions...`);
+        await enrichWithDetailPages(allResults, {
+          description: [
+            ".middle-content-sub-block",
+            ".middle-content",
+            ".tech-description",
+            "main p",
+          ],
+        }, 9999);
+        console.log(`[scraper] ${institution}: detail enrichment complete`);
         return allResults;
       } catch (err: any) {
         console.error(`[scraper] ${institution} failed: ${err?.message}`);

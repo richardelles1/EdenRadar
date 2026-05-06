@@ -1,5 +1,6 @@
 import { createFlintboxScraper } from "./flintbox";
 import { fetchHtml, cleanText } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 const INST = "University of Michigan";
@@ -70,6 +71,18 @@ async function scrapeElucid(): Promise<ScrapedListing[]> {
       `[scraper] ${INST}: Elucid API failed (${err?.message}) — falling back to other sources`
     );
     return [];
+  }
+
+  if (results.length > 0) {
+    console.log(`[scraper] ${INST}: ${results.length} listings, fetching detail descriptions...`);
+    await enrichWithDetailPages(results, {
+      description: [
+        ".product-description-box .section",
+        ".section",
+        ".product-description-box",
+      ],
+    }, 9999);
+    console.log(`[scraper] ${INST}: detail enrichment complete`);
   }
 
   return results;

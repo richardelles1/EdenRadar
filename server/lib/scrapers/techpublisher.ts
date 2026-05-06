@@ -265,6 +265,7 @@ export function createTechPublisherScraper(
           results,
           {
             description: [
+              ".tech-description",
               ".field--name-body .field__item",
               ".field--name-body",
               ".technology-listing-description",

@@ -1324,7 +1324,16 @@ export const warfScraper: InstitutionScraper = {
       throw new SiteHttpError(503, `${WARF_SEARCH_BASE}${WARF_PARENT_CATEGORIES[0]}`);
     }
 
-    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via category search`);
+    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via category search, fetching detail descriptions...`);
+    await enrichWithDetailPages(results, {
+      description: [
+        ".section-content",
+        ".entry-content .section-content",
+        ".entry-content",
+        "main p",
+      ],
+    }, 9999);
+    console.log(`[scraper] University of Wisconsin (WARF): detail enrichment complete`);
     return results;
   },
 };
