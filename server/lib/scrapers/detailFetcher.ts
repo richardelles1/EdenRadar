@@ -97,6 +97,21 @@ export async function enrichWithDetailPages(
           const ps = extractText($, selectors.patentStatus);
           if (ps) listing.patentStatus = ps.slice(0, 200);
         }
+
+        if (selectors.licensingStatus) {
+          const ls = extractText($, selectors.licensingStatus);
+          if (ls) listing.licensingStatus = ls.slice(0, 200);
+        }
+
+        if (selectors.technologyId) {
+          const tid = extractText($, selectors.technologyId);
+          if (tid) listing.technologyId = tid.slice(0, 100);
+        }
+
+        if (selectors.contactEmail) {
+          const email = extractText($, selectors.contactEmail);
+          if (email) listing.contactEmail = email.slice(0, 200);
+        }
       } catch {}
     }
   }
