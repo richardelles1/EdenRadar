@@ -13,25 +13,23 @@ export function computeContentHash(title: string, description: string, abstract?
 
 export type CompletenessAsset = {
   assetClass?: AssetClass | string | null;
-  // Drug/Biologic fields
-  target?: string | null;
   modality?: string | null;
   indication?: string | null;
   developmentStage?: string | null;
   mechanismOfAction?: string | null;
+  ipType?: string | null;
+  patentStatus?: string | null;
+  summary?: string | null;
+  // Retained for backwards-compat with callers that still pass these — not scored
+  target?: string | null;
   innovationClaim?: string | null;
   unmetNeed?: string | null;
   comparableDrugs?: string | null;
   licensingReadiness?: string | null;
-  ipType?: string | null;
-  // Device/Tool/Software attributes (stored in deviceAttributes JSONB)
   deviceAttributes?: Record<string, unknown> | null;
-  // Common
-  summary?: string | null;
   abstract?: string | null;
   categories?: string[] | null;
   inventors?: string[] | null;
-  patentStatus?: string | null;
 };
 
 function hasValue(val: unknown): boolean {
@@ -41,138 +39,51 @@ function hasValue(val: unknown): boolean {
   return false;
 }
 
-function deviceAttr(attrs: Record<string, unknown> | null | undefined, key: string): unknown {
-  return attrs?.[key] ?? null;
-}
-
-/**
- * Tiered summary quality score: awards 0, half, or full points based on text length.
- * A rich summary (≥150 chars) earns full credit; a thin one (≥50 chars) earns half.
- */
-function summaryScore(summary: string | null | undefined, maxPts: number): number {
-  const len = (summary ?? "").length;
-  if (len >= 150) return maxPts;
-  if (len >= 50) return Math.round(maxPts * 0.5);
-  return 0;
-}
-
 /**
  * Returns a 0-100 completeness score for the asset.
  *
- * Formula changes (v2):
+ * Formula v3 — universal buyer-decision formula, no asset-class branching.
+ * Scores exactly what a licensing manager needs to make a go/no-go call:
  *
- * Drug/Biologic — target demoted to a +10 bonus applied after the 100-pt base,
- * then clamped to 100. This stops penalising TTO assets that structurally cannot
- * provide molecular nomenclature but are otherwise well-described.
+ *   indication        = 25 pts  (what does it treat or do)
+ *   modality          = 20 pts  (what type of asset)
+ *   developmentStage  = 20 pts  (how ready is it)
+ *   summary quality   = 15 pts  (≥300 chars=15, ≥150=10, ≥50=5)
+ *   mechanismOfAction = 12 pts  (how it works — critical for EDEN matching)
+ *   IP protection     =  8 pts  (ipType OR patentStatus, either earns full credit)
+ *   ──────────────────────────
+ *   Total             = 100 pts
  *
- *   Base (100 pts max):
- *     indication=20, modality=15, developmentStage=15, summary=10, abstract=8,
- *     licensingReadiness=8, (patentStatus+ipType)=8, mechanismOfAction=8,
- *     inventors=4, comparableDrugs=4
- *   Bonus (+10): target — can push above 100, clamped to 100.
- *
- * Unclassified (null / "other" / "unknown" assetClass) — previously returned null,
- * leaving 6,457 assets permanently in the "Unscored" tier. Now returns a generic
- * description-quality score so these assets can be ranked and surfaced to buyers.
- *
- *   summaryLen≥300=50, ≥150=35, ≥50=20 + developmentStage=15, indication=15,
- *   modality=15, inventors=5 — clamped to 100.
+ * Removed from scoring: inventors, abstract, licensingReadiness, comparableDrugs,
+ * target, innovationClaim, deviceAttributes. These live in the dossier or are
+ * structurally unavailable from TTO pages and don't drive licensing decisions.
  */
 export function computeCompletenessScore(asset: CompletenessAsset): number | null {
-  const cls = (asset.assetClass ?? "").toLowerCase();
-
-  // ── Generic "description quality" fallback for unclassified assets ──────────
-  if (!cls || cls === "other" || cls === "unknown") {
-    let score = 0;
-    const summaryLen = (asset.summary ?? "").length;
-    if (summaryLen >= 300) score += 50;
-    else if (summaryLen >= 150) score += 35;
-    else if (summaryLen >= 50) score += 20;
-    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 15;
-    if (hasValue(asset.indication)) score += 15;
-    if (hasValue(asset.modality)) score += 15;
-    if (hasValue(asset.inventors)) score += 5;
-    return Math.min(100, score);
-  }
-
-  // ── Medical Device ─────────────────────────────────────────────────────────
-  if (cls === "medical_device") {
-    let score = 0;
-    const da = asset.deviceAttributes ?? null;
-    if (hasValue(deviceAttr(da, "primaryApplication"))) score += 20;
-    if (hasValue(deviceAttr(da, "keyAdvantages"))) score += 15;
-    if (hasValue(deviceAttr(da, "regulatoryPathway")) && deviceAttr(da, "regulatoryPathway") !== "unknown") score += 15;
-    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
-    if (hasValue(asset.innovationClaim)) score += 8;
-    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
-    score += summaryScore(asset.summary, 8);
-    if (hasValue(asset.abstract)) score += 5;
-    if (hasValue(asset.inventors)) score += 5;
-    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 6;
-    return Math.min(100, score);
-  }
-
-  // ── Research Tool ──────────────────────────────────────────────────────────
-  if (cls === "research_tool") {
-    let score = 0;
-    const da = asset.deviceAttributes ?? null;
-    if (hasValue(deviceAttr(da, "applications"))) score += 20;
-    if (hasValue(deviceAttr(da, "targetUsers"))) score += 15;
-    if (hasValue(asset.innovationClaim)) score += 10;
-    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 10;
-    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
-    score += summaryScore(asset.summary, 10);
-    if (hasValue(asset.abstract)) score += 8;
-    if (hasValue(asset.inventors)) score += 5;
-    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 7;
-    if (hasValue(asset.categories)) score += 5;
-    return Math.min(100, score);
-  }
-
-  // ── Software ───────────────────────────────────────────────────────────────
-  if (cls === "software") {
-    let score = 0;
-    const da = asset.deviceAttributes ?? null;
-    if (hasValue(deviceAttr(da, "useCase"))) score += 20;
-    if (hasValue(deviceAttr(da, "deploymentModel")) && deviceAttr(da, "deploymentModel") !== "unknown") score += 15;
-    if (hasValue(asset.innovationClaim)) score += 10;
-    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 10;
-    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
-    score += summaryScore(asset.summary, 10);
-    if (hasValue(asset.abstract)) score += 8;
-    if (hasValue(asset.inventors)) score += 5;
-    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 7;
-    if (hasValue(asset.categories)) score += 5;
-    return Math.min(100, score);
-  }
-
-  // ── Drug/Biologic (and all other classified asset types) ───────────────────
-  // Target is demoted to a bonus field (+10) applied after the 100-pt base.
-  // This prevents well-described TTO assets from being permanently capped at 85.
-  //
-  // Base budget: indication=20, modality=15, developmentStage=15, summary=10,
-  //   abstract=8, licensingReadiness=8, (patentStatus+ipType)=8,
-  //   mechanismOfAction=8, inventors=4, comparableDrugs=4 → 100 pts
-  // Bonus: target=+10 (clamped to 100 after)
   let score = 0;
-  if (hasValue(asset.indication)) score += 20;
-  if (hasValue(asset.modality)) score += 15;
-  if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 15;
-  score += summaryScore(asset.summary, 10);
-  if (hasValue(asset.abstract)) score += 8;
-  if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
-  // IP coverage: patentStatus and/or ipType — either one earns the full 8 pts.
-  // The "/" in the spec means "or", so a patent filing alone or an IP type alone
-  // is sufficient evidence of protectable IP to count as fully covered.
-  const hasPatent = hasValue(asset.patentStatus) && asset.patentStatus !== "unknown";
-  const hasIpType = hasValue(asset.ipType);
-  if (hasPatent || hasIpType) score += 8;
-  if (hasValue(asset.mechanismOfAction)) score += 8;
-  if (hasValue(asset.inventors)) score += 4;
-  if (hasValue(asset.comparableDrugs)) score += 4;
-  // Target bonus: pushes total above 100 then is clamped — rewards assets with
-  // confirmed molecular targets without penalising the majority that don't have one.
-  if (hasValue(asset.target)) score += 10;
+
+  // indication (25 pts) — primary question: what does it treat or do
+  if (hasValue(asset.indication)) score += 25;
+
+  // modality (20 pts) — what type of asset
+  if (hasValue(asset.modality)) score += 20;
+
+  // developmentStage (20 pts) — how ready is it
+  if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 20;
+
+  // summary quality (15 pts tiered) — enough context for a buyer to evaluate
+  const summaryLen = (asset.summary ?? "").length;
+  if (summaryLen >= 300) score += 15;
+  else if (summaryLen >= 150) score += 10;
+  else if (summaryLen >= 50) score += 5;
+
+  // mechanismOfAction (12 pts) — how it works; also critical for EDEN vector matching
+  if (hasValue(asset.mechanismOfAction)) score += 12;
+
+  // IP protection (8 pts) — ipType OR patentStatus, either earns full credit
+  const hasIp = hasValue(asset.ipType) ||
+    (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown");
+  if (hasIp) score += 8;
+
   return Math.min(100, score);
 }
 

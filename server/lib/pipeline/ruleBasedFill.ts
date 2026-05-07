@@ -11,8 +11,12 @@ const STAGE_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bphase\s*1\b|\bphase\s*I\b|\bfirst-in-human\b/i, value: "phase 1" },
   { pattern: /\bIND\s+filed\b|\bIND\s+approved\b|\binvestigational\s+new\s+drug\b/i, value: "preclinical" },
   { pattern: /\bpreclinical\b|\bpre-clinical\b|\bin\s+vivo\b|\bin\s+vitro\b|\banimal\s+model\b|\bmouse\s+model\b|\brat\s+model\b/i, value: "preclinical" },
+  // Prototype / proof-of-concept / pilot: technology demonstrated but not yet in clinical trials.
+  // Mapped to preclinical — more accurate than "discovery" which implies bench-only research.
+  { pattern: /\bprototype\b|\bproof[- ]of[- ]concept\b|\bpoc\s+(?:study|testing|data|results?)\b|\bpilot\s+(?:study|testing|trial|program|experiment)\b|\bfeasibility\s+(?:study|testing|trial)\b/i, value: "preclinical" },
   { pattern: /\bFDA[- ]approved\b|\bEMA[- ]approved\b|\bCE[- ]marked\b|\b510\(k\)[- ]cleared\b|\bmarket\s+approval\b|\bcommercialized\b/i, value: "approved" },
-  { pattern: /\bdiscovery\s+stage\b|\bhit\s+identification\b|\blead\s+identification\b|\bproof[- ]of[- ]concept\b/i, value: "discovery" },
+  // Discovery: genuine early-stage research — hit/lead ID only. POC removed (see preclinical above).
+  { pattern: /\bdiscovery\s+stage\b|\bhit\s+identification\b|\blead\s+identification\b/i, value: "discovery" },
 ];
 
 // ── IP Type rules ─────────────────────────────────────────────────────────────
@@ -226,6 +230,19 @@ const CATEGORY_INDICATION_MAP: Array<{ keywords: RegExp; value: string }> = [
 
 // ── Indication keyword rules ──────────────────────────────────────────────────
 const INDICATION_RULES: Array<{ pattern: RegExp; value: string }> = [
+  // ── Device / diagnostic / broad clinical applications ────────────────────
+  // These go first so specific device/tool assets are not skipped by isDrug gate.
+  { pattern: /\bhearing\s+(?:loss|impairment|screening|disorder)\b|\bauditory\s+(?:loss|impairment|screening)\b|\botoacoustic\b|\baudiolog\w+/i, value: "hearing loss" },
+  { pattern: /\brenal\s+function\b|\bkidney\s+function\b|\bglomerular\s+filtration\b|\bGFR\b(?!\s*\w*receptor)/i, value: "renal disease" },
+  { pattern: /\btraumatic\s+brain\s+injury\b|\bTBI\b|\bconcussion\b|\bhead\s+(?:injury|trauma)\b/i, value: "traumatic brain injury" },
+  { pattern: /\bischemic\s+stroke\b|\bhemorrhagic\s+stroke\b|\bstroke\s+(?:treatment|detection|diagnosis|monitoring|rehabilitation)\b/i, value: "stroke" },
+  { pattern: /\bsepsis\b|\bseptic\s+shock\b|\bbacteremia\b/i, value: "sepsis" },
+  { pattern: /\borthopedic\b|\bbone\s+(?:fracture|repair|regeneration|healing|defect)\b|\bjoint\s+(?:replacement|repair)\b|\bspinal\s+(?:cord\s+injury|fusion|stenosis)\b/i, value: "musculoskeletal disorder" },
+  { pattern: /\bwound\s+(?:healing|care|closure|management)\b|\bchronic\s+wound\b|\bskin\s+(?:regeneration|graft|repair)\b/i, value: "wound healing" },
+  { pattern: /\bintraoperative\b|\bsurgical\s+(?:guidance|navigation|tool|device|robot|imaging|planning)\b|\bminimally\s+invasive\s+surgery\b/i, value: "surgical application" },
+  { pattern: /\bpoint[- ]of[- ]care\b|\brapid\s+(?:diagnostic|test|detection|assay)\b|\bbedside\s+(?:monitoring|test|diagnostic)\b/i, value: "point-of-care diagnostics" },
+  { pattern: /\bneonatal\s+(?:screening|diagnosis|monitoring|care)\b|\bnewborn\s+screening\b/i, value: "neonatal screening" },
+  // ── Specific cancers ─────────────────────────────────────────────────────
   { pattern: /\bnon-small\s+cell\s+lung\s+cancer\b|\bnsclc\b/i, value: "non-small cell lung cancer" },
   { pattern: /\bsmall\s+cell\s+lung\s+cancer\b|\bsclc\b/i, value: "small cell lung cancer" },
   { pattern: /\blung\s+cancer\b|\blung\s+carcinoma\b|\blung\s+adenocarcinoma\b/i, value: "non-small cell lung cancer" },
@@ -372,8 +389,11 @@ export function applyRulesToAsset(asset: {
       if (val) fields.modality = val;
     }
 
-    // ── Indication: specific text rules first, category map as broad fallback ─
-    if (isDrug && !humanV.indication && (!asset.indication || asset.indication === "unknown")) {
+    // ── Indication: apply to all non-sparse assets, not just drug-like ones.
+    // Indication (25 pts in scoring) is too valuable to gate behind isDrug —
+    // devices, diagnostics, and tools all have clinical applications that map
+    // to indication. Text rules run first (more specific); category map is fallback.
+    if (!humanV.indication && (!asset.indication || asset.indication === "unknown")) {
       const fromText = applyRules(INDICATION_RULES, text);
       const fromCats = cats.length > 0 ? applyCategoriesToIndication(cats) : null;
       const val = fromText ?? fromCats;

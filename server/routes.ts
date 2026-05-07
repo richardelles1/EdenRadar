@@ -4809,10 +4809,11 @@ export async function registerRoutes(
   let drSkipped = 0;
   let drAbortController: AbortController | null = null;
   let drStartMs = 0;
-  let drLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+  let drLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string; institution?: string } | null = null;
 
-  app.get("/api/admin/enrichment/detail-refetch/count", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/enrichment/detail-refetch/count", requireAdmin, async (req, res) => {
     try {
+      const institution = (req.query.institution as string | undefined)?.trim() || null;
       const result = await db.execute<{ total: string }>(sql`
         SELECT COUNT(*)::int AS total
         FROM ingested_assets
@@ -4820,6 +4821,7 @@ export async function registerRoutes(
           AND source_name = 'tech_transfer'
           AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
+          ${institution ? sql`AND institution = ${institution}` : sql``}
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
     } catch (err: any) {
@@ -4845,8 +4847,9 @@ export async function registerRoutes(
     res.json({ message: "Stop signal sent" });
   });
 
-  app.post("/api/admin/enrichment/detail-refetch", requireAdmin, async (_req, res) => {
+  app.post("/api/admin/enrichment/detail-refetch", requireAdmin, async (req, res) => {
     if (drRunning) return res.status(409).json({ error: "Detail re-fetch already running" });
+    const institution: string | null = (req.body?.institution as string | undefined)?.trim() || null;
     drRunning = true;
     drProcessed = 0;
     drTotal = 0;
@@ -4855,7 +4858,7 @@ export async function registerRoutes(
     drAbortController = new AbortController();
     const { signal } = drAbortController;
     drStartMs = Date.now();
-    res.json({ message: "Detail re-fetch started" });
+    res.json({ message: institution ? `Detail re-fetch started for ${institution}` : "Detail re-fetch started" });
 
     try {
       const rows = await db.execute<{ id: number; asset_name: string | null; source_url: string | null }>(sql`
@@ -4865,8 +4868,8 @@ export async function registerRoutes(
           AND source_name = 'tech_transfer'
           AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
+          ${institution ? sql`AND institution = ${institution}` : sql``}
         ORDER BY
-          (asset_class = 'drug_biologic') DESC,
           COALESCE(completeness_score, 0) DESC
       `);
 
@@ -4923,8 +4926,9 @@ export async function registerRoutes(
         total: drTotal,
         durationMs: Date.now() - drStartMs,
         completedAt: new Date().toISOString(),
+        institution: institution ?? undefined,
       };
-      console.log(`[detail-refetch] Complete: ${drEnriched} enriched, ${drSkipped} skipped of ${drTotal} thin TTO assets in ${Date.now() - drStartMs}ms`);
+      console.log(`[detail-refetch] Complete: ${drEnriched} enriched, ${drSkipped} skipped of ${drTotal} thin TTO assets${institution ? ` (${institution})` : ""} in ${Date.now() - drStartMs}ms`);
     } catch (err: any) {
       console.error("[detail-refetch] Error:", err.message);
     } finally {

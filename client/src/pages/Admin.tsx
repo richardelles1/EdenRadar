@@ -2779,6 +2779,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
+  const [drInstitution, setDrInstitution] = React.useState("");
   const [inpartRefetchPolling, setInpartRefetchPolling] = React.useState(false);
   const [flintboxRefetchPolling, setFlintboxRefetchPolling] = React.useState(false);
   const [columbiaRefetchPolling, setColumbiaRefetchPolling] = React.useState(false);
@@ -2897,9 +2898,11 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: detailRefetchCount, refetch: refetchDetailRefetchCount } = useQuery<{ total: number }>({
-    queryKey: ["/api/admin/enrichment/detail-refetch/count", pw],
+    queryKey: ["/api/admin/enrichment/detail-refetch/count", pw, drInstitution],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/detail-refetch/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const params = new URLSearchParams();
+      if (drInstitution.trim()) params.set("institution", drInstitution.trim());
+      const res = await fetch(`/api/admin/enrichment/detail-refetch/count${params.size ? `?${params}` : ""}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2928,7 +2931,11 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
 
   const runDetailRefetch = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/detail-refetch", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const res = await fetch("/api/admin/enrichment/detail-refetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ institution: drInstitution.trim() || undefined }),
+      });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error || "Failed to start"); }
       return res.json();
     },
@@ -3830,6 +3837,17 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                   </p>
                 </div>
               )}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Institution filter (e.g. Johns Hopkins University)"
+                  value={drInstitution}
+                  onChange={(e) => setDrInstitution(e.target.value)}
+                  disabled={detailRefetchStatus?.running}
+                  data-testid="input-dr-institution"
+                  className="flex-1 h-8 px-2.5 text-xs rounded-md border border-amber-300 dark:border-amber-700 bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-amber-400 disabled:opacity-50"
+                />
+              </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={() => refetchDetailRefetchCount()}
                   className="gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30" data-testid="button-detail-refetch-count">

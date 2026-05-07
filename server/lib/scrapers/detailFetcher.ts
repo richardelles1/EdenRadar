@@ -23,6 +23,11 @@ export interface DetailSelectors {
  * from a TTO detail page. Exported so the admin retroactive re-fetch job can
  * reuse the same selector set without duplicating it. */
 export const DESCRIPTION_SELECTORS: string[] = [
+  // TechPublisher platform (jhu, ucla, usf, ufl, uta, suny, princeton, czbiohub, etc.)
+  // These must come first — they are the most specific and highest-signal match.
+  ".c_tp_description",
+  ".tech-description",
+  // Drupal/standard TTO themes
   ".field--name-body",
   ".tech-detail__description",
   ".technology-description",
