@@ -1010,9 +1010,17 @@ export class DatabaseStorage implements IStorage {
     ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number | null;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
-    // Fetch existing humanVerified, enrichmentSources, and developmentStage
+    // Fetch existing humanVerified, enrichmentSources, and all four primary fields
+    // so the non-downgrade guard can compare old vs new values.
     const [existing] = await db
-      .select({ developmentStage: ingestedAssets.developmentStage, humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
+      .select({
+        developmentStage: ingestedAssets.developmentStage,
+        target: ingestedAssets.target,
+        modality: ingestedAssets.modality,
+        indication: ingestedAssets.indication,
+        humanVerified: ingestedAssets.humanVerified,
+        enrichmentSources: ingestedAssets.enrichmentSources,
+      })
       .from(ingestedAssets)
       .where(eq(ingestedAssets.id, id))
       .limit(1);
@@ -1020,6 +1028,17 @@ export class DatabaseStorage implements IStorage {
     const hv: Record<string, boolean> = (existing?.humanVerified as Record<string, boolean>) ?? {};
     const existingSources: Record<string, string> = (existing?.enrichmentSources as Record<string, string>) ?? {};
     const newSources: Record<string, string> = { ...existingSources };
+
+    // Non-downgrade rule: write a primary field only when NOT human-verified AND either
+    //   (a) the incoming value is good (non-null, non-empty, non-"unknown") — upgrade or correction, or
+    //   (b) the existing value is also not good — writing "unknown" is fine when nothing better exists.
+    // This prevents any pipeline stage from replacing a specific value with "unknown" due to
+    // a GPT miss, while still allowing deliberate corrections (good → different-good).
+    const isGoodVal = (v: string | null | undefined): boolean =>
+      !!v && v.trim() !== "" && v.trim().toLowerCase() !== "unknown";
+
+    const shouldWritePrimary = (field: string, newVal: string | null | undefined, existingVal: string | null | undefined): boolean =>
+      !hv[field] && (isGoodVal(newVal) || !isGoodVal(existingVal));
 
     const oldStage = existing?.developmentStage;
     const newStage = data.developmentStage;
@@ -1037,11 +1056,11 @@ export class DatabaseStorage implements IStorage {
       updateData.stageChangedAt = new Date();
     }
 
-    // Only write fields that are not human-verified
-    if (!hv.target) { updateData.target = data.target; newSources.target = "mini"; }
-    if (!hv.modality) { updateData.modality = data.modality; newSources.modality = "mini"; }
-    if (!hv.indication) { updateData.indication = data.indication; newSources.indication = "mini"; }
-    if (!hv.developmentStage) { updateData.developmentStage = data.developmentStage; newSources.developmentStage = "mini"; }
+    // Primary fields: never downgrade a good existing value to "unknown".
+    if (shouldWritePrimary("target", data.target, existing?.target)) { updateData.target = data.target; newSources.target = "mini"; }
+    if (shouldWritePrimary("modality", data.modality, existing?.modality)) { updateData.modality = data.modality; newSources.modality = "mini"; }
+    if (shouldWritePrimary("indication", data.indication, existing?.indication)) { updateData.indication = data.indication; newSources.indication = "mini"; }
+    if (shouldWritePrimary("developmentStage", data.developmentStage, existing?.developmentStage)) { updateData.developmentStage = data.developmentStage; newSources.developmentStage = "mini"; }
 
     if (data.categories) updateData.categories = data.categories;
     if (data.categoryConfidence !== undefined) updateData.categoryConfidence = data.categoryConfidence;
@@ -2083,17 +2102,30 @@ export class DatabaseStorage implements IStorage {
     await db.transaction(async (tx) => {
       for (const data of batch) {
         try {
-          // Pre-fetch humanVerified, enrichmentSources, AND deepEnrichAttempts so we can
-          // increment the counter as a plain integer — no SQL expression, no type cast needed.
+          // Pre-fetch humanVerified, enrichmentSources, deepEnrichAttempts, and the four
+          // primary fields so the non-downgrade guard can compare old vs new values.
           const [cur] = await tx.select({
             humanVerified: ingestedAssets.humanVerified,
             enrichmentSources: ingestedAssets.enrichmentSources,
             deepEnrichAttempts: ingestedAssets.deepEnrichAttempts,
             classifyAttempts: ingestedAssets.classifyAttempts,
+            target: ingestedAssets.target,
+            modality: ingestedAssets.modality,
+            indication: ingestedAssets.indication,
+            developmentStage: ingestedAssets.developmentStage,
           }).from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
 
           const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
           const existingSources: Record<string, string> = (cur?.enrichmentSources as Record<string, string>) ?? {};
+
+          // Non-downgrade rule: write a primary field only when NOT human-verified AND either
+          //   (a) the incoming value is good (non-null, non-empty, non-"unknown") — upgrade or correction, or
+          //   (b) the existing value is also not good — no regression when nothing better exists.
+          const isGoodVal = (v: string | null | undefined): boolean =>
+            !!v && v.trim() !== "" && v.trim().toLowerCase() !== "unknown";
+
+          const shouldWritePrimary = (field: string, newVal: string | null | undefined, existingVal: string | null | undefined): boolean =>
+            !hv[field] && (isGoodVal(newVal) || !isGoodVal(existingVal));
 
           const newSources: Record<string, string> = { ...existingSources };
           // Strictly-typed update — no Record<string, unknown> or `as any` needed.
@@ -2112,10 +2144,11 @@ export class DatabaseStorage implements IStorage {
             dedupeEmbedding: null,
           };
 
-          if (!hv.target) { update.target = data.target; newSources.target = source; }
-          if (!hv.modality) { update.modality = data.modality; newSources.modality = source; }
-          if (!hv.indication) { update.indication = data.indication; newSources.indication = source; }
-          if (!hv.developmentStage) { update.developmentStage = data.developmentStage; newSources.developmentStage = source; }
+          // Primary fields: never downgrade a good existing value to "unknown".
+          if (shouldWritePrimary("target", data.target, cur?.target)) { update.target = data.target; newSources.target = source; }
+          if (shouldWritePrimary("modality", data.modality, cur?.modality)) { update.modality = data.modality; newSources.modality = source; }
+          if (shouldWritePrimary("indication", data.indication, cur?.indication)) { update.indication = data.indication; newSources.indication = source; }
+          if (shouldWritePrimary("developmentStage", data.developmentStage, cur?.developmentStage)) { update.developmentStage = data.developmentStage; newSources.developmentStage = source; }
           if (!hv.mechanismOfAction) { update.mechanismOfAction = data.mechanismOfAction || null; newSources.mechanismOfAction = source; }
           if (!hv.innovationClaim) { update.innovationClaim = data.innovationClaim || null; newSources.innovationClaim = source; }
           if (!hv.ipType) { update.ipType = data.ipType; newSources.ipType = source; }
