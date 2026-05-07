@@ -36,9 +36,9 @@ const LIMIT = limitArg ? parseInt(limitArg.split("=")[1], 10) : Infinity;
 const CONCURRENCY = 5;
 const DELAY_MS = 350;
 
-const DB_URL = process.env.SUPABASE_DATABASE_URL ?? process.env.DATABASE_URL;
+const DB_URL = process.env.SUPABASE_DATABASE_URL;
 if (!DB_URL) {
-  console.error("ERROR: SUPABASE_DATABASE_URL (or DATABASE_URL) not set.");
+  console.error("ERROR: SUPABASE_DATABASE_URL is not set.");
   process.exit(1);
 }
 

@@ -35,10 +35,10 @@ async function main() {
            innovation_claim, unmet_need, comparable_drugs, licensing_readiness, summary, abstract,
            categories, inventors, patent_status, device_attributes, completeness_score
     FROM ingested_assets
-    WHERE relevant = true AND enriched_at IS NOT NULL
+    WHERE relevant = true
   `);
 
-  console.log(`Found ${rows.rows.length} enriched assets to rescore`);
+  console.log(`Found ${rows.rows.length} relevant assets to rescore`);
 
   let changed = 0;
   let unchanged = 0;
@@ -108,7 +108,7 @@ async function main() {
       END AS band,
       COUNT(*)::int AS n
     FROM ingested_assets
-    WHERE relevant = true AND enriched_at IS NOT NULL
+    WHERE relevant = true
     GROUP BY 1 ORDER BY 2 DESC
   `);
   console.log("Band distribution after rescore:", JSON.stringify(bands.rows, null, 2));

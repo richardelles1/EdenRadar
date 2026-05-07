@@ -5,7 +5,9 @@ npm install
 # This avoids drizzle-kit's interactive confirmation prompts for constraint additions.
 node -e "
 const { Pool } = require('pg');
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const connStr = process.env.SUPABASE_DATABASE_URL;
+if (!connStr) { console.error('ERROR: SUPABASE_DATABASE_URL is not set — aborting schema patch.'); process.exit(1); }
+const pool = new Pool({ connectionString: connStr, ssl: { rejectUnauthorized: false } });
 async function run() {
   const client = await pool.connect();
   try {

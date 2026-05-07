@@ -5609,7 +5609,7 @@ export async function registerRoutes(
                innovation_claim, unmet_need, comparable_drugs, licensing_readiness, ip_type, summary, abstract,
                categories, inventors, patent_status, device_attributes, completeness_score
         FROM ingested_assets
-        WHERE relevant = true AND enriched_at IS NOT NULL
+        WHERE relevant = true
       `);
 
       rescoreTotal = rows.rows.length;

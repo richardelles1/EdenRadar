@@ -98,8 +98,8 @@ async function unitChecks() {
 }
 
 async function e2e() {
-  if (!process.env.DATABASE_URL) {
-    console.log("DATABASE_URL not set — skipping DB e2e");
+  if (!process.env.SUPABASE_DATABASE_URL) {
+    console.log("SUPABASE_DATABASE_URL not set — skipping DB e2e");
     return;
   }
 
