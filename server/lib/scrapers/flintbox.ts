@@ -48,16 +48,35 @@ export async function discoverFlintboxCredentials(
   if (discoveredCreds.has(slug)) return discoveredCreds.get(slug)!;
   const base = `https://${slug}.flintbox.com`;
   try {
+    // Primary: cheerio-based attribute extraction
     const $ = await fetchHtml(base, 15000);
-    if (!$) return null;
-    const el = $("#flintbox");
-    const rawId = el.attr("data-organization-id");
-    const rawKey = el.attr("data-organization-access-key");
-    if (!rawId || !rawKey) return null;
-    const creds = { orgId: parseInt(rawId, 10), accessKey: rawKey };
+    if ($) {
+      const el = $("#flintbox");
+      const rawId = el.attr("data-organization-id");
+      const rawKey = el.attr("data-organization-access-key");
+      if (rawId && rawKey) {
+        const creds = { orgId: parseInt(rawId, 10), accessKey: rawKey };
+        if (!isNaN(creds.orgId)) {
+          discoveredCreds.set(slug, creds);
+          console.log(`[scraper] Flintbox discovered credentials for ${slug} (orgId=${creds.orgId})`);
+          return creds;
+        }
+      }
+    }
+    // Fallback: raw regex on HTML — handles React SPA pages where cheerio misses attrs
+    const res = await fetch(base, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    const idMatch = html.match(/data-organization-id=["'](\d+)["']/);
+    const keyMatch = html.match(/data-organization-access-key=["']([a-f0-9-]{36})["']/);
+    if (!idMatch || !keyMatch) return null;
+    const creds = { orgId: parseInt(idMatch[1], 10), accessKey: keyMatch[1] };
     if (isNaN(creds.orgId)) return null;
     discoveredCreds.set(slug, creds);
-    console.log(`[scraper] Flintbox auto-discovered credentials for ${slug} (orgId=${creds.orgId})`);
+    console.log(`[scraper] Flintbox regex-discovered credentials for ${slug} (orgId=${creds.orgId})`);
     return creds;
   } catch {
     return null;

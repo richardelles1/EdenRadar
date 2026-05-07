@@ -3879,7 +3879,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               {inpartRefetchCount != null && (
                 <div className="flex items-center gap-3 p-2.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-background">
                   <span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-400">{inpartRefetchCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">thin InPart assets remaining (&lt;50 chars)</span>
+                  <span className="text-xs text-muted-foreground">thin InPart assets remaining (&lt;120 chars)</span>
                 </div>
               )}
               {inpartRefetchStatus?.running && (
@@ -3945,7 +3945,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               {flintboxRefetchCount != null && (
                 <div className="flex items-center gap-3 p-2.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-background">
                   <span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-400">{flintboxRefetchCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">thin Flintbox assets remaining (&lt;50 chars)</span>
+                  <span className="text-xs text-muted-foreground">thin Flintbox assets remaining (&lt;120 chars)</span>
                 </div>
               )}
               {flintboxRefetchStatus?.running && (

@@ -4821,6 +4821,8 @@ export async function registerRoutes(
           AND source_name = 'tech_transfer'
           AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
+          AND source_url NOT ILIKE '%in-part.com%'
+          AND source_url NOT ILIKE '%flintbox.com%'
           ${institution ? sql`AND institution = ${institution}` : sql``}
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -4868,6 +4870,8 @@ export async function registerRoutes(
           AND source_name = 'tech_transfer'
           AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
+          AND source_url NOT ILIKE '%in-part.com%'
+          AND source_url NOT ILIKE '%flintbox.com%'
           ${institution ? sql`AND institution = ${institution}` : sql``}
         ORDER BY
           COALESCE(completeness_score, 0) DESC
@@ -4960,7 +4964,7 @@ export async function registerRoutes(
         SELECT COUNT(*)::int AS total
         FROM ingested_assets
         WHERE source_url LIKE '%.portals.in-part.com%'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -5004,7 +5008,7 @@ export async function registerRoutes(
         SELECT id, source_url
         FROM ingested_assets
         WHERE source_url LIKE '%.portals.in-part.com%'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
         ORDER BY COALESCE(completeness_score, 0) DESC
       `);
@@ -5111,7 +5115,7 @@ export async function registerRoutes(
         SELECT COUNT(*)::int AS total
         FROM ingested_assets
         WHERE source_url ILIKE '%.flintbox.com%'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -5155,7 +5159,7 @@ export async function registerRoutes(
         SELECT id, source_url
         FROM ingested_assets
         WHERE source_url ILIKE '%.flintbox.com%'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
         ORDER BY COALESCE(completeness_score, 0) DESC
       `);

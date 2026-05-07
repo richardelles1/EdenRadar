@@ -191,7 +191,9 @@ export function extractText($: cheerio.CheerioAPI, selectors: string[]): string 
   for (const sel of selectors) {
     const el = $(sel);
     if (el.length > 0) {
-      const text = cleanText(el.text());
+      const cloned = el.clone();
+      cloned.find("style, script").remove();
+      const text = cleanText(cloned.text());
       if (text.length > 20) return text;
     }
   }
