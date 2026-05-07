@@ -13053,13 +13053,18 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const searchQuery = [listing.therapeuticArea, listing.modality].filter(Boolean).join(" ");
       const patentQuery = [listing.therapeuticArea, listing.mechanism?.slice(0, 80) ?? ""].filter(Boolean).join(" ");
 
+      // External API calls (ClinicalTrials.gov, patents) can take several seconds on cold paths.
+      // Cap them at 900ms so the overall response stays well within the 1500ms SLA budget.
+      const withTimeout = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
+        Promise.race([p, new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms))]);
+
       const [relatedRaw, linkedRaw, trialsRaw, patentsRaw, compsRaw] = await Promise.allSettled([
         storage.keywordSearchIngestedAssets(searchQuery, 10),
         listing.ingestedAssetId
           ? db.select().from(ingestedAssets).where(eq(ingestedAssets.id, listing.ingestedAssetId)).limit(1)
           : Promise.resolve([] as typeof ingestedAssets.$inferSelect[]),
-        searchClinicalTrials(listing.therapeuticArea, 5).catch(() => []),
-        searchPatents(patentQuery, 5).catch(() => []),
+        withTimeout(searchClinicalTrials(listing.therapeuticArea, 5).catch(() => []), 900, []),
+        withTimeout(searchPatents(patentQuery, 5).catch(() => []), 900, []),
         storage.keywordSearchIngestedAssets(listing.therapeuticArea, 15),
       ]);
 
