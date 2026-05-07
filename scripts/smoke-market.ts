@@ -53,6 +53,7 @@ import { eq } from "drizzle-orm";
 
 const BASE_URL = process.argv[2] ?? "http://localhost:5000";
 const MARKET_BUDGET_MS = 1500;
+const AI_BUDGET_MS = 10_000;
 const RUN_ID = randomUUID().slice(0, 8);
 // Loopback-only bypass; server-side check enforces this in addition.
 // We only verify here that the BASE_URL is loopback so we fail fast with a
@@ -82,6 +83,7 @@ async function probe(
   path: string,
   asUser: string,
   validate: (body: unknown) => string,
+  budgetMs: number = MARKET_BUDGET_MS,
 ): Promise<ProbeResult> {
   const url = `${BASE_URL}${path}`;
   const start = Date.now();
@@ -102,7 +104,7 @@ async function probe(
         error: `BAD_STATUS(${res.status}, expected 200) · ${typeof body === "string" ? body : JSON.stringify(body).slice(0, 200)}`,
       };
     }
-    const overBudget = ms > MARKET_BUDGET_MS;
+    const overBudget = ms > budgetMs;
     let detail = "";
     try { detail = validate(body); }
     catch (vErr) {
@@ -110,7 +112,7 @@ async function probe(
     }
     return {
       name, url, status: res.status, ms, ok: !overBudget, detail,
-      error: overBudget ? `OVER_BUDGET(${ms}ms > ${MARKET_BUDGET_MS}ms)` : undefined,
+      error: overBudget ? `OVER_BUDGET(${ms}ms > ${budgetMs}ms)` : undefined,
     };
   } catch (err) {
     return {
@@ -265,7 +267,7 @@ async function teardownFixture(f: Fixture | null): Promise<void> {
       },
     ));
 
-    // 3. Intelligence panel cold path.
+    // 3. Intelligence panel cold path — AI-backed, higher latency budget.
     results.push(await probe(
       "listing-intelligence",
       `/api/market/listings/${fx.listing.id}/intelligence`,
@@ -276,6 +278,7 @@ async function teardownFixture(f: Fixture | null): Promise<void> {
         if (keys.length === 0) throw new Error("empty intelligence payload");
         return `keys=${keys.length}`;
       },
+      AI_BUDGET_MS,
     ));
 
     // 4. Pipeline list (seller-side).
