@@ -2331,7 +2331,10 @@ export class DatabaseStorage implements IStorage {
             (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
           ) >= 3
         )
-      ORDER BY COALESCE(enriched_at, '1970-01-01'::timestamptz) ASC
+      ORDER BY
+        (CASE WHEN asset_class = 'drug_biologic' THEN 0 ELSE 1 END) ASC,
+        char_length(COALESCE(summary, '') || COALESCE(abstract, '')) DESC,
+        COALESCE(completeness_score, 0) ASC
       LIMIT ${limit}
     `);
     return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>;

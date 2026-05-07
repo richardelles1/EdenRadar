@@ -4899,7 +4899,8 @@ export async function registerRoutes(
                   UPDATE ingested_assets
                   SET summary = ${content.slice(0, 5000)},
                       content_hash = ${newHash},
-                      enriched_at = NULL
+                      enriched_at = NULL,
+                      data_sparse = NULL
                   WHERE id = ${row.id}
                 `);
                 drEnriched++;
@@ -5060,7 +5061,8 @@ export async function registerRoutes(
               await db.execute(sql`
                 UPDATE ingested_assets
                 SET summary = ${newSummary},
-                    enriched_at = NULL
+                    enriched_at = NULL,
+                    data_sparse = NULL
                 WHERE id = ${row.id}
               `);
               irEnriched++;
@@ -5221,7 +5223,8 @@ export async function registerRoutes(
               await db.execute(sql`
                 UPDATE ingested_assets
                 SET summary = ${combined},
-                    enriched_at = NULL
+                    enriched_at = NULL,
+                    data_sparse = NULL
                 WHERE id = ${row.id}
               `);
               fbEnriched++;
