@@ -47,8 +47,8 @@ const MODALITY_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bmRNA\s+(?:vaccine|therap|platform|delivery|encod)\b|\blipid[\s-]?nanoparticle\s+mRNA\b/i, value: "mrna" },
   // RNA therapeutics (siRNA, ASO, RNAi)
   { pattern: /\bsiRNA\b|\bshRNA\b|\bRNAi\b|\bmiRNA\s+(?:mimic|inhibitor|therap)\b|\bASO\b|\bantisense\s+oligon|\bRNA[\s-]?interferenc|\boligonucleotide\s+therap/i, value: "rna therapy" },
-  // Vaccines
-  { pattern: /\bvaccine\b|\bimmuniz(?:ation|ing)\b|\bimmunogen\b|\bvaccination\b|\badjuvant[\s-]?(?:based|system|formulation)\b/i, value: "vaccine" },
+  // Vaccines — require explicit asset context, not just mention of the word
+  { pattern: /\bvaccine\s+(?:candidate|platform|formulation|development|therapy|immunogen)\b|\bprophylactic\s+vaccine\b|\btherapeutic\s+vaccine\b|\bmRNA\s+vaccine\b|\bviral\s+vector\s+vaccine\b/i, value: "vaccine" },
   // ADC and complex antibody formats first
   { pattern: /\bbispecific\s+antibod|\bantibody[\s-]?drug\s+conjug|\bADC\b(?:\s+therap|\s+platform)|\bnanobod|\bscFv\b|\bIgG\b/i, value: "antibody" },
   // Antibody (broad)
@@ -59,10 +59,8 @@ const MODALITY_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bnanoparticle\b|\bliposome\b|\bliposomal\b|\bnano[\s-]?medicine\b|\bnano[\s-]?carrier\b|\blipid[\s-]?nanoparticle\b|\bpolymeric\s+nano|\bexosome[\s-]?(?:based|delivery)/i, value: "nanoparticle" },
   // PROTAC / molecular glue / degraders
   { pattern: /\bPROTAC\b|\bmolecular\s+glue\b|\btargeted\s+protein\s+degrad|\bTPD\b/i, value: "small molecule" },
-  // Small molecule (broad)
-  { pattern: /\bsmall[\s-]?molecule\b|\bkinase\s+inhibitor\b|\bprotease\s+inhibitor\b|\breceptor\s+(?:antagonist|agonist)\b|\ballosteric\s+(?:inhibitor|modulator)\b/i, value: "small molecule" },
-  // Compound / drug candidate catch-all (likely small molecule)
-  { pattern: /\blead\s+compound\b|\bdrug\s+candidate\b|\bcompound\s+\d+[a-z]?\b/i, value: "small molecule" },
+  // Small molecule — explicit term or unambiguous chemistry classes only
+  { pattern: /\bsmall[\s-]?molecule\b|\bkinase\s+inhibitor\b|\bprotease\s+inhibitor\b|\ballosteric\s+(?:inhibitor|modulator)\b/i, value: "small molecule" },
   // Diagnostics
   { pattern: /\bdiagnostic\s+(?:test|kit|assay|platform|tool|device|marker)\b|\bbiomarker\s+(?:test|assay|panel|platform)\b|\bimaging\s+agent\b|\bcontrast\s+agent\b|\bin\s+vitro\s+diagnostic\b|\bIVD\b/i, value: "diagnostic" },
   // Peptide (broad fallback)
