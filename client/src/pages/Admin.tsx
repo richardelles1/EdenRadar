@@ -4596,7 +4596,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   );
 }
 
-function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilter?: boolean }) {
+function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilter?: number }) {
   const [institutionFilter, setInstitutionFilter] = useState("");
   const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
   const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
@@ -11089,11 +11089,11 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
 // ── Data Quality Tab ─────────────────────────────────────────────────────────
 
 function DataQualityTab({ pw }: { pw: string }) {
-  const [gaveUpActive, setGaveUpActive] = useState(false);
+  const [gaveUpTrigger, setGaveUpTrigger] = useState(0);
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
-      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpActive(v => !v)} />
-      <Enrichment pw={pw} initialGaveUpFilter={gaveUpActive} />
+      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpTrigger(v => v + 1)} />
+      <Enrichment pw={pw} initialGaveUpFilter={gaveUpTrigger} />
       <EdenReadinessPanel pw={pw} />
       <RelevancePanel pw={pw} />
       <PotentialDuplicates pw={pw} />
