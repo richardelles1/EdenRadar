@@ -133,11 +133,19 @@ async function enrichFlintboxThinListings(
           const json = await res.json() as any;
           const attrs = json?.data?.attributes ?? json?.attributes ?? (json as any);
           // Prioritised fallback: description → fullDescription → abstract
+          // Then supplementary fields: benefit, marketApplication, keyPoint1-3, other.
+          // "other" is the primary rich-text description for Cornell and extended content for Auburn.
           const descRaw = cleanText(stripHtml(
             attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "",
           ));
+          const benefitRaw = cleanText(stripHtml(attrs?.benefit ?? ""));
           const marketRaw = cleanText(stripHtml(attrs?.marketApplication ?? ""));
-          const combined = [descRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 2000);
+          const kp1 = cleanText(stripHtml(attrs?.keyPoint1 ?? ""));
+          const kp2 = cleanText(stripHtml(attrs?.keyPoint2 ?? ""));
+          const kp3 = cleanText(stripHtml(attrs?.keyPoint3 ?? ""));
+          const otherRaw = cleanText(stripHtml(attrs?.other ?? ""));
+          const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw]
+            .filter((s) => s.length > 0).join(" ").slice(0, 2000);
           if (combined.length >= 50) {
             listing.description = combined;
             if (descRaw.length >= 50) listing.abstract = descRaw.slice(0, 2000);

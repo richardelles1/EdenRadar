@@ -5252,13 +5252,17 @@ export async function registerRoutes(
             const json = await fetchRes.json() as any;
             const attrs = json?.data?.attributes ?? json?.attributes ?? json;
             // Prioritised fallback: description → fullDescription → abstract
+            // Then supplementary fields: benefit, marketApplication, keyPoint1-3, other.
+            // "other" is the full rich-text description for Cornell (596-850 chars) and
+            // extended content for Auburn (1771 chars) — not present in description/abstract.
             const descRaw = stripFbHtml(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "");
             const benefitRaw = stripFbHtml(attrs?.benefit ?? "");
             const marketRaw = stripFbHtml(attrs?.marketApplication ?? "");
             const kp1 = stripFbHtml(attrs?.keyPoint1 ?? "");
             const kp2 = stripFbHtml(attrs?.keyPoint2 ?? "");
             const kp3 = stripFbHtml(attrs?.keyPoint3 ?? "");
-            const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3]
+            const otherRaw = stripFbHtml(attrs?.other ?? "");
+            const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw]
               .filter((s) => s.length > 0)
               .join(" ")
               .slice(0, 5_000);
