@@ -2816,6 +2816,17 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
     staleTime: 60_000,
   });
 
+  const { data: enrichHealth } = useQuery<{ readyCount: number; needsRefetchCount: number; gaveUpCount: number; enriched24hCount: number }>({
+    queryKey: ["/api/admin/enrichment/health", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/health", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load enrichment health");
+      return res.json();
+    },
+    staleTime: 30_000,
+    refetchInterval: polling ? 5000 : 30_000,
+  });
+
   const { data: classifyCount, refetch: refetchClassifyCount } = useQuery<{
     thick: number; thin: number; tooThin: number; total: number; estCost: number; exhausted: number;
   }>({
@@ -3580,6 +3591,60 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
             </div>
             <div className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground">Runs GPT-4o-mini on assets that still have unknown fields after rule fill. Type-aware classification: nulls returned for non-applicable fields. Resumable.</p>
+
+              {/* Queue Health */}
+              {enrichHealth && (
+                <div className="grid grid-cols-4 gap-2" data-testid="enrichment-queue-health">
+                  {[
+                    {
+                      label: "Ready to enrich",
+                      val: enrichHealth.readyCount,
+                      color: "emerald",
+                      tooltip: "Have sufficient text and are under the 3-attempt cap — will be processed by the next run",
+                    },
+                    {
+                      label: "Needs re-fetch",
+                      val: enrichHealth.needsRefetchCount,
+                      color: "sky",
+                      tooltip: "Summary < 120 chars — run a re-fetch tool first to gather more text before enrichment",
+                    },
+                    {
+                      label: "Gave up",
+                      val: enrichHealth.gaveUpCount,
+                      color: "red",
+                      tooltip: "Hit the 3-attempt cap — AI tried 3× and couldn't classify. These are skipped to avoid wasting spend. Re-fetch that improves text by 200+ chars will reset the cap.",
+                    },
+                    {
+                      label: "Enriched (24 h)",
+                      val: enrichHealth.enriched24hCount,
+                      color: "violet",
+                      tooltip: "Assets that had enriched_at set in the last 24 hours",
+                    },
+                  ].map(({ label, val, color, tooltip }) => (
+                    <div
+                      key={label}
+                      title={tooltip}
+                      className={`rounded-lg border bg-background p-2.5 text-center cursor-default
+                        ${color === "emerald" ? "border-emerald-200 dark:border-emerald-800" : ""}
+                        ${color === "sky" ? "border-sky-200 dark:border-sky-800" : ""}
+                        ${color === "red" ? "border-red-200 dark:border-red-800" : ""}
+                        ${color === "violet" ? "border-violet-200 dark:border-violet-800" : ""}
+                      `}
+                      data-testid={`stat-health-${label.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      <div className={`text-base font-bold tabular-nums
+                        ${color === "emerald" ? "text-emerald-700 dark:text-emerald-400" : ""}
+                        ${color === "sky" ? "text-sky-700 dark:text-sky-400" : ""}
+                        ${color === "red" && val > 0 ? "text-red-600 dark:text-red-400" : ""}
+                        ${color === "red" && val === 0 ? "text-muted-foreground" : ""}
+                        ${color === "violet" ? "text-violet-700 dark:text-violet-400" : ""}
+                      `}>{val.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground leading-tight mt-0.5">{label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {pipelineStats && unknownCount > 0 && (
                 <div className="grid grid-cols-4 gap-2">
                   {[{ label: "Target", val: pipelineStats.byField.target }, { label: "Modality", val: pipelineStats.byField.modality }, { label: "Indication", val: pipelineStats.byField.indication }, { label: "Dev Stage", val: pipelineStats.byField.developmentStage }].map(f => (

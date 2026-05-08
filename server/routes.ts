@@ -4298,6 +4298,43 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/enrichment/health", requireAdmin, async (req, res) => {
+    try {
+      const rows = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (
+            WHERE relevant = true
+              AND (data_sparse IS NULL OR data_sparse = false)
+              AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+              AND COALESCE(mini_enrich_attempts, 0) < 3
+          )::int AS ready_count,
+          COUNT(*) FILTER (
+            WHERE relevant = true
+              AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 120
+              AND enriched_at IS NULL
+          )::int AS needs_refetch_count,
+          COUNT(*) FILTER (
+            WHERE relevant = true
+              AND COALESCE(mini_enrich_attempts, 0) >= 3
+          )::int AS gave_up_count,
+          COUNT(*) FILTER (
+            WHERE relevant = true
+              AND enriched_at > NOW() - INTERVAL '24 hours'
+          )::int AS enriched_24h_count
+        FROM ingested_assets
+      `);
+      const row = rows.rows[0] as any;
+      res.json({
+        readyCount: row.ready_count ?? 0,
+        needsRefetchCount: row.needs_refetch_count ?? 0,
+        gaveUpCount: row.gave_up_count ?? 0,
+        enriched24hCount: row.enriched_24h_count ?? 0,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch enrichment health" });
+    }
+  });
+
   app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
 
@@ -4927,7 +4964,10 @@ export async function registerRoutes(
                   SET summary = ${content.slice(0, 5000)},
                       content_hash = ${newHash},
                       enriched_at = NULL,
-                      data_sparse = NULL
+                      data_sparse = NULL,
+                      mini_enrich_attempts = CASE
+                        WHEN length(${content.slice(0, 5000)}) - length(COALESCE(summary, '')) >= 200
+                        THEN 0 ELSE mini_enrich_attempts END
                   WHERE id = ${row.id}
                 `);
                 drEnriched++;
@@ -5094,7 +5134,10 @@ export async function registerRoutes(
                 UPDATE ingested_assets
                 SET summary = ${newSummary},
                     enriched_at = NULL,
-                    data_sparse = NULL
+                    data_sparse = NULL,
+                    mini_enrich_attempts = CASE
+                      WHEN length(${newSummary}) - length(COALESCE(summary, '')) >= 200
+                      THEN 0 ELSE mini_enrich_attempts END
                 WHERE id = ${row.id}
               `);
               irEnriched++;
@@ -5279,7 +5322,10 @@ export async function registerRoutes(
                 UPDATE ingested_assets
                 SET summary = ${combined},
                     enriched_at = NULL,
-                    data_sparse = NULL
+                    data_sparse = NULL,
+                    mini_enrich_attempts = CASE
+                      WHEN length(${combined}) - length(COALESCE(summary, '')) >= 200
+                      THEN 0 ELSE mini_enrich_attempts END
                 WHERE id = ${row.id}
               `);
               fbEnriched++;
@@ -5458,7 +5504,10 @@ export async function registerRoutes(
                   patent_status = COALESCE(${patentStatus}, patent_status),
                   inventors     = COALESCE(${inventors.length > 0 ? inventors : null}, inventors),
                   enriched_at   = NULL,
-                  data_sparse   = NULL
+                  data_sparse   = NULL,
+                  mini_enrich_attempts = CASE
+                    WHEN length(${summary}) - length(COALESCE(ingested_assets.summary, '')) >= 200
+                    THEN 0 ELSE mini_enrich_attempts END
               WHERE id = ${row.id}
             `);
             tpEnriched++;
@@ -5620,7 +5669,10 @@ export async function registerRoutes(
                   technology_id    = COALESCE(${listing.technologyId ?? null}, technology_id),
                   source_url       = ${canonicalUrl},
                   enriched_at      = NULL,
-                  data_sparse      = NULL
+                  data_sparse      = NULL,
+                  mini_enrich_attempts = CASE
+                    WHEN length(${listing.description}) - length(COALESCE(ingested_assets.summary, '')) >= 200
+                    THEN 0 ELSE mini_enrich_attempts END
               WHERE id = ${row.id}
             `);
             cuEnriched++;
