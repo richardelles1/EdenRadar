@@ -3706,6 +3706,7 @@ export async function registerRoutes(
         progress: usptoProgress,
         result: usptoResult,
         spotCheck: usptoSpotCheckValidation,
+        noApiKey: !process.env.USPTO_ODP_API_KEY,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
@@ -3724,19 +3725,27 @@ export async function registerRoutes(
 
   app.post("/api/admin/enrichment/uspto/spot-check", async (req, res) => {
     try {
+      const apiKey = process.env.USPTO_ODP_API_KEY ?? "";
       const { runSpotCheck } = await import("./lib/pipeline/usptoPatentLookup");
-      const validation = await runSpotCheck();
+      const validation = await runSpotCheck(apiKey);
       usptoSpotCheckValidation = validation;
+      if (!validation.passed) {
+        return res.status(502).json({
+          error: validation.reason ?? "Spot check gate failed — fewer than 3 institutions returned valid patent data",
+          validation,
+        });
+      }
       res.json({ validation });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Preview failed" });
+      res.status(500).json({ error: err.message ?? "Spot check failed" });
     }
   });
 
   app.post("/api/admin/enrichment/uspto/run", async (req, res) => {
     try {
-      if (usptoRunning) return res.status(409).json({ error: "Patent extraction already running" });
+      if (usptoRunning) return res.status(409).json({ error: "USPTO cross-reference already running" });
 
+      const apiKey = process.env.USPTO_ODP_API_KEY ?? "";
       usptoRunning = true;
       usptoProgress = { processed: 0, total: 0, matched: 0, unmatched: 0, skipped: 0 };
       usptoResult = null;
@@ -3746,6 +3755,7 @@ export async function registerRoutes(
 
       import("./lib/pipeline/usptoPatentLookup").then(({ runUsptoPatentCrossRef }) => {
         runUsptoPatentCrossRef({
+          apiKey,
           onProgress: (p) => { usptoProgress = p; },
           shouldStop: () => usptoShouldStop,
         }).then((summary) => {

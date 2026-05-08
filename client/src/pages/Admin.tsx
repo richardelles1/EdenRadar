@@ -3431,6 +3431,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     progress: { processed: number; total: number; matched: number; unmatched: number; skipped: number } | null;
     result: { processed: number; matched: number; unmatched: number; skipped: number; missingIpTypeCount: number } | null;
     spotCheck: UsptoSpotValidation | null;
+    noApiKey: boolean;
   };
 
   const { data: usptoStatus, refetch: refetchUsptoStatus } = useQuery<UsptoStatus>({
@@ -3736,9 +3737,24 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
             <div className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Scans TTO asset names and summaries for embedded US patent numbers (e.g. "US 10,690,653", "US20200215228A1") using regex, then fills <em>ip_type = "patent"</em> and <em>patent_status</em>.
-                No external API required. Never overwrites existing non-null values or human-verified fields.
+                Queries the USPTO API by institution assignee, then fuzzy-matches patent titles against TTO asset names (Jaccard ≥ 0.35) to fill <em>ip_type = "patent"</em> and <em>patent_status</em>.
+                A regex supplement pass also catches assets with patent numbers embedded directly in their text.
+                Never overwrites existing non-null values or human-verified fields.
               </p>
+
+              {/* No API key banner */}
+              {usptoStatus?.noApiKey && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30" data-testid="uspto-no-api-key-banner">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-semibold text-amber-800 dark:text-amber-300">USPTO_ODP_API_KEY not set</p>
+                    <p className="text-amber-700 dark:text-amber-400">
+                      The API pass will be skipped — only the regex text-extraction supplement will run.
+                      Add <span className="font-mono">USPTO_ODP_API_KEY</span> to your environment secrets for full coverage.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Missing ip_type count */}
               {usptoCount && (
@@ -3753,14 +3769,14 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                 </div>
               )}
 
-              {/* Preview results */}
+              {/* Spot check results */}
               {usptoStatus?.spotCheck && (
                 <div className="space-y-1.5" data-testid="uspto-spot-check-results">
                   <div className="flex items-center gap-2">
-                    <p className="text-xs font-medium text-muted-foreground">Preview — sample assets with extractable patent numbers:</p>
+                    <p className="text-xs font-medium text-muted-foreground">Spot check results:</p>
                     {usptoStatus.spotCheck.passed
-                      ? <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{usptoStatus.spotCheck.validCount} institutions found</span>
-                      : <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">No assets found</span>
+                      ? <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{usptoStatus.spotCheck.validCount}/{usptoStatus.spotCheck.results.length} valid — gate passed</span>
+                      : <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">{usptoStatus.spotCheck.validCount}/{usptoStatus.spotCheck.results.length} valid — need ≥3 to run</span>
                     }
                   </div>
                   {usptoStatus.spotCheck.reason && (
@@ -3769,22 +3785,21 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                     {usptoStatus.spotCheck.results.map((r) => (
                       <div key={r.institution}
-                        className="rounded-lg border px-3 py-2 text-xs border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20"
+                        className={`rounded-lg border px-3 py-2 text-xs ${!r.valid ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20" : "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20"}`}
                         data-testid={`spot-check-row-${r.institution.replace(/\s+/g, "-").toLowerCase()}`}>
                         <div className="flex items-center gap-1.5">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                          {!r.valid
+                            ? <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
                           <span className="font-medium">{r.institution}</span>
-                          <span className="ml-auto tabular-nums text-muted-foreground">{r.count.toLocaleString()} assets</span>
+                          <span className="ml-auto tabular-nums text-muted-foreground">{r.count.toLocaleString()} patents</span>
                         </div>
                         {r.sample.length > 0 && (
-                          <ul className="mt-1 pl-5 space-y-0.5">
-                            {r.sample.slice(0, 2).map((s, i) => (
-                              <li key={i} className="text-muted-foreground truncate" title={s.title}>
-                                <span className="text-blue-600 dark:text-blue-400 font-mono text-[10px] mr-1">[{s.number}]</span>{s.title}
-                              </li>
-                            ))}
-                          </ul>
+                          <p className="mt-1 text-muted-foreground truncate pl-5" title={r.sample[0].title}>
+                            {r.sample[0].title}
+                          </p>
                         )}
+                        {r.error && <p className="mt-1 text-red-600 dark:text-red-400 pl-5">{r.error}</p>}
                       </div>
                     ))}
                   </div>
@@ -3834,7 +3849,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                 <Button size="sm" variant="outline" onClick={() => runUsptoSpotCheck.mutate()} disabled={runUsptoSpotCheck.isPending || usptoStatus?.running}
                   className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30" data-testid="button-uspto-spot-check">
                   {runUsptoSpotCheck.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
-                  Preview
+                  Spot Check API
                 </Button>
                 <Button size="sm" onClick={() => runUsptoXref.mutate()} disabled={usptoStatus?.running || runUsptoXref.isPending}
                   className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50" data-testid="button-run-uspto-xref">
