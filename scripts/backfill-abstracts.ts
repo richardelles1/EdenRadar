@@ -5,14 +5,13 @@
  * source URLs but < 120 chars of combined summary+abstract text.
  *
  * Platform strategies:
- *  1. TechLink (DoD + VA) — Playwright ES XHR intercept → bulk ES replay →
- *     match assets by slug/numeric-ID → write description back.
- *     Note: TechLink is a pure React SPA with no public JSON REST API; the ES
- *     cluster requires an auth header only obtainable by intercepting the browser.
- *  2. TechnologyPublisher — cheerio HTML fetch → .c_tp_description extraction
- *     (mirrors the established techpublisher-retroactive-refetch.ts pattern).
+ *  1. TechLink (DoD + VA) — public REST API https://techlinkcenter.org/api/v2/projects/{id}
+ *     where {id} is the slug parsed from source_url. Non-JSON (HTML SPA) responses are
+ *     classified as `failed` and logged per asset.
+ *  2. TechnologyPublisher — detail-page re-fetch by source_url (slug/numeric-ID endpoint)
+ *     → .c_tp_description extraction (mirrors techpublisher-retroactive-refetch.ts pattern).
  *  3. Flintbox — credential discovery per subdomain + JSON API per UUID.
- *  4. Generic HTML — cheerio fetch → DESCRIPTION_SELECTORS cascade.
+ *  4. Generic HTML — cheerio fetch → DESCRIPTION_SELECTORS cascade + Next.js dehydrated state.
  *
  * DB write-back:
  *   Per success: abstract, data_sparse=false, mini_enrich_attempts=0, enriched_at=NULL.
@@ -49,6 +48,9 @@ const DELAY_MS = 200;
 const FETCH_TIMEOUT_MS = 15_000;
 
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36";
+
+// Matches the <script id="__NEXT_DATA__"> block used by Next.js SSR pages
+const NEXT_DATA_RE = /<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/;
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
 const DB_URL = process.env.SUPABASE_DATABASE_URL;
