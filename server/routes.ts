@@ -5224,6 +5224,7 @@ Do not respond with anything else.`;
           AND source_url NOT ILIKE '%in-part.com%'
           AND source_url NOT ILIKE '%flintbox.com%'
           AND source_url NOT ILIKE '%technologypublisher.com%'
+          AND source_url NOT ILIKE '%.pdf%'
           ${institution ? sql`AND institution = ${institution}` : sql``}
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -5291,6 +5292,8 @@ Do not respond with anything else.`;
             if (signal.aborted) break;
             const row = batch[batchIdx++];
             if (!row?.source_url) { drProcessed++; drSkipped++; continue; }
+            // Skip PDF URLs — they can't be scraped for text content
+            if (row.source_url.toLowerCase().includes(".pdf")) { drProcessed++; drSkipped++; continue; }
             try {
               const $ = await fetchHtml(row.source_url, 12000, signal, 1);
               if (!$) { drProcessed++; drSkipped++; continue; }
@@ -5610,56 +5613,81 @@ Do not respond with anything else.`;
           .replace(/\s+/g, " ").trim();
       }
 
-      // Process in batches of FB_RE_CONCURRENCY with 200ms pause between batches
-      for (let batchStart = 0; batchStart < rows.rows.length; batchStart += FB_RE_CONCURRENCY) {
-        if (signal.aborted) break;
-        const batch = rows.rows.slice(batchStart, batchStart + FB_RE_CONCURRENCY);
-        await Promise.all(batch.map(async (row) => {
-          if (signal.aborted) { fbProcessed++; fbSkipped++; return; }
-          if (!row?.source_url) { fbProcessed++; fbSkipped++; return; }
+      // ── NEW STRATEGY: The individual /api/v1/technologies/{id} endpoint returns 404.
+      // Use the org-level list endpoint instead (/api/v1/technologies) which returns all
+      // technologies for an org including keyPoint1/2/3. Group assets by slug, fetch the
+      // full list once per org, build an ID→attrs map, then look up each thin asset.
 
-          const urlMatch = row.source_url.match(/^https?:\/\/([^.]+)\.flintbox\.com\/technologies\/([^/?#]+)/);
-          if (!urlMatch) { fbProcessed++; fbSkipped++; return; }
-          const [, slug, uuid] = urlMatch;
+      function fbAttrsToContent(attrs: any): string {
+        return [
+          attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? attrs?.briefDescription ?? "",
+          attrs?.benefit ?? "",
+          attrs?.marketApplication ?? "",
+          attrs?.keyPoint1 ?? "",
+          attrs?.keyPoint2 ?? "",
+          attrs?.keyPoint3 ?? "",
+          attrs?.other ?? "",
+          attrs?.publications ?? "",
+        ].map(stripFbHtml).filter((s) => s.length > 0).join(" ").slice(0, 5_000);
+      }
 
-          const creds = await getCredentials(slug);
-          if (!creds) { fbProcessed++; fbSkipped++; return; }
+      // Group thin assets by org slug
+      const bySlug = new Map<string, Array<{ id: number; source_url: string; techId: string }>>();
+      const noMatch: Array<{ id: number }> = [];
+      for (const row of rows.rows) {
+        const urlMatch = row.source_url?.match(/^https?:\/\/([^.]+)\.flintbox\.com\/technologies\/([^/?#]+)/);
+        if (!urlMatch) { noMatch.push({ id: row.id }); continue; }
+        const [, slug, techId] = urlMatch;
+        if (!bySlug.has(slug)) bySlug.set(slug, []);
+        bySlug.get(slug)!.push({ id: row.id, source_url: row.source_url, techId });
+      }
+      // Assets with no URL match count as skipped
+      fbSkipped += noMatch.length;
+      fbProcessed += noMatch.length;
 
-          try {
-            const apiUrl =
-              `https://${slug}.flintbox.com/api/v1/technologies/${uuid}` +
-              `?organizationId=${creds.orgId}&organizationAccessKey=${creds.accessKey}`;
-            const fetchRes = await fetch(apiUrl, {
-              headers: {
-                Accept: "application/json",
-                "X-Requested-With": "XMLHttpRequest",
-                "User-Agent": "Mozilla/5.0",
-              },
-              signal: AbortSignal.any([signal, AbortSignal.timeout(FB_RE_TIMEOUT)]),
-            });
-            if (!fetchRes.ok) { fbProcessed++; fbSkipped++; return; }
-            const json = await fetchRes.json() as any;
-            const attrs = json?.data?.attributes ?? json?.attributes ?? json;
-            // Institutions vary widely on which field holds the description — cover all known variants.
-            // "other" is the primary/only field for Cornell, TAMUS, and Louisville.
-            // "benefit" + "marketApplication" cover McGill, Rice, and Monash.
-            const descRaw = stripFbHtml(
-              attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ??
-              attrs?.briefDescription ?? attrs?.brief_description ?? ""
-            );
-            const benefitRaw = stripFbHtml(attrs?.benefit ?? "");
-            const marketRaw = stripFbHtml(attrs?.marketApplication ?? "");
-            const kp1 = stripFbHtml(attrs?.keyPoint1 ?? "");
-            const kp2 = stripFbHtml(attrs?.keyPoint2 ?? "");
-            const kp3 = stripFbHtml(attrs?.keyPoint3 ?? "");
-            const otherRaw = stripFbHtml(attrs?.other ?? "");
-            const pubRaw = stripFbHtml(attrs?.publications ?? "");
-            const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw, pubRaw]
-              .filter((s) => s.length > 0)
-              .join(" ")
-              .slice(0, 5_000);
+      for (const [slug, assets] of bySlug) {
+        if (signal.aborted) { fbSkipped += assets.length; fbProcessed += assets.length; continue; }
 
-            if (combined.length >= 120) {
+        const creds = await getCredentials(slug);
+        if (!creds) {
+          console.log(`[flintbox-refetch] No creds for slug=${slug}, skipping ${assets.length} assets`);
+          fbSkipped += assets.length; fbProcessed += assets.length; continue;
+        }
+
+        // Fetch the full technology list for this org (one request per org, not per asset)
+        let techById = new Map<string, any>();
+        try {
+          const listUrl =
+            `https://${slug}.flintbox.com/api/v1/technologies` +
+            `?organizationId=${creds.orgId}&organizationAccessKey=${creds.accessKey}`;
+          const listRes = await fetch(listUrl, {
+            headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest", "User-Agent": "Mozilla/5.0" },
+            signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+          });
+          if (listRes.ok) {
+            const listJson = await listRes.json() as any;
+            const arr: any[] = listJson?.data ?? listJson?.technologies ?? (Array.isArray(listJson) ? listJson : []);
+            for (const tech of arr) {
+              const tid = String(tech.id ?? tech?.attributes?.id ?? "");
+              if (tid) techById.set(tid, tech?.attributes ?? tech);
+            }
+            console.log(`[flintbox-refetch] ${slug}: loaded ${techById.size} technologies from list endpoint`);
+          } else {
+            console.warn(`[flintbox-refetch] ${slug}: list endpoint HTTP ${listRes.status}, will skip ${assets.length} assets`);
+          }
+        } catch (e: any) {
+          console.warn(`[flintbox-refetch] ${slug}: list fetch failed: ${e.message}, skipping ${assets.length} assets`);
+        }
+
+        // Process each asset using in-memory list data (no per-asset HTTP call)
+        for (const asset of assets) {
+          if (signal.aborted) { fbProcessed++; fbSkipped++; continue; }
+          const attrs = techById.get(asset.techId);
+          if (!attrs) { fbProcessed++; fbSkipped++; continue; }
+
+          const combined = fbAttrsToContent(attrs);
+          if (combined.length >= 120) {
+            try {
               await db.execute(sql`
                 UPDATE ingested_assets
                 SET summary = ${combined},
@@ -5668,23 +5696,26 @@ Do not respond with anything else.`;
                     mini_enrich_attempts = CASE
                       WHEN length(${combined}) - length(COALESCE(summary, '')) >= 200
                       THEN 0 ELSE mini_enrich_attempts END
-                WHERE id = ${row.id}
+                WHERE id = ${asset.id}
               `);
               fbEnriched++;
-            } else if (combined.length >= 50) {
-              fbPartial++;
-            } else {
-              fbSkipped++;
-            }
-          } catch {
+            } catch { fbSkipped++; }
+          } else if (combined.length >= 50) {
+            fbPartial++;
+          } else {
             fbSkipped++;
           }
           fbProcessed++;
-        }));
-        // 200ms pause between batches to avoid rate-limiting
-        if (batchStart + FB_RE_CONCURRENCY < rows.rows.length && !signal.aborted) {
-          await new Promise((r) => setTimeout(r, 200));
         }
+
+        // Brief pause between orgs
+        if (!signal.aborted) await new Promise((r) => setTimeout(r, 300));
+      }
+
+      // Sanity check: warn if processed ≠ enriched + partial + skipped
+      const fbSum = fbEnriched + fbPartial + fbSkipped;
+      if (fbSum !== fbProcessed) {
+        console.warn(`[flintbox-refetch] Totals mismatch: enriched=${fbEnriched} partial=${fbPartial} skipped=${fbSkipped} sum=${fbSum} ≠ processed=${fbProcessed}`);
       }
 
       fbLastSummary = {
@@ -5815,8 +5846,14 @@ Do not respond with anything else.`;
 
             const $ = load(html);
 
-            // Description: .c_tp_description contains rich HTML — strip tags for plain text
-            const descHtml = $(".c_tp_description").first().html() ?? "";
+            // Description: .c_tp_description for classic layout; .page-main__description for
+            // modern BCH/CZBioHub layout. Fall back to first [class*=description] as last resort.
+            const descHtml =
+              $(".c_tp_description").first().html() ??
+              $(".page-main__description").first().html() ??
+              $(".tech-description").first().html() ??
+              $("[class*='description']").first().html() ??
+              "";
             const summary = stripHtmlTp(descHtml).slice(0, 5_000);
             if (summary.length < 50) { tpProcessed++; tpSkipped++; return; }
             if (summary.length < 120) { tpProcessed++; tpPartial++; return; }
@@ -5872,6 +5909,10 @@ Do not respond with anything else.`;
         completedAt: new Date().toISOString(),
       };
       saveRefetchState("techpublisher", tpLastSummary);
+      const tpSum = tpEnriched + tpPartial + tpSkipped;
+      if (tpSum !== tpProcessed) {
+        console.warn(`[tp-refetch] Totals mismatch: enriched=${tpEnriched} partial=${tpPartial} skipped=${tpSkipped} sum=${tpSum} ≠ processed=${tpProcessed}`);
+      }
       console.log(`[tp-refetch] Complete: ${tpEnriched} enriched, ${tpPartial} partial, ${tpSkipped} skipped of ${tpTotal} thin TechPublisher assets in ${Date.now() - tpStartMs}ms`);
     } catch (err: any) {
       console.error("[tp-refetch] Error:", err.message);
@@ -5993,27 +6034,50 @@ Do not respond with anything else.`;
             : row.source_url;
 
           try {
-            // Use typed helpers — no any casts, no duplicated parsing logic
+            // Primary: typed JSON helper (appends .json to URL)
             const json = await fetchColumbiaJson(canonicalUrl, CU_RE_TIMEOUT, signal);
-            if (!json) { cuProcessed++; cuSkipped++; return; }
+            const listing = json ? columbiaJsonToListing(canonicalUrl, json) : null;
 
-            const listing = columbiaJsonToListing(canonicalUrl, json);
-            if (!listing || listing.description.length < 50) { cuProcessed++; cuSkipped++; return; }
-            if (listing.description.length < 120) { cuProcessed++; cuPartial++; return; }
+            // Fallback: cheerio scrape the HTML page when JSON is unavailable/stale
+            let description = listing?.description ?? "";
+            let abstract = listing?.abstract ?? undefined;
+            if (description.length < 50) {
+              try {
+                const { load: cheerioLoad } = await import("cheerio");
+                const htmlRes = await fetch(canonicalUrl, {
+                  headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36", Accept: "text/html" },
+                  signal: AbortSignal.any([signal, AbortSignal.timeout(CU_RE_TIMEOUT)]),
+                });
+                if (htmlRes.ok) {
+                  const html = await htmlRes.text();
+                  const $$ = cheerioLoad(html);
+                  // Columbia's React frontend renders description in article p elements
+                  const htmlDesc = $$("article p, .field--type-text-with-summary, [class*='description'] p")
+                    .map((_, el) => $$(el).text().trim()).get().filter((t) => t.length > 20).join(" ");
+                  if (htmlDesc.length > description.length) description = htmlDesc.slice(0, 5_000);
+                  if (!abstract) {
+                    abstract = $$('meta[name="description"]').attr("content")?.trim() ?? undefined;
+                  }
+                }
+              } catch { /* HTML fallback failed — continue with whatever we have */ }
+            }
+
+            if (description.length < 50) { cuProcessed++; cuSkipped++; return; }
+            if (description.length < 120) { cuProcessed++; cuPartial++; return; }
 
             await db.execute(sql`
               UPDATE ingested_assets
-              SET summary          = ${listing.description},
-                  abstract         = ${listing.abstract ?? null},
-                  inventors        = ${listing.inventors && listing.inventors.length > 0 ? listing.inventors : null},
-                  patent_status    = COALESCE(${listing.patentStatus ?? null}, patent_status),
-                  licensing_status = COALESCE(${listing.licensingStatus ?? null}, licensing_status),
-                  technology_id    = COALESCE(${listing.technologyId ?? null}, technology_id),
+              SET summary          = ${description},
+                  abstract         = COALESCE(${abstract ?? null}, abstract),
+                  inventors        = COALESCE(${listing?.inventors && listing.inventors.length > 0 ? listing.inventors : null}, inventors),
+                  patent_status    = COALESCE(${listing?.patentStatus ?? null}, patent_status),
+                  licensing_status = COALESCE(${listing?.licensingStatus ?? null}, licensing_status),
+                  technology_id    = COALESCE(${listing?.technologyId ?? null}, technology_id),
                   source_url       = ${canonicalUrl},
                   enriched_at      = NULL,
                   data_sparse      = NULL,
                   mini_enrich_attempts = CASE
-                    WHEN length(${listing.description}) - length(COALESCE(ingested_assets.summary, '')) >= 200
+                    WHEN length(${description}) - length(COALESCE(ingested_assets.summary, '')) >= 200
                     THEN 0 ELSE mini_enrich_attempts END
               WHERE id = ${row.id}
             `);
@@ -6037,6 +6101,10 @@ Do not respond with anything else.`;
         completedAt: new Date().toISOString(),
       };
       saveRefetchState("columbia", cuLastSummary);
+      const cuSum = cuEnriched + cuPartial + cuSkipped;
+      if (cuSum !== cuProcessed) {
+        console.warn(`[columbia-refetch] Totals mismatch: enriched=${cuEnriched} partial=${cuPartial} skipped=${cuSkipped} sum=${cuSum} ≠ processed=${cuProcessed}`);
+      }
       console.log(`[columbia-refetch] Complete: ${cuEnriched} enriched, ${cuPartial} partial, ${cuSkipped} skipped of ${cuTotal} thin Columbia assets in ${Date.now() - cuStartMs}ms`);
     } catch (err: any) {
       console.error("[columbia-refetch] Error:", err.message);
