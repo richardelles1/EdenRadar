@@ -5252,10 +5252,18 @@ export async function registerRoutes(
             const json = await fetchRes.json() as any;
             const attrs = json?.data?.attributes ?? json?.attributes ?? json;
             // Prioritised fallback: description → fullDescription → abstract
-            // Then supplementary fields: benefit, marketApplication, keyPoint1-3, other.
-            // "other" is the full rich-text description for Cornell (596-850 chars) and
-            // extended content for Auburn (1771 chars) — not present in description/abstract.
-            const descRaw = stripFbHtml(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "");
+            // Field mapping confirmed by live API probes across all major thin institutions:
+            //   description/fullDescription/abstract — generic Flintbox primary fields
+            //   briefDescription/brief_description   — older listing-API alias (some institutions)
+            //   benefit            — Rice (1699ch), McGill (711ch), Monash (578ch), TAMUS (1445ch), Louisville
+            //   marketApplication  — Rice (963ch), McGill (698ch), Monash (987ch), Louisville (258ch)
+            //   keyPoint1-3        — all institutions (supplementary bullet points)
+            //   other              — Cornell ONLY field (596-850ch), TAMUS primary (2270-2922ch),
+            //                        Louisville primary (3298ch when abstract empty), Auburn extended (1771ch)
+            const descRaw = stripFbHtml(
+              attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ??
+              attrs?.briefDescription ?? attrs?.brief_description ?? ""
+            );
             const benefitRaw = stripFbHtml(attrs?.benefit ?? "");
             const marketRaw = stripFbHtml(attrs?.marketApplication ?? "");
             const kp1 = stripFbHtml(attrs?.keyPoint1 ?? "");
