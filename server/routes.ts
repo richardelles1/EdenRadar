@@ -5251,15 +5251,8 @@ export async function registerRoutes(
             if (!fetchRes.ok) { fbProcessed++; fbSkipped++; return; }
             const json = await fetchRes.json() as any;
             const attrs = json?.data?.attributes ?? json?.attributes ?? json;
-            // Prioritised fallback: description → fullDescription → abstract
-            // Field mapping confirmed by live API probes across all major thin institutions:
-            //   description/fullDescription/abstract — generic Flintbox primary fields
-            //   briefDescription/brief_description   — older listing-API alias (some institutions)
-            //   benefit            — Rice (1699ch), McGill (711ch), Monash (578ch), TAMUS (1445ch), Louisville
-            //   marketApplication  — Rice (963ch), McGill (698ch), Monash (987ch), Louisville (258ch)
-            //   keyPoint1-3        — all institutions (supplementary bullet points)
-            //   other              — Cornell ONLY field (596-850ch), TAMUS primary (2270-2922ch),
-            //                        Louisville primary (3298ch when abstract empty), Auburn extended (1771ch)
+            // Institutions vary widely on which field holds the description — cover all known variants.
+            // "other" is the primary/only description field for Cornell, TAMUS, and Louisville.
             const descRaw = stripFbHtml(
               attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ??
               attrs?.briefDescription ?? attrs?.brief_description ?? ""

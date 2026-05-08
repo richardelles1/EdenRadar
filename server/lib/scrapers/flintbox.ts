@@ -132,18 +132,11 @@ async function enrichFlintboxThinListings(
           if (!res.ok) return;
           const json = await res.json() as any;
           const attrs = json?.data?.attributes ?? json?.attributes ?? (json as any);
-          // Prioritised fallback: description → fullDescription → abstract
-          // Field mapping confirmed by live API probes across all major thin institutions:
-          //   description/fullDescription/abstract — generic Flintbox primary fields
-          //   briefDescription/brief_description   — older listing-API alias (some institutions)
-          //   benefit            — Rice (1699ch), McGill (711ch), Monash (578ch), TAMUS (1445ch)
-          //   marketApplication  — Rice (963ch), McGill (698ch), Monash (987ch), Louisville (258ch)
-          //   keyPoint1-3        — all institutions (supplementary bullet points)
-          //   other              — Cornell primary (596-850ch), TAMUS primary (2270-2922ch),
-          //                        Louisville primary (3298ch), Auburn extended (1771ch)
+          // Institutions vary widely on which field holds the description — cover all known variants.
+          // "other" is the primary/only description field for Cornell, TAMUS, and Louisville.
           const descRaw = cleanText(stripHtml(
             attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ??
-            (attrs as any)?.briefDescription ?? (attrs as any)?.brief_description ?? "",
+            attrs?.briefDescription ?? attrs?.brief_description ?? "",
           ));
           const benefitRaw = cleanText(stripHtml(attrs?.benefit ?? ""));
           const marketRaw = cleanText(stripHtml(attrs?.marketApplication ?? ""));
