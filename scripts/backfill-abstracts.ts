@@ -7,12 +7,16 @@
  * Platform strategies:
  *  1. TechLink (DoD + VA) — Playwright ES XHR intercept → bulk ES replay →
  *     match assets by slug/numeric-ID → write description back.
- *  2. TechnologyPublisher — cheerio HTML fetch → .c_tp_description extraction.
+ *     Note: TechLink is a pure React SPA with no public JSON REST API; the ES
+ *     cluster requires an auth header only obtainable by intercepting the browser.
+ *  2. TechnologyPublisher — cheerio HTML fetch → .c_tp_description extraction
+ *     (mirrors the established techpublisher-retroactive-refetch.ts pattern).
  *  3. Flintbox — credential discovery per subdomain + JSON API per UUID.
  *  4. Generic HTML — cheerio fetch → DESCRIPTION_SELECTORS cascade.
  *
- * DB write-back per success: abstract, data_sparse=false, mini_enrich_attempts=0,
- * enriched_at=NULL (so asset re-enters the AI enrichment queue).
+ * DB write-back:
+ *   Per success: abstract, data_sparse=false, mini_enrich_attempts=0, enriched_at=NULL.
+ *   Batched in groups of 50 via a single VALUES table UPDATE per batch.
  *
  * Usage:
  *   npx tsx scripts/backfill-abstracts.ts [--dry-run] [--platform=<p>] [--limit=N]
@@ -93,21 +97,46 @@ async function fetchHtml(url: string): Promise<string | null> {
   }
 }
 
-async function writeBack(id: number, result: FetchResult): Promise<void> {
-  if (DRY_RUN) return;
-  const summary = result.summary ?? result.abstract;
-  await db.execute(sql`
-    UPDATE ingested_assets
-    SET abstract              = ${result.abstract.slice(0, 8000)},
-        summary               = ${summary.slice(0, 8000)},
-        data_sparse           = false,
-        mini_enrich_attempts  = 0,
-        enriched_at           = NULL
-    WHERE id = ${id}
-  `);
+// ── Batch write system ────────────────────────────────────────────────────────
+const WRITE_BATCH_SIZE = 50;
+const pendingWrites: Array<{ id: number; result: FetchResult }> = [];
+
+async function flushWriteBatch(): Promise<void> {
+  if (DRY_RUN || pendingWrites.length === 0) { pendingWrites.length = 0; return; }
+  const batch = pendingWrites.splice(0, pendingWrites.length);
+  // Single VALUES table UPDATE — one round-trip for up to 50 rows
+  const valuePlaceholders = batch.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::text)`).join(", ");
+  const params: (number | string)[] = batch.flatMap(({ id, result }) => [id, (result.summary ?? result.abstract).slice(0, 8000)]);
+  await pool.query(
+    `UPDATE ingested_assets
+     SET abstract             = tmp.txt,
+         summary              = tmp.txt,
+         data_sparse          = false,
+         mini_enrich_attempts = 0,
+         enriched_at          = NULL
+     FROM (VALUES ${valuePlaceholders}) AS tmp(id, txt)
+     WHERE ingested_assets.id = tmp.id`,
+    params,
+  );
 }
 
-// ── Progress tracker ──────────────────────────────────────────────────────────
+async function queueWrite(id: number, result: FetchResult): Promise<void> {
+  if (DRY_RUN) return;
+  pendingWrites.push({ id, result });
+  if (pendingWrites.length >= WRITE_BATCH_SIZE) await flushWriteBatch();
+}
+
+// ── Per-institution tracking ──────────────────────────────────────────────────
+interface InstitutionStats { fetched: number; skipped: number; failed: number }
+const instStats = new Map<string, InstitutionStats>();
+
+function trackInst(institution: string, outcome: keyof InstitutionStats): void {
+  const s = instStats.get(institution) ?? { fetched: 0, skipped: 0, failed: 0 };
+  s[outcome]++;
+  instStats.set(institution, s);
+}
+
+// ── Platform-level progress tracker ──────────────────────────────────────────
 interface PlatformStats {
   total: number;
   fetched: number;
@@ -308,15 +337,18 @@ async function processTechLink(assets: AssetRow[]): Promise<void> {
       }
 
       if (abstract && abstract.length >= MIN_USEFUL_LENGTH) {
-        await writeBack(row.id, { abstract });
+        await queueWrite(row.id, { abstract });
         stats[platform].fetched++;
+        trackInst(row.institution, "fetched");
       } else {
         stats[platform].skipped++;
+        trackInst(row.institution, "skipped");
       }
       logProgress(platform);
     }));
     if (i + CONCURRENCY < assets.length) await new Promise((r) => setTimeout(r, DELAY_MS));
   }
+  await flushWriteBatch();
   console.log(`\n  [${platform}] Done.`);
 }
 
@@ -391,18 +423,24 @@ async function processTechPublisher(assets: AssetRow[]): Promise<void> {
       try {
         const result = await fetchTechPublisherAbstract(row.source_url);
         if (result) {
-          await writeBack(row.id, result);
+          await queueWrite(row.id, result);
           stats[platform].fetched++;
+          trackInst(row.institution, "fetched");
         } else {
           stats[platform].skipped++;
+          trackInst(row.institution, "skipped");
         }
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`\n  [${platform}] FAIL id=${row.id} url=${row.source_url}: ${msg}`);
         stats[platform].failed++;
+        trackInst(row.institution, "failed");
       }
       logProgress(platform);
     }));
     if (i + CONCURRENCY < assets.length) await new Promise((r) => setTimeout(r, DELAY_MS));
   }
+  await flushWriteBatch();
   console.log(`\n  [${platform}] Done.`);
 }
 
@@ -506,18 +544,24 @@ async function processFlintbox(assets: AssetRow[]): Promise<void> {
       try {
         const result = await fetchFlintboxAbstract(row.source_url);
         if (result) {
-          await writeBack(row.id, result);
+          await queueWrite(row.id, result);
           stats[platform].fetched++;
+          trackInst(row.institution, "fetched");
         } else {
           stats[platform].skipped++;
+          trackInst(row.institution, "skipped");
         }
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`\n  [${platform}] FAIL id=${row.id} url=${row.source_url}: ${msg}`);
         stats[platform].failed++;
+        trackInst(row.institution, "failed");
       }
       logProgress(platform);
     }));
     if (i + CONCURRENCY < assets.length) await new Promise((r) => setTimeout(r, DELAY_MS));
   }
+  await flushWriteBatch();
   console.log(`\n  [${platform}] Done.`);
 }
 
@@ -611,18 +655,24 @@ async function processGeneric(assets: AssetRow[]): Promise<void> {
       try {
         const result = await fetchGenericAbstract(row.source_url);
         if (result) {
-          await writeBack(row.id, result);
+          await queueWrite(row.id, result);
           stats[platform].fetched++;
+          trackInst(row.institution, "fetched");
         } else {
           stats[platform].skipped++;
+          trackInst(row.institution, "skipped");
         }
-      } catch {
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`\n  [${platform}] FAIL id=${row.id} url=${row.source_url}: ${msg}`);
         stats[platform].failed++;
+        trackInst(row.institution, "failed");
       }
       logProgress(platform);
     }));
     if (i + CONCURRENCY < assets.length) await new Promise((r) => setTimeout(r, DELAY_MS));
   }
+  await flushWriteBatch();
   console.log(`\n  [${platform}] Done.`);
 }
 
@@ -719,7 +769,7 @@ async function main() {
 
   const durationS = ((Date.now() - startMs) / 1000).toFixed(1);
 
-  // Summary
+  // Platform-level summary
   console.log("\n\n=== Final Summary ===");
   let totalFetched = 0;
   let totalSkipped = 0;
@@ -735,6 +785,23 @@ async function main() {
   console.log(`  Total failed:  ${totalFailed}`);
   console.log(`  Duration:      ${durationS}s`);
   if (DRY_RUN) console.log("  (DRY RUN — no writes made)");
+
+  // Per-institution summary (requested: fetched / skipped / failed per institution)
+  if (instStats.size > 0) {
+    console.log("\n=== Per-Institution Results ===");
+    // Sort by fetched desc, then by institution name
+    const sorted = [...instStats.entries()].sort(([, a], [, b]) => {
+      const aTotal = a.fetched + a.skipped + a.failed;
+      const bTotal = b.fetched + b.skipped + b.failed;
+      if (b.fetched !== a.fetched) return b.fetched - a.fetched;
+      return bTotal - aTotal;
+    });
+    for (const [inst, s] of sorted) {
+      const parts = [`✓ ${s.fetched}`, `skip ${s.skipped}`];
+      if (s.failed > 0) parts.push(`✗ ${s.failed}`);
+      console.log(`  ${inst}: ${parts.join("  ")}`);
+    }
+  }
 
   if (!DRY_RUN) {
     // Count remaining thin assets
