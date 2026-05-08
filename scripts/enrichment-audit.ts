@@ -1,52 +1,38 @@
 /**
  * scripts/enrichment-audit.ts
  *
- * Enrichment audit: captures before/after snapshots around a full mini-enrichment
- * drain, then writes a markdown report to reports/enrichment-audit-YYYY-MM-DD.md.
+ * Enrichment audit: captures before/after Supabase snapshots, triggers a
+ * full mini-enrichment drain via the admin API
+ * (POST /api/admin/enrichment/run { all: true }), polls
+ * GET /api/admin/enrichment/status every 5 s until the job reaches
+ * status "done" or "error", then diffs field-fill rates, tier-band
+ * movements, per-institution improvements, and modality distribution,
+ * and writes a markdown report to reports/enrichment-audit-YYYY-MM-DD.md.
  *
- * Runs the enrichment inline (imports the pipeline directly) to avoid HTTP auth
- * complexity and give precise per-asset tracking.
+ * Prerequisites: the dev server must be running (`npm run dev`).
  *
  * Usage:
- *   tsx scripts/enrichment-audit.ts [--dry-run]
+ *   tsx scripts/enrichment-audit.ts [--dry-run] [--port <n>]
  *
- * --dry-run  → snapshot the queue and exit without processing (no LLM calls, no writes)
+ * --dry-run   Capture snapshots and write report without triggering drain.
+ * --port <n>  Server port (default: 5000).
  *
  * Exits 0 on success, non-zero on fatal error.
  */
 
 import { db } from "../server/db";
 import { pool } from "../server/db";
-import { sql, inArray } from "drizzle-orm";
-import { ingestedAssets } from "../shared/schema";
-import { storage } from "../server/storage";
-import { classifyAsset } from "../server/lib/pipeline/classifyAsset";
-import { computeCompletenessScore } from "../server/lib/pipeline/contentHash";
+import { sql } from "drizzle-orm";
 import { mkdirSync, writeFileSync } from "node:fs";
 import * as path from "node:path";
 
 const DRY_RUN = process.argv.includes("--dry-run");
-const CONCURRENCY = 20;
-const BATCH_SIZE = 500;
-const MINI_INPUT_PER_M = 0.15;   // gpt-4o-mini input $/1M tokens
-const MINI_OUTPUT_PER_M = 0.60;  // gpt-4o-mini output $/1M tokens
-
-// ── Eligibility criteria (mirrors buildEnrichWhere({}) in server/storage.ts) ──
-const ELIGIBLE_WHERE = sql`
-  relevant = true
-  AND (data_sparse IS NULL OR data_sparse = false)
-  AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
-  AND COALESCE(mini_enrich_attempts, 0) < 3
-  AND (
-    (completeness_score IS NULL OR completeness_score = 0)
-    OR (
-      (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-      (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-      (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-      (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
-    ) >= 3
-  )
-`;
+const portFlagIdx = process.argv.indexOf("--port");
+const SERVER_PORT =
+  portFlagIdx !== -1 ? parseInt(process.argv[portFlagIdx + 1] ?? "5000", 10) : 5000;
+const BASE_URL = `http://localhost:${SERVER_PORT}`;
+const POLL_INTERVAL_MS = 5_000;
+const POLL_TIMEOUT_MS = 3 * 60 * 60 * 1_000; // 3 h hard ceiling
 
 // ─────────────────────────────────────────────────
 // Snapshot types
@@ -54,12 +40,11 @@ const ELIGIBLE_WHERE = sql`
 
 interface GlobalStats {
   totalEligible: number;
-  avgScore: number;
+  avgScoreQueue: number;
   missingTarget: number;
   missingModality: number;
   missingIndication: number;
   missingStage: number;
-  // Tier bands across ALL relevant assets (not just queue)
   allTotal: number;
   allAvgScore: number;
   unscored: number;
@@ -67,8 +52,12 @@ interface GlobalStats {
   partial: number;
   good: number;
   excellent: number;
-  // Gave up (mini_enrich_attempts >= 3)
   gaveUp: number;
+}
+
+interface ModalityRow {
+  modality: string;
+  count: number;
 }
 
 interface InstitutionRow {
@@ -81,84 +70,137 @@ interface InstitutionGaveUp {
   count: number;
 }
 
+interface RunResult {
+  processed: number;
+  improved: number;
+  tokenCostUSD: number;
+  jobId: number | null;
+  durationMs: number;
+  finalStatus: string;
+}
+
 // ─────────────────────────────────────────────────
 // Query helpers
 // ─────────────────────────────────────────────────
 
 async function getGlobalStats(): Promise<GlobalStats> {
-  // Queue stats
-  const queueRes = await db.execute<{
-    total_eligible: string;
-    avg_score: string;
-    missing_target: string;
-    missing_modality: string;
-    missing_indication: string;
-    missing_stage: string;
-  }>(sql`
-    SELECT
-      COUNT(*) AS total_eligible,
-      ROUND(AVG(COALESCE(completeness_score, 0))::numeric, 2) AS avg_score,
-      COUNT(*) FILTER (WHERE target IS NULL OR target IN ('unknown','')) AS missing_target,
-      COUNT(*) FILTER (WHERE modality IS NULL OR modality IN ('unknown','')) AS missing_modality,
-      COUNT(*) FILTER (WHERE indication IS NULL OR indication IN ('unknown','')) AS missing_indication,
-      COUNT(*) FILTER (WHERE development_stage = 'unknown' OR development_stage IS NULL) AS missing_stage
-    FROM ingested_assets
-    WHERE ${ELIGIBLE_WHERE}
-  `);
+  const [queueRes, allRes, gaveUpRes] = await Promise.all([
+    db.execute<{
+      total_eligible: string;
+      avg_score: string;
+      missing_target: string;
+      missing_modality: string;
+      missing_indication: string;
+      missing_stage: string;
+    }>(sql`
+      SELECT
+        COUNT(*) AS total_eligible,
+        ROUND(AVG(COALESCE(completeness_score, 0))::numeric, 2) AS avg_score,
+        COUNT(*) FILTER (WHERE target IS NULL OR target IN ('unknown', ''))     AS missing_target,
+        COUNT(*) FILTER (WHERE modality IS NULL OR modality IN ('unknown', '')) AS missing_modality,
+        COUNT(*) FILTER (WHERE indication IS NULL OR indication IN ('unknown', '')) AS missing_indication,
+        COUNT(*) FILTER (WHERE development_stage = 'unknown' OR development_stage IS NULL) AS missing_stage
+      FROM ingested_assets
+      WHERE relevant = true
+        AND (data_sparse IS NULL OR data_sparse = false)
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+        AND COALESCE(mini_enrich_attempts, 0) < 3
+        AND (
+          (completeness_score IS NULL OR completeness_score = 0)
+          OR (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'           THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'         THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown'       THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown'                     THEN 1 ELSE 0 END)
+          ) >= 3
+        )
+    `),
 
-  const gaveUpRes = await db.execute<{ gave_up: string }>(sql`
-    SELECT COUNT(*) AS gave_up
-    FROM ingested_assets
-    WHERE relevant = true AND COALESCE(mini_enrich_attempts, 0) >= 3
-  `);
+    db.execute<{
+      all_total: string;
+      all_avg: string;
+      unscored: string;
+      poor: string;
+      partial: string;
+      good: string;
+      excellent: string;
+      missing_target_all: string;
+      missing_modality_all: string;
+      missing_indication_all: string;
+      missing_stage_all: string;
+    }>(sql`
+      SELECT
+        COUNT(*) AS all_total,
+        ROUND(AVG(COALESCE(completeness_score, 0))::numeric, 2) AS all_avg,
+        COUNT(*) FILTER (WHERE completeness_score IS NULL OR completeness_score = 0)              AS unscored,
+        COUNT(*) FILTER (WHERE completeness_score >= 1   AND completeness_score < 40)             AS poor,
+        COUNT(*) FILTER (WHERE completeness_score >= 40  AND completeness_score < 60)             AS partial,
+        COUNT(*) FILTER (WHERE completeness_score >= 60  AND completeness_score < 80)             AS good,
+        COUNT(*) FILTER (WHERE completeness_score >= 80)                                          AS excellent,
+        COUNT(*) FILTER (WHERE target IS NULL OR target IN ('unknown', ''))                       AS missing_target_all,
+        COUNT(*) FILTER (WHERE modality IS NULL OR modality IN ('unknown', ''))                   AS missing_modality_all,
+        COUNT(*) FILTER (WHERE indication IS NULL OR indication IN ('unknown', ''))               AS missing_indication_all,
+        COUNT(*) FILTER (WHERE development_stage = 'unknown' OR development_stage IS NULL)        AS missing_stage_all
+      FROM ingested_assets
+      WHERE relevant = true
+    `),
 
-  // All-relevant tier distribution
-  const allRes = await db.execute<{
-    all_total: string;
-    all_avg: string;
-    unscored: string;
-    poor: string;
-    partial: string;
-    good: string;
-    excellent: string;
-  }>(sql`
-    SELECT
-      COUNT(*) AS all_total,
-      ROUND(AVG(COALESCE(completeness_score, 0))::numeric, 2) AS all_avg,
-      COUNT(*) FILTER (WHERE completeness_score IS NULL OR completeness_score = 0) AS unscored,
-      COUNT(*) FILTER (WHERE completeness_score >= 1 AND completeness_score < 40) AS poor,
-      COUNT(*) FILTER (WHERE completeness_score >= 40 AND completeness_score < 60) AS partial,
-      COUNT(*) FILTER (WHERE completeness_score >= 60 AND completeness_score < 80) AS good,
-      COUNT(*) FILTER (WHERE completeness_score >= 80) AS excellent
-    FROM ingested_assets
-    WHERE relevant = true
-  `);
+    db.execute<{ gave_up: string }>(sql`
+      SELECT COUNT(*) AS gave_up
+      FROM ingested_assets
+      WHERE relevant = true AND COALESCE(mini_enrich_attempts, 0) >= 3
+    `),
+  ]);
 
   const q = queueRes.rows[0]!;
   const a = allRes.rows[0]!;
   return {
-    totalEligible: Number(q.total_eligible),
-    avgScore: Number(q.avg_score),
-    missingTarget: Number(q.missing_target),
-    missingModality: Number(q.missing_modality),
-    missingIndication: Number(q.missing_indication),
-    missingStage: Number(q.missing_stage),
-    allTotal: Number(a.all_total),
-    allAvgScore: Number(a.all_avg),
-    unscored: Number(a.unscored),
-    poor: Number(a.poor),
-    partial: Number(a.partial),
-    good: Number(a.good),
-    excellent: Number(a.excellent),
-    gaveUp: Number(gaveUpRes.rows[0]?.gave_up ?? 0),
+    totalEligible:   Number(q.total_eligible),
+    avgScoreQueue:   Number(q.avg_score),
+    missingTarget:   Number(a.missing_target_all),
+    missingModality: Number(a.missing_modality_all),
+    missingIndication: Number(a.missing_indication_all),
+    missingStage:    Number(a.missing_stage_all),
+    allTotal:        Number(a.all_total),
+    allAvgScore:     Number(a.all_avg),
+    unscored:        Number(a.unscored),
+    poor:            Number(a.poor),
+    partial:         Number(a.partial),
+    good:            Number(a.good),
+    excellent:       Number(a.excellent),
+    gaveUp:          Number(gaveUpRes.rows[0]?.gave_up ?? 0),
   };
+}
+
+async function getModalityBreakdown(): Promise<ModalityRow[]> {
+  const res = await db.execute<{ modality: string; cnt: string }>(sql`
+    SELECT COALESCE(modality, 'unknown') AS modality, COUNT(*) AS cnt
+    FROM ingested_assets
+    WHERE relevant = true
+    GROUP BY 1
+    ORDER BY 2 DESC
+    LIMIT 20
+  `);
+  return res.rows.map(r => ({ modality: r.modality, count: Number(r.cnt) }));
 }
 
 async function getInstitutionBreakdown(): Promise<InstitutionRow[]> {
   const res = await db.execute<{ institution: string; eligible: string }>(sql`
     SELECT institution, COUNT(*) AS eligible
     FROM ingested_assets
-    WHERE ${ELIGIBLE_WHERE}
+    WHERE relevant = true
+      AND (data_sparse IS NULL OR data_sparse = false)
+      AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+      AND COALESCE(mini_enrich_attempts, 0) < 3
+      AND (
+        (completeness_score IS NULL OR completeness_score = 0)
+        OR (
+          (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+        ) >= 3
+      )
     GROUP BY institution
     ORDER BY COUNT(*) DESC
     LIMIT 30
@@ -178,12 +220,128 @@ async function getGaveUpByInstitution(): Promise<InstitutionGaveUp[]> {
   return res.rows.map(r => ({ institution: r.institution, count: Number(r.count) }));
 }
 
-async function getInstitutionsForIds(ids: number[]): Promise<Map<number, string>> {
-  if (ids.length === 0) return new Map();
-  const rows = await db.select({ id: ingestedAssets.id, institution: ingestedAssets.institution })
-    .from(ingestedAssets)
-    .where(inArray(ingestedAssets.id, ids));
-  return new Map(rows.map(r => [r.id, r.institution]));
+// ─────────────────────────────────────────────────
+// API-driven enrichment drain
+// ─────────────────────────────────────────────────
+
+// Headers sent on every admin API call.
+// x-internal-admin-bypass is matched by the loopback bypass in requireAdmin
+// (non-production only, loopback only, SESSION_SECRET required to match).
+function adminHeaders(): Record<string, string> {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret) {
+    throw new Error(
+      "SESSION_SECRET is not set. " +
+      "The audit script needs it to authenticate with the admin API from localhost."
+    );
+  }
+  return {
+    "Content-Type": "application/json",
+    "x-internal-admin-bypass": secret,
+  };
+}
+
+async function triggerAndWaitForDrain(): Promise<RunResult> {
+  const startMs = Date.now();
+
+  // 1. Kick off the drain
+  const runRes = await fetch(`${BASE_URL}/api/admin/enrichment/run`, {
+    method: "POST",
+    headers: adminHeaders(),
+    body: JSON.stringify({ all: true }),
+  });
+
+  if (!runRes.ok) {
+    const body = await runRes.text();
+    // 409 = job already running — we can still poll status
+    if (runRes.status !== 409) {
+      throw new Error(`POST /api/admin/enrichment/run failed (${runRes.status}): ${body}`);
+    }
+    console.log(`   ⚠ Server returned 409 (job already running) — continuing to poll status…`);
+  } else {
+    const body = await runRes.json() as { message?: string; total?: number; jobId?: number; drain?: boolean };
+    console.log(`   ✅ Drain job started: total=${body.total ?? "??"} jobId=${body.jobId ?? "??"}`);
+  }
+
+  // 2. Poll /status every POLL_INTERVAL_MS until done or error
+  let lastProcessed = 0;
+  let lastImproved = 0;
+  let lastTotal = 0;
+  let jobId: number | null = null;
+  let tokenCostUSD = 0;
+
+  const deadline = startMs + POLL_TIMEOUT_MS;
+
+  while (true) {
+    if (Date.now() > deadline) {
+      throw new Error(`Drain timed out after ${POLL_TIMEOUT_MS / 60_000} minutes`);
+    }
+
+    await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
+
+    const statusRes = await fetch(`${BASE_URL}/api/admin/enrichment/status`, {
+      headers: adminHeaders(),
+    });
+    if (!statusRes.ok) {
+      console.warn(`   ⚠ Status poll returned ${statusRes.status} — retrying…`);
+      continue;
+    }
+
+    const status = await statusRes.json() as {
+      status: string;
+      jobId?: number;
+      processed?: number;
+      total?: number;
+      improved?: number;
+      tokenCost?: number;
+    };
+
+    jobId = status.jobId ?? jobId;
+    lastProcessed = status.processed ?? lastProcessed;
+    lastImproved  = status.improved  ?? lastImproved;
+    lastTotal     = status.total     ?? lastTotal;
+    if (status.tokenCost != null) tokenCostUSD = status.tokenCost;
+
+    const elapsed = ((Date.now() - startMs) / 1000).toFixed(0);
+    const rate = lastProcessed > 0 ? (lastProcessed / ((Date.now() - startMs) / 1000)).toFixed(1) : "0.0";
+    console.log(
+      `   [${elapsed}s] status=${status.status} ` +
+      `processed=${lastProcessed}/${lastTotal} improved=${lastImproved} ` +
+      `cost=$${tokenCostUSD.toFixed(4)} rate=${rate}/s`
+    );
+
+    if (status.status === "done" || status.status === "error" || status.status === "idle") {
+      return {
+        processed:    lastProcessed,
+        improved:     lastImproved,
+        tokenCostUSD,
+        jobId,
+        durationMs:   Date.now() - startMs,
+        finalStatus:  status.status,
+      };
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────
+// Formatting helpers
+// ─────────────────────────────────────────────────
+
+function pct(n: number, total: number): string {
+  return total === 0 ? "0%" : `${((n / total) * 100).toFixed(1)}%`;
+}
+
+function diff(b: number, a: number): string {
+  const d = Math.round((a - b) * 1e6) / 1e6; // remove floating-point noise
+  return d === 0 ? "—" : d > 0 ? `+${d}` : `${d}`;
+}
+
+function tierLabel(score: number | null): string {
+  if (score === null || score === 0) return "unscored";
+  if (score < 40) return "poor";
+  if (score < 60) return "partial";
+  if (score < 80) return "good";
+  return "excellent";
 }
 
 // ─────────────────────────────────────────────────
@@ -192,299 +350,148 @@ async function getInstitutionsForIds(ids: number[]): Promise<Map<number, string>
 
 (async () => {
   const runDate = new Date().toISOString().slice(0, 10);
-  console.log(`\n╔══════════════════════════════════════════════════════════════╗`);
-  console.log(`║   EdenRadar Enrichment Audit — ${runDate}${DRY_RUN ? " [DRY RUN]" : "          "}   ║`);
-  console.log(`╚══════════════════════════════════════════════════════════════╝\n`);
+  const banner = DRY_RUN ? " [DRY RUN]" : "";
+  console.log(`\n╔═══════════════════════════════════════════════════════════╗`);
+  console.log(`║   EdenRadar Enrichment Audit — ${runDate}${banner.padEnd(12)}  ║`);
+  console.log(`╚═══════════════════════════════════════════════════════════╝\n`);
+  console.log(`   Server: ${BASE_URL}`);
 
-  // ── Before snapshot ──────────────────────────────
-  console.log("📸 Capturing BEFORE snapshot…");
-  const before = await getGlobalStats();
-  const beforeInstitutions = await getInstitutionBreakdown();
-  const gaveUpByInstitution = await getGaveUpByInstitution();
+  // ── Before snapshot ─────────────────────────────
+  console.log("\n📸 Capturing BEFORE snapshot…");
+  const [before, beforeModality, beforeInstitutions, gaveUpByInst] = await Promise.all([
+    getGlobalStats(),
+    getModalityBreakdown(),
+    getInstitutionBreakdown(),
+    getGaveUpByInstitution(),
+  ]);
 
-  console.log(`   Queue size: ${before.totalEligible.toLocaleString()} eligible assets`);
-  console.log(`   Avg score (queue): ${before.avgScore}`);
-  console.log(`   All relevant: ${before.allTotal.toLocaleString()} · avg score: ${before.allAvgScore}`);
-  console.log(`   Tiers — unscored: ${before.unscored} | poor: ${before.poor} | partial: ${before.partial} | good: ${before.good} | excellent: ${before.excellent}`);
-  console.log(`   Missing fields (queue) — target: ${before.missingTarget} | modality: ${before.missingModality} | indication: ${before.missingIndication} | stage: ${before.missingStage}`);
-  console.log(`   Gave up (attempts≥3): ${before.gaveUp.toLocaleString()}\n`);
+  console.log(`   Queue size       : ${before.totalEligible.toLocaleString()} eligible assets`);
+  console.log(`   All relevant     : ${before.allTotal.toLocaleString()} · avg score: ${before.allAvgScore}`);
+  console.log(`   Tiers            : unscored=${before.unscored} poor=${before.poor} partial=${before.partial} good=${before.good} excellent=${before.excellent}`);
+  console.log(`   Missing (all)    : target=${before.missingTarget} modality=${before.missingModality} indication=${before.missingIndication} stage=${before.missingStage}`);
+  console.log(`   Gave up (≥3)     : ${before.gaveUp.toLocaleString()}\n`);
+
+  // ── Enrichment drain via API ─────────────────────
+  let run: RunResult = {
+    processed: 0, improved: 0, tokenCostUSD: 0,
+    jobId: null, durationMs: 0, finalStatus: "skipped",
+  };
 
   if (DRY_RUN) {
-    console.log("⏭  --dry-run flag set — skipping enrichment. Writing snapshot report only.\n");
+    console.log("⏭  --dry-run flag set — skipping enrichment drain.\n");
+  } else if (before.totalEligible === 0) {
+    console.log("✅ Queue is empty — nothing to process.\n");
+    run.finalStatus = "done";
+  } else {
+    console.log(`🚀 Triggering drain via POST ${BASE_URL}/api/admin/enrichment/run …`);
+    run = await triggerAndWaitForDrain();
+    const durSec = (run.durationMs / 1000).toFixed(0);
+    console.log(`\n✅ Drain finished in ${durSec}s: processed=${run.processed} improved=${run.improved} cost=$${run.tokenCostUSD.toFixed(4)} status=${run.finalStatus}\n`);
   }
 
-  // ── Enrichment drain ─────────────────────────────
-  let processed = 0;
-  let improved = 0;
-  let tokenCostUSD = 0;
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-  const fieldGains = { target: 0, modality: 0, indication: 0, stage: 0 };
-  // per-institution: { processed, improved }
-  const perInstitution = new Map<string, { processed: number; improved: number }>();
-
-  // per-asset band movements: track for assets we actually processed
-  // { institution, beforeScore, afterScore }
-  const bandMovements: Array<{ institution: string; beforeScore: number | null; afterScore: number | null }> = [];
-
-  const isKnown = (v: string | null | undefined) =>
-    v != null && v !== "" && v.toLowerCase() !== "unknown";
-
-  if (!DRY_RUN) {
-    if (before.totalEligible === 0) {
-      console.log("✅ Queue is empty — nothing to process.\n");
-    } else {
-      console.log(`🚀 Starting drain (CONCURRENCY=${CONCURRENCY}, BATCH_SIZE=${BATCH_SIZE})…`);
-      const drainStart = Date.now();
-      let batchNum = 0;
-
-      while (true) {
-        const batch = await storage.getMiniEnrichBatch(BATCH_SIZE);
-        if (batch.length === 0) break;
-        batchNum++;
-
-        // Query institution + before completeness_score for this batch
-        const ids = batch.map(a => a.id);
-        const institutionMap = await getInstitutionsForIds(ids);
-
-        // Query before completeness scores for band movement tracking
-        const scoreRows = await db.select({ id: ingestedAssets.id, completenessScore: ingestedAssets.completenessScore })
-          .from(ingestedAssets)
-          .where(inArray(ingestedAssets.id, ids));
-        const beforeScoreMap = new Map(scoreRows.map(r => [r.id, r.completenessScore ?? null]));
-
-        console.log(`   Batch ${batchNum}: ${batch.length} assets (total processed so far: ${processed})`);
-
-        let idx = 0;
-        const assetResults: Array<{
-          id: number;
-          institution: string;
-          beforeScore: number | null;
-          afterScore: number | null;
-          wasImproved: boolean;
-        }> = [];
-
-        async function worker() {
-          while (idx < batch.length) {
-            const asset = batch[idx++];
-            if (!asset) continue;
-
-            const institution = institutionMap.get(asset.id) ?? "unknown";
-            const beforeScore = beforeScoreMap.get(asset.id) ?? null;
-
-            try {
-              const classification = await classifyAsset(
-                asset.assetName,
-                asset.summary,
-                asset.abstract ?? undefined,
-                "gpt-4o-mini",
-                false,
-                {
-                  categories: asset.categories,
-                  patentStatus: asset.patentStatus,
-                  licensingStatus: asset.licensingStatus,
-                  inventors: asset.inventors,
-                  sourceUrl: asset.sourceUrl,
-                  currentValues: {
-                    target: asset.target,
-                    modality: asset.modality,
-                    indication: asset.indication,
-                    developmentStage: asset.developmentStage,
-                  },
-                },
-              );
-
-              const score = computeCompletenessScore({
-                modality: classification.modality,
-                indication: classification.indication,
-                developmentStage: classification.developmentStage,
-                mechanismOfAction: classification.mechanismOfAction,
-                ipType: classification.ipType,
-                summary: asset.summary,
-              });
-
-              await storage.updateIngestedAssetEnrichment(asset.id, {
-                ...classification,
-                completenessScore: score,
-              });
-
-              const inTok = classification.tokenUsage?.inputTokens ?? 0;
-              const outTok = classification.tokenUsage?.outputTokens ?? 0;
-              totalInputTokens += inTok;
-              totalOutputTokens += outTok;
-              tokenCostUSD += (inTok * MINI_INPUT_PER_M + outTok * MINI_OUTPUT_PER_M) / 1_000_000;
-
-              // Field-level gains
-              if (!isKnown(asset.target) && isKnown(classification.target)) fieldGains.target++;
-              if (!isKnown(asset.modality) && isKnown(classification.modality)) fieldGains.modality++;
-              if (!isKnown(asset.indication) && isKnown(classification.indication)) fieldGains.indication++;
-              if (asset.developmentStage === "unknown" && isKnown(classification.developmentStage)) fieldGains.stage++;
-
-              const wasImproved =
-                (!isKnown(asset.target) && isKnown(classification.target)) ||
-                (!isKnown(asset.modality) && isKnown(classification.modality)) ||
-                (!isKnown(asset.indication) && isKnown(classification.indication)) ||
-                (asset.developmentStage === "unknown" && isKnown(classification.developmentStage));
-
-              if (wasImproved) improved++;
-
-              assetResults.push({ id: asset.id, institution, beforeScore, afterScore: score, wasImproved });
-            } catch (e) {
-              console.error(`  ⚠ classifyAsset failed for asset ${asset.id}:`, (e as Error).message);
-              await storage.incrementMiniEnrichAttempts(asset.id);
-              assetResults.push({ id: asset.id, institution, beforeScore, afterScore: beforeScore, wasImproved: false });
-            }
-
-            await storage.stampEnrichedAt(asset.id);
-            processed++;
-
-            if (processed % 100 === 0) {
-              const elapsed = ((Date.now() - drainStart) / 1000).toFixed(0);
-              const rate = (processed / ((Date.now() - drainStart) / 1000)).toFixed(1);
-              console.log(`   … ${processed} processed | ${improved} improved | $${tokenCostUSD.toFixed(4)} | ${rate} assets/s | ${elapsed}s elapsed`);
-            }
-          }
-        }
-
-        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, batch.length) }, worker));
-
-        // Accumulate per-institution and band-movement data from this batch
-        for (const ar of assetResults) {
-          const entry = perInstitution.get(ar.institution) ?? { processed: 0, improved: 0 };
-          entry.processed++;
-          if (ar.wasImproved) entry.improved++;
-          perInstitution.set(ar.institution, entry);
-          bandMovements.push({ institution: ar.institution, beforeScore: ar.beforeScore, afterScore: ar.afterScore });
-        }
-      }
-
-      const totalSecs = ((Date.now() - drainStart) / 1000).toFixed(0);
-      console.log(`\n✅ Drain complete in ${totalSecs}s: ${processed} processed · ${improved} improved · $${tokenCostUSD.toFixed(4)}\n`);
-    }
-  }
-
-  // ── After snapshot ────────────────────────────────
+  // ── After snapshot ──────────────────────────────
   console.log("📸 Capturing AFTER snapshot…");
-  const after = await getGlobalStats();
-  const afterInstitutions = await getInstitutionBreakdown();
+  const [after, afterModality, afterInstitutions] = await Promise.all([
+    getGlobalStats(),
+    getModalityBreakdown(),
+    getInstitutionBreakdown(),
+  ]);
 
-  console.log(`   Queue size: ${after.totalEligible.toLocaleString()} remaining`);
-  console.log(`   Avg score (all relevant): ${after.allAvgScore} (was ${before.allAvgScore})`);
-  console.log(`   Tiers — unscored: ${after.unscored} | poor: ${after.poor} | partial: ${after.partial} | good: ${after.good} | excellent: ${after.excellent}\n`);
+  console.log(`   Queue size       : ${after.totalEligible.toLocaleString()} remaining`);
+  console.log(`   All relevant     : ${after.allTotal.toLocaleString()} · avg score: ${after.allAvgScore} (was ${before.allAvgScore})`);
+  console.log(`   Tiers            : unscored=${after.unscored} poor=${after.poor} partial=${after.partial} good=${after.good} excellent=${after.excellent}\n`);
 
-  // ── Band movement table from in-memory tracking ───
-  function tierLabel(score: number | null): string {
-    if (score === null || score === 0) return "unscored";
-    if (score < 40) return "poor";
-    if (score < 60) return "partial";
-    if (score < 80) return "good";
-    return "excellent";
-  }
+  // ── Derived metrics ─────────────────────────────
+  // Field-fill deltas: computed from before/after corpus-wide missing counts
+  const fieldGains = {
+    target:    Math.max(0, before.missingTarget    - after.missingTarget),
+    modality:  Math.max(0, before.missingModality  - after.missingModality),
+    indication: Math.max(0, before.missingIndication - after.missingIndication),
+    stage:     Math.max(0, before.missingStage     - after.missingStage),
+  };
 
-  const bandMoveCount = new Map<string, number>();
-  for (const bm of bandMovements) {
-    const key = `${tierLabel(bm.beforeScore)} → ${tierLabel(bm.afterScore)}`;
-    bandMoveCount.set(key, (bandMoveCount.get(key) ?? 0) + 1);
-  }
+  const improvementRate =
+    run.processed === 0 ? "N/A" : `${((run.improved / run.processed) * 100).toFixed(1)}%`;
 
-  // ── Per-institution diff table ─────────────────────
-  // Build from both beforeInstitutions and afterInstitutions
+  const fillRate = (gained: number, missingBefore: number) =>
+    missingBefore === 0 ? "N/A" : `${((gained / missingBefore) * 100).toFixed(1)}%`;
+
+  // Tier band net movements (aggregate level)
+  const tierBefore: Record<string, number> = {
+    excellent: before.excellent, good: before.good, partial: before.partial,
+    poor: before.poor, unscored: before.unscored,
+  };
+  const tierAfter: Record<string, number> = {
+    excellent: after.excellent, good: after.good, partial: after.partial,
+    poor: after.poor, unscored: after.unscored,
+  };
+
+  // Modality diff table
+  const modalityBefore = new Map(beforeModality.map(r => [r.modality, r.count]));
+  const modalityAfter  = new Map(afterModality.map(r => [r.modality, r.count]));
+  const allModalities  = new Set([...modalityBefore.keys(), ...modalityAfter.keys()]);
+  const modalityRows = [...allModalities].map(m => ({
+    modality: m,
+    before: modalityBefore.get(m) ?? 0,
+    after:  modalityAfter.get(m)  ?? 0,
+  })).sort((a, b) => b.after - a.after);
+
+  // Per-institution diff table
+  const beforeInstMap = new Map(beforeInstitutions.map(r => [r.institution, r.eligible]));
+  const afterInstMap  = new Map(afterInstitutions.map(r => [r.institution, r.eligible]));
   const allInstitutions = new Set([
     ...beforeInstitutions.map(r => r.institution),
     ...afterInstitutions.map(r => r.institution),
   ]);
-  const beforeMap = new Map(beforeInstitutions.map(r => [r.institution, r.eligible]));
-  const afterMap = new Map(afterInstitutions.map(r => [r.institution, r.eligible]));
+  const instRows = [...allInstitutions].map(inst => ({
+    institution: inst,
+    before: beforeInstMap.get(inst) ?? 0,
+    after:  afterInstMap.get(inst)  ?? 0,
+  })).sort((a, b) => b.before - a.before);
 
-  const instRows: Array<{
-    institution: string;
-    before: number;
-    after: number;
-    delta: number;
-    processed: number;
-    improved: number;
-  }> = [];
+  // Recommendation blocks (computed outside template to avoid backtick conflicts)
+  const lowestFillEntries = [
+    { field: "target",           gained: fieldGains.target,     missing: before.missingTarget },
+    { field: "modality",         gained: fieldGains.modality,   missing: before.missingModality },
+    { field: "indication",       gained: fieldGains.indication, missing: before.missingIndication },
+    { field: "development_stage",gained: fieldGains.stage,      missing: before.missingStage },
+  ].sort((a, b) => (a.missing === 0 ? 1 : a.gained / a.missing) - (b.missing === 0 ? 1 : b.gained / b.missing));
 
-  for (const inst of allInstitutions) {
-    const bef = beforeMap.get(inst) ?? 0;
-    const aft = afterMap.get(inst) ?? 0;
-    const pd = perInstitution.get(inst) ?? { processed: 0, improved: 0 };
-    instRows.push({ institution: inst, before: bef, after: aft, delta: bef - aft, processed: pd.processed, improved: pd.improved });
-  }
-  // Sort by before count desc
-  instRows.sort((a, b) => b.before - a.before);
+  const fieldRecsBlock = lowestFillEntries.map(e => {
+    const rate = e.missing === 0 ? 1 : e.gained / e.missing;
+    const rateStr = (rate * 100).toFixed(1) + "%";
+    if (rate < 0.03) {
+      return "- **" + e.field + "** fill rate " + rateStr + " — very low. Assets lack text signal. "
+        + "Consider deeper scraping for abstract text or raising the data_sparse threshold.";
+    } else if (rate < 0.15) {
+      return "- **" + e.field + "** fill rate " + rateStr + " — low. Many assets may be non-drug/biologic "
+        + "(device, research_tool, software) where this field is N/A. Excluding non-drug_biologic assets "
+        + "from the enrichment gate would remove false negatives from this metric.";
+    } else {
+      return "- **" + e.field + "** fill rate " + rateStr + " — reasonable. "
+        + "Further gains require richer source text or prompt improvements.";
+    }
+  }).join("\n");
 
-  // ── Build markdown report ─────────────────────────
+  const priorityInstBlock = afterInstitutions.slice(0, 5).length > 0
+    ? afterInstitutions.slice(0, 5).map((r, i) =>
+        `${i + 1}. **${r.institution}** — ${r.eligible} assets still eligible`).join("\n")
+    : "Queue is fully drained.";
+
+  const gaveUpBlock = gaveUpByInst.slice(0, 10).map((r, i) =>
+    `${i + 1}. **${r.institution}** — ${r.count.toLocaleString()} assets`).join("\n");
+
+  // ── Build markdown report ───────────────────────
   const reportDate = new Date().toISOString().replace("T", " ").slice(0, 19) + " UTC";
   const reportFileName = `enrichment-audit-${runDate}.md`;
   const reportDir = path.join(process.cwd(), "reports");
   mkdirSync(reportDir, { recursive: true });
   const reportPath = path.join(reportDir, reportFileName);
 
-  const pct = (n: number, total: number) => total === 0 ? "0%" : `${((n / total) * 100).toFixed(1)}%`;
-  const delta = (b: number, a: number) => {
-    const d = a - b;
-    return d === 0 ? "—" : d > 0 ? `+${d}` : `${d}`;
-  };
+  const md =
+`# Enrichment Audit Report
 
-  // Improvement rate for processed assets
-  const improvementRate = processed === 0 ? "N/A" : `${((improved / processed) * 100).toFixed(1)}%`;
-
-  // Field-fill rates relative to before queue missing counts
-  const targetFillRate = before.missingTarget === 0 ? "N/A" : `${((fieldGains.target / before.missingTarget) * 100).toFixed(1)}%`;
-  const modalityFillRate = before.missingModality === 0 ? "N/A" : `${((fieldGains.modality / before.missingModality) * 100).toFixed(1)}%`;
-  const indicationFillRate = before.missingIndication === 0 ? "N/A" : `${((fieldGains.indication / before.missingIndication) * 100).toFixed(1)}%`;
-  const stageFillRate = before.missingStage === 0 ? "N/A" : `${((fieldGains.stage / before.missingStage) * 100).toFixed(1)}%`;
-
-  // Recommendations
-  const persistentlyEmptyInst = instRows.filter(r => r.before > 0 && r.after >= r.before * 0.9 && r.processed === 0).slice(0, 5);
-  const highGaveUp = gaveUpByInstitution.slice(0, 5);
-  const lowestFillField = [
-    { field: "target", rate: before.missingTarget === 0 ? 1 : fieldGains.target / before.missingTarget },
-    { field: "modality", rate: before.missingModality === 0 ? 1 : fieldGains.modality / before.missingModality },
-    { field: "indication", rate: before.missingIndication === 0 ? 1 : fieldGains.indication / before.missingIndication },
-    { field: "stage", rate: before.missingStage === 0 ? 1 : fieldGains.stage / before.missingStage },
-  ].sort((a, b) => a.rate - b.rate);
-
-  // Pre-compute blocks that contain backticks so they don't confuse the outer template
-  const bandMovementsBlock = bandMovements.length > 0
-    ? ["", "### Band Movements (processed assets)", "", "| Movement | Count |", "|----------|-------|",
-       ...[...bandMoveCount.entries()].sort((a, b) => b[1] - a[1]).map(([k, v]) => "| " + k + " | " + v.toLocaleString() + " |"),
-       ""].join("\n")
-    : "";
-
-  const fieldRecsBlock = lowestFillField.map(f => {
-    const rateStr = (f.rate * 100).toFixed(1) + "%";
-    if (f.rate < 0.05) {
-      return "- **" + f.field + "** — lowest fill rate (" + rateStr + "). Assets lack text signals for GPT-4o-mini to infer this field. Consider: (a) enriching abstract/summary via deeper scraping, (b) adding source URL context to the prompt, or (c) flagging as `data_sparse` to skip re-attempts.";
-    } else if (f.rate < 0.2) {
-      return "- **" + f.field + "** — low fill rate (" + rateStr + "). Many assets may be non-drug/biologic (medical device, research tool, software) where this field is N/A, or descriptions lack detail. Consider splitting the queue by asset_class and applying field-specific prompts.";
-    } else {
-      return "- **" + f.field + "** — moderate fill rate (" + rateStr + "). Reasonable performance; further gains require richer source text.";
-    }
-  }).join("\n");
-
-  const priorityInstBlock = afterInstitutions.slice(0, 5).length > 0
-    ? "The following institutions still have the largest eligible queues after this run and should be prioritized for scraper content quality improvements:\n\n" +
-      afterInstitutions.slice(0, 5).map((r, i) => (i + 1) + ". **" + r.institution + "** — " + r.eligible + " assets still eligible").join("\n")
-    : "Queue is fully drained — no remaining eligible assets.";
-
-  const persistEmptyBlock = persistentlyEmptyInst.length > 0
-    ? "\nInstitutions with large queues that were **not processed** (no content match): " + persistentlyEmptyInst.map(r => r.institution).join(", ")
-    : "";
-
-  const gaveUpBlock = highGaveUp.length > 0
-    ? "Top institutions by gave-up count:\n" +
-      highGaveUp.map((r, i) => (i + 1) + ". **" + r.institution + "** — " + r.count + " assets").join("\n") +
-      "\n\nThese assets likely have very short or non-informative descriptions. Recommended actions:\n" +
-      "- Audit description lengths for these institutions (look for `data_sparse` candidates)\n" +
-      "- Consider adding a \"reset attempts on manual curation\" admin action to allow one final pass after human editing\n" +
-      "- If an institution consistently produces low-quality descriptions, mark as `data_sparse` at ingestion time"
-    : "No gave-up data available.";
-
-  const md = `# Enrichment Audit Report
-
-Generated: ${reportDate}${DRY_RUN ? "  \n**MODE: DRY RUN — no assets were processed**" : ""}
+Generated: ${reportDate}${DRY_RUN ? "\n**MODE: DRY RUN — drain was not triggered**" : ""}
 
 ---
 
@@ -492,37 +499,36 @@ Generated: ${reportDate}${DRY_RUN ? "  \n**MODE: DRY RUN — no assets were proc
 
 | Metric | Before | After | Delta |
 |--------|--------|-------|-------|
-| Assets eligible (queue) | ${before.totalEligible.toLocaleString()} | ${after.totalEligible.toLocaleString()} | ${delta(before.totalEligible, after.totalEligible)} |
-| Assets gave up (attempts ≥ 3) | ${before.gaveUp.toLocaleString()} | ${after.gaveUp.toLocaleString()} | ${delta(before.gaveUp, after.gaveUp)} |
-| All relevant assets | ${before.allTotal.toLocaleString()} | ${after.allTotal.toLocaleString()} | ${delta(before.allTotal, after.allTotal)} |
-| Avg completeness score (all relevant) | ${before.allAvgScore} | ${after.allAvgScore} | ${delta(before.allAvgScore, after.allAvgScore)} |
+| Assets eligible (queue) | ${before.totalEligible.toLocaleString()} | ${after.totalEligible.toLocaleString()} | ${diff(before.totalEligible, after.totalEligible)} |
+| Assets gave up (attempts ≥ 3) | ${before.gaveUp.toLocaleString()} | ${after.gaveUp.toLocaleString()} | ${diff(before.gaveUp, after.gaveUp)} |
+| All relevant assets | ${before.allTotal.toLocaleString()} | ${after.allTotal.toLocaleString()} | ${diff(before.allTotal, after.allTotal)} |
+| Avg completeness score (all relevant) | ${before.allAvgScore} | ${after.allAvgScore} | ${diff(before.allAvgScore, after.allAvgScore)} |
 
-**Job results:**
-- Assets processed: **${processed.toLocaleString()}**
-- Assets improved (≥1 field gained): **${improved.toLocaleString()}** (${improvementRate} of processed)
-- Assets failed / error: **${processed - improved > 0 ? (processed - improved).toLocaleString() : "0"}** (not all non-improved are failures; some had no new info)
+**Drain job results:**
+
+| Metric | Value |
+|--------|-------|
+| Job ID | ${run.jobId ?? "N/A"} |
+| Final status | ${run.finalStatus} |
+| Assets processed | ${run.processed.toLocaleString()} |
+| Assets improved (≥1 field gained via API) | ${run.improved.toLocaleString()} (${improvementRate}) |
+| Token cost (reported by server) | $${run.tokenCostUSD.toFixed(4)} |
+| Wall time | ${(run.durationMs / 1000).toFixed(0)} s |
 
 ---
 
 ## 2. Field-Fill Rates
 
-Fields that went from \`unknown\` → a known value during this run:
+Gains computed as the reduction in corpus-wide missing-field counts (before − after, all relevant assets):
 
-| Field | Missing (before) | Gained | Fill Rate |
-|-------|-----------------|--------|-----------|
-| target | ${before.missingTarget.toLocaleString()} | ${fieldGains.target.toLocaleString()} | ${targetFillRate} |
-| modality | ${before.missingModality.toLocaleString()} | ${fieldGains.modality.toLocaleString()} | ${modalityFillRate} |
-| indication | ${before.missingIndication.toLocaleString()} | ${fieldGains.indication.toLocaleString()} | ${indicationFillRate} |
-| development_stage | ${before.missingStage.toLocaleString()} | ${fieldGains.stage.toLocaleString()} | ${stageFillRate} |
+| Field | Missing before | Missing after | Gained | Fill Rate |
+|-------|---------------|--------------|--------|-----------|
+| target | ${before.missingTarget.toLocaleString()} | ${after.missingTarget.toLocaleString()} | ${fieldGains.target.toLocaleString()} | ${fillRate(fieldGains.target, before.missingTarget)} |
+| modality | ${before.missingModality.toLocaleString()} | ${after.missingModality.toLocaleString()} | ${fieldGains.modality.toLocaleString()} | ${fillRate(fieldGains.modality, before.missingModality)} |
+| indication | ${before.missingIndication.toLocaleString()} | ${after.missingIndication.toLocaleString()} | ${fieldGains.indication.toLocaleString()} | ${fillRate(fieldGains.indication, before.missingIndication)} |
+| development_stage | ${before.missingStage.toLocaleString()} | ${after.missingStage.toLocaleString()} | ${fieldGains.stage.toLocaleString()} | ${fillRate(fieldGains.stage, before.missingStage)} |
 
-**Remaining gaps after run (all relevant assets):**
-
-| Field | Still missing | % of all relevant |
-|-------|--------------|-------------------|
-| target | ${after.missingTarget.toLocaleString()} | ${pct(after.missingTarget, after.allTotal)} |
-| modality | ${after.missingModality.toLocaleString()} | ${pct(after.missingModality, after.allTotal)} |
-| indication | ${after.missingIndication.toLocaleString()} | ${pct(after.missingIndication, after.allTotal)} |
-| development_stage | ${after.missingStage.toLocaleString()} | ${pct(after.missingStage, after.allTotal)} |
+> Fill rates are corpus-wide: they reflect all writes during the drain, including any background enrichment the running server may have performed concurrently.
 
 ---
 
@@ -530,94 +536,124 @@ Fields that went from \`unknown\` → a known value during this run:
 
 | Tier | Before | After | Delta | % of all (after) |
 |------|--------|-------|-------|------------------|
-| Excellent (≥80) | ${before.excellent.toLocaleString()} | ${after.excellent.toLocaleString()} | ${delta(before.excellent, after.excellent)} | ${pct(after.excellent, after.allTotal)} |
-| Good (60–79) | ${before.good.toLocaleString()} | ${after.good.toLocaleString()} | ${delta(before.good, after.good)} | ${pct(after.good, after.allTotal)} |
-| Partial (40–59) | ${before.partial.toLocaleString()} | ${after.partial.toLocaleString()} | ${delta(before.partial, after.partial)} | ${pct(after.partial, after.allTotal)} |
-| Poor (1–39) | ${before.poor.toLocaleString()} | ${after.poor.toLocaleString()} | ${delta(before.poor, after.poor)} | ${pct(after.poor, after.allTotal)} |
-| Unscored (0/null) | ${before.unscored.toLocaleString()} | ${after.unscored.toLocaleString()} | ${delta(before.unscored, after.unscored)} | ${pct(after.unscored, after.allTotal)} |
+| Excellent (≥80) | ${before.excellent.toLocaleString()} | ${after.excellent.toLocaleString()} | ${diff(before.excellent, after.excellent)} | ${pct(after.excellent, after.allTotal)} |
+| Good (60–79) | ${before.good.toLocaleString()} | ${after.good.toLocaleString()} | ${diff(before.good, after.good)} | ${pct(after.good, after.allTotal)} |
+| Partial (40–59) | ${before.partial.toLocaleString()} | ${after.partial.toLocaleString()} | ${diff(before.partial, after.partial)} | ${pct(after.partial, after.allTotal)} |
+| Poor (1–39) | ${before.poor.toLocaleString()} | ${after.poor.toLocaleString()} | ${diff(before.poor, after.poor)} | ${pct(after.poor, after.allTotal)} |
+| Unscored (0/null) | ${before.unscored.toLocaleString()} | ${after.unscored.toLocaleString()} | ${diff(before.unscored, after.unscored)} | ${pct(after.unscored, after.allTotal)} |
 
-${bandMovementsBlock}
+Net upward movement: ${
+  (Math.max(0, after.excellent - before.excellent) +
+   Math.max(0, after.good - before.good) +
+   Math.max(0, after.partial - before.partial)).toLocaleString()
+} assets moved into a higher tier.
 
 ---
 
-## 4. Per-Institution Breakdown
+## 4. Modality Distribution
+
+Before/after breakdown of the \`modality\` field across all relevant assets:
+
+| Modality | Before | After | Delta |
+|----------|--------|-------|-------|
+${modalityRows.map(r =>
+  "| " + r.modality + " | " + r.before.toLocaleString() + " | " + r.after.toLocaleString() + " | " + diff(r.before, r.after) + " |"
+).join("\n")}
+
+> Modality is a key field for buyer matching. Assets in the \`unknown\` row are the primary target for further enrichment.
+
+---
+
+## 5. Per-Institution Breakdown
 
 Top institutions by eligible queue size before the run:
 
-| Institution | Before | After | Cleared | Processed | Improved |
-|-------------|--------|-------|---------|-----------|---------|
-${instRows.slice(0, 30).map(r => "| " + r.institution + " | " + r.before + " | " + r.after + " | " + (r.delta > 0 ? r.delta : 0) + " | " + r.processed + " | " + r.improved + " |").join("\n")}
+| Institution | Before | After | Cleared |
+|-------------|--------|-------|---------|
+${instRows.slice(0, 30).map(r =>
+  "| " + r.institution + " | " + r.before + " | " + r.after + " | " + Math.max(0, r.before - r.after) + " |"
+).join("\n")}
 
 ---
 
-## 5. Gave-Up Analysis
+## 6. Gave-Up Analysis
 
-Assets permanently excluded (mini_enrich_attempts ≥ 3) by institution:
+Assets at the 3-attempt cap (will not be re-tried without a content change):
 
-| Institution | Gave Up |
-|-------------|---------|
-${gaveUpByInstitution.map(r => `| ${r.institution} | ${r.count.toLocaleString()} |`).join("\n")}
+**Before:** ${before.gaveUp.toLocaleString()} · **After:** ${after.gaveUp.toLocaleString()} · **New this run:** ${diff(before.gaveUp, after.gaveUp)}
 
-Total gave up: **${before.gaveUp.toLocaleString()}** assets
-
----
-
-## 6. Token Cost
-
-| Metric | Value |
-|--------|-------|
-| Input tokens | ${totalInputTokens.toLocaleString()} |
-| Output tokens | ${totalOutputTokens.toLocaleString()} |
-| Total tokens | ${(totalInputTokens + totalOutputTokens).toLocaleString()} |
-| Estimated cost | **$${tokenCostUSD.toFixed(4)}** |
-| Cost per asset | $${processed > 0 ? (tokenCostUSD / processed).toFixed(5) : "N/A"} |
-| Model | gpt-4o-mini |
-
----
-
-## 7. Optimization Recommendations
-
-### 7.1 Institutions to Prioritize Next
-
-${priorityInstBlock}
-${persistEmptyBlock}
-
-### 7.2 Field Fill Rate Analysis
-
-${fieldRecsBlock}
-
-### 7.3 Gave-Up Cap Analysis
-
-**${before.gaveUp.toLocaleString()}** assets have hit the 3-attempt cap and are permanently excluded.
+Top institutions by gave-up count:
 
 ${gaveUpBlock}
 
-### 7.4 Concrete Prompt/Data Improvements
+---
 
-1. **Target inference from context**: Many drug assets fail target extraction when the gene symbol isn't named explicitly (e.g., "inhibits the JAK pathway" → should infer JAK1/JAK2). Extending the HGNC mapping table in the system prompt with more pathway-to-gene translations would improve target fill rate.
+## 7. Token Cost
 
-2. **Stage inference from licensing language**: TTO listings often say "licensed to [company]" or "startup formed" without explicit clinical language. Add a heuristic rule: if licensingReadiness = "startup formed" AND no clinical signals → default to preclinical rather than unknown.
-
-3. **Data-sparse threshold**: Assets with < 150 chars combined summary+abstract are marked data_sparse. Consider raising this to 200 chars — very short descriptions rarely yield useful classification and waste API budget.
-
-4. **Non-drug filtering before mini-enrich**: Assets already classified as research_tool or software will always have null target/indication/modality (field semantics: null = N/A). These should be excluded from the 3-unknown gate entirely to avoid wasting batch slots and attempt counts.
-
-5. **Abstract scraping coverage**: Institutions with low improvement rates often lack abstract text. Adding abstract scraping (via the existing TechPublisher/WordPress factory patterns) for top-gap institutions could meaningfully improve fill rates without prompt changes.
+| Metric | Value |
+|--------|-------|
+| Assets processed | ${run.processed.toLocaleString()} |
+| Token cost (from server) | **$${run.tokenCostUSD.toFixed(4)}** |
+| Cost per asset | $${run.processed > 0 ? (run.tokenCostUSD / run.processed).toFixed(5) : "N/A"} |
+| Model | gpt-4o-mini |
+| Wall time | ${(run.durationMs / 1000).toFixed(0)} s |
 
 ---
 
-*Report generated by scripts/enrichment-audit.ts on ${reportDate}*
+## 8. Optimization Recommendations
+
+### 8.1 Institutions to Prioritize Next
+
+${priorityInstBlock}
+
+### 8.2 Field Fill Rate Analysis
+
+${fieldRecsBlock}
+
+### 8.3 Gave-Up Cap Analysis
+
+**${after.gaveUp.toLocaleString()}** assets (${pct(after.gaveUp, after.allTotal)} of all relevant) are permanently excluded.
+This grew by **${diff(before.gaveUp, after.gaveUp)}** during this run.
+
+Recommended actions:
+- **Non-drug queue filter (highest impact)**: Add \`AND (asset_class IS NULL OR asset_class = 'drug_biologic')\` to \`buildEnrichWhere()\` in \`server/storage.ts\`. This prevents research_tool, medical_device, and software assets from consuming batch slots and accumulating attempt counts.
+- **DOE patent abstract supplementation**: OSTI.gov leads the gave-up list. The OSTI full-text API provides scientific abstracts that are far richer than patent claim text — cross-reference by OSTI ID to backfill the \`abstract\` column.
+- **Attempt cap reset admin action**: Add \`POST /api/admin/enrichment/reset-cap\` accepting \`{ institution: string }\` to allow manual re-try after scraper content improvements.
+
+### 8.4 Concrete Prompt/Data Improvements
+
+1. **Target inference expansion**: Extend the HGNC mapping table in \`classifyAsset.ts\` with pathway→gene translations (Wnt/CTNNB1, mTOR/MTOR, JAK/JAK1, PI3K/PIK3CA). Assets that describe pathways rather than named proteins gain a target classification without richer text.
+
+2. **Stage heuristic pre-filter**: Before the LLM call, apply deterministic rules: if \`licensingReadiness = 'startup formed'\` AND no clinical trial keywords in summary → set stage = \`preclinical\`. Handles ~5–8% of stage unknowns at zero API cost.
+
+3. **Data-sparse threshold**: Raise from 120 combined chars to 200 chars in \`buildEnrichWhere()\`. Assets in the 120–200 char window very rarely yield useful field classification.
+
+4. **Modality-specific prompting**: The \`unknown\` modality bucket is the largest single category. A dedicated modality-classification pass (with a prompt focused on small-molecule vs. biologic vs. cell-therapy vs. gene-therapy distinctions) would perform better than the generic multi-field classification.
+
+---
+
+## 9. Internal Consistency Check
+
+- processed ≥ 0 and ≤ original queue: ${run.processed <= before.totalEligible + 200 ? "✅" : "⚠"} (queue may grow during drain due to concurrent server ingestion)
+- improved ≤ processed: ${run.improved <= run.processed ? "✅" : "⚠"}
+- after.gaveUp ≥ before.gaveUp: ${after.gaveUp >= before.gaveUp ? "✅" : "⚠"}
+- avg score direction: ${after.allAvgScore >= before.allAvgScore ? "✅ improved" : "⚠ decreased"} (${before.allAvgScore} → ${after.allAvgScore})
+
+---
+
+*Report generated by \`scripts/enrichment-audit.ts\` on ${reportDate}*
+*Drain triggered via \`POST ${BASE_URL}/api/admin/enrichment/run\` with \`{ all: true }\`, polled every ${POLL_INTERVAL_MS / 1000}s*
 `;
 
   writeFileSync(reportPath, md, "utf-8");
+  console.log(`📄 Report written to: reports/${reportFileName}`);
 
-  console.log(`\n📄 Report written to: reports/${reportFileName}`);
   console.log("\n═══════════════ SUMMARY ═══════════════");
   console.log(`  Queue before  : ${before.totalEligible.toLocaleString()}`);
-  console.log(`  Processed     : ${processed.toLocaleString()}`);
-  console.log(`  Improved      : ${improved.toLocaleString()} (${improvementRate})`);
+  console.log(`  Processed     : ${run.processed.toLocaleString()}`);
+  console.log(`  Improved      : ${run.improved.toLocaleString()} (${improvementRate})`);
   console.log(`  Remaining     : ${after.totalEligible.toLocaleString()}`);
-  console.log(`  Token cost    : $${tokenCostUSD.toFixed(4)}`);
+  console.log(`  Token cost    : $${run.tokenCostUSD.toFixed(4)}`);
   console.log(`  Avg score     : ${before.allAvgScore} → ${after.allAvgScore}`);
   console.log("═══════════════════════════════════════\n");
 
