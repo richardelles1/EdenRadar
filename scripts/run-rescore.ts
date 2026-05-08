@@ -30,10 +30,11 @@ async function main() {
     patent_status: string | null;
     device_attributes: Record<string, unknown> | null;
     completeness_score: number | null;
+    source_type: string;
   }>(sql`
     SELECT id, asset_class, target, modality, indication, development_stage, mechanism_of_action,
            innovation_claim, unmet_need, comparable_drugs, licensing_readiness, summary, abstract,
-           categories, inventors, patent_status, device_attributes, completeness_score
+           categories, inventors, patent_status, device_attributes, completeness_score, source_type
     FROM ingested_assets
     WHERE relevant = true
   `);
@@ -63,6 +64,7 @@ async function main() {
       inventors: r.inventors,
       patentStatus: r.patent_status,
       deviceAttributes: r.device_attributes,
+      sourceType: r.source_type,
     });
     const current = r.completeness_score != null ? Number(r.completeness_score) : null;
     if (newScore !== current) {

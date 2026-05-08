@@ -82,10 +82,10 @@ async function runRescoreForInstitution(): Promise<void> {
     indication: string | null; development_stage: string | null;
     mechanism_of_action: string | null; ip_type: string | null;
     summary: string | null; patent_status: string | null;
-    completeness_score: number | null;
+    completeness_score: number | null; source_type: string;
   }>(sql`
     SELECT id, asset_class, modality, indication, development_stage, mechanism_of_action,
-           ip_type, summary, patent_status, completeness_score
+           ip_type, summary, patent_status, completeness_score, source_type
     FROM ingested_assets
     WHERE relevant = true AND institution = ${INSTITUTION}
   `);
@@ -99,6 +99,7 @@ async function runRescoreForInstitution(): Promise<void> {
       assetClass: r.asset_class, modality: r.modality, indication: r.indication,
       developmentStage: r.development_stage, mechanismOfAction: r.mechanism_of_action,
       ipType: r.ip_type, summary: r.summary, patentStatus: r.patent_status,
+      sourceType: r.source_type,
     }) ?? 0;
     const current = r.completeness_score != null ? Number(r.completeness_score) : null;
     if (newScore !== current) updates.push({ id: r.id, score: newScore });

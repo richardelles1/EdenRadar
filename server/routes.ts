@@ -3476,7 +3476,7 @@ export async function registerRoutes(
 
   async function runEnrichmentWorker(
     jobId: number,
-    assets: Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>,
+    assets: Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null; sourceType?: string | null }>,
     startProcessed: number,
     startImproved: number,
     resumed: boolean,
@@ -3533,6 +3533,7 @@ export async function registerRoutes(
             comparableDrugs: classification.comparableDrugs,
             licensingReadiness: classification.licensingReadiness,
             deviceAttributes: classification.deviceAttributes,
+            sourceType: asset.sourceType,
           });
           // Always persist the type-aware classification (assetClass, deviceAttributes,
           // completenessScore, enrichmentSources, and any vocab-normalized fields).
@@ -4187,7 +4188,7 @@ export async function registerRoutes(
       const existingRes = await db.execute(sql`
         SELECT target, indication, modality, development_stage, ip_type, licensing_readiness,
                mechanism_of_action, innovation_claim, unmet_need, comparable_drugs, summary, abstract,
-               categories, inventors, patent_status, asset_class, device_attributes
+               categories, inventors, patent_status, asset_class, device_attributes, source_type
         FROM ingested_assets WHERE id = ${id}
       `);
       if (existingRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
@@ -4218,6 +4219,7 @@ export async function registerRoutes(
         inventors: existing.inventors ?? null,
         patentStatus: existing.patent_status ?? null,
         ipType: merged.ip_type ?? null,
+        sourceType: existing.source_type ?? null,
       });
 
       await db.execute(sql`
@@ -6048,10 +6050,11 @@ Do not respond with anything else.`;
         licensing_readiness: string | null; ip_type: string | null; summary: string | null; abstract: string | null;
         categories: string[] | null; inventors: string[] | null; patent_status: string | null;
         device_attributes: Record<string, unknown> | null; completeness_score: number | null;
+        source_type: string;
       }>(sql`
         SELECT id, asset_class, target, modality, indication, development_stage, mechanism_of_action,
                innovation_claim, unmet_need, comparable_drugs, licensing_readiness, ip_type, summary, abstract,
-               categories, inventors, patent_status, device_attributes, completeness_score
+               categories, inventors, patent_status, device_attributes, completeness_score, source_type
         FROM ingested_assets
         WHERE relevant = true
       `);
@@ -6074,6 +6077,7 @@ Do not respond with anything else.`;
             summary: r.summary, abstract: r.abstract, categories: r.categories,
             inventors: r.inventors, patentStatus: r.patent_status,
             deviceAttributes: r.device_attributes,
+            sourceType: r.source_type,
           });
           // Only write if score has changed (avoids unnecessary churn)
           const current = r.completeness_score != null ? Number(r.completeness_score) : null;
