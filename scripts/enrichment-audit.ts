@@ -2,9 +2,9 @@
  * scripts/enrichment-audit.ts
  *
  * Enrichment audit: captures before/after Supabase snapshots, triggers a
- * full mini-enrichment drain via the internal API
- * (POST /api/internal/enrichment/run { all: true }), polls
- * GET /api/internal/enrichment/status every 5 s until the job reaches
+ * full mini-enrichment drain via the admin API
+ * (POST /api/admin/enrichment/run { all: true }), polls
+ * GET /api/admin/enrichment/status every 5 s until the job reaches
  * status "done" or "error", then diffs field-fill rates, tier-band
  * movements (full transition matrix), modality distribution,
  * per-institution improvements, and processed/improved/failed counts,
@@ -38,8 +38,13 @@ const POLL_TIMEOUT_MS = 3 * 60 * 60 * 1_000; // 3 h hard ceiling
 
 // ─────────────────────────────────────────────────
 // Headers for admin API calls
-// Passes x-admin-password when ADMIN_PASSWORD or SESSION_SECRET is present
-// so the script works against both protected and open admin endpoints.
+//
+// The /api/admin/enrichment/* endpoints are registered after the
+// app.use("/api/admin", requireAdmin) middleware in routes.ts.
+// requireAdmin accepts an x-admin-password header (checked against
+// SESSION_SECRET) from loopback callers. ADMIN_EMAILS-based Supabase
+// JWT auth is the browser flow; it is not available in a Node script
+// without a live Supabase session, so we use the shared-secret path instead.
 // ─────────────────────────────────────────────────
 
 function scriptHeaders(): Record<string, string> {
@@ -291,7 +296,7 @@ async function triggerAndWaitForDrain(): Promise<Omit<RunResult, "noGain">> {
   if (!runRes.ok) {
     const body = await runRes.text();
     if (runRes.status !== 409) {
-      throw new Error(`POST /api/internal/enrichment/run failed (${runRes.status}): ${body}`);
+      throw new Error(`POST /api/admin/enrichment/run failed (${runRes.status}): ${body}`);
     }
     console.log(`   ⚠ Server returned 409 (job already running) — polling status…`);
   } else {
