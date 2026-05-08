@@ -564,7 +564,7 @@ function buildEnrichWhere(filters: EnrichFilter = {}): SQL {
   const parts: SQL[] = [
     sql`relevant = true`,
     sql`(data_sparse IS NULL OR data_sparse = false)`,
-    sql`char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120`,
+    sql`char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50`,
     sql`COALESCE(mini_enrich_attempts, 0) < 3`,
   ];
   if (filters.institution) parts.push(sql`institution ILIKE ${'%' + filters.institution + '%'}`);
@@ -2392,14 +2392,14 @@ export class DatabaseStorage implements IStorage {
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }> {
     // Select relevant, non-sparse assets that are either unscored OR have 3+ unknown key fields,
-    // with sufficient description length (>=120 chars) to be worth a mini pass.
+    // with sufficient description length (>=50 chars) to be worth a mini pass.
     // Assets with mini_enrich_attempts >= 3 are excluded from actionable queue but counted separately as exhausted.
     // backfillCount: assets already processed (enriched_at IS NOT NULL) that still have unknowns and mini_enrich_attempts=0.
     // These are legacy assets that predate the attempt-cap column; the backfill endpoint seeds them to 1.
     const FIELD_UNKNOWN_PREDICATE = sql`(
         relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
-        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
@@ -2444,7 +2444,7 @@ export class DatabaseStorage implements IStorage {
         AND enriched_at IS NOT NULL
         AND relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
-        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
