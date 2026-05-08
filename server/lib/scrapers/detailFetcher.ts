@@ -127,12 +127,15 @@ export async function enrichInPartListings(
           )
           .filter((s: string) => s.length > 0)
           .join(" ")
-          .slice(0, 1_000);
+          .slice(0, 5_000);
       }
 
-      const description = precis || bodyText;
+      // Combine precis (teaser) with the full contentV2 body — both add value.
+      // Prior behaviour used precis || bodyText which discarded bodyText (2 500+ chars)
+      // whenever precis existed (typically only ~126 chars).
+      const description = [precis, bodyText].filter(Boolean).join(" ").trim();
       if (description.length >= 30) {
-        listing.description = description.slice(0, 1_000);
+        listing.description = description.slice(0, 5_000);
       }
     } catch {
       // silently skip

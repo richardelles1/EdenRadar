@@ -156,7 +156,8 @@ export function createUCTechTransferScraper(
         console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages, fetching NCD detail descriptions (all)...`);
         await enrichWithDetailPages(allResults, {
           description: [
-            ".middle-content-sub-block",
+            ".ncd-data",               // UC TechTransfer portal — data block (tech-ID + Summary text, excludes page title)
+            ".middle-content-sub-block", // broader fallback (includes title noise but covers all sections)
             ".middle-content",
             ".tech-description",
             "main p",
