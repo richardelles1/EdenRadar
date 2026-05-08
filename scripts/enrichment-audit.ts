@@ -38,12 +38,15 @@ const POLL_TIMEOUT_MS = 3 * 60 * 60 * 1_000; // 3 h hard ceiling
 
 // ─────────────────────────────────────────────────
 // Headers for admin API calls
-// The enrichment run/status endpoints are not wrapped in requireAdmin,
-// so no Supabase JWT is required from a loopback script.
+// Passes x-admin-password when ADMIN_PASSWORD or SESSION_SECRET is present
+// so the script works against both protected and open admin endpoints.
 // ─────────────────────────────────────────────────
 
 function scriptHeaders(): Record<string, string> {
-  return { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const pw = process.env.ADMIN_PASSWORD ?? process.env.SESSION_SECRET;
+  if (pw) headers["x-admin-password"] = pw;
+  return headers;
 }
 
 // ─────────────────────────────────────────────────
@@ -102,11 +105,14 @@ async function getGlobalStats(): Promise<GlobalStats> {
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
-            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
-          ) >= 3
+            (asset_class IS NULL OR asset_class = 'drug_biologic')
+            AND (
+              (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+              (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+              (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+              (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+            ) >= 3
+          )
         )
     `),
 
@@ -174,11 +180,14 @@ async function getInstitutionBreakdown(): Promise<InstitutionRow[]> {
       AND (
         (completeness_score IS NULL OR completeness_score = 0)
         OR (
-          (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
-        ) >= 3
+          (asset_class IS NULL OR asset_class = 'drug_biologic')
+          AND (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+          ) >= 3
+        )
       )
     GROUP BY institution ORDER BY COUNT(*) DESC LIMIT 30
   `);
@@ -206,11 +215,14 @@ async function snapshotEligibleAssets(): Promise<AssetSnapshot[]> {
       AND (
         (completeness_score IS NULL OR completeness_score = 0)
         OR (
-          (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
-        ) >= 3
+          (asset_class IS NULL OR asset_class = 'drug_biologic')
+          AND (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+          ) >= 3
+        )
       )
   `);
   return res.rows.map(r => ({
