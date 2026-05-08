@@ -5252,7 +5252,8 @@ export async function registerRoutes(
             const json = await fetchRes.json() as any;
             const attrs = json?.data?.attributes ?? json?.attributes ?? json;
             // Institutions vary widely on which field holds the description — cover all known variants.
-            // "other" is the primary/only description field for Cornell, TAMUS, and Louisville.
+            // "other" is the primary/only field for Cornell, TAMUS, and Louisville.
+            // "benefit" + "marketApplication" cover McGill, Rice, and Monash.
             const descRaw = stripFbHtml(
               attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ??
               attrs?.briefDescription ?? attrs?.brief_description ?? ""
@@ -5263,7 +5264,8 @@ export async function registerRoutes(
             const kp2 = stripFbHtml(attrs?.keyPoint2 ?? "");
             const kp3 = stripFbHtml(attrs?.keyPoint3 ?? "");
             const otherRaw = stripFbHtml(attrs?.other ?? "");
-            const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw]
+            const pubRaw = stripFbHtml(attrs?.publications ?? "");
+            const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw, pubRaw]
               .filter((s) => s.length > 0)
               .join(" ")
               .slice(0, 5_000);

@@ -133,7 +133,8 @@ async function enrichFlintboxThinListings(
           const json = await res.json() as any;
           const attrs = json?.data?.attributes ?? json?.attributes ?? (json as any);
           // Institutions vary widely on which field holds the description — cover all known variants.
-          // "other" is the primary/only description field for Cornell, TAMUS, and Louisville.
+          // "other" is the primary/only field for Cornell, TAMUS, and Louisville.
+          // "benefit" + "marketApplication" cover McGill, Rice, and Monash.
           const descRaw = cleanText(stripHtml(
             attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ??
             attrs?.briefDescription ?? attrs?.brief_description ?? "",
@@ -144,7 +145,8 @@ async function enrichFlintboxThinListings(
           const kp2 = cleanText(stripHtml(attrs?.keyPoint2 ?? ""));
           const kp3 = cleanText(stripHtml(attrs?.keyPoint3 ?? ""));
           const otherRaw = cleanText(stripHtml(attrs?.other ?? ""));
-          const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw]
+          const pubRaw = cleanText(stripHtml(attrs?.publications ?? ""));
+          const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw, pubRaw]
             .filter((s) => s.length > 0).join(" ").slice(0, 2000);
           if (combined.length >= 50) {
             listing.description = combined;
