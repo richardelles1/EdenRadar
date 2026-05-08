@@ -37,21 +37,13 @@ const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 3 * 60 * 60 * 1_000; // 3 h hard ceiling
 
 // ─────────────────────────────────────────────────
-// Auth header for admin API routes
-// Uses ADMIN_PASSWORD env var (per task spec); falls back to SESSION_SECRET.
-// The requireAdmin middleware in server/lib/supabaseAuth.ts accepts this header
-// from the loopback interface in non-production environments.
+// Headers for admin API calls
+// The enrichment run/status endpoints are not wrapped in requireAdmin,
+// so no Supabase JWT is required from a loopback script.
 // ─────────────────────────────────────────────────
 
 function scriptHeaders(): Record<string, string> {
-  const pw = process.env.ADMIN_PASSWORD ?? process.env.SESSION_SECRET;
-  if (!pw) {
-    throw new Error(
-      "Neither ADMIN_PASSWORD nor SESSION_SECRET env var is set. " +
-      "One of these is required to authenticate with the /api/admin/* endpoints."
-    );
-  }
-  return { "Content-Type": "application/json", "x-admin-password": pw };
+  return { "Content-Type": "application/json" };
 }
 
 // ─────────────────────────────────────────────────
