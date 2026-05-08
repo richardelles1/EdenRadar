@@ -4915,7 +4915,11 @@ export async function registerRoutes(
             try {
               const $ = await fetchHtml(row.source_url, 12000, signal, 1);
               if (!$) { drProcessed++; drSkipped++; continue; }
-              const content = extractText($, DESCRIPTION_SELECTORS);
+              let content = extractText($, DESCRIPTION_SELECTORS);
+              if (!content || content.length <= 120) {
+                const metaDesc = $('meta[name="description"]').attr('content') ?? '';
+                if (metaDesc.length > 120) content = metaDesc;
+              }
               if (content && content.length > 120) {
                 const newHash = computeContentHash(row.asset_name ?? "", content, "");
                 await db.execute(sql`

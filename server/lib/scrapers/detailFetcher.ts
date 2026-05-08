@@ -27,8 +27,12 @@ export const DESCRIPTION_SELECTORS: string[] = [
   // These must come first — they are the most specific and highest-signal match.
   ".c_tp_description",
   ".tech-description",
+  // UC system (techtransfer.universityofcalifornia.edu)
+  ".ncd-data",
+  ".ncd-main-right-panel",
   // Drupal/standard TTO themes
   ".field--name-body",
+  ".field--body",
   ".tech-detail__description",
   ".technology-description",
   "#description",
