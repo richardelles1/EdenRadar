@@ -4901,11 +4901,13 @@ export async function registerRoutes(
             WHERE relevant = true
               AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
               AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+              AND (asset_class IS NULL OR asset_class NOT IN ('medical_device', 'research_tool', 'software'))
           )::int AS total,
           COUNT(*) FILTER (
             WHERE relevant = true
               AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
               AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+              AND (asset_class IS NULL OR asset_class NOT IN ('medical_device', 'research_tool', 'software'))
           )::int AS llm_eligible
         FROM ingested_assets
       `);
@@ -5026,10 +5028,10 @@ export async function registerRoutes(
                     THEN 'phase 1'
                   WHEN txt ~* '\\mIND\\s+(filed|application|submitted|approved|enabling)\\M|\\mIND-enabling\\M'
                     THEN 'IND filed'
-                  WHEN txt ~* '\\mpreclinical\\M|\\mpre[- ]clinical\\M|\\mlead[- ]optimi.ation\\M'
-                    THEN 'preclinical'
                   WHEN txt ~* '\\mdiscovery stage\\M|\\mearly[- ]stage discovery\\M|\\mhit[- ]to[- ]lead\\M|\\mhit identification\\M|\\mtarget validation\\M'
                     THEN 'discovery'
+                  WHEN txt ~* '\\mpreclinical\\M|\\mpre[- ]clinical\\M|\\mlead[- ]optimi.ation\\M'
+                    THEN 'preclinical'
                 END AS new_stage,
                 id AS asset_id
               FROM (
@@ -5039,6 +5041,7 @@ export async function registerRoutes(
                 WHERE relevant = true
                   AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
                   AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+                  AND (asset_class IS NULL OR asset_class NOT IN ('medical_device', 'research_tool', 'software'))
               ) t
             )
             UPDATE ingested_assets ia
@@ -5082,6 +5085,7 @@ Do not respond with anything else.`;
                WHERE relevant = true
                  AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
                  AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+                 AND (asset_class IS NULL OR asset_class NOT IN ('medical_device', 'research_tool', 'software'))
                ORDER BY COALESCE(completeness_score, 0) DESC
                LIMIT $1`,
               [cap],

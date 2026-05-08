@@ -1,7 +1,9 @@
 /**
  * scripts/fill-dev-stage.ts
  *
- * Two-phase development stage fill for relevant assets missing `development_stage`.
+ * Two-phase development stage fill for relevant drug/biologic assets missing
+ * `development_stage`. Non-drug asset classes (medical_device, research_tool,
+ * software) are out of scope — their stage semantics differ.
  *
  * Phase 1 (regex, zero API cost):
  *   Runs a single SQL CTE over summary+abstract. Patterns are explicit and
@@ -9,12 +11,15 @@
  *   then rescores completeness_score for every touched row.
  *
  * Phase 2 (LLM — gpt-4o-mini, temperature=0):
- *   For assets still missing stage with ≥120 chars of text, calls OpenAI with a
- *   tightly constrained system prompt that enumerates the exact allowed values.
- *   Only non-"unknown" responses are written. Rescores every touched row.
+ *   For assets with ≥120 chars of text that didn't match the regex, calls OpenAI
+ *   with a tightly constrained system prompt. Any response not in the enum
+ *   (including "unknown") is not written to the DB. Rescores every touched row.
  *
  * Usage:
  *   npx tsx scripts/fill-dev-stage.ts [--dry-run] [--phase=1|2] [--cap=N]
+ *
+ * Prints: total scanned / regex hits / LLM hits / LLM unknown / skipped
+ *         (insufficient text) / estimated cost.
  *
  * Environment: SUPABASE_DATABASE_URL, OPENAI_API_KEY
  */
@@ -42,20 +47,31 @@ export const STAGE_ENUM = [
 ] as const;
 export type StageValue = typeof STAGE_ENUM[number];
 
-// ── Regex extraction (Node-side, for script summary; SQL-side for Phase 1 write) ─
-const STAGE_PATTERNS: Array<{ pattern: RegExp; stage: StageValue }> = [
-  // Commercial first (highest confidence)
+// Asset classes excluded from this pass — their stage semantics differ
+const EXCLUDED_CLASSES = ["'medical_device'", "'research_tool'", "'software'"].join(", ");
+// SQL fragment re-used in both Phase 1 and Phase 2 queries
+const ASSET_CLASS_FILTER =
+  `AND (asset_class IS NULL OR asset_class NOT IN (${EXCLUDED_CLASSES}))`;
+
+// ── Canonical regex patterns (shared by script and SQL via same ordering) ─────
+// Order matters: first match wins. Discovery checked BEFORE preclinical's
+// "lead optimization" to avoid "hit-to-lead optimization" → preclinical misfire.
+export const STAGE_PATTERNS: Array<{ pattern: RegExp; stage: StageValue }> = [
+  // Commercial (highest confidence — explicit approval/market signals)
   { pattern: /\bFDA[- ]approved\b|\bFDA[- ]cleared\b|\bcommercially available\b|\bmarketed drug\b|\bon the market\b|\bapproved for sale\b|\bpost[- ]market\b/i, stage: "commercial" },
-  // Phase 3 before 2 before 1 (to avoid partial substring matches)
+  // Phase 3 (roman and arabic numerals; negative lookahead for '/' prevents Phase III/IV → phase 3)
   { pattern: /\bphase\s*(?:III|3)\b(?!\s*\/)/i, stage: "phase 3" },
+  // Phase II/III → phase 2 (must check combined before standalone II)
   { pattern: /\bphase\s*(?:II|2)\s*\/\s*(?:III|3)\b/i, stage: "phase 2" },
+  // Phase 2 standalone
   { pattern: /\bphase\s*(?:II|2)\b(?!\s*\/)/i, stage: "phase 2" },
+  // Phase I (standalone or Phase I/II → phase 1)
   { pattern: /\bphase\s*(?:I|1)\b|\bphase\s*(?:I|1)\s*\/\s*(?:II|2)\b/i, stage: "phase 1" },
-  // IND
+  // IND filed
   { pattern: /\bIND\s+(?:filed|application|submitted|approved|enabling)\b|\bIND-enabling\b/i, stage: "IND filed" },
-  // Discovery checked BEFORE preclinical's lead-optimization so "hit-to-lead optimization" → discovery
+  // Discovery — checked BEFORE preclinical to win on "hit-to-lead optimization"
   { pattern: /\bdiscovery stage\b|\bearly[- ]stage discovery\b|\bhit[- ]to[- ]lead\b|\bhit identification\b|\btarget validation\b|\btarget discovery\b/i, stage: "discovery" },
-  // Preclinical (lead opt + pre-clinical synonyms — after discovery to avoid overlap)
+  // Preclinical (lead optimisation + pre-clinical synonyms)
   { pattern: /\bpreclinical\b|\bpre[- ]clinical\b|\blead[- ]optimi[sz]ation\b/i, stage: "preclinical" },
 ];
 
@@ -82,7 +98,7 @@ Rules:
 export async function extractStageByLLM(
   text: string,
   openai: OpenAI,
-): Promise<StageValue | "unknown" | null> {
+): Promise<StageValue | "unknown"> {
   const truncated = text.slice(0, 1000);
   try {
     const resp = await openai.chat.completions.create({
@@ -97,10 +113,10 @@ export async function extractStageByLLM(
     const raw = (resp.choices[0]?.message?.content ?? "").trim().toLowerCase();
     const matched = STAGE_ENUM.find((s) => s.toLowerCase() === raw);
     if (matched) return matched;
-    if (raw === "unknown") return "unknown";
-    return null; // invalid response — treat as skipped
+    // Any response not in the enum (including explicit "unknown") is treated as unknown — not written
+    return "unknown";
   } catch {
-    return null;
+    return "unknown";
   }
 }
 
@@ -142,7 +158,6 @@ async function rescoreAssets(ids: number[]): Promise<number> {
 
   if (DRY_RUN) return updates.length;
 
-  // Batch UPDATE via VALUES table
   const placeholders = updates.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::real)`).join(", ");
   const params = updates.flatMap(({ id, score }) => [id, score]);
   await pool.query(
@@ -155,51 +170,59 @@ async function rescoreAssets(ids: number[]): Promise<number> {
   return updates.length;
 }
 
-// ── Phase 1: SQL regex ────────────────────────────────────────────────────────
-async function runPhase1(): Promise<{ filled: number; rescored: number }> {
-  console.log("\n── Phase 1: SQL regex extraction ──");
+// ── SQL CASE expression (mirrors STAGE_PATTERNS order exactly) ────────────────
+// Discovery is checked BEFORE preclinical in both SQL and regex.
+const STAGE_SQL_CASE = `
+  CASE
+    WHEN txt ~* '\\mFDA[- ]approved\\M|\\mFDA[- ]cleared\\M|commercially available|marketed drug|on the market|approved for sale|post[- ]market'
+      THEN 'commercial'
+    WHEN txt ~* '\\mphase\\s*(III|3)\\M(?!\\s*/)'
+      THEN 'phase 3'
+    WHEN txt ~* '\\mphase\\s*(II|2)\\s*/\\s*(III|3)\\M'
+      THEN 'phase 2'
+    WHEN txt ~* '\\mphase\\s*(II|2)\\M(?!\\s*/)'
+      THEN 'phase 2'
+    WHEN txt ~* '\\mphase\\s*(I|1)\\M|\\mphase\\s*(I|1)\\s*/\\s*(II|2)\\M'
+      THEN 'phase 1'
+    WHEN txt ~* '\\mIND\\s+(filed|application|submitted|approved|enabling)\\M|\\mIND-enabling\\M'
+      THEN 'IND filed'
+    WHEN txt ~* '\\mdiscovery stage\\M|\\mearly[- ]stage discovery\\M|\\mhit[- ]to[- ]lead\\M|\\mhit identification\\M|\\mtarget validation\\M'
+      THEN 'discovery'
+    WHEN txt ~* '\\mpreclinical\\M|\\mpre[- ]clinical\\M|\\mlead[- ]optimi.ation\\M'
+      THEN 'preclinical'
+  END`;
 
-  // Use a PostgreSQL CTE to classify and update in one round-trip.
-  // We ordered the CASE branches to match the same priority as STAGE_PATTERNS above.
-  const estimateRes = await pool.query<{ total: string }>(`
-    SELECT COUNT(*)::int AS total
+// ── Phase 1: SQL regex ────────────────────────────────────────────────────────
+async function runPhase1(): Promise<{ filled: number; rescored: number; scanned: number }> {
+  console.log("\n── Phase 1: SQL regex extraction ──");
+  console.log(`  Scope: relevant drug/biologic assets (asset_class IS NULL or drug_biologic)`);
+
+  const estimateRes = await pool.query<{ total: string; insufficient: string }>(`
+    SELECT
+      COUNT(*) FILTER (WHERE char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50)::int AS total,
+      COUNT(*) FILTER (WHERE char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 50)::int AS insufficient
     FROM ingested_assets
     WHERE relevant = true
       AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
-      AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+      ${ASSET_CLASS_FILTER}
   `);
   const eligible = Number(estimateRes.rows[0]?.total ?? 0);
-  console.log(`  Eligible assets: ${eligible.toLocaleString()}`);
-  if (eligible === 0) return { filled: 0, rescored: 0 };
+  const insufficient = Number(estimateRes.rows[0]?.insufficient ?? 0);
+  console.log(`  Scanned (≥50 chars)  : ${eligible.toLocaleString()}`);
+  console.log(`  Skipped (insufficient): ${insufficient.toLocaleString()} (< 50 chars)`);
+  if (eligible === 0) return { filled: 0, rescored: 0, scanned: eligible };
 
   if (DRY_RUN) {
     const dryRes = await pool.query<{ new_stage: string; cnt: string }>(`
       WITH classified AS (
-        SELECT
-          CASE
-            WHEN txt ~* '\\mFDA[- ]approved\\M|\\mFDA[- ]cleared\\M|commercially available|marketed drug|on the market|approved for sale|post[- ]market'
-              THEN 'commercial'
-            WHEN txt ~* '\\mphase\\s*(?:III|3)\\M(?!\\s*/)'
-              THEN 'phase 3'
-            WHEN txt ~* '\\mphase\\s*(?:II|2)\\s*/\\s*(?:III|3)\\M'
-              THEN 'phase 2'
-            WHEN txt ~* '\\mphase\\s*(?:II|2)\\M(?!\\s*/)'
-              THEN 'phase 2'
-            WHEN txt ~* '\\mphase\\s*(?:I|1)\\M|\\mphase\\s*(?:I|1)\\s*/\\s*(?:II|2)\\M'
-              THEN 'phase 1'
-            WHEN txt ~* '\\mIND\\s+(?:filed|application|submitted|approved|enabling)\\M|\\mIND-enabling\\M'
-              THEN 'IND filed'
-            WHEN txt ~* '\\mpreclinical\\M|\\mpre[- ]clinical\\M|\\mlead[- ]optimi[sz]ation\\M'
-              THEN 'preclinical'
-            WHEN txt ~* '\\mdiscovery stage\\M|\\mearly[- ]stage discovery\\M|\\mhit[- ]to[- ]lead\\M|\\mhit identification\\M|\\mtarget validation\\M'
-              THEN 'discovery'
-          END AS new_stage
+        SELECT ${STAGE_SQL_CASE} AS new_stage
         FROM (
           SELECT LOWER(COALESCE(summary, '') || ' ' || COALESCE(abstract, '')) AS txt
           FROM ingested_assets
           WHERE relevant = true
             AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
             AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+            ${ASSET_CLASS_FILTER}
         ) t
       )
       SELECT new_stage, COUNT(*)::int AS cnt
@@ -210,37 +233,19 @@ async function runPhase1(): Promise<{ filled: number; rescored: number }> {
     const total = dryRes.rows.reduce((s, r) => s + Number(r.cnt), 0);
     console.log(`  [DRY RUN] Would fill ${total} assets:`);
     dryRes.rows.forEach((r) => console.log(`    ${r.new_stage}: ${r.cnt}`));
-    return { filled: total, rescored: 0 };
+    return { filled: total, rescored: 0, scanned: eligible };
   }
 
   const res = await pool.query<{ id: number }>(`
     WITH fills AS (
-      SELECT id,
-        CASE
-          WHEN txt ~* '\\mFDA[- ]approved\\M|\\mFDA[- ]cleared\\M|commercially available|marketed drug|on the market|approved for sale|post[- ]market'
-            THEN 'commercial'
-          WHEN txt ~* '\\mphase\\s*(?:III|3)\\M(?!\\s*/)'
-            THEN 'phase 3'
-          WHEN txt ~* '\\mphase\\s*(?:II|2)\\s*/\\s*(?:III|3)\\M'
-            THEN 'phase 2'
-          WHEN txt ~* '\\mphase\\s*(?:II|2)\\M(?!\\s*/)'
-            THEN 'phase 2'
-          WHEN txt ~* '\\mphase\\s*(?:I|1)\\M|\\mphase\\s*(?:I|1)\\s*/\\s*(?:II|2)\\M'
-            THEN 'phase 1'
-          WHEN txt ~* '\\mIND\\s+(?:filed|application|submitted|approved|enabling)\\M|\\mIND-enabling\\M'
-            THEN 'IND filed'
-          WHEN txt ~* '\\mpreclinical\\M|\\mpre[- ]clinical\\M|\\mlead[- ]optimi[sz]ation\\M'
-            THEN 'preclinical'
-          WHEN txt ~* '\\mdiscovery stage\\M|\\mearly[- ]stage discovery\\M|\\mhit[- ]to[- ]lead\\M|\\mhit identification\\M|\\mtarget validation\\M'
-            THEN 'discovery'
-        END AS new_stage,
-        id AS asset_id
+      SELECT id, ${STAGE_SQL_CASE} AS new_stage, id AS asset_id
       FROM (
         SELECT id, LOWER(COALESCE(summary, '') || ' ' || COALESCE(abstract, '')) AS txt
         FROM ingested_assets
         WHERE relevant = true
           AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
           AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+          ${ASSET_CLASS_FILTER}
       ) t
     )
     UPDATE ingested_assets ia
@@ -259,7 +264,7 @@ async function runPhase1(): Promise<{ filled: number; rescored: number }> {
   const rescored = await rescoreAssets(res.rows.map((r) => r.id));
   console.log(`  Rescored: ${rescored} assets`);
 
-  return { filled, rescored };
+  return { filled, rescored, scanned: eligible };
 }
 
 // ── Phase 2: LLM ─────────────────────────────────────────────────────────────
@@ -267,34 +272,53 @@ const LLM_CONCURRENCY = 5;
 const COST_PER_INPUT_TOKEN = 0.15 / 1_000_000;  // gpt-4o-mini
 const COST_PER_OUTPUT_TOKEN = 0.60 / 1_000_000;
 
-async function runPhase2(
-  cap = CAP,
-): Promise<{ processed: number; filled: number; unknown_: number; skipped: number; costUsd: number }> {
+interface Phase2Result {
+  scanned: number;
+  processed: number;
+  filled: number;
+  unknown_: number;
+  skippedInsufficient: number;
+  costUsd: number;
+}
+
+async function runPhase2(cap = CAP): Promise<Phase2Result> {
   console.log("\n── Phase 2: LLM extraction (gpt-4o-mini) ──");
+  console.log(`  Scope: relevant drug/biologic assets with ≥120 chars`);
 
   if (!process.env.OPENAI_API_KEY) {
     console.warn("  OPENAI_API_KEY not set — skipping Phase 2");
-    return { processed: 0, filled: 0, unknown_: 0, skipped: 0, costUsd: 0 };
+    return { scanned: 0, processed: 0, filled: 0, unknown_: 0, skippedInsufficient: 0, costUsd: 0 };
   }
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  const { rows } = await pool.query<{
-    id: number; summary: string; abstract: string | null;
-    modality: string | null; indication: string | null;
-    mechanism_of_action: string | null; ip_type: string | null; patent_status: string | null;
-  }>(
-    `SELECT id, summary, abstract, modality, indication, mechanism_of_action, ip_type, patent_status
+  // Count assets that have text but < 120 chars (insufficient for LLM, eligible for regex)
+  const countRes = await pool.query<{ llm_eligible: string; insufficient: string }>(`
+    SELECT
+      COUNT(*) FILTER (WHERE char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120)::int AS llm_eligible,
+      COUNT(*) FILTER (WHERE char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+                         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 120)::int AS insufficient
+    FROM ingested_assets
+    WHERE relevant = true
+      AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
+      ${ASSET_CLASS_FILTER}
+  `);
+  const llmEligible = Number(countRes.rows[0]?.llm_eligible ?? 0);
+  const skippedInsufficient = Number(countRes.rows[0]?.insufficient ?? 0);
+  console.log(`  Eligible for LLM (≥120 chars): ${llmEligible.toLocaleString()} (cap=${cap})`);
+  console.log(`  Skipped (insufficient text)  : ${skippedInsufficient.toLocaleString()} (50–119 chars)`);
+  if (llmEligible === 0) return { scanned: llmEligible, processed: 0, filled: 0, unknown_: 0, skippedInsufficient, costUsd: 0 };
+
+  const { rows } = await pool.query<{ id: number; summary: string; abstract: string | null }>(
+    `SELECT id, summary, abstract
      FROM ingested_assets
      WHERE relevant = true
        AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+       ${ASSET_CLASS_FILTER}
      ORDER BY COALESCE(completeness_score, 0) DESC
      LIMIT $1`,
     [Math.min(cap, 10000)],
   );
-
-  console.log(`  Eligible for LLM: ${rows.length} assets (cap=${cap})`);
-  if (rows.length === 0) return { processed: 0, filled: 0, unknown_: 0, skipped: 0, costUsd: 0 };
 
   const estCost = rows.length * (700 * COST_PER_INPUT_TOKEN + 5 * COST_PER_OUTPUT_TOKEN);
   console.log(`  Estimated cost: $${estCost.toFixed(3)}`);
@@ -302,9 +326,6 @@ async function runPhase2(
   let processed = 0;
   let filled = 0;
   let unknown_ = 0;
-  let skipped = 0;
-  let inputTokens = 0;
-  let outputTokens = 0;
   const filledIds: number[] = [];
 
   async function processOne(row: typeof rows[0]): Promise<void> {
@@ -312,7 +333,6 @@ async function runPhase2(
     const stage = await extractStageByLLM(text, openai);
     processed++;
 
-    if (stage === null) { skipped++; return; }
     if (stage === "unknown") { unknown_++; return; }
 
     if (!DRY_RUN) {
@@ -329,11 +349,10 @@ async function runPhase2(
 
     if (processed % 50 === 0) {
       const pct = ((processed / rows.length) * 100).toFixed(0);
-      process.stdout.write(`\r  [${pct}%] processed=${processed} filled=${filled} unknown=${unknown_} skip=${skipped}`);
+      process.stdout.write(`\r  [${pct}%] processed=${processed} filled=${filled} unknown=${unknown_}`);
     }
   }
 
-  // Bounded concurrency pool
   const queue = [...rows];
   const workers = Array.from({ length: Math.min(LLM_CONCURRENCY, queue.length) }, async () => {
     while (queue.length > 0) {
@@ -345,17 +364,14 @@ async function runPhase2(
 
   process.stdout.write("\n");
 
-  const costUsd = (inputTokens * COST_PER_INPUT_TOKEN) + (outputTokens * COST_PER_OUTPUT_TOKEN);
-  const estActualCost = filled * (700 * COST_PER_INPUT_TOKEN + 5 * COST_PER_OUTPUT_TOKEN) +
-    (processed - filled - unknown_) * (200 * COST_PER_INPUT_TOKEN + 5 * COST_PER_OUTPUT_TOKEN);
-
-  console.log(`  Filled: ${filled}  Unknown: ${unknown_}  Skipped: ${skipped}`);
+  const estActualCost = processed * (700 * COST_PER_INPUT_TOKEN + 5 * COST_PER_OUTPUT_TOKEN);
+  console.log(`  Filled: ${filled}  Unknown: ${unknown_}`);
   console.log(`  Est. actual cost: $${estActualCost.toFixed(4)}`);
 
   const rescored = await rescoreAssets(filledIds);
   console.log(`  Rescored: ${rescored} assets`);
 
-  return { processed, filled, unknown_, skipped, costUsd: estActualCost };
+  return { scanned: llmEligible, processed, filled, unknown_, skippedInsufficient, costUsd: estActualCost };
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
@@ -367,16 +383,19 @@ async function runPhase2(
   console.log(`╚═══════════════════════════════════╝`);
   if (ONLY_PHASE) console.log(`Phase filter: ${ONLY_PHASE}`);
 
-  let p1 = { filled: 0, rescored: 0 };
-  let p2 = { processed: 0, filled: 0, unknown_: 0, skipped: 0, costUsd: 0 };
+  let p1 = { filled: 0, rescored: 0, scanned: 0 };
+  let p2: Phase2Result = { scanned: 0, processed: 0, filled: 0, unknown_: 0, skippedInsufficient: 0, costUsd: 0 };
 
   if (!ONLY_PHASE || ONLY_PHASE === 1) p1 = await runPhase1();
   if (!ONLY_PHASE || ONLY_PHASE === 2) p2 = await runPhase2();
 
   const dur = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`\n══ Summary ════════════════════════`);
+  console.log(`  Total scanned        : ${(p1.scanned + p2.skippedInsufficient).toLocaleString()}`);
   console.log(`  Phase 1 regex filled : ${p1.filled}`);
-  console.log(`  Phase 2 LLM filled   : ${p2.filled}  (${p2.unknown_} unknown, ${p2.skipped} skipped)`);
+  console.log(`  Phase 2 LLM filled   : ${p2.filled}`);
+  console.log(`  LLM unknown / no-sig : ${p2.unknown_}`);
+  console.log(`  Skipped (insuff. txt): ${p2.skippedInsufficient}`);
   console.log(`  Total filled         : ${p1.filled + p2.filled}`);
   console.log(`  Est. LLM cost        : $${p2.costUsd.toFixed(4)}`);
   console.log(`  Duration             : ${dur}s`);
