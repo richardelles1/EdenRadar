@@ -175,100 +175,72 @@ const DESCRIPTION_SELECTORS = [
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Platform 1: TechLink (DoD + VA) via Playwright ES XHR intercept
+// Platform 1: TechLink (DoD + VA) — public REST API /api/v2/projects/{id}
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Uses Playwright to load the TechLink listing page and intercept the
- * Elasticsearch search request. Captures the ES URL + Authorization header.
- * Returns null if intercept fails (e.g. Playwright not available).
+ * Calls the TechLink public REST API for a single project.
+ * API endpoint: https://techlinkcenter.org/api/v2/projects/{id}
+ * The {id} is the slug parsed from the source URL (last path segment before any UUID).
+ *
+ * Returns an object with the concatenated description text, or throws on network failure.
+ * Returns null if the API response is non-JSON, empty, or yields insufficient text.
  */
-async function captureTechLinkEsAuth(
-  pageUrl: string,
-  waitMs = 10_000,
-): Promise<{ esUrl: string; esAuth: string } | null> {
-  let browser: import("playwright").Browser | null = null;
-  try {
-    const { chromium } = await import("playwright");
-    browser = await chromium.launch({
-      headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-    });
-    const page = await browser.newPage();
-    await page.setExtraHTTPHeaders({ "User-Agent": UA, "Accept-Language": "en-US,en;q=0.9" });
+async function fetchTechLinkProject(slug: string): Promise<FetchResult | null> {
+  const apiUrl = `https://techlinkcenter.org/api/v2/projects/${encodeURIComponent(slug)}`;
+  const res = await fetch(apiUrl, {
+    headers: {
+      "Accept": "application/json",
+      "User-Agent": UA,
+    },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
 
-    let esUrl: string | null = null;
-    let esAuth: string | null = null;
+  // Treat non-2xx as a hard failure (caller will log it)
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${apiUrl}`);
 
-    page.on("request", (req) => {
-      const url = req.url();
-      if (!url.includes("es.amazonaws.com") || !url.includes("_search")) return;
-      if (!esUrl) {
-        esUrl = url;
-        esAuth = req.headers()["authorization"] ?? null;
-      }
-    });
-
-    await page.goto(pageUrl, { timeout: 60_000, waitUntil: "domcontentloaded" });
-    await page.waitForTimeout(waitMs);
-    await browser.close();
-    browser = null;
-
-    if (esUrl && esAuth) return { esUrl, esAuth };
-    return null;
-  } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`\n  [techlink] Playwright ES capture failed: ${msg}`);
-    return null;
-  } finally {
-    await browser?.close();
+  const ct = res.headers.get("content-type") ?? "";
+  if (!ct.includes("application/json") && !ct.includes("text/json")) {
+    // API returned HTML (React SPA shell) — no data available
+    throw new Error(`Non-JSON response (${ct}) from ${apiUrl}`);
   }
+
+  const json = await res.json() as Record<string, unknown>;
+
+  // Extract all text-bearing fields; concatenate for a rich abstract
+  const fields = [
+    json?.description, json?.objectives, json?.benefits,
+    json?.abstract, json?.summary, json?.body,
+    (json?.data as Record<string, unknown>)?.description,
+    (json?.data as Record<string, unknown>)?.abstract,
+  ];
+  const combined = fields
+    .map((f) => cleanText(stripHtml(String(f ?? ""))))
+    .filter((s) => s.length >= 10)
+    .join(" ")
+    .slice(0, 5000);
+
+  return combined.length >= MIN_USEFUL_LENGTH ? { abstract: combined } : null;
 }
 
 /**
- * Executes a targeted Elasticsearch query against TechLink's ES cluster.
- * Returns the first hit's description fields, or null if not found.
+ * Parses the stable project ID (slug) from a TechLink source URL.
+ *
+ * URL formats:
+ *   /technologies/{slug}
+ *   /technologies/{slug}/{uuid}
+ *   /va-technologies/{slug}/{numeric-id}
+ *
+ * Returns the slug segment (the first non-UUID, non-numeric-id path segment
+ * after "/technologies/" or "/va-technologies/").
  */
-async function queryTechLinkEs(
-  esUrl: string,
-  esAuth: string,
-  slug: string | null,
-  numericId: string | null,
-): Promise<string | null> {
-  try {
-    const urlObj = new URL(esUrl);
-
-    // Build a targeted query: prefer numeric ID match (exact), fall back to slug match
-    const query = numericId
-      ? { query: { term: { "id": numericId } } }
-      : slug
-      ? { query: { bool: { should: [
-          { term: { "slug.keyword": slug } },
-          { match: { "slug": { query: slug, fuzziness: 0 } } },
-        ] } }, size: 1 }
-      : null;
-
-    if (!query) return null;
-
-    // Build a fresh search URL (same index, fresh query)
-    const searchUrl = `${urlObj.origin}${urlObj.pathname.replace(/\?.*/, "")}?source=${encodeURIComponent(JSON.stringify({ ...query, size: 1 }))}&source_content_type=application/json`;
-
-    const res = await fetch(searchUrl, {
-      headers: { "Accept": "application/json, text/plain, */*", "Authorization": esAuth },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-
-    const data = await res.json() as Record<string, unknown>;
-    const hits = ((data.hits as Record<string, unknown>)?.hits ?? []) as unknown[];
-    if (hits.length === 0) return null;
-
-    const src = (hits[0] as Record<string, unknown>)._source as Record<string, unknown> ?? {};
-    const desc = String(src.description ?? src.abstract ?? src.summary ?? src.body ?? "").trim();
-    return desc.length >= MIN_USEFUL_LENGTH ? desc.slice(0, 5000) : null;
-  } catch {
-    return null;
-  }
+function parseTechLinkId(url: string): string | null {
+  const m = url.match(/\/(?:va-)?technologies\/([^/?#]+)/);
+  if (!m) return null;
+  const candidate = m[1];
+  // If this segment IS a UUID or numeric-only, the slug is not in the URL
+  if (/^[0-9a-f]{8}-/i.test(candidate) || /^\d+$/.test(candidate)) return null;
+  return candidate;
 }
 
 async function processTechLink(assets: AssetRow[]): Promise<void> {
@@ -276,73 +248,37 @@ async function processTechLink(assets: AssetRow[]): Promise<void> {
   initStats(platform, assets.length);
   if (assets.length === 0) return;
 
-  console.log(`\n[${platform}] ${assets.length} thin assets. Capturing ES auth via Playwright...`);
-
-  // Capture DoD ES auth
-  const dodAuth = await captureTechLinkEsAuth("https://techlinkcenter.org/technologies", 10_000);
-  if (dodAuth) console.log(`  [${platform}] DoD ES auth captured ✓`);
-  else console.warn(`  [${platform}] DoD ES auth FAILED — DoD assets will use generic HTML fallback`);
-
-  // Capture VA ES auth
-  const vaAuth = await captureTechLinkEsAuth("https://techlinkcenter.org/va-technologies/", 12_000);
-  if (vaAuth) console.log(`  [${platform}] VA ES auth captured ✓`);
-  else console.warn(`  [${platform}] VA ES auth FAILED — VA assets will use generic HTML fallback`);
+  console.log(`\n[${platform}] ${assets.length} thin assets — calling /api/v2/projects/{id}`);
 
   for (let i = 0; i < assets.length; i += CONCURRENCY) {
     const batch = assets.slice(i, i + CONCURRENCY);
     await Promise.all(batch.map(async (row) => {
-      const url = row.source_url;
-      const isVA = url.includes("/va-technologies/");
-      const auth = isVA ? vaAuth : dodAuth;
-
-      // Parse slug and optional numeric ID from URL
-      // DoD:  /technologies/{slug}           (no ID)
-      // DoD:  /technologies/{slug}/{uuid}
-      // VA:   /va-technologies/{slug}/{id}   (numeric ID)
-      const parts = url.split("/").filter(Boolean);
-      const lastPart = parts[parts.length - 1] ?? "";
-      const secondLast = parts[parts.length - 2] ?? "";
-      const isNumericId = /^\d+$/.test(lastPart);
-      const isUuidLike = /^[0-9a-f]{8}-/.test(lastPart.toLowerCase());
-
-      let slug: string | null = null;
-      let numericId: string | null = null;
-
-      if (isNumericId) {
-        numericId = lastPart;
-        slug = secondLast || null;
-      } else if (isUuidLike) {
-        slug = secondLast || null;
-      } else {
-        slug = lastPart || null;
+      const id = parseTechLinkId(row.source_url);
+      if (!id) {
+        // URL has no parseable slug — log and count as failed
+        console.warn(`\n  [${platform}] FAIL id=${row.id}: cannot parse slug from ${row.source_url}`);
+        stats[platform].failed++;
+        trackInst(row.institution, "failed");
+        logProgress(platform);
+        return;
       }
 
-      let abstract: string | null = null;
-
-      // Try ES query first (fast)
-      if (auth) {
-        abstract = await queryTechLinkEs(auth.esUrl, auth.esAuth, slug, numericId);
-      }
-
-      // Fall back to generic HTML (TechLink is a React SPA — will likely get empty shell)
-      if (!abstract || abstract.length < MIN_USEFUL_LENGTH) {
-        const html = await fetchHtml(url);
-        if (html) {
-          const $ = load(html);
-          for (const sel of DESCRIPTION_SELECTORS) {
-            const text = cleanText($(sel).text());
-            if (text.length >= MIN_USEFUL_LENGTH) { abstract = text.slice(0, 5000); break; }
-          }
+      try {
+        const result = await fetchTechLinkProject(id);
+        if (result) {
+          await queueWrite(row.id, result);
+          stats[platform].fetched++;
+          trackInst(row.institution, "fetched");
+        } else {
+          // API responded but returned no usable text
+          stats[platform].skipped++;
+          trackInst(row.institution, "skipped");
         }
-      }
-
-      if (abstract && abstract.length >= MIN_USEFUL_LENGTH) {
-        await queueWrite(row.id, { abstract });
-        stats[platform].fetched++;
-        trackInst(row.institution, "fetched");
-      } else {
-        stats[platform].skipped++;
-        trackInst(row.institution, "skipped");
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`\n  [${platform}] FAIL id=${row.id} slug=${id}: ${msg}`);
+        stats[platform].failed++;
+        trackInst(row.institution, "failed");
       }
       logProgress(platform);
     }));
@@ -353,61 +289,65 @@ async function processTechLink(assets: AssetRow[]): Promise<void> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Platform 2: TechnologyPublisher — cheerio HTML fetch
+// Platform 2: TechnologyPublisher — detail-page re-fetch by slug/ID
+//
+// TechnologyPublisher sites serve individual technology pages at:
+//   https://{subdomain}.technologypublisher.com/technology/{numeric-id}
+//   https://{subdomain}.technologypublisher.com/tech/{slug}
+//
+// Each source URL stored in the DB IS the per-record detail endpoint. Fetching
+// it and parsing the `.c_tp_description` selector retrieves the full abstract
+// (same approach used by the production techpublisher-retroactive-refetch.ts).
 // ══════════════════════════════════════════════════════════════════════════════
 
-const TP_DESC_SELECTORS = [
-  ".c_tp_description", ".tech-description",
-  ".field--name-body .field__item", ".field--name-body",
-  ".technology-listing-description", "#field-description",
-  ".views-field-body .field-content", ".tech-detail__description",
-  ".technology-description", "#description", ".description",
-  "article .content", ".entry-content",
-];
-
-const NEXT_DATA_RE = /<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/;
-
+/**
+ * Fetches a TechnologyPublisher detail page (URL = the slug-based record endpoint
+ * stored in source_url) and extracts the description.
+ *
+ * Throws on HTTP errors → caller classifies as `failed`.
+ * Returns null when the page loads but yields no description → caller classifies as `skipped`.
+ */
 async function fetchTechPublisherAbstract(url: string): Promise<FetchResult | null> {
-  const html = await fetchHtml(url);
-  if (!html) return null;
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+
+  const html = await res.text();
+  if (html.length < 500) throw new Error(`Response too short (${html.length} bytes) for ${url}`);
+
   const $ = load(html);
 
-  // Pass 1: standard selectors — highest fidelity
-  for (const sel of TP_DESC_SELECTORS) {
-    const text = cleanText(stripHtml($(sel).html() ?? $(sel).text()));
+  // Primary: .c_tp_description — the canonical TechnologyPublisher description block
+  const descText = cleanText(stripHtml($(".c_tp_description").first().html() ?? ""));
+  if (descText.length >= MIN_USEFUL_LENGTH) {
+    // Also extract patent status and inventors as the retroactive-refetch script does
+    let patentStatus: string | null = null;
+    const patentRows = $(".c_tp_patent tr").slice(1);
+    if (patentRows.length > 0) {
+      const cells = patentRows.first().find("td");
+      const appType = cells.eq(1).text().trim();
+      const patTitle = cells.eq(0).text().trim();
+      if (appType || patTitle) patentStatus = [appType, patTitle].filter(Boolean).join(" — ").slice(0, 200);
+    }
+    void patentStatus; // available for future write-back; not in schema yet
+    return { abstract: descText.slice(0, 5000) };
+  }
+
+  // Fallback: other well-known TechnologyPublisher description selectors
+  const fallbackSelectors = [
+    ".tech-description", ".field--name-body .field__item", ".field--name-body",
+    ".technology-listing-description", "#field-description",
+    ".views-field-body .field-content", ".tech-detail__description",
+    ".technology-description",
+  ];
+  for (const sel of fallbackSelectors) {
+    const text = cleanText(stripHtml($(sel).first().html() ?? $(sel).first().text()));
     if (text.length >= MIN_USEFUL_LENGTH) return { abstract: text.slice(0, 5000) };
   }
 
-  // Pass 2: Next.js dehydrated state — some TP sites are React SPAs
-  const ndm = NEXT_DATA_RE.exec(html);
-  if (ndm) {
-    try {
-      const nd = JSON.parse(ndm[1]) as Record<string, unknown>;
-      const queries: Record<string, unknown>[] =
-        (((nd?.props as Record<string, unknown>)?.pageProps as Record<string, unknown>)
-          ?.dehydratedState as Record<string, unknown>)?.queries as Record<string, unknown>[] ?? [];
-      for (const q of queries) {
-        const data = (q?.state as Record<string, unknown>)?.data as Record<string, unknown>;
-        if (!data) continue;
-        const details = (data?.details ?? data) as Record<string, unknown>;
-        const desc = String(details?.description ?? details?.abstract ?? details?.body ?? details?.precis ?? "").trim();
-        if (desc.length >= MIN_USEFUL_LENGTH) return { abstract: desc.slice(0, 5000) };
-      }
-    } catch {}
-  }
-
-  // Pass 3: longest paragraph in #content (many TTO sites use this structure)
-  const contentTexts: string[] = [];
-  $("#content p, #main p, main p, .content p, article p").each((_, el) => {
-    const t = cleanText($(el).text());
-    if (t.length >= MIN_USEFUL_LENGTH) contentTexts.push(t);
-  });
-  if (contentTexts.length > 0) {
-    const combined = contentTexts.join(" ").slice(0, 5000);
-    if (combined.length >= MIN_USEFUL_LENGTH) return { abstract: combined };
-  }
-
-  return null;
+  return null; // page loaded but no description found → caller counts as skipped
 }
 
 async function processTechPublisher(assets: AssetRow[]): Promise<void> {
