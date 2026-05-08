@@ -1,4 +1,6 @@
 import crypto from "crypto";
+import fs from "fs";
+import path from "path";
 import { captureException as sentryCaptureException } from "./lib/sentry";
 import rateLimit from "express-rate-limit";
 import { cacheGet, cacheSet } from "./lib/responseCache";
@@ -316,6 +318,23 @@ function relevanceEvalCacheKey(classifierVersion: string, weightsSig: string): s
 }
 function invalidateRelevanceEvalCache(): void {
   relevanceEvalCache = null;
+}
+
+// ── Re-fetch state persistence (Bug 8) ───────────────────────────────────────
+// Persists lastSummary for all re-fetch handlers so a server restart doesn't
+// wipe progress history. Band/mini-enrich/EDEN already persist via the DB;
+// TTO/InPart/Flintbox/TP/Columbia/Rescore/Classify/DrugBiologic use this file.
+const REFETCH_STATE_FILE = path.join(process.cwd(), ".local", "refetch-state.json");
+let _refetchState: Record<string, unknown> = {};
+try {
+  _refetchState = JSON.parse(fs.readFileSync(REFETCH_STATE_FILE, "utf8"));
+} catch {}
+function saveRefetchState(key: string, value: unknown): void {
+  try {
+    _refetchState[key] = value;
+    fs.mkdirSync(path.dirname(REFETCH_STATE_FILE), { recursive: true });
+    fs.writeFileSync(REFETCH_STATE_FILE, JSON.stringify(_refetchState, null, 2));
+  } catch {}
 }
 
 export async function registerRoutes(
@@ -4572,7 +4591,7 @@ export async function registerRoutes(
   let classifyLastSummary: {
     succeeded: number; failed: number; skipped: number; total: number;
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; completedAt: string;
-  } | null = null;
+  } | null = (_refetchState.classify as typeof classifyLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/classify-unclassified/count", requireAdmin, async (req, res) => {
     try {
@@ -4718,6 +4737,7 @@ export async function registerRoutes(
           durationMs,
           completedAt: new Date().toISOString(),
         };
+        saveRefetchState("classify", classifyLastSummary);
         console.log(`[classify] Complete: ${result.succeeded} classified, ${result.skipped} thin-skipped, ${result.failed} failed — $${costUsd.toFixed(4)}`);
       }).catch((e) => {
         classifyRunning = false;
@@ -4809,7 +4829,8 @@ export async function registerRoutes(
   let drSkipped = 0;
   let drAbortController: AbortController | null = null;
   let drStartMs = 0;
-  let drLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string; institution?: string } | null = null;
+  let drLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string; institution?: string } | null =
+    (_refetchState.tto as typeof drLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/detail-refetch/count", requireAdmin, async (req, res) => {
     try {
@@ -4823,6 +4844,7 @@ export async function registerRoutes(
           AND source_url IS NOT NULL
           AND source_url NOT ILIKE '%in-part.com%'
           AND source_url NOT ILIKE '%flintbox.com%'
+          AND source_url NOT ILIKE '%technologypublisher.com%'
           ${institution ? sql`AND institution = ${institution}` : sql``}
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -4872,6 +4894,7 @@ export async function registerRoutes(
           AND source_url IS NOT NULL
           AND source_url NOT ILIKE '%in-part.com%'
           AND source_url NOT ILIKE '%flintbox.com%'
+          AND source_url NOT ILIKE '%technologypublisher.com%'
           ${institution ? sql`AND institution = ${institution}` : sql``}
         ORDER BY
           COALESCE(completeness_score, 0) DESC
@@ -4933,6 +4956,7 @@ export async function registerRoutes(
         completedAt: new Date().toISOString(),
         institution: institution ?? undefined,
       };
+      saveRefetchState("tto", drLastSummary);
       console.log(`[detail-refetch] Complete: ${drEnriched} enriched, ${drSkipped} skipped of ${drTotal} thin TTO assets${institution ? ` (${institution})` : ""} in ${Date.now() - drStartMs}ms`);
     } catch (err: any) {
       console.error("[detail-refetch] Error:", err.message);
@@ -4954,10 +4978,12 @@ export async function registerRoutes(
   let irProcessed = 0;
   let irTotal = 0;
   let irEnriched = 0;
+  let irPartial = 0;
   let irSkipped = 0;
   let irAbortController: AbortController | null = null;
   let irStartMs = 0;
-  let irLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+  let irLastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null =
+    (_refetchState.inpart as typeof irLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/inpart-refetch/count", requireAdmin, async (_req, res) => {
     try {
@@ -4980,6 +5006,7 @@ export async function registerRoutes(
       processed: irProcessed,
       total: irTotal,
       enriched: irEnriched,
+      partial: irPartial,
       skipped: irSkipped,
       elapsedMs: irRunning ? Date.now() - irStartMs : 0,
       lastSummary: irLastSummary,
@@ -4998,6 +5025,7 @@ export async function registerRoutes(
     irProcessed = 0;
     irTotal = 0;
     irEnriched = 0;
+    irPartial = 0;
     irSkipped = 0;
     irAbortController = new AbortController();
     const { signal } = irAbortController;
@@ -5025,7 +5053,7 @@ export async function registerRoutes(
           try {
             const fetchRes = await fetch(row.source_url, {
               headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-              signal: AbortSignal.timeout(INPART_RE_TIMEOUT),
+              signal: AbortSignal.any([signal, AbortSignal.timeout(INPART_RE_TIMEOUT)]),
             });
             if (!fetchRes.ok) { irProcessed++; irSkipped++; continue; }
             const html = await fetchRes.text();
@@ -5055,8 +5083,8 @@ export async function registerRoutes(
                 .slice(0, 1_000);
             }
 
-            const description = precis || bodyText;
-            if (description.length >= 50) {
+            const description = bodyText || precis;
+            if (description.length >= 120) {
               const newSummary = description.slice(0, 5_000);
               await db.execute(sql`
                 UPDATE ingested_assets
@@ -5066,6 +5094,8 @@ export async function registerRoutes(
                 WHERE id = ${row.id}
               `);
               irEnriched++;
+            } else if (description.length >= 50) {
+              irPartial++;
             } else {
               irSkipped++;
             }
@@ -5081,12 +5111,14 @@ export async function registerRoutes(
 
       irLastSummary = {
         enriched: irEnriched,
+        partial: irPartial,
         skipped: irSkipped,
         total: irTotal,
         durationMs: Date.now() - irStartMs,
         completedAt: new Date().toISOString(),
       };
-      console.log(`[inpart-refetch] Complete: ${irEnriched} enriched, ${irSkipped} skipped of ${irTotal} thin InPart assets in ${Date.now() - irStartMs}ms`);
+      saveRefetchState("inpart", irLastSummary);
+      console.log(`[inpart-refetch] Complete: ${irEnriched} enriched, ${irPartial} partial, ${irSkipped} skipped of ${irTotal} thin InPart assets in ${Date.now() - irStartMs}ms`);
     } catch (err: any) {
       console.error("[inpart-refetch] Error:", err.message);
     } finally {
@@ -5106,10 +5138,12 @@ export async function registerRoutes(
   let fbProcessed = 0;
   let fbTotal = 0;
   let fbEnriched = 0;
+  let fbPartial = 0;
   let fbSkipped = 0;
   let fbAbortController: AbortController | null = null;
   let fbStartMs = 0;
-  let fbLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+  let fbLastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null =
+    (_refetchState.flintbox as typeof fbLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/flintbox-refetch/count", requireAdmin, async (_req, res) => {
     try {
@@ -5132,6 +5166,7 @@ export async function registerRoutes(
       processed: fbProcessed,
       total: fbTotal,
       enriched: fbEnriched,
+      partial: fbPartial,
       skipped: fbSkipped,
       elapsedMs: fbRunning ? Date.now() - fbStartMs : 0,
       lastSummary: fbLastSummary,
@@ -5150,6 +5185,7 @@ export async function registerRoutes(
     fbProcessed = 0;
     fbTotal = 0;
     fbEnriched = 0;
+    fbPartial = 0;
     fbSkipped = 0;
     fbAbortController = new AbortController();
     const { signal } = fbAbortController;
@@ -5190,6 +5226,7 @@ export async function registerRoutes(
         if (signal.aborted) break;
         const batch = rows.rows.slice(batchStart, batchStart + FB_RE_CONCURRENCY);
         await Promise.all(batch.map(async (row) => {
+          if (signal.aborted) { fbProcessed++; fbSkipped++; return; }
           if (!row?.source_url) { fbProcessed++; fbSkipped++; return; }
 
           const urlMatch = row.source_url.match(/^https?:\/\/([^.]+)\.flintbox\.com\/technologies\/([^/?#]+)/);
@@ -5209,17 +5246,24 @@ export async function registerRoutes(
                 "X-Requested-With": "XMLHttpRequest",
                 "User-Agent": "Mozilla/5.0",
               },
-              signal: AbortSignal.timeout(FB_RE_TIMEOUT),
+              signal: AbortSignal.any([signal, AbortSignal.timeout(FB_RE_TIMEOUT)]),
             });
             if (!fetchRes.ok) { fbProcessed++; fbSkipped++; return; }
             const json = await fetchRes.json() as any;
             const attrs = json?.data?.attributes ?? json?.attributes ?? json;
             // Prioritised fallback: description → fullDescription → abstract
             const descRaw = stripFbHtml(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract ?? "");
+            const benefitRaw = stripFbHtml(attrs?.benefit ?? "");
             const marketRaw = stripFbHtml(attrs?.marketApplication ?? "");
-            const combined = [descRaw, marketRaw].filter((s) => s.length > 0).join(" ").slice(0, 5_000);
+            const kp1 = stripFbHtml(attrs?.keyPoint1 ?? "");
+            const kp2 = stripFbHtml(attrs?.keyPoint2 ?? "");
+            const kp3 = stripFbHtml(attrs?.keyPoint3 ?? "");
+            const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3]
+              .filter((s) => s.length > 0)
+              .join(" ")
+              .slice(0, 5_000);
 
-            if (combined.length >= 50) {
+            if (combined.length >= 120) {
               await db.execute(sql`
                 UPDATE ingested_assets
                 SET summary = ${combined},
@@ -5228,6 +5272,8 @@ export async function registerRoutes(
                 WHERE id = ${row.id}
               `);
               fbEnriched++;
+            } else if (combined.length >= 50) {
+              fbPartial++;
             } else {
               fbSkipped++;
             }
@@ -5244,12 +5290,14 @@ export async function registerRoutes(
 
       fbLastSummary = {
         enriched: fbEnriched,
+        partial: fbPartial,
         skipped: fbSkipped,
         total: fbTotal,
         durationMs: Date.now() - fbStartMs,
         completedAt: new Date().toISOString(),
       };
-      console.log(`[flintbox-refetch] Complete: ${fbEnriched} enriched, ${fbSkipped} skipped of ${fbTotal} thin Flintbox assets in ${Date.now() - fbStartMs}ms`);
+      saveRefetchState("flintbox", fbLastSummary);
+      console.log(`[flintbox-refetch] Complete: ${fbEnriched} enriched, ${fbPartial} partial, ${fbSkipped} skipped of ${fbTotal} thin Flintbox assets in ${Date.now() - fbStartMs}ms`);
     } catch (err: any) {
       console.error("[flintbox-refetch] Error:", err.message);
     } finally {
@@ -5272,10 +5320,12 @@ export async function registerRoutes(
   let tpProcessed = 0;
   let tpTotal = 0;
   let tpEnriched = 0;
+  let tpPartial = 0;
   let tpSkipped = 0;
   let tpAbortController: AbortController | null = null;
   let tpStartMs = 0;
-  let tpLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+  let tpLastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null =
+    (_refetchState.techpublisher as typeof tpLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/techpublisher-refetch/count", requireAdmin, async (_req, res) => {
     try {
@@ -5283,7 +5333,7 @@ export async function registerRoutes(
         SELECT COUNT(*)::int AS total
         FROM ingested_assets
         WHERE source_url ILIKE '%technologypublisher.com%'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -5298,6 +5348,7 @@ export async function registerRoutes(
       processed: tpProcessed,
       total: tpTotal,
       enriched: tpEnriched,
+      partial: tpPartial,
       skipped: tpSkipped,
       elapsedMs: tpRunning ? Date.now() - tpStartMs : 0,
       lastSummary: tpLastSummary,
@@ -5316,6 +5367,7 @@ export async function registerRoutes(
     tpProcessed = 0;
     tpTotal = 0;
     tpEnriched = 0;
+    tpPartial = 0;
     tpSkipped = 0;
     tpAbortController = new AbortController();
     const { signal } = tpAbortController;
@@ -5337,7 +5389,7 @@ export async function registerRoutes(
         SELECT id, source_url, institution
         FROM ingested_assets
         WHERE source_url ILIKE '%technologypublisher.com%'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
         ORDER BY COALESCE(completeness_score, 0) DESC
       `);
@@ -5347,6 +5399,7 @@ export async function registerRoutes(
         if (signal.aborted) break;
         const batch = rows.rows.slice(batchStart, batchStart + TP_RE_CONCURRENCY);
         await Promise.all(batch.map(async (row) => {
+          if (signal.aborted) { tpProcessed++; tpSkipped++; return; }
           if (!row?.source_url) { tpProcessed++; tpSkipped++; return; }
 
           try {
@@ -5355,7 +5408,7 @@ export async function registerRoutes(
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
                 Accept: "text/html,application/xhtml+xml",
               },
-              signal: AbortSignal.timeout(TP_RE_TIMEOUT),
+              signal: AbortSignal.any([signal, AbortSignal.timeout(TP_RE_TIMEOUT)]),
             });
             if (!pageRes.ok) { tpProcessed++; tpSkipped++; return; }
             const html = await pageRes.text();
@@ -5367,6 +5420,7 @@ export async function registerRoutes(
             const descHtml = $(".c_tp_description").first().html() ?? "";
             const summary = stripHtmlTp(descHtml).slice(0, 5_000);
             if (summary.length < 50) { tpProcessed++; tpSkipped++; return; }
+            if (summary.length < 120) { tpProcessed++; tpPartial++; return; }
 
             // Patent status from .c_tp_patent table (first data row after header)
             let patentStatus: string | null = null;
@@ -5392,7 +5446,8 @@ export async function registerRoutes(
                   abstract      = ${summary},
                   patent_status = COALESCE(${patentStatus}, patent_status),
                   inventors     = COALESCE(${inventors.length > 0 ? inventors : null}, inventors),
-                  enriched_at   = NULL
+                  enriched_at   = NULL,
+                  data_sparse   = NULL
               WHERE id = ${row.id}
             `);
             tpEnriched++;
@@ -5408,12 +5463,14 @@ export async function registerRoutes(
 
       tpLastSummary = {
         enriched: tpEnriched,
+        partial: tpPartial,
         skipped: tpSkipped,
         total: tpTotal,
         durationMs: Date.now() - tpStartMs,
         completedAt: new Date().toISOString(),
       };
-      console.log(`[tp-refetch] Complete: ${tpEnriched} enriched, ${tpSkipped} skipped of ${tpTotal} thin TechPublisher assets in ${Date.now() - tpStartMs}ms`);
+      saveRefetchState("techpublisher", tpLastSummary);
+      console.log(`[tp-refetch] Complete: ${tpEnriched} enriched, ${tpPartial} partial, ${tpSkipped} skipped of ${tpTotal} thin TechPublisher assets in ${Date.now() - tpStartMs}ms`);
     } catch (err: any) {
       console.error("[tp-refetch] Error:", err.message);
     } finally {
@@ -5434,10 +5491,12 @@ export async function registerRoutes(
   let cuProcessed = 0;
   let cuTotal = 0;
   let cuEnriched = 0;
+  let cuPartial = 0;
   let cuSkipped = 0;
   let cuAbortController: AbortController | null = null;
   let cuStartMs = 0;
-  let cuLastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null = null;
+  let cuLastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null =
+    (_refetchState.columbia as typeof cuLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/columbia-refetch/count", requireAdmin, async (_req, res) => {
     try {
@@ -5445,7 +5504,7 @@ export async function registerRoutes(
         SELECT COUNT(*)::int AS total
         FROM ingested_assets
         WHERE institution = 'Columbia University'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
       `);
       res.json({ total: Number(result.rows[0]?.total ?? 0) });
@@ -5460,6 +5519,7 @@ export async function registerRoutes(
       processed: cuProcessed,
       total: cuTotal,
       enriched: cuEnriched,
+      partial: cuPartial,
       skipped: cuSkipped,
       elapsedMs: cuRunning ? Date.now() - cuStartMs : 0,
       lastSummary: cuLastSummary,
@@ -5478,6 +5538,7 @@ export async function registerRoutes(
     cuProcessed = 0;
     cuTotal = 0;
     cuEnriched = 0;
+    cuPartial = 0;
     cuSkipped = 0;
     cuAbortController = new AbortController();
     const { signal } = cuAbortController;
@@ -5508,7 +5569,7 @@ export async function registerRoutes(
         SELECT id, source_url
         FROM ingested_assets
         WHERE institution = 'Columbia University'
-          AND length(COALESCE(summary, '')) < 50
+          AND length(COALESCE(summary, '')) < 120
           AND source_url IS NOT NULL
         ORDER BY COALESCE(completeness_score, 0) DESC
       `);
@@ -5518,6 +5579,7 @@ export async function registerRoutes(
         if (signal.aborted) break;
         const batch = rows.rows.slice(batchStart, batchStart + CU_RE_CONCURRENCY);
         await Promise.all(batch.map(async (row) => {
+          if (signal.aborted) { cuProcessed++; cuSkipped++; return; }
           if (!row?.source_url) { cuProcessed++; cuSkipped++; return; }
 
           // Extract file number from slug (part after --) and remap to canonical URL
@@ -5530,11 +5592,12 @@ export async function registerRoutes(
 
           try {
             // Use typed helpers — no any casts, no duplicated parsing logic
-            const json = await fetchColumbiaJson(canonicalUrl, CU_RE_TIMEOUT);
+            const json = await fetchColumbiaJson(canonicalUrl, CU_RE_TIMEOUT, signal);
             if (!json) { cuProcessed++; cuSkipped++; return; }
 
             const listing = columbiaJsonToListing(canonicalUrl, json);
             if (!listing || listing.description.length < 50) { cuProcessed++; cuSkipped++; return; }
+            if (listing.description.length < 120) { cuProcessed++; cuPartial++; return; }
 
             await db.execute(sql`
               UPDATE ingested_assets
@@ -5545,7 +5608,8 @@ export async function registerRoutes(
                   licensing_status = COALESCE(${listing.licensingStatus ?? null}, licensing_status),
                   technology_id    = COALESCE(${listing.technologyId ?? null}, technology_id),
                   source_url       = ${canonicalUrl},
-                  enriched_at      = NULL
+                  enriched_at      = NULL,
+                  data_sparse      = NULL
               WHERE id = ${row.id}
             `);
             cuEnriched++;
@@ -5561,12 +5625,14 @@ export async function registerRoutes(
 
       cuLastSummary = {
         enriched: cuEnriched,
+        partial: cuPartial,
         skipped: cuSkipped,
         total: cuTotal,
         durationMs: Date.now() - cuStartMs,
         completedAt: new Date().toISOString(),
       };
-      console.log(`[columbia-refetch] Complete: ${cuEnriched} enriched, ${cuSkipped} skipped of ${cuTotal} thin Columbia assets in ${Date.now() - cuStartMs}ms`);
+      saveRefetchState("columbia", cuLastSummary);
+      console.log(`[columbia-refetch] Complete: ${cuEnriched} enriched, ${cuPartial} partial, ${cuSkipped} skipped of ${cuTotal} thin Columbia assets in ${Date.now() - cuStartMs}ms`);
     } catch (err: any) {
       console.error("[columbia-refetch] Error:", err.message);
     } finally {
@@ -5581,7 +5647,10 @@ export async function registerRoutes(
   let rescoreProcessed = 0;
   let rescoreTotal = 0;
   let rescoreUpdated = 0;
-  let rescoreLastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null = null;
+  let rescoreShouldStop = false;
+  let rescoreStartMs = 0;
+  let rescoreLastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null =
+    (_refetchState.rescore as typeof rescoreLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/rescore/status", requireAdmin, (_req, res) => {
     res.json({
@@ -5589,8 +5658,15 @@ export async function registerRoutes(
       processed: rescoreProcessed,
       total: rescoreTotal,
       updated: rescoreUpdated,
+      elapsedMs: rescoreRunning ? Date.now() - rescoreStartMs : 0,
       lastSummary: rescoreLastSummary,
     });
+  });
+
+  app.post("/api/admin/enrichment/rescore/stop", requireAdmin, (_req, res) => {
+    if (!rescoreRunning) return res.status(409).json({ error: "Not running" });
+    rescoreShouldStop = true;
+    res.json({ message: "Stop signal sent" });
   });
 
   app.post("/api/admin/enrichment/rescore", requireAdmin, async (req, res) => {
@@ -5599,7 +5675,9 @@ export async function registerRoutes(
     rescoreProcessed = 0;
     rescoreTotal = 0;
     rescoreUpdated = 0;
-    const startMs = Date.now();
+    rescoreShouldStop = false;
+    rescoreStartMs = Date.now();
+    const startMs = rescoreStartMs;
     res.json({ message: "Rescore started" });
 
     try {
@@ -5624,6 +5702,7 @@ export async function registerRoutes(
       const CHUNK = 200;
 
       for (let i = 0; i < rows.rows.length; i += CHUNK) {
+        if (rescoreShouldStop) break;
         const chunk = rows.rows.slice(i, i + CHUNK);
         for (const r of chunk) {
           const newScore = computeCompletenessScore({
@@ -5656,6 +5735,7 @@ export async function registerRoutes(
         durationMs: Date.now() - startMs,
         completedAt: new Date().toISOString(),
       };
+      saveRefetchState("rescore", rescoreLastSummary);
       console.log(`[rescore] Complete: ${written}/${rows.rows.length} scores updated in ${Date.now() - startMs}ms`);
     } catch (err: any) {
       console.error("[rescore] Error:", err.message);
@@ -5685,7 +5765,7 @@ export async function registerRoutes(
   let dbgLastSummary: {
     total: number; succeeded: number; failed: number;
     costUsd: number; durationMs: number; fieldFillCounts: Record<string, number>; completedAt: string;
-  } | null = null;
+  } | null = (_refetchState.drug_biologic as typeof dbgLastSummary) ?? null;
 
   app.get("/api/admin/enrichment/drug-biologic-gap-fill/count", requireAdmin, async (_req, res) => {
     try {
@@ -5867,6 +5947,7 @@ export async function registerRoutes(
           costUsd: parseFloat(costUsd.toFixed(4)), durationMs,
           fieldFillCounts: { ...dbgFieldCounts }, completedAt: new Date().toISOString(),
         };
+        saveRefetchState("drug_biologic", dbgLastSummary);
         console.log(`[dbg-gap-fill] Complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, fields: ${JSON.stringify(dbgFieldCounts)}`);
       }).catch((e) => {
         dbgRunning = false;

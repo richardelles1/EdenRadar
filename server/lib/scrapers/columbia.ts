@@ -72,15 +72,20 @@ export interface ColumbiaJsonResponse {
 export async function fetchColumbiaJson(
   url: string,
   timeoutMs = 12_000,
+  externalSignal?: AbortSignal,
 ): Promise<ColumbiaJsonResponse | null> {
   try {
+    const timeoutSig = AbortSignal.timeout(timeoutMs);
+    const signal = externalSignal
+      ? AbortSignal.any([externalSignal, timeoutSig])
+      : timeoutSig;
     const res = await fetch(`${url}.json`, {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         Accept: "application/json",
       },
-      signal: AbortSignal.timeout(timeoutMs),
+      signal,
     });
     if (!res.ok) return null;
     return (await res.json()) as ColumbiaJsonResponse;

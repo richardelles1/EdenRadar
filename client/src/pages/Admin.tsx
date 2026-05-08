@@ -2867,7 +2867,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: rescoreStatus, refetch: refetchRescoreStatus } = useQuery<{
-    running: boolean; processed: number; total: number; updated: number;
+    running: boolean; processed: number; total: number; updated: number; elapsedMs: number;
     lastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
     queryKey: ["/api/admin/enrichment/rescore/status", pw],
@@ -2895,6 +2895,14 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
       return res.json();
     },
     onSuccess: () => setRescorePolling(true),
+  });
+
+  const stopRescore = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rescore/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
   });
 
   const { data: detailRefetchCount, refetch: refetchDetailRefetchCount } = useQuery<{ total: number }>({
@@ -2960,8 +2968,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: inpartRefetchStatus } = useQuery<{
-    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
-    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+    running: boolean; processed: number; total: number; enriched: number; partial: number; skipped: number; elapsedMs: number;
+    lastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
     queryKey: ["/api/admin/enrichment/inpart-refetch/status", pw],
     queryFn: async () => {
@@ -3007,8 +3015,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: flintboxRefetchStatus } = useQuery<{
-    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
-    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+    running: boolean; processed: number; total: number; enriched: number; partial: number; skipped: number; elapsedMs: number;
+    lastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
     queryKey: ["/api/admin/enrichment/flintbox-refetch/status", pw],
     queryFn: async () => {
@@ -3054,8 +3062,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: columbiaRefetchStatus } = useQuery<{
-    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
-    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+    running: boolean; processed: number; total: number; enriched: number; partial: number; skipped: number; elapsedMs: number;
+    lastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
     queryKey: ["/api/admin/enrichment/columbia-refetch/status", pw],
     queryFn: async () => {
@@ -3101,8 +3109,8 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   });
 
   const { data: tpRefetchStatus } = useQuery<{
-    running: boolean; processed: number; total: number; enriched: number; skipped: number; elapsedMs: number;
-    lastSummary: { enriched: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
+    running: boolean; processed: number; total: number; enriched: number; partial: number; skipped: number; elapsedMs: number;
+    lastSummary: { enriched: number; partial: number; skipped: number; total: number; durationMs: number; completedAt: string } | null;
   }>({
     queryKey: ["/api/admin/enrichment/techpublisher-refetch/status", pw],
     queryFn: async () => {
@@ -3899,7 +3907,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                       data-testid="inpart-refetch-progress-bar" />
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{inpartRefetchStatus.enriched.toLocaleString()} upgraded · {inpartRefetchStatus.skipped.toLocaleString()} skipped</span>
+                    <span>{inpartRefetchStatus.enriched.toLocaleString()} upgraded · {(inpartRefetchStatus.partial ?? 0).toLocaleString()} partial · {inpartRefetchStatus.skipped.toLocaleString()} skipped</span>
                   </div>
                 </div>
               )}
@@ -3907,7 +3915,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30" data-testid="inpart-refetch-result">
                   <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
                   <p className="text-xs font-medium text-violet-700 dark:text-violet-400">
-                    {inpartRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {inpartRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    {inpartRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {(inpartRefetchStatus.lastSummary.partial ?? 0).toLocaleString()} partial · {inpartRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
                     <span className="text-muted-foreground ml-1">({Math.round(inpartRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
                   </p>
                 </div>
@@ -3965,7 +3973,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                       data-testid="flintbox-refetch-progress-bar" />
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{flintboxRefetchStatus.enriched.toLocaleString()} upgraded · {flintboxRefetchStatus.skipped.toLocaleString()} skipped</span>
+                    <span>{flintboxRefetchStatus.enriched.toLocaleString()} upgraded · {(flintboxRefetchStatus.partial ?? 0).toLocaleString()} partial · {flintboxRefetchStatus.skipped.toLocaleString()} skipped</span>
                   </div>
                 </div>
               )}
@@ -3973,7 +3981,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30" data-testid="flintbox-refetch-result">
                   <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
                   <p className="text-xs font-medium text-violet-700 dark:text-violet-400">
-                    {flintboxRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {flintboxRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    {flintboxRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {(flintboxRefetchStatus.lastSummary.partial ?? 0).toLocaleString()} partial · {flintboxRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
                     <span className="text-muted-foreground ml-1">({Math.round(flintboxRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
                   </p>
                 </div>
@@ -4009,7 +4017,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               {columbiaRefetchCount != null && (
                 <div className="flex items-center gap-3 p-2.5 rounded-lg border border-violet-200 dark:border-violet-800 bg-background">
                   <span className="text-lg font-bold tabular-nums text-violet-700 dark:text-violet-400">{columbiaRefetchCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">thin Columbia assets remaining (&lt;50 chars)</span>
+                  <span className="text-xs text-muted-foreground">thin Columbia assets remaining (&lt;120 chars)</span>
                 </div>
               )}
               {columbiaRefetchStatus?.running && (
@@ -4029,7 +4037,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                       data-testid="columbia-refetch-progress-bar" />
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{columbiaRefetchStatus.enriched.toLocaleString()} upgraded · {columbiaRefetchStatus.skipped.toLocaleString()} skipped</span>
+                    <span>{columbiaRefetchStatus.enriched.toLocaleString()} upgraded · {(columbiaRefetchStatus.partial ?? 0).toLocaleString()} partial · {columbiaRefetchStatus.skipped.toLocaleString()} skipped</span>
                   </div>
                 </div>
               )}
@@ -4037,7 +4045,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30" data-testid="columbia-refetch-result">
                   <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
                   <p className="text-xs font-medium text-violet-700 dark:text-violet-400">
-                    {columbiaRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {columbiaRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    {columbiaRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {(columbiaRefetchStatus.lastSummary.partial ?? 0).toLocaleString()} partial · {columbiaRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
                     <span className="text-muted-foreground ml-1">({Math.round(columbiaRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
                   </p>
                 </div>
@@ -4087,7 +4095,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                       data-testid="tp-refetch-progress-bar" />
                   </div>
                   <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{tpRefetchStatus.enriched.toLocaleString()} upgraded · {tpRefetchStatus.skipped.toLocaleString()} skipped</span>
+                    <span>{tpRefetchStatus.enriched.toLocaleString()} upgraded · {(tpRefetchStatus.partial ?? 0).toLocaleString()} partial · {tpRefetchStatus.skipped.toLocaleString()} skipped</span>
                   </div>
                 </div>
               )}
@@ -4095,7 +4103,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30" data-testid="tp-refetch-result">
                   <CheckCircle2 className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
                   <p className="text-xs font-medium text-violet-700 dark:text-violet-400">
-                    {tpRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {tpRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
+                    {tpRefetchStatus.lastSummary.enriched.toLocaleString()} upgraded · {(tpRefetchStatus.lastSummary.partial ?? 0).toLocaleString()} partial · {tpRefetchStatus.lastSummary.skipped.toLocaleString()} skipped
                     <span className="text-muted-foreground ml-1">({Math.round(tpRefetchStatus.lastSummary.durationMs / 1000)}s)</span>
                   </p>
                 </div>
@@ -4135,6 +4143,10 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-slate-500" />
                     <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">Rescoring…</span>
                     <span className="text-xs tabular-nums text-muted-foreground ml-auto">{rescoreStatus.processed.toLocaleString()}/{rescoreStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopRescore.mutate()} disabled={stopRescore.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-rescore-stop">
+                      {stopRescore.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
                   </div>
                   <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
                     <div className="bg-slate-500 h-1.5 rounded-full transition-all duration-500"

@@ -2301,7 +2301,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>> {
-    // Same criteria as getMiniEnrichQueue: relevant, non-sparse, >150 chars, 3+ unknown key fields.
+    // Same criteria as getMiniEnrichQueue: relevant, non-sparse, >=120 chars, 3+ unknown key fields.
     // Capped by `limit` so each run is a bounded, cost-controlled cycle.
     // We also pull abstract + ctx fields (categories/patent/licensing/inventors/sourceUrl)
     // so the mini classifier has the same context the deep classifier gets — many of
@@ -2320,7 +2320,7 @@ export class DatabaseStorage implements IStorage {
       FROM ingested_assets
       WHERE relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
-        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
         AND COALESCE(mini_enrich_attempts, 0) < 3
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
@@ -2342,14 +2342,14 @@ export class DatabaseStorage implements IStorage {
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }> {
     // Select relevant, non-sparse assets that are either unscored OR have 3+ unknown key fields,
-    // with sufficient description length (>150 chars) to be worth a mini pass.
+    // with sufficient description length (>=120 chars) to be worth a mini pass.
     // Assets with mini_enrich_attempts >= 3 are excluded from actionable queue but counted separately as exhausted.
     // backfillCount: assets already processed (enriched_at IS NOT NULL) that still have unknowns and mini_enrich_attempts=0.
     // These are legacy assets that predate the attempt-cap column; the backfill endpoint seeds them to 1.
     const FIELD_UNKNOWN_PREDICATE = sql`(
         relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
-        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
@@ -2394,7 +2394,7 @@ export class DatabaseStorage implements IStorage {
         AND enriched_at IS NOT NULL
         AND relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
-        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
