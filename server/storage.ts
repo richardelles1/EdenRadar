@@ -586,14 +586,20 @@ function buildEnrichWhere(filters: EnrichFilter = {}): SQL {
     else if (mf === "modality") parts.push(sql`(modality IS NULL OR modality IN ('unknown',''))`);
     else if (mf === "stage") parts.push(sql`(development_stage IS NULL OR development_stage IN ('unknown',''))`);
   } else {
+    // The "3+ drug-field unknowns" gate only applies to drug/biologic assets (or unclassified).
+    // Research tools, medical devices, and software structurally lack drug fields and would
+    // burn all 3 enrichment attempts returning 'unknown' for every drug-specific field.
     parts.push(sql`(
       (completeness_score IS NULL OR completeness_score = 0)
       OR (
-        (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-        (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-        (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-        (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
-      ) >= 3
+        (asset_class IS NULL OR asset_class = 'drug_biologic')
+        AND (
+          (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+        ) >= 3
+      )
     )`);
   }
   return parts.reduce((a, b) => sql`${a} AND ${b}`);
@@ -2403,11 +2409,14 @@ export class DatabaseStorage implements IStorage {
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
-            (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
-          ) >= 3
+            (asset_class IS NULL OR asset_class = 'drug_biologic')
+            AND (
+              (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+              (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+              (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+              (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+            ) >= 3
+          )
         )
       )`;
 

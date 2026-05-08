@@ -42,48 +42,83 @@ function hasValue(val: unknown): boolean {
 /**
  * Returns a 0-100 completeness score for the asset.
  *
- * Formula v3 — universal buyer-decision formula, no asset-class branching.
- * Scores exactly what a licensing manager needs to make a go/no-go call:
+ * Formula v4 — asset-class-aware. Drug/biologic assets use drug-specific
+ * field weights; non-drug assets (medical_device, research_tool, software)
+ * use a profile that doesn't penalise them for structurally-absent drug fields.
  *
- *   indication        = 25 pts  (what does it treat or do)
- *   modality          = 20 pts  (what type of asset)
+ * Drug/biologic (default):
+ *   indication        = 25 pts  (what disease does it treat)
+ *   modality          = 20 pts  (what type of drug/biologic)
  *   developmentStage  = 20 pts  (how ready is it)
- *   summary quality   = 15 pts  (≥300 chars=15, ≥150=10, ≥50=5)
- *   mechanismOfAction = 12 pts  (how it works — critical for EDEN matching)
- *   IP protection     =  8 pts  (ipType OR patentStatus, either earns full credit)
- *   ──────────────────────────
+ *   summary quality   = 15 pts  (≥300=15, ≥150=10, ≥50=5)
+ *   mechanismOfAction = 12 pts  (how it works)
+ *   IP protection     =  8 pts  (ipType OR patentStatus)
  *   Total             = 100 pts
  *
- * Removed from scoring: inventors, abstract, licensingReadiness, comparableDrugs,
- * target, innovationClaim, deviceAttributes. These live in the dossier or are
- * structurally unavailable from TTO pages and don't drive licensing decisions.
+ * Medical device:
+ *   developmentStage  = 20 pts  (how ready is it)
+ *   indication        = 20 pts  (intended use / clinical application)
+ *   modality          = 15 pts  (device category / type)
+ *   summary quality   = 15 pts  (≥300=15, ≥150=10, ≥50=5)
+ *   mechanismOfAction = 12 pts  (how it works)
+ *   IP protection     =  8 pts
+ *   deviceAttributes  = 10 pts  (structured device specs)
+ *   Total             = 100 pts
+ *
+ * Research tool / software:
+ *   summary quality   = 30 pts  (≥300=30, ≥150=20, ≥50=10)
+ *   mechanismOfAction = 25 pts  (how it works — core buyer signal)
+ *   innovationClaim   = 20 pts  (what's novel)
+ *   IP protection     = 15 pts
+ *   developmentStage  = 10 pts  (commercial-readiness)
+ *   Total             = 100 pts
  */
 export function computeCompletenessScore(asset: CompletenessAsset): number | null {
+  const cls = (asset.assetClass ?? "").toLowerCase();
+  const hasIp = hasValue(asset.ipType) ||
+    (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown");
+
+  // ── Research tool / software ──────────────────────────────────────────────
+  if (cls === "research_tool" || cls === "software") {
+    let score = 0;
+    const summaryLen = (asset.summary ?? "").length;
+    if (summaryLen >= 300) score += 30;
+    else if (summaryLen >= 150) score += 20;
+    else if (summaryLen >= 50) score += 10;
+    if (hasValue(asset.mechanismOfAction)) score += 25;
+    if (hasValue(asset.innovationClaim))   score += 20;
+    if (hasIp)                             score += 15;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
+    return Math.min(100, score);
+  }
+
+  // ── Medical device ────────────────────────────────────────────────────────
+  if (cls === "medical_device") {
+    let score = 0;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 20;
+    if (hasValue(asset.indication))        score += 20;
+    if (hasValue(asset.modality))          score += 15;
+    const summaryLen = (asset.summary ?? "").length;
+    if (summaryLen >= 300) score += 15;
+    else if (summaryLen >= 150) score += 10;
+    else if (summaryLen >= 50) score += 5;
+    if (hasValue(asset.mechanismOfAction)) score += 12;
+    if (hasIp)                             score += 8;
+    if (asset.deviceAttributes && Object.keys(asset.deviceAttributes).length > 0) score += 10;
+    return Math.min(100, score);
+  }
+
+  // ── Drug / biologic (default — includes unclassified assets) ─────────────
   let score = 0;
-
-  // indication (25 pts) — primary question: what does it treat or do
-  if (hasValue(asset.indication)) score += 25;
-
-  // modality (20 pts) — what type of asset
-  if (hasValue(asset.modality)) score += 20;
-
-  // developmentStage (20 pts) — how ready is it
+  if (hasValue(asset.indication))        score += 25;
+  if (hasValue(asset.modality))          score += 20;
   if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 20;
-
-  // summary quality (15 pts tiered) — enough context for a buyer to evaluate
   const summaryLen = (asset.summary ?? "").length;
   if (summaryLen >= 300) score += 15;
   else if (summaryLen >= 150) score += 10;
   else if (summaryLen >= 50) score += 5;
-
-  // mechanismOfAction (12 pts) — how it works; also critical for EDEN vector matching
   if (hasValue(asset.mechanismOfAction)) score += 12;
-
-  // IP protection (8 pts) — ipType OR patentStatus, either earns full credit
-  const hasIp = hasValue(asset.ipType) ||
-    (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown");
-  if (hasIp) score += 8;
-
+  if (hasIp)                             score += 8;
   return Math.min(100, score);
 }
 
