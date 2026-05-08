@@ -107,16 +107,23 @@ async function flushWriteBatch(): Promise<void> {
   if (DRY_RUN || pendingWrites.length === 0) { pendingWrites.length = 0; return; }
   const batch = pendingWrites.splice(0, pendingWrites.length);
   // Single VALUES table UPDATE — one round-trip for up to 50 rows
-  const valuePlaceholders = batch.map((_, i) => `($${i * 2 + 1}::int, $${i * 2 + 2}::text)`).join(", ");
-  const params: (number | string)[] = batch.flatMap(({ id, result }) => [id, (result.summary ?? result.abstract).slice(0, 8000)]);
+  // abstract = the raw field text; summary = aggregated text (or same as abstract if no summary)
+  const valuePlaceholders = batch.map((_, i) =>
+    `($${i * 3 + 1}::int, $${i * 3 + 2}::text, $${i * 3 + 3}::text)`
+  ).join(", ");
+  const params: (number | string)[] = batch.flatMap(({ id, result }) => [
+    id,
+    result.abstract.slice(0, 8000),
+    (result.summary ?? result.abstract).slice(0, 8000),
+  ]);
   await pool.query(
     `UPDATE ingested_assets
-     SET abstract             = tmp.txt,
-         summary              = tmp.txt,
+     SET abstract             = tmp.abst,
+         summary              = tmp.summ,
          data_sparse          = false,
          mini_enrich_attempts = 0,
          enriched_at          = NULL
-     FROM (VALUES ${valuePlaceholders}) AS tmp(id, txt)
+     FROM (VALUES ${valuePlaceholders}) AS tmp(id, abst, summ)
      WHERE ingested_assets.id = tmp.id`,
     params,
   );
