@@ -1912,6 +1912,7 @@ interface EnrichmentStatus {
   jobId?: number;
   error?: string;
   tokenCost?: number;
+  filters?: { institution?: string; modality?: string; tier?: string; missingField?: string; stage?: string; indication?: string };
 }
 
 interface BandInfo {
@@ -3690,6 +3691,41 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                       {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
                     </Button>
                   </div>
+                  {status.filters && Object.values(status.filters).some(Boolean) && (
+                    <div className="flex flex-wrap gap-1.5 items-center" data-testid="enrichment-active-filters">
+                      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Filters:</span>
+                      {status.filters.institution && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-institution">
+                          Institution: {status.filters.institution}
+                        </span>
+                      )}
+                      {status.filters.modality && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-modality">
+                          Modality: {status.filters.modality}
+                        </span>
+                      )}
+                      {status.filters.tier && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-tier">
+                          Tier: {status.filters.tier}
+                        </span>
+                      )}
+                      {status.filters.missingField && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-missing">
+                          Missing: {status.filters.missingField}
+                        </span>
+                      )}
+                      {status.filters.stage && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-stage">
+                          Stage: {status.filters.stage}
+                        </span>
+                      )}
+                      {status.filters.indication && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-indication">
+                          Indication: {status.filters.indication}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
                     <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} data-testid="enrichment-progress-bar" />
                   </div>

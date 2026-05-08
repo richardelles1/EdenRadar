@@ -3467,6 +3467,7 @@ export async function registerRoutes(
     resumed: boolean;
     drain: boolean;
     tokenCost: number;
+    filters: EnrichFilter;
   } | null = null;
   // Persists the final token cost of the last run so the "done" status response
   // can include it even after liveEnrichment is set to null on completion.
@@ -3482,7 +3483,7 @@ export async function registerRoutes(
     drain: boolean = false,
     filters: EnrichFilter = {},
   ) {
-    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain, tokenCost: 0 };
+    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain, tokenCost: 0, filters };
     const MINI_INPUT_PER_M = 0.15;   // gpt-4o-mini input $/1M tokens
     const MINI_OUTPUT_PER_M = 0.60;  // gpt-4o-mini output $/1M tokens
     const CONCURRENCY = 30;
@@ -4265,6 +4266,7 @@ export async function registerRoutes(
         improved: liveEnrichment.improved,
         resumed: liveEnrichment.resumed,
         tokenCost: liveEnrichment.tokenCost,
+        filters: Object.keys(liveEnrichment.filters).length > 0 ? liveEnrichment.filters : undefined,
       });
     }
 
