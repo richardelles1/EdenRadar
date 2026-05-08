@@ -155,6 +155,7 @@ export function scoreReadiness(asset: Partial<ScoredAsset>): DimensionResult {
   else if (stage.includes("phase 1")) { score = 65; stageLabel = "Phase 1 clinical trial"; }
   else if (stage.includes("preclinical")) { score = 50; stageLabel = "Preclinical"; }
   else if (stage.includes("discovery")) { score = 30; stageLabel = "Discovery stage"; }
+  else if (stage === "early stage") { score = 30; stageLabel = "Early stage (pre-clinical)"; }
   else if (stage.includes("approved")) { score = 60; stageLabel = "Approved (relicensing)"; }
   else { score = 35; stageLabel = asset.development_stage ?? "Stage unclear"; }
 

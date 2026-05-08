@@ -22,7 +22,7 @@ export interface EnrichAssetContext {
   sourceUrl?: string | null;
 }
 
-const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"]);
+const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "early stage", "unknown"]);
 const MODALITY_VALUES = new Set([
   "small molecule", "antibody", "bispecific antibody", "car-t", "gene therapy", "gene editing",
   "mrna therapy", "cell therapy", "peptide", "sirna", "adc", "protac", "vaccine", "nanoparticle",
@@ -68,7 +68,7 @@ export async function enrichAssetTitle(
         {
           role: "system",
           content: `Extract biomedical fields from a university TTO technology listing. Reply with JSON only, no markdown.
-Fields: target (gene/protein/pathway/anatomical target/biomarker, or "unknown"), modality (one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|medical device|diagnostic|platform technology|research tool|unknown), indication (disease/condition, or "unknown"), developmentStage (one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown), biotechRelevant (true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application).`,
+Fields: target (gene/protein/pathway/anatomical target/biomarker, or "unknown"), modality (one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|medical device|diagnostic|platform technology|research tool|unknown), indication (disease/condition, or "unknown"), developmentStage (one of: discovery|early stage|preclinical|phase 1|phase 2|phase 3|approved|unknown — use "early stage" when clearly pre-clinical but stage cannot be more precisely determined), biotechRelevant (true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application).`,
         },
         {
           role: "user",
@@ -137,7 +137,7 @@ Fields to determine: ${unknownFields.join(", ")}
 - target: gene/protein/pathway/mechanism/anatomical target/biomarker, or "unknown" if truly impossible
 - modality: one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|medical device|diagnostic|platform technology|research tool|unknown
 - indication: disease/condition, or "unknown" if truly impossible
-- developmentStage: one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown
+- developmentStage: one of: discovery|early stage|preclinical|phase 1|phase 2|phase 3|approved|unknown (use "early stage" when clearly pre-clinical but stage cannot be more precisely determined)
 - biotechRelevant: true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application
 
 Current known fields: ${JSON.stringify(Object.fromEntries(Object.entries(currentFields).filter(([, v]) => v !== "unknown")))}`,

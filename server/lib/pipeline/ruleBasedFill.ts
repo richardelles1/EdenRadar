@@ -209,6 +209,8 @@ const CATEGORY_MODALITY_MAP: Array<{ keywords: RegExp; value: string }> = [
 
 // ── Category → Indication map ─────────────────────────────────────────────────
 // Provides coarse indication from categories when no specific disease text is found.
+// NOTE: categories are a structural/first-party signal — this map runs outside the
+// dataSparse gate so thin-text assets with institution-tagged categories still benefit.
 const CATEGORY_INDICATION_MAP: Array<{ keywords: RegExp; value: string }> = [
   { keywords: /\boncology|\bcancer/i, value: "cancer" },
   { keywords: /\bneurology|\bneuroscience|\bneurological|\bneurodegenera/i, value: "neurological disorder" },
@@ -225,6 +227,10 @@ const CATEGORY_INDICATION_MAP: Array<{ keywords: RegExp; value: string }> = [
   { keywords: /\bhematology|\bblood[\s-]?disease/i, value: "hematological disorder" },
   { keywords: /\bwound[\s-]?heal|\bregenerative\s+medicine|\btissue\s+engineer/i, value: "wound healing" },
   { keywords: /\bpsychiatry|\bmental\s+health|\bpsychiatric/i, value: "psychiatric disorder" },
+  { keywords: /\burology|\burological/i, value: "urological condition" },
+  { keywords: /\breproductive\s+health|\bfertility|\bobstetrics|\bgynecology|\bgynecolog/i, value: "reproductive health" },
+  { keywords: /\bsurgery|\bsurgical/i, value: "surgical application" },
+  { keywords: /\bmedical\s+imaging|\bradiology|\bnuclear\s+medicine/i, value: "medical imaging" },
 ];
 
 // ── Indication keyword rules ──────────────────────────────────────────────────
@@ -380,6 +386,21 @@ export function applyRulesToAsset(asset: {
     provenance.licensingReadiness = "rule:tto_source";
   }
 
+  // ── Category-based fills: structural signal, applies regardless of text length ──
+  // Institution-tagged categories are first-party metadata from the TTO portal —
+  // they apply even if the description text is thin (< 150 chars). Text-pattern
+  // rules inside the dataSparse gate may later override these with more specific values.
+  if (cats.length > 0) {
+    if (!humanV.modality && (!asset.modality || asset.modality === "unknown")) {
+      const fromCats = applyCategoriesToModality(cats);
+      if (fromCats) { fields.modality = fromCats; provenance.modality = "rule:category"; }
+    }
+    if (!humanV.indication && (!asset.indication || asset.indication === "unknown")) {
+      const fromCats = applyCategoriesToIndication(cats);
+      if (fromCats) { fields.indication = fromCats; provenance.indication = "rule:category"; }
+    }
+  }
+
   if (!dataSparse) {
     if (!humanV.developmentStage && asset.developmentStage === "unknown") {
       const val = applyRules(STAGE_RULES, text);
@@ -394,22 +415,20 @@ export function applyRulesToAsset(asset: {
       if (val) fields.licensingReadiness = val;
     }
 
-    // ── Modality: categories first (structured signal), then text rules ──────
+    // ── Modality: text rules (category fill already handled above) ────────────
+    // Text rules are more specific — they can override the category-based fill.
     if (!humanV.modality && (!asset.modality || asset.modality === "unknown")) {
-      const fromCats = cats.length > 0 ? applyCategoriesToModality(cats) : null;
-      const val = fromCats ?? applyRules(MODALITY_RULES, text);
-      if (val) fields.modality = val;
+      const val = applyRules(MODALITY_RULES, text);
+      if (val) { fields.modality = val; provenance.modality = "rule"; }
     }
 
-    // ── Indication: apply to all non-sparse assets, not just drug-like ones.
+    // ── Indication: text rules are more specific, can override category fill ──
     // Indication (25 pts in scoring) is too valuable to gate behind isDrug —
     // devices, diagnostics, and tools all have clinical applications that map
-    // to indication. Text rules run first (more specific); category map is fallback.
+    // to indication.
     if (!humanV.indication && (!asset.indication || asset.indication === "unknown")) {
       const fromText = applyRules(INDICATION_RULES, text);
-      const fromCats = cats.length > 0 ? applyCategoriesToIndication(cats) : null;
-      const val = fromText ?? fromCats;
-      if (val) fields.indication = val;
+      if (fromText) { fields.indication = fromText; provenance.indication = "rule"; }
     }
 
     // ── Target: gene/protein name vocabulary scan ─────────────────────────────
@@ -424,6 +443,24 @@ export function applyRulesToAsset(asset: {
         if (val) fields.target = val;
       }
     }
+  }
+
+  // ── Early stage TTO default ──────────────────────────────────────────────────
+  // Applies AFTER text-based stage rules so text clues always win.
+  // "early stage" is an umbrella for TTO assets where we know the technology is
+  // pre-clinical but can't distinguish discovery from preclinical. Safer than
+  // forcing "preclinical" (which implies animal data) or leaving "unknown".
+  // Guard: no clinical stage keywords anywhere in the combined text.
+  const CLINICAL_STAGE_SIGNALS = /\bphase\s+[123]\b|\bphase\s+I{1,3}\b|\bclinical\s+trial\b|\bIND\s+(?:filed|approved)\b|\bFDA[- ]approved\b|\bEMA[- ]approved\b|\b510\(k\)\b|\bapproved\b|\bBLA\b|\bNDA\b/i;
+  if (
+    asset.sourceType === "tech_transfer" &&
+    !humanV.developmentStage &&
+    (!asset.developmentStage || asset.developmentStage === "unknown") &&
+    !fields.developmentStage &&
+    !CLINICAL_STAGE_SIGNALS.test(text)
+  ) {
+    fields.developmentStage = "early stage";
+    provenance.developmentStage = "rule:tto_early_stage";
   }
 
   return { fields, dataSparse, provenance };
