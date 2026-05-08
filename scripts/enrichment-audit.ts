@@ -105,14 +105,11 @@ async function getGlobalStats(): Promise<GlobalStats> {
         AND (
           (completeness_score IS NULL OR completeness_score = 0)
           OR (
-            (asset_class IS NULL OR asset_class = 'drug_biologic')
-            AND (
-              (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
-              (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
-              (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-              (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
-            ) >= 3
-          )
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+          ) >= 3
         )
     `),
 
@@ -180,14 +177,11 @@ async function getInstitutionBreakdown(): Promise<InstitutionRow[]> {
       AND (
         (completeness_score IS NULL OR completeness_score = 0)
         OR (
-          (asset_class IS NULL OR asset_class = 'drug_biologic')
-          AND (
-            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
-          ) >= 3
-        )
+          (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+        ) >= 3
       )
     GROUP BY institution ORDER BY COUNT(*) DESC LIMIT 30
   `);
@@ -215,14 +209,11 @@ async function snapshotEligibleAssets(): Promise<AssetSnapshot[]> {
       AND (
         (completeness_score IS NULL OR completeness_score = 0)
         OR (
-          (asset_class IS NULL OR asset_class = 'drug_biologic')
-          AND (
-            (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
-          ) >= 3
-        )
+          (CASE WHEN COALESCE(target, 'unknown') = 'unknown'     THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown'   THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN development_stage = 'unknown'               THEN 1 ELSE 0 END)
+        ) >= 3
       )
   `);
   return res.rows.map(r => ({
