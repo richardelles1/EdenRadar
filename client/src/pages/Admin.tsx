@@ -2549,6 +2549,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
             <SelectItem value="indication">Missing: Indication</SelectItem>
             <SelectItem value="modality">Missing: Modality</SelectItem>
             <SelectItem value="stage">Missing: Dev Stage</SelectItem>
+            <SelectItem value="capped">Gave up (≥3 attempts)</SelectItem>
           </SelectContent>
         </Select>
       </div>

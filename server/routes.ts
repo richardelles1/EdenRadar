@@ -4301,18 +4301,19 @@ export async function registerRoutes(
 
   app.get("/api/admin/enrichment/health", requireAdmin, async (req, res) => {
     try {
-      const rows = await db.execute(sql`
+      type HealthRow = { ready_count: number; needs_refetch_count: number; gave_up_count: number; enriched_24h_count: number };
+      const rows = await db.execute<HealthRow>(sql`
         SELECT
           COUNT(*) FILTER (
             WHERE relevant = true
               AND enriched_at IS NULL
-              AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
+              AND char_length(COALESCE(summary, '')) >= 120
               AND COALESCE(mini_enrich_attempts, 0) < 3
           )::int AS ready_count,
           COUNT(*) FILTER (
             WHERE relevant = true
               AND enriched_at IS NULL
-              AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 120
+              AND char_length(COALESCE(summary, '')) < 120
           )::int AS needs_refetch_count,
           COUNT(*) FILTER (
             WHERE relevant = true
@@ -4324,7 +4325,7 @@ export async function registerRoutes(
           )::int AS enriched_24h_count
         FROM ingested_assets
       `);
-      const row = rows.rows[0] as any;
+      const row = rows.rows[0];
       res.json({
         readyCount: row.ready_count ?? 0,
         needsRefetchCount: row.needs_refetch_count ?? 0,
