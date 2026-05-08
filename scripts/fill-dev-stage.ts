@@ -31,7 +31,21 @@ const DRY_RUN = process.argv.includes("--dry-run");
 const phaseArg = process.argv.find((a) => a.startsWith("--phase="));
 const ONLY_PHASE = phaseArg ? parseInt(phaseArg.split("=")[1], 10) : null;
 const capArg = process.argv.find((a) => a.startsWith("--cap="));
-const CAP = capArg ? parseInt(capArg.split("=")[1], 10) : 5000;
+const CAP_RAW = capArg ? parseInt(capArg.split("=")[1], 10) : 5000;
+if (capArg && (isNaN(CAP_RAW) || CAP_RAW < 1)) { console.error("ERROR: --cap must be a positive integer"); process.exit(1); }
+const CAP = CAP_RAW;
+const minTextArg = process.argv.find((a) => a.startsWith("--min-text="));
+const LLM_MIN_TEXT_RAW = minTextArg ? parseInt(minTextArg.split("=")[1], 10) : 120;
+if (minTextArg && (isNaN(LLM_MIN_TEXT_RAW) || LLM_MIN_TEXT_RAW < 1 || LLM_MIN_TEXT_RAW > 10000)) { console.error("ERROR: --min-text must be a positive integer between 1 and 10000"); process.exit(1); }
+const LLM_MIN_TEXT = LLM_MIN_TEXT_RAW;
+// --all-fields: use summary+abstract+innovation_claim+mechanism_of_action+unmet_need for text
+const ALL_FIELDS = process.argv.includes("--all-fields");
+const TEXT_SQL = ALL_FIELDS
+  ? `COALESCE(summary,'') || ' ' || COALESCE(abstract,'') || ' ' || COALESCE(innovation_claim,'') || ' ' || COALESCE(mechanism_of_action,'') || ' ' || COALESCE(unmet_need,'')`
+  : `COALESCE(summary,'') || COALESCE(abstract,'')`;
+const TEXT_LABEL = ALL_FIELDS ? "summary+abstract+innovation_claim+moa+unmet_need" : "summary+abstract";
+// --permissive: allow LLM to infer stage from indirect signals (in vitro, animal models, etc.)
+const PERMISSIVE = process.argv.includes("--permissive");
 
 // ── DB ────────────────────────────────────────────────────────────────────────
 const DB_URL = process.env.SUPABASE_DATABASE_URL;
@@ -128,7 +142,7 @@ export const STAGE_SQL_CASE = `
 
 // ── LLM extraction ────────────────────────────────────────────────────────────
 const STAGE_ENUM_STR = STAGE_ENUM.join(", ");
-const SYSTEM_PROMPT = `You are a biotech development stage classifier.
+const SYSTEM_PROMPT_STRICT = `You are a biotech development stage classifier.
 
 Given a technology description, identify the development stage. You MUST respond with exactly one value from this list:
 ${STAGE_ENUM_STR}
@@ -138,6 +152,24 @@ Rules:
 - If no clear stage signal exists, respond with: unknown
 - Do not infer from indirect signals.
 - Do not respond with anything other than one of the listed values or "unknown".`;
+
+const SYSTEM_PROMPT_PERMISSIVE = `You are a biotech development stage classifier.
+
+Given a technology description, classify the development stage. You MUST respond with exactly one value from this list:
+${STAGE_ENUM_STR}
+
+Rules:
+- Use explicit stage mentions when available (e.g. "Phase 2", "IND filed", "preclinical").
+- Also infer stage from contextual clues:
+  - In vitro only / cell-based assays / no animal data → "discovery"
+  - Animal efficacy studies / rodent/primate models / lead optimization → "preclinical"
+  - IND filing mentioned or enabling studies complete → "IND filed"
+  - Human clinical studies mentioned → use the appropriate phase
+  - FDA-approved / marketed / on the market → "commercial"
+- If genuinely no stage signal exists even with inference, respond with: unknown
+- Do not respond with anything other than one of the listed values or "unknown".`;
+
+const SYSTEM_PROMPT = PERMISSIVE ? SYSTEM_PROMPT_PERMISSIVE : SYSTEM_PROMPT_STRICT;
 
 export async function extractStageByLLM(
   text: string,
@@ -263,9 +295,9 @@ async function runPhase2(cap = CAP): Promise<Phase2Result> {
   // Count assets by text-length eligibility for reporting
   const countRes = await pool.query<{ llm_eligible: string; insufficient: string }>(`
     SELECT
-      COUNT(*) FILTER (WHERE char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= 120)::int AS llm_eligible,
-      COUNT(*) FILTER (WHERE char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= 50
-                         AND char_length(COALESCE(summary,'') || COALESCE(abstract,'')) < 120)::int  AS insufficient
+      COUNT(*) FILTER (WHERE char_length(${TEXT_SQL}) >= ${LLM_MIN_TEXT})::int AS llm_eligible,
+      COUNT(*) FILTER (WHERE char_length(${TEXT_SQL}) >= 50
+                         AND char_length(${TEXT_SQL}) < ${LLM_MIN_TEXT})::int  AS insufficient
     FROM ingested_assets
     WHERE relevant = true
       AND (development_stage IS NULL OR development_stage IN ('unknown',''))
@@ -273,16 +305,17 @@ async function runPhase2(cap = CAP): Promise<Phase2Result> {
   `);
   const llmEligible = Number(countRes.rows[0]?.llm_eligible ?? 0);
   const skippedInsufficient = Number(countRes.rows[0]?.insufficient ?? 0);
-  console.log(`  Eligible (≥120 chars) : ${llmEligible.toLocaleString()} (cap=${cap})`);
-  console.log(`  Skipped (50-119 chars): ${skippedInsufficient.toLocaleString()}`);
+  console.log(`  Text fields      : ${TEXT_LABEL}`);
+  console.log(`  Eligible (≥${LLM_MIN_TEXT} chars) : ${llmEligible.toLocaleString()} (cap=${cap})`);
+  console.log(`  Skipped (50–${LLM_MIN_TEXT - 1} chars): ${skippedInsufficient.toLocaleString()}`);
   if (llmEligible === 0) return { llmEligible, processed: 0, filled: 0, unknown_: 0, skippedInsufficient, costUsd: 0 };
 
-  const { rows } = await pool.query<{ id: number; summary: string; abstract: string | null }>(
-    `SELECT id, summary, abstract
+  const { rows } = await pool.query<{ id: number; summary: string | null; abstract: string | null; innovation_claim: string | null; mechanism_of_action: string | null; unmet_need: string | null }>(
+    `SELECT id, summary, abstract, innovation_claim, mechanism_of_action, unmet_need
      FROM ingested_assets
      WHERE relevant = true
        AND (development_stage IS NULL OR development_stage IN ('unknown',''))
-       AND char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= 120
+       AND char_length(${TEXT_SQL}) >= ${LLM_MIN_TEXT}
        ${ASSET_CLASS_FILTER}
      ORDER BY COALESCE(completeness_score, 0) DESC
      LIMIT $1`,
@@ -301,7 +334,9 @@ async function runPhase2(cap = CAP): Promise<Phase2Result> {
   const workers = Array.from({ length: Math.min(LLM_CONCURRENCY, queue.length) }, async () => {
     while (queue.length > 0) {
       const row = queue.shift()!;
-      const text = `${row.summary ?? ""} ${row.abstract ?? ""}`.trim();
+      const text = ALL_FIELDS
+        ? `${row.summary ?? ""} ${row.abstract ?? ""} ${row.innovation_claim ?? ""} ${row.mechanism_of_action ?? ""} ${row.unmet_need ?? ""}`.trim()
+        : `${row.summary ?? ""} ${row.abstract ?? ""}`.trim();
       const stage = await extractStageByLLM(text, openai);
       processed++;
       if (stage === "unknown") {
