@@ -3706,6 +3706,7 @@ export async function registerRoutes(
         progress: usptoProgress,
         result: usptoResult,
         spotCheck: usptoSpotCheckValidation,
+        noApiKey: !process.env.USPTO_ODP_API_KEY,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });

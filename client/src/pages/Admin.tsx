@@ -3424,13 +3424,14 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   });
 
   // ── USPTO Patent Cross-Reference hooks ──
-  type UsptoSpotResult = { institution: string; assignee: string; count: number; hasTitle: boolean; hasValidDate: boolean; sample: { patentNumber: string; patentTitle: string; patentDate: string | null } | null; error?: string; valid: boolean };
+  type UsptoSpotResult = { institution: string; assigneeName: string; count: number; hasTitle: boolean; hasValidDate: boolean; sample: Array<{ number: string; title: string; date: string | null }>; error?: string; valid: boolean };
   type UsptoSpotValidation = { results: UsptoSpotResult[]; validCount: number; passed: boolean; reason?: string };
   type UsptoStatus = {
     running: boolean;
     progress: { processed: number; total: number; matched: number; unmatched: number; skipped: number } | null;
     result: { processed: number; matched: number; unmatched: number; skipped: number; missingIpTypeCount: number } | null;
     spotCheck: UsptoSpotValidation | null;
+    noApiKey: boolean;
   };
 
   const { data: usptoStatus, refetch: refetchUsptoStatus } = useQuery<UsptoStatus>({
@@ -3736,9 +3737,23 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
             <div className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Queries the USPTO PatentsView API by institution assignee, then fuzzy-matches patent titles against TTO asset names (Jaccard ≥ 0.35) to fill <em>ip_type = "patent"</em> and <em>patent_status</em>.
-                Never overwrites existing non-null values or human-verified fields. Run spot check first to verify API connectivity before writing.
+                Queries the USPTO ODP API by institution assignee, then fuzzy-matches patent titles against TTO asset names (Jaccard ≥ 0.35) to fill <em>ip_type = "patent"</em> and <em>patent_status</em>.
+                Never overwrites existing non-null values or human-verified fields.
               </p>
+
+              {/* No API key banner */}
+              {usptoStatus?.noApiKey && (
+                <div className="flex items-start gap-2.5 p-3 rounded-lg border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/30" data-testid="uspto-no-api-key-banner">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs space-y-1">
+                    <p className="font-semibold text-amber-800 dark:text-amber-300">USPTO_ODP_API_KEY not set</p>
+                    <p className="text-amber-700 dark:text-amber-400">
+                      The PatentsView API moved to <span className="font-mono">api.uspto.gov</span> and requires a free API key.
+                      Register at <span className="font-medium">developer.uspto.gov</span>, then add the key as <span className="font-mono">USPTO_ODP_API_KEY</span> in your environment secrets.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* Missing ip_type count */}
               {usptoCount && (
@@ -3778,9 +3793,9 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                           <span className="font-medium">{r.institution}</span>
                           <span className="ml-auto tabular-nums text-muted-foreground">{r.count.toLocaleString()} patents</span>
                         </div>
-                        {r.sample && (
-                          <p className="mt-1 text-muted-foreground truncate pl-5" title={r.sample.patentTitle}>
-                            {r.sample.patentTitle}
+                        {r.sample.length > 0 && (
+                          <p className="mt-1 text-muted-foreground truncate pl-5" title={r.sample[0].title}>
+                            {r.sample[0].title}
                           </p>
                         )}
                         {r.error && <p className="mt-1 text-red-600 dark:text-red-400 pl-5">{r.error}</p>}

@@ -101,68 +101,70 @@ function setCached(key: string, patents: PatentRecord[]): void {
   cache.set(key, { patents, date: todayString() });
 }
 
-// ── PatentsView API fetch ─────────────────────────────────────────────────────
+// ── USPTO ODP API fetch (api.uspto.gov) ───────────────────────────────────────
+// The old api.patentsview.org endpoint is permanently shut down as of 2025.
+// Free API key available at: https://developer.uspto.gov/api-catalog/pta-patentsview
 
-const PATENTSVIEW_URL = "https://api.patentsview.org/patents/query";
+const USPTO_ODP_URL = "https://api.uspto.gov/patent/v1/patents/search";
 const FIFTEEN_YEARS_AGO = new Date(Date.now() - 15 * 365.25 * 24 * 60 * 60 * 1000)
   .toISOString()
   .slice(0, 10);
+const TODAY = new Date().toISOString().slice(0, 10);
 
 async function fetchPatentsByAssignee(
   assigneeName: string,
   apiKey: string,
 ): Promise<PatentRecord[]> {
+  if (!apiKey) throw new Error("USPTO_ODP_API_KEY is not set — get a free key at developer.uspto.gov");
+
   const cacheKey = `${assigneeName}::${todayString()}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
-  const body = {
-    q: {
-      _and: [
-        { _contains: { assignee_organization: assigneeName } },
-        { _gte: { patent_date: FIFTEEN_YEARS_AGO } },
-      ],
+  // New USPTO ODP API uses GET with Lucene query syntax
+  const q = `assigneeNameText:"${assigneeName}"`;
+  const params = new URLSearchParams({
+    q,
+    dateRangeField: "grantDate",
+    startdt: FIFTEEN_YEARS_AGO,
+    enddt: TODAY,
+    start: "0",
+    rows: "500",
+  });
+
+  const res = await fetch(`${USPTO_ODP_URL}?${params.toString()}`, {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "X-API-KEY": apiKey,
     },
-    f: ["patent_number", "patent_title", "patent_date", "patent_type", "assignee_organization"],
-    o: { per_page: 500, page: 1 },
-  };
-
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (apiKey) headers["X-Api-Key"] = apiKey;
-
-  const res = await fetch(PATENTSVIEW_URL, {
-    method: "POST",
-    headers,
-    body: JSON.stringify(body),
     signal: AbortSignal.timeout(20_000),
   });
 
   if (!res.ok) {
     const errBody = await res.text().catch(() => "");
-    throw new Error(`PatentsView HTTP ${res.status}: ${errBody.slice(0, 200)}`);
+    throw new Error(`USPTO ODP HTTP ${res.status}: ${errBody.slice(0, 200)}`);
   }
 
   const rawText = await res.text();
   const data = JSON.parse(rawText) as {
     patents?: Array<{
-      patent_number: string;
-      patent_title: string;
-      patent_date: string | null;
-      patent_type: string | null;
-      assignees?: Array<{ assignee_organization: string | null }>;
+      patentNumber?: string;
+      patentTitle?: string;
+      grantDate?: string | null;
+      filingDate?: string | null;
+      assignees?: Array<{ assigneeNameText?: string | null }>;
     }>;
+    count?: number;
   };
 
   const patents: PatentRecord[] = (data.patents ?? []).map((p) => ({
-    patentNumber: p.patent_number ?? "",
-    title: p.patent_title ?? "",
-    grantDate: p.patent_date ?? null,
-    filingDate: null,
+    patentNumber: p.patentNumber ?? "",
+    title: p.patentTitle ?? "",
+    grantDate: p.grantDate ?? null,
+    filingDate: p.filingDate ?? null,
     assignee: assigneeName,
-    status: p.patent_date ? "granted" : "filed",
+    status: p.grantDate ? "granted" : "filed",
   }));
 
   setCached(cacheKey, patents);
