@@ -4546,7 +4546,14 @@ export const techLinkScraper: InstitutionScraper = {
             ? `${BASE}/technologies/${nameSlug}/${uuid}`
             : `${BASE}/technologies`; // no valid UUID — link to search root
 
-          const description = String(src.description ?? src.abstract ?? src.summary ?? "").slice(0, 1000);
+          // TechLink ES `description` is a teaser-only field (often < 20 chars).
+          // Pull all available rich-text fields from the ES source and concatenate
+          // non-empty values — detail pages are JS-rendered and cannot be fetched.
+          const descParts = [
+            src.description, src.background, src.summary, src.abstract,
+            src.applications, src.advantages, src.body, src.full_description,
+          ].map(v => String(v ?? "").trim()).filter(s => s.length > 5);
+          const description = descParts.join(" ").slice(0, 2000);
           xhrItems.set(uuid || title, { title, description, url });
         }
       };
@@ -6049,8 +6056,32 @@ export const llnlScraper: InstitutionScraper = {
 
       if (results.length === 0) {
         console.warn(`[scraper] ${inst}: 0 listings returned — site may have changed structure`);
+        return results;
       }
-      console.log(`[scraper] ${inst}: ${results.length} listings across ${categories.size} categories`);
+      console.log(`[scraper] ${inst}: ${results.length} listings across ${categories.size} categories — fetching detail pages...`);
+
+      // ── Fetch detail pages for description text ──────────────────────────
+      // LLNL uses Drupal. Detail pages contain body in .field--name-body and
+      // additional context in .field--name-field-potential-applications and
+      // .field--name-field-background. All three selectors are tried in order.
+      const thinBefore = results.filter(l => !l.description || l.description.length < 50);
+      await enrichWithDetailPages(results, {
+        description: [
+          ".field--name-body",
+          ".field--name-field-potential-applications",
+          ".field--name-field-background",
+          ".field--body",
+          "#description",
+          ".description",
+          "main p",
+        ],
+      }, 9999);
+      const enrichedCount = thinBefore.filter(l => (l.description?.length ?? 0) >= 50).length;
+      const sample = results.find(l => (l.description?.length ?? 0) > 100);
+      console.log(`[scraper] ${inst}: detail fetch complete — ${enrichedCount}/${thinBefore.length} thin listings enriched`);
+      if (sample) {
+        console.log(`[scraper] ${inst}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars — "${sample.description!.slice(0, 150)}"`);
+      }
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${inst} failed: ${err?.message}`);
@@ -6117,7 +6148,14 @@ export const techLinkVAScraper: InstitutionScraper = {
             ? `${BASE}${pathPrefix}/${nameSlug}/${idRaw}`
             : `${BASE}${pathPrefix}`;
 
-          const description = String(src.description ?? src.abstract ?? src.summary ?? "").slice(0, 1000);
+          // TechLink ES `description` is a teaser-only field (often < 20 chars).
+          // Pull all available rich-text fields from the ES source and concatenate
+          // non-empty values — detail pages are JS-rendered and cannot be fetched.
+          const descParts = [
+            src.description, src.background, src.summary, src.abstract,
+            src.applications, src.advantages, src.body, src.full_description,
+          ].map(v => String(v ?? "").trim()).filter(s => s.length > 5);
+          const description = descParts.join(" ").slice(0, 2000);
           xhrItems.set(idRaw || title, { title, description, url });
         }
       };

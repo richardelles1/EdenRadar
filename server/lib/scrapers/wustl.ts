@@ -44,7 +44,8 @@ export const wustlScraper: InstitutionScraper = {
 
       await enrichWithDetailPages(results, {
         description: [
-          ".et_pb_text_inner",
+          ".et_pb_post_content",   // Divi builder — primary content container (confirmed live)
+          ".et_pb_text_inner",     // Divi text module inner content (fallback)
           ".entry-content",
           ".tech-summary-content",
           "article .content p",
