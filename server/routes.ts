@@ -4510,6 +4510,7 @@ export async function registerRoutes(
           assetName: a.assetName,
           summary: a.summary,
           abstract: a.abstract,
+          sourceType: a.sourceType,
           ctx: {
             categories: a.categories,
             patentStatus: a.patentStatus,
@@ -4723,10 +4724,10 @@ export async function registerRoutes(
       const rows = await db.execute<{
         id: number; asset_name: string; summary: string; abstract: string | null;
         categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
-        inventors: string[] | null; source_url: string | null;
+        inventors: string[] | null; source_url: string | null; source_type: string;
       }>(sql`
         SELECT id, asset_name, summary, abstract, categories, patent_status,
-               licensing_readiness, inventors, source_url
+               licensing_readiness, inventors, source_url, source_type
         FROM ingested_assets
         WHERE relevant = true
           AND (asset_class IS NULL OR asset_class = '')
@@ -4743,6 +4744,7 @@ export async function registerRoutes(
         assetName: r.asset_name,
         summary: r.summary,
         abstract: r.abstract,
+        sourceType: r.source_type,
         ctx: {
           categories: r.categories,
           patentStatus: r.patent_status,
@@ -6182,11 +6184,11 @@ Do not respond with anything else.`;
         id: number; asset_name: string; summary: string; abstract: string | null;
         mechanism_of_action: string | null; comparable_drugs: string | null;
         categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
-        inventors: string[] | null; source_url: string | null;
+        inventors: string[] | null; source_url: string | null; source_type: string;
         target: string | null; modality: string | null; indication: string | null; development_stage: string;
       }>(sql`
         SELECT id, asset_name, summary, abstract, mechanism_of_action, comparable_drugs,
-               categories, patent_status, licensing_readiness, inventors, source_url,
+               categories, patent_status, licensing_readiness, inventors, source_url, source_type,
                target, modality, indication, development_stage
         FROM ingested_assets
         WHERE relevant = true
@@ -6221,6 +6223,7 @@ Do not respond with anything else.`;
         licensingStatus: r.licensing_readiness,
         inventors: r.inventors,
         sourceUrl: r.source_url,
+        sourceType: r.source_type,
       }));
 
       dbgRunning = true;
@@ -6253,6 +6256,7 @@ Do not respond with anything else.`;
             assetName: a.assetName,
             summary: a.summary,
             abstract: a.abstract,
+            sourceType: a.sourceType,
             ctx: {
               categories: a.categories,
               patentStatus: a.patentStatus,
@@ -6535,7 +6539,7 @@ Do not respond with anything else.`;
         assetClass: string | null; mechanismOfAction: string | null; unmetNeed: string | null;
         comparableDrugs: string | null; innovationClaim: string | null;
         categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
-        inventors: string[] | null; sourceUrl: string | null;
+        inventors: string[] | null; sourceUrl: string | null; sourceType: string;
         target: string | null; modality: string | null; indication: string | null; developmentStage: string;
       }>;
 
@@ -6552,12 +6556,12 @@ Do not respond with anything else.`;
           asset_class: string | null; mechanism_of_action: string | null; unmet_need: string | null;
           comparable_drugs: string | null; innovation_claim: string | null;
           categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
-          inventors: string[] | null; source_url: string | null;
+          inventors: string[] | null; source_url: string | null; source_type: string;
           target: string | null; modality: string | null; indication: string | null; development_stage: string;
         }>(sql`
           SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
                  comparable_drugs, innovation_claim,
-                 categories, patent_status, licensing_readiness, inventors, source_url,
+                 categories, patent_status, licensing_readiness, inventors, source_url, source_type,
                  target, modality, indication, development_stage
           FROM ingested_assets
           WHERE relevant = true
@@ -6582,7 +6586,7 @@ Do not respond with anything else.`;
           assetClass: r.asset_class, mechanismOfAction: r.mechanism_of_action, unmetNeed: r.unmet_need,
           comparableDrugs: r.comparable_drugs, innovationClaim: r.innovation_claim,
           categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
-          inventors: r.inventors, sourceUrl: r.source_url,
+          inventors: r.inventors, sourceUrl: r.source_url, sourceType: r.source_type,
           target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
         }));
       } else {
@@ -6598,12 +6602,12 @@ Do not respond with anything else.`;
           asset_class: string | null; mechanism_of_action: string | null; unmet_need: string | null;
           comparable_drugs: string | null; innovation_claim: string | null;
           categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
-          inventors: string[] | null; source_url: string | null;
+          inventors: string[] | null; source_url: string | null; source_type: string;
           target: string | null; modality: string | null; indication: string | null; development_stage: string;
         }>(sql`
           SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
                  comparable_drugs, innovation_claim,
-                 categories, patent_status, licensing_readiness, inventors, source_url,
+                 categories, patent_status, licensing_readiness, inventors, source_url, source_type,
                  target, modality, indication, development_stage
           FROM ingested_assets
           WHERE relevant = true
@@ -6617,7 +6621,7 @@ Do not respond with anything else.`;
           assetClass: r.asset_class, mechanismOfAction: r.mechanism_of_action, unmetNeed: r.unmet_need,
           comparableDrugs: r.comparable_drugs, innovationClaim: r.innovation_claim,
           categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
-          inventors: r.inventors, sourceUrl: r.source_url,
+          inventors: r.inventors, sourceUrl: r.source_url, sourceType: r.source_type,
           target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
         }));
       }
@@ -6689,6 +6693,7 @@ Do not respond with anything else.`;
             assetName: a.assetName,
             summary: a.summary,
             abstract: a.abstract,
+            sourceType: a.sourceType,
             ctx: {
               categories: a.categories,
               patentStatus: a.patentStatus,

@@ -280,7 +280,7 @@ export interface IStorage {
   getAssetsNeedingDeepEnrich(): Promise<Array<{
     id: number; assetName: string; summary: string; abstract: string | null;
     categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
-    inventors: string[] | null; sourceUrl: string | null;
+    inventors: string[] | null; sourceUrl: string | null; sourceType: string;
   }>>;
   getAssetsNeedingDeepEnrichCount(): Promise<number>;
   updateIngestedAssetDeepEnrichment(id: number, data: {
@@ -1962,7 +1962,7 @@ export class DatabaseStorage implements IStorage {
   async getAssetsNeedingDeepEnrich(): Promise<Array<{
     id: number; assetName: string; summary: string; abstract: string | null;
     categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
-    inventors: string[] | null; sourceUrl: string | null;
+    inventors: string[] | null; sourceUrl: string | null; sourceType: string;
   }>> {
     return db
       .select({
@@ -1975,6 +1975,7 @@ export class DatabaseStorage implements IStorage {
         licensingStatus: ingestedAssets.licensingStatus,
         inventors: ingestedAssets.inventors,
         sourceUrl: ingestedAssets.sourceUrl,
+        sourceType: ingestedAssets.sourceType,
       })
       .from(ingestedAssets)
       // Four selection buckets. Buckets can overlap in edge cases (e.g., an asset
