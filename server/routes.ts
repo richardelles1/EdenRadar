@@ -4422,6 +4422,62 @@ export async function registerRoutes(
     }
   }, 15_000);
 
+  // ── Internal script routes (non-production + loopback only) ─────────────
+  // Used by scripts/enrichment-audit.ts to trigger and poll mini-enrichment
+  // without a Supabase JWT. Lives at /api/internal/ (not /api/admin/) so the
+  // global requireAdmin middleware at line 2523 does not apply.
+  // Gated by: non-production environment + loopback source + SESSION_SECRET header.
+  function requireInternalScript(req: import("express").Request, res: import("express").Response, next: import("express").NextFunction): void {
+    if (process.env.NODE_ENV === "production") { res.status(404).json({ error: "Not found" }); return; }
+    const secret = process.env.SESSION_SECRET;
+    if (!secret) { res.status(404).json({ error: "Not found" }); return; }
+    const sock = (req as any).socket;
+    const remote: string = sock?.remoteAddress ?? "";
+    const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+    if (!isLoopback || (req.headers as Record<string, string | undefined>)["x-internal-script-key"] !== secret) {
+      res.status(404).json({ error: "Not found" }); return;
+    }
+    next();
+  }
+
+  app.post("/api/internal/enrichment/run", requireInternalScript, async (req, res) => {
+    try {
+      if (liveEnrichment) return res.status(409).json({ error: "Enrichment job already running" });
+      const existingJob = await storage.getRunningEnrichmentJob();
+      if (existingJob) return res.status(409).json({ error: "Enrichment job already running" });
+      const drainAll = req.body?.all === true;
+      const filters: EnrichFilter = {};
+      const assets = await storage.getMiniEnrichBatch(500, filters);
+      if (assets.length === 0) return res.json({ message: "No assets in mini-enrich queue" });
+      const job = await storage.createEnrichmentJob(assets.length);
+      res.json({ message: "Drain started", total: assets.length, jobId: job.id, drain: drainAll });
+      standardEnrichShouldStop = false;
+      runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll, filters);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
+    }
+  });
+
+  app.get("/api/internal/enrichment/status", requireInternalScript, async (_req, res) => {
+    const lastJob = await storage.getLatestEnrichmentJob();
+    if (liveEnrichment && lastJob && liveEnrichment.jobId === lastJob.id) {
+      return res.json({
+        status: "running", jobId: lastJob.id,
+        processed: liveEnrichment.processed, total: liveEnrichment.total,
+        improved: liveEnrichment.improved, tokenCost: liveEnrichment.tokenCost,
+      });
+    }
+    if (lastJob) {
+      if (lastJob.status === "completed") return res.json({ status: "idle", processed: 0, total: 0, improved: 0 });
+      return res.json({
+        status: lastJob.status, jobId: lastJob.id,
+        processed: lastJob.processed, total: lastJob.total, improved: lastJob.improved,
+        tokenCost: lastJob.status === "done" ? lastRunTokenCost : undefined,
+      });
+    }
+    res.json({ status: "idle", processed: 0, total: 0, improved: 0 });
+  });
+
   // ── EDEN routes ──────────────────────────────────────────────────────────
 
   let edenJobId: number | null = null;

@@ -112,30 +112,8 @@ export async function getAdminUser(req: Request): Promise<{ id: string; email: s
 /**
  * Express middleware that requires an admin user. Admin routes intentionally
  * never honor x-impersonation-token (impersonationContext skips /api/admin/*).
- *
- * Internal script bypass: in non-production environments, requests from the
- * loopback interface that carry an x-internal-admin-bypass header matching
- * SESSION_SECRET are granted admin access without a Supabase JWT. This mirrors
- * the smoke-auth bypass pattern in verifyAnyAuth and is used exclusively by
- * scripts/enrichment-audit.ts (and similar maintenance scripts) that cannot
- * obtain a Supabase session headlessly.
  */
 export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (process.env.NODE_ENV !== "production" && process.env.SESSION_SECRET) {
-    const bypass = req.headers["x-internal-admin-bypass"];
-    const remote = (req.socket as any)?.remoteAddress ?? "";
-    const isLoopback =
-      remote === "127.0.0.1" ||
-      remote === "::1" ||
-      remote === "::ffff:127.0.0.1";
-    if (isLoopback && bypass === process.env.SESSION_SECRET) {
-      req.headers["x-admin-id"] = "script";
-      req.headers["x-admin-email"] = "script@internal.local";
-      req.headers["x-user-id"] = "script";
-      return next();
-    }
-  }
-
   const u = await getAdminUser(req);
   if (!u) {
     return res.status(401).json({ error: "Admin authentication required" });
