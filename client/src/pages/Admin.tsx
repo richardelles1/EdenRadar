@@ -2047,7 +2047,7 @@ interface BrowsedAsset {
   enrichment_sources: Record<string, string> | null;
 }
 
-type AssetBrowserInit = { dim: "modality" | "stage" | "indication"; value: string } | null;
+type AssetBrowserInit = { dim: "modality" | "stage" | "indication" | "missing"; value: string } | null;
 
 function computeLocalScore(
   fields: { target?: string; modality?: string; indication?: string; development_stage?: string; summary?: string; abstract?: string; innovation_claim?: string; mechanism_of_action?: string },
@@ -2349,9 +2349,10 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
 
   useEffect(() => {
     if (!initialFilter) return;
-    if (initialFilter.dim === "modality") { setModality(initialFilter.value); setStage(""); setIndication(""); }
-    else if (initialFilter.dim === "stage") { setStage(initialFilter.value); setModality(""); setIndication(""); }
-    else if (initialFilter.dim === "indication") { setIndication(initialFilter.value); setModality(""); setStage(""); }
+    if (initialFilter.dim === "modality") { setModality(initialFilter.value); setStage(""); setIndication(""); setMissing(""); }
+    else if (initialFilter.dim === "stage") { setStage(initialFilter.value); setModality(""); setIndication(""); setMissing(""); }
+    else if (initialFilter.dim === "indication") { setIndication(initialFilter.value); setModality(""); setStage(""); setMissing(""); }
+    else if (initialFilter.dim === "missing") { setMissing(initialFilter.value); setModality(""); setStage(""); setIndication(""); }
     setPage(1);
     setExpandedId(null);
   }, [initialFilter]);
@@ -2716,7 +2717,7 @@ function FillBar({ pct, color }: { pct: number | null; color: string }) {
 
 // ── Enrichment Pipeline Panel ──────────────────────────────────────────────
 // All enrichment controls in one collapsible card: EDEN auto-run + Steps 1/2/3.
-function EnrichmentPipelinePanel({ pw }: { pw: string }) {
+function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpClick?: () => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
 
@@ -3595,53 +3596,40 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
               {/* Queue Health */}
               {enrichHealth && (
                 <div className="grid grid-cols-4 gap-2" data-testid="enrichment-queue-health">
-                  {[
-                    {
-                      label: "Ready to enrich",
-                      val: enrichHealth.readyCount,
-                      color: "emerald",
-                      tooltip: "Have sufficient text and are under the 3-attempt cap — will be processed by the next run",
-                    },
-                    {
-                      label: "Needs re-fetch",
-                      val: enrichHealth.needsRefetchCount,
-                      color: "sky",
-                      tooltip: "Summary < 120 chars — run a re-fetch tool first to gather more text before enrichment",
-                    },
-                    {
-                      label: "Gave up",
-                      val: enrichHealth.gaveUpCount,
-                      color: "red",
-                      tooltip: "Hit the 3-attempt cap — AI tried 3× and couldn't classify. These are skipped to avoid wasting spend. Re-fetch that improves text by 200+ chars will reset the cap.",
-                    },
-                    {
-                      label: "Enriched (24 h)",
-                      val: enrichHealth.enriched24hCount,
-                      color: "violet",
-                      tooltip: "Assets that had enriched_at set in the last 24 hours",
-                    },
-                  ].map(({ label, val, color, tooltip }) => (
-                    <div
-                      key={label}
-                      title={tooltip}
-                      className={`rounded-lg border bg-background p-2.5 text-center cursor-default
-                        ${color === "emerald" ? "border-emerald-200 dark:border-emerald-800" : ""}
-                        ${color === "sky" ? "border-sky-200 dark:border-sky-800" : ""}
-                        ${color === "red" ? "border-red-200 dark:border-red-800" : ""}
-                        ${color === "violet" ? "border-violet-200 dark:border-violet-800" : ""}
-                      `}
-                      data-testid={`stat-health-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      <div className={`text-base font-bold tabular-nums
-                        ${color === "emerald" ? "text-emerald-700 dark:text-emerald-400" : ""}
-                        ${color === "sky" ? "text-sky-700 dark:text-sky-400" : ""}
-                        ${color === "red" && val > 0 ? "text-red-600 dark:text-red-400" : ""}
-                        ${color === "red" && val === 0 ? "text-muted-foreground" : ""}
-                        ${color === "violet" ? "text-violet-700 dark:text-violet-400" : ""}
-                      `}>{val.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground leading-tight mt-0.5">{label}</div>
+                  <div title="Have sufficient text and are under the 3-attempt cap — will be processed by the next run"
+                    className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-background p-2.5 text-center"
+                    data-testid="stat-health-ready-to-enrich">
+                    <div className="text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{enrichHealth.readyCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">Ready to enrich</div>
+                  </div>
+                  <div title="Summary &lt; 120 chars — run a re-fetch tool first to gather more text before enrichment"
+                    className="rounded-lg border border-sky-200 dark:border-sky-800 bg-background p-2.5 text-center"
+                    data-testid="stat-health-needs-re-fetch">
+                    <div className="text-base font-bold tabular-nums text-sky-700 dark:text-sky-400">{enrichHealth.needsRefetchCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">Needs re-fetch</div>
+                  </div>
+                  <button
+                    title="Hit the 3-attempt cap — AI tried 3× and couldn't classify. Click to filter the asset list below. Re-fetch that improves text by 200+ chars will reset the cap."
+                    onClick={onGaveUpClick}
+                    className={`rounded-lg border bg-background p-2.5 text-center transition-colors
+                      ${enrichHealth.gaveUpCount > 0
+                        ? "border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                        : "border-border cursor-default"}
+                    `}
+                    data-testid="stat-health-gave-up">
+                    <div className={`text-base font-bold tabular-nums ${enrichHealth.gaveUpCount > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                      {enrichHealth.gaveUpCount.toLocaleString()}
                     </div>
-                  ))}
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">
+                      Gave up{enrichHealth.gaveUpCount > 0 && onGaveUpClick ? " ↓ view" : ""}
+                    </div>
+                  </button>
+                  <div title="Assets where enriched_at was set in the last 24 hours"
+                    className="rounded-lg border border-violet-200 dark:border-violet-800 bg-background p-2.5 text-center"
+                    data-testid="stat-health-enriched-24-h">
+                    <div className="text-base font-bold tabular-nums text-violet-700 dark:text-violet-400">{enrichHealth.enriched24hCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">Enriched (24 h)</div>
+                  </div>
                 </div>
               )}
 
@@ -4607,7 +4595,7 @@ function EnrichmentPipelinePanel({ pw }: { pw: string }) {
   );
 }
 
-function Enrichment({ pw }: { pw: string }) {
+function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilter?: boolean }) {
   const [institutionFilter, setInstitutionFilter] = useState("");
   const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
   const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
@@ -4615,6 +4603,13 @@ function Enrichment({ pw }: { pw: string }) {
   const [browserPreFilter, setBrowserPreFilter] = useState<AssetBrowserInit>(null);
   const browserRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (initialGaveUpFilter) {
+      setBrowserPreFilter({ dim: "missing", value: "capped" });
+      setTimeout(() => browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 200);
+    }
+  }, [initialGaveUpFilter]);
 
   const handleFilterSelect = (dim: "modality" | "stage" | "indication", value: string) => {
     setBrowserPreFilter({ dim, value });
@@ -11093,10 +11088,11 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
 // ── Data Quality Tab ─────────────────────────────────────────────────────────
 
 function DataQualityTab({ pw }: { pw: string }) {
+  const [gaveUpActive, setGaveUpActive] = useState(false);
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
-      <EnrichmentPipelinePanel pw={pw} />
-      <Enrichment pw={pw} />
+      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpActive(v => !v)} />
+      <Enrichment pw={pw} initialGaveUpFilter={gaveUpActive} />
       <EdenReadinessPanel pw={pw} />
       <RelevancePanel pw={pw} />
       <PotentialDuplicates pw={pw} />

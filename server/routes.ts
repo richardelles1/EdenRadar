@@ -4089,6 +4089,7 @@ export async function registerRoutes(
       else if (m === "indication") parts.push(sql`(indication IS NULL OR indication IN ('unknown',''))`);
       else if (m === "modality") parts.push(sql`(modality IS NULL OR modality IN ('unknown',''))`);
       else if (m === "stage") parts.push(sql`(development_stage IS NULL OR development_stage IN ('unknown',''))`);
+      else if (m === "capped") parts.push(sql`COALESCE(mini_enrich_attempts, 0) >= 3`);
     }
     return parts.reduce((a, b) => sql`${a} AND ${b}`);
   }
@@ -4304,14 +4305,14 @@ export async function registerRoutes(
         SELECT
           COUNT(*) FILTER (
             WHERE relevant = true
-              AND (data_sparse IS NULL OR data_sparse = false)
+              AND enriched_at IS NULL
               AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
               AND COALESCE(mini_enrich_attempts, 0) < 3
           )::int AS ready_count,
           COUNT(*) FILTER (
             WHERE relevant = true
-              AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 120
               AND enriched_at IS NULL
+              AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 120
           )::int AS needs_refetch_count,
           COUNT(*) FILTER (
             WHERE relevant = true
