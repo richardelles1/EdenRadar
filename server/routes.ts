@@ -4951,69 +4951,49 @@ export async function registerRoutes(
     stageFillLlmFilled = 0;
     stageFillShouldStop = false;
 
-    // Count eligible so the client can show progress
+    // Count eligible (with asset_class exclusion matching actual fill queries)
     const countRes = await db.execute<{ total: string }>(sql`
       SELECT COUNT(*)::int AS total FROM ingested_assets
       WHERE relevant = true
         AND (development_stage IS NULL OR development_stage IN ('unknown', ''))
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+        AND (asset_class IS NULL OR asset_class NOT IN ('medical_device', 'research_tool', 'software'))
     `);
     stageFillTotal = Number((countRes.rows[0] as any)?.total ?? 0);
     res.json({ started: true, total: stageFillTotal });
 
+    // ── Inline SQL score expression matching computeCompletenessScore() ──────
+    // Allows stage write + score update to be one atomic SQL UPDATE per phase.
+    const STAGE_FILL_SCORE_SQL = `
+      LEAST(100,
+        CASE WHEN ia.indication IS NOT NULL AND length(ia.indication) >= 3
+                  AND ia.indication NOT IN ('unknown','') THEN 25 ELSE 0 END +
+        CASE WHEN ia.modality IS NOT NULL AND length(ia.modality) >= 3
+                  AND ia.modality NOT IN ('unknown','') THEN 20 ELSE 0 END +
+        CASE WHEN new_stage IS NOT NULL AND length(new_stage) >= 3
+                  AND new_stage NOT IN ('unknown','') THEN 20 ELSE 0 END +
+        CASE WHEN length(COALESCE(ia.summary,'')) >= 300 THEN 15
+             WHEN length(COALESCE(ia.summary,'')) >= 150 THEN 10
+             WHEN length(COALESCE(ia.summary,'')) >= 50  THEN 5 ELSE 0 END +
+        CASE WHEN ia.mechanism_of_action IS NOT NULL AND length(ia.mechanism_of_action) >= 3
+                  AND ia.mechanism_of_action NOT IN ('unknown','') THEN 12 ELSE 0 END +
+        CASE WHEN (ia.ip_type IS NOT NULL AND length(ia.ip_type) >= 3
+                   AND ia.ip_type NOT IN ('unknown',''))
+               OR (ia.patent_status IS NOT NULL AND length(ia.patent_status) >= 3
+                   AND ia.patent_status NOT IN ('unknown',''))
+             THEN 8 ELSE 0 END
+      )`;
+
     // ── Background job ─────────────────────────────────────────────────────
     (async () => {
       const t0 = Date.now();
-      const { computeCompletenessScore } = await import("./lib/pipeline/contentHash.js");
-
-      type StageFillScoreRow = {
-        id: number; modality: string | null; indication: string | null;
-        development_stage: string | null; summary: string | null;
-        mechanism_of_action: string | null; ip_type: string | null; patent_status: string | null;
-      };
-
-      async function rescoreIds(ids: number[]): Promise<number> {
-        if (ids.length === 0) return 0;
-        const qr = await pool.query<StageFillScoreRow>(
-          `SELECT id, modality, indication, development_stage, summary,
-                  mechanism_of_action, ip_type, patent_status
-           FROM ingested_assets WHERE id = ANY($1)`,
-          [ids],
-        );
-        const rows: StageFillScoreRow[] = qr.rows;
-        if (rows.length === 0) return 0;
-        const placeholders = rows
-          .map((_row: StageFillScoreRow, i: number) => `($${i * 2 + 1}::int, $${i * 2 + 2}::real)`)
-          .join(", ");
-        const params = rows.flatMap((r: StageFillScoreRow) => [
-          r.id,
-          computeCompletenessScore({
-            modality: r.modality,
-            indication: r.indication,
-            developmentStage: r.development_stage,
-            summary: r.summary,
-            mechanismOfAction: r.mechanism_of_action,
-            ipType: r.ip_type,
-            patentStatus: r.patent_status,
-          }) ?? 0,
-        ]);
-        await pool.query(
-          `UPDATE ingested_assets ia SET completeness_score = tmp.score
-           FROM (VALUES ${placeholders}) AS tmp(id, score)
-           WHERE ia.id = tmp.id`,
-          params,
-        );
-        return rows.length;
-      }
-
-      let totalRescored = 0;
       let costUsd = 0;
 
       try {
-        // ── Phase 1: SQL regex ──
+        // ── Phase 1: SQL regex — atomic stage + score UPDATE in one CTE ──
         if (!onlyPhase || onlyPhase === 1) {
           const p1 = await pool.query<{ id: number }>(`
-            WITH fills AS (
+            WITH source AS (
               SELECT id,
                 CASE
                   WHEN txt ~* '\\mFDA[- ]approved\\M|\\mFDA[- ]cleared\\M|commercially available|marketed drug|on the market|approved for sale|post[- ]market'
@@ -5032,8 +5012,7 @@ export async function registerRoutes(
                     THEN 'discovery'
                   WHEN txt ~* '\\mpreclinical\\M|\\mpre[- ]clinical\\M|\\mlead[- ]optimi.ation\\M'
                     THEN 'preclinical'
-                END AS new_stage,
-                id AS asset_id
+                END AS new_stage
               FROM (
                 SELECT id,
                        LOWER(COALESCE(summary, '') || ' ' || COALESCE(abstract, '')) AS txt
@@ -5046,23 +5025,23 @@ export async function registerRoutes(
             )
             UPDATE ingested_assets ia
             SET
-              development_stage = f.new_stage,
+              development_stage  = s.new_stage,
+              completeness_score = ${STAGE_FILL_SCORE_SQL},
               enrichment_sources = COALESCE(enrichment_sources, '{}'::jsonb)
                 || '{"development_stage":"regex"}'::jsonb
-            FROM fills f
-            WHERE ia.id = f.asset_id AND f.new_stage IS NOT NULL
+            FROM source s
+            WHERE ia.id = s.id AND s.new_stage IS NOT NULL
             RETURNING ia.id
           `);
           stageFillRegexFilled = p1.rows.length;
           stageFillProcessed += stageFillRegexFilled;
-          console.log(`[fill-stage] Phase 1 regex: ${stageFillRegexFilled} filled`);
-          totalRescored += await rescoreIds(p1.rows.map((r) => r.id));
+          console.log(`[fill-stage] Phase 1 regex: ${stageFillRegexFilled} filled (stage + score atomic)`);
         }
 
         if (stageFillShouldStop) {
           console.log("[fill-stage] Stop requested after Phase 1");
         } else if (!onlyPhase || onlyPhase === 2) {
-          // ── Phase 2: LLM ──
+          // ── Phase 2: LLM — collect results, then single atomic batch UPDATE ──
           if (!process.env.OPENAI_API_KEY) {
             console.warn("[fill-stage] Phase 2 skipped — OPENAI_API_KEY not set");
           } else {
@@ -5092,7 +5071,9 @@ Do not respond with anything else.`;
             );
 
             console.log(`[fill-stage] Phase 2 LLM: ${llmRows.length} eligible (cap=${cap})`);
-            const llmFilledIds: number[] = [];
+
+            // Collect all (id, stage) results first — then one atomic batch UPDATE
+            const llmResults = new Map<number, string>(); // id → stage to write
             const CONCURRENCY = 5;
             const queue = [...llmRows];
 
@@ -5112,18 +5093,8 @@ Do not respond with anything else.`;
                   });
                   const raw = (resp.choices[0]?.message?.content ?? "").trim().toLowerCase();
                   const matched = STAGE_ENUM_VALS.find((s) => s.toLowerCase() === raw);
-                  if (matched) {
-                    await pool.query(
-                      `UPDATE ingested_assets
-                       SET development_stage = $1,
-                           enrichment_sources = COALESCE(enrichment_sources, '{}'::jsonb)
-                             || '{"development_stage":"llm"}'::jsonb
-                       WHERE id = $2`,
-                      [matched, row.id],
-                    );
-                    llmFilledIds.push(row.id);
-                    stageFillLlmFilled++;
-                  }
+                  // Any response not in enum (including "unknown") is not written
+                  if (matched) llmResults.set(row.id, matched);
                 } catch {
                   // swallow individual errors
                 }
@@ -5132,11 +5103,30 @@ Do not respond with anything else.`;
             };
 
             await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-            totalRescored += await rescoreIds(llmFilledIds);
+
+            // Single atomic batch UPDATE: stage + score together, no separate rescore pass
+            stageFillLlmFilled = llmResults.size;
+            if (llmResults.size > 0) {
+              const ids    = Array.from(llmResults.keys());
+              const stages = ids.map((id) => llmResults.get(id)!);
+              await pool.query(`
+                WITH updates AS (
+                  SELECT unnest($1::int[]) AS id, unnest($2::text[]) AS new_stage
+                )
+                UPDATE ingested_assets ia
+                SET
+                  development_stage  = u.new_stage,
+                  completeness_score = ${STAGE_FILL_SCORE_SQL},
+                  enrichment_sources = COALESCE(enrichment_sources, '{}'::jsonb)
+                    || '{"development_stage":"llm"}'::jsonb
+                FROM updates u
+                WHERE ia.id = u.id
+              `, [ids, stages]);
+            }
 
             // Rough cost estimate: ~700 input + ~5 output tokens per call @ gpt-4o-mini pricing
             costUsd = llmRows.length * ((700 * 0.15 + 5 * 0.60) / 1_000_000);
-            console.log(`[fill-stage] Phase 2 LLM: ${stageFillLlmFilled} filled, est. cost $${costUsd.toFixed(4)}`);
+            console.log(`[fill-stage] Phase 2 LLM: ${stageFillLlmFilled} filled (stage + score atomic), est. cost $${costUsd.toFixed(4)}`);
           }
         }
       } catch (err: any) {
@@ -5145,13 +5135,13 @@ Do not respond with anything else.`;
         stageFillLastSummary = {
           regexFilled: stageFillRegexFilled,
           llmFilled: stageFillLlmFilled,
-          rescored: totalRescored,
+          rescored: stageFillRegexFilled + stageFillLlmFilled,
           costUsd,
           durationMs: Date.now() - t0,
           completedAt: new Date().toISOString(),
         };
         stageFillRunning = false;
-        console.log(`[fill-stage] Done — regex=${stageFillRegexFilled} llm=${stageFillLlmFilled} rescored=${totalRescored}`);
+        console.log(`[fill-stage] Done — regex=${stageFillRegexFilled} llm=${stageFillLlmFilled}`);
       }
     })();
   });
