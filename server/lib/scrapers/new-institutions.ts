@@ -4549,10 +4549,18 @@ export const techLinkScraper: InstitutionScraper = {
           // TechLink ES `description` is a teaser-only field (often < 20 chars).
           // Pull all available rich-text fields from the ES source and concatenate
           // non-empty values — detail pages are JS-rendered and cannot be fetched.
-          const descParts = [
+          // De-duplicate: skip a field whose content is already covered by a prior field.
+          const rawParts = [
             src.description, src.background, src.summary, src.abstract,
             src.applications, src.advantages, src.body, src.full_description,
           ].map(v => String(v ?? "").trim()).filter(s => s.length > 5);
+          const descParts: string[] = [];
+          for (const part of rawParts) {
+            const covered = descParts.some(
+              prev => prev.includes(part) || part.includes(prev)
+            );
+            if (!covered) descParts.push(part);
+          }
           const description = descParts.join(" ").slice(0, 2000);
           xhrItems.set(uuid || title, { title, description, url });
         }
@@ -6151,10 +6159,18 @@ export const techLinkVAScraper: InstitutionScraper = {
           // TechLink ES `description` is a teaser-only field (often < 20 chars).
           // Pull all available rich-text fields from the ES source and concatenate
           // non-empty values — detail pages are JS-rendered and cannot be fetched.
-          const descParts = [
+          // De-duplicate: skip a field whose content is already covered by a prior field.
+          const rawParts = [
             src.description, src.background, src.summary, src.abstract,
             src.applications, src.advantages, src.body, src.full_description,
           ].map(v => String(v ?? "").trim()).filter(s => s.length > 5);
+          const descParts: string[] = [];
+          for (const part of rawParts) {
+            const covered = descParts.some(
+              prev => prev.includes(part) || part.includes(prev)
+            );
+            if (!covered) descParts.push(part);
+          }
           const description = descParts.join(" ").slice(0, 2000);
           xhrItems.set(idRaw || title, { title, description, url });
         }
