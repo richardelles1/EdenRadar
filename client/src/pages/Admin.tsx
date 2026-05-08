@@ -3835,9 +3835,8 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   {runUsptoSpotCheck.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
                   Spot Check API
                 </Button>
-                <Button size="sm" onClick={() => runUsptoXref.mutate()} disabled={!usptoSpotCheckOk || usptoStatus?.running || runUsptoXref.isPending}
-                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50" data-testid="button-run-uspto-xref"
-                  title={!usptoSpotCheckOk ? "Run spot check first to verify API connectivity" : undefined}>
+                <Button size="sm" onClick={() => runUsptoXref.mutate()} disabled={usptoStatus?.running || runUsptoXref.isPending}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50" data-testid="button-run-uspto-xref">
                   {usptoStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                   Run Cross-Reference
                 </Button>

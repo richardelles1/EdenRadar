@@ -3743,9 +3743,6 @@ export async function registerRoutes(
   app.post("/api/admin/enrichment/uspto/run", async (req, res) => {
     try {
       if (usptoRunning) return res.status(409).json({ error: "USPTO cross-reference already running" });
-      if (!usptoSpotCheckValidation?.passed) {
-        return res.status(400).json({ error: "Spot check must pass (≥3 valid institutions) before running cross-reference" });
-      }
 
       const apiKey = process.env.USPTO_ODP_API_KEY ?? "";
       usptoRunning = true;
