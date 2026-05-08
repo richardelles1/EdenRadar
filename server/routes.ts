@@ -4302,33 +4302,32 @@ export async function registerRoutes(
 
   app.get("/api/admin/enrichment/health", requireAdmin, async (req, res) => {
     try {
-      type HealthRow = { ready_count: number; needs_refetch_count: number; gave_up_count: number; enriched_24h_count: number };
-      const rows = await db.execute<HealthRow>(sql`
-        SELECT
-          COUNT(*) FILTER (
-            WHERE relevant = true
-              AND enriched_at IS NULL
-              AND char_length(COALESCE(summary, '')) >= 120
-              AND COALESCE(mini_enrich_attempts, 0) < 3
-          )::int AS ready_count,
-          COUNT(*) FILTER (
-            WHERE relevant = true
-              AND enriched_at IS NULL
-              AND char_length(COALESCE(summary, '')) < 120
-          )::int AS needs_refetch_count,
-          COUNT(*) FILTER (
-            WHERE relevant = true
-              AND COALESCE(mini_enrich_attempts, 0) >= 3
-          )::int AS gave_up_count,
-          COUNT(*) FILTER (
-            WHERE relevant = true
-              AND enriched_at > NOW() - INTERVAL '24 hours'
-          )::int AS enriched_24h_count
-        FROM ingested_assets
-      `);
-      const row = rows.rows[0];
+      // readyCount uses getFilteredEnrichCount({}) so it always matches the
+      // /count endpoint and the run-button label — same buildEnrichWhere criteria.
+      type AuxRow = { needs_refetch_count: number; gave_up_count: number; enriched_24h_count: number };
+      const [countResult, auxRows] = await Promise.all([
+        storage.getFilteredEnrichCount({}),
+        db.execute<AuxRow>(sql`
+          SELECT
+            COUNT(*) FILTER (
+              WHERE relevant = true
+                AND (data_sparse IS NULL OR data_sparse = false)
+                AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 120
+            )::int AS needs_refetch_count,
+            COUNT(*) FILTER (
+              WHERE relevant = true
+                AND COALESCE(mini_enrich_attempts, 0) >= 3
+            )::int AS gave_up_count,
+            COUNT(*) FILTER (
+              WHERE relevant = true
+                AND enriched_at > NOW() - INTERVAL '24 hours'
+            )::int AS enriched_24h_count
+          FROM ingested_assets
+        `),
+      ]);
+      const row = auxRows.rows[0];
       res.json({
-        readyCount: row.ready_count ?? 0,
+        readyCount: countResult.count,
         needsRefetchCount: row.needs_refetch_count ?? 0,
         gaveUpCount: row.gave_up_count ?? 0,
         enriched24hCount: row.enriched_24h_count ?? 0,

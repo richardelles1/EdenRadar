@@ -3787,11 +3787,13 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {(() => {
-                    const displayCount = hasEnrichFilters ? (enrichCount?.count ?? 0) : Math.min(500, miniQueue?.count ?? 0);
-                    const displayCost = hasEnrichFilters ? (enrichCount?.costEstimate ?? 0) : (miniQueue?.costEstimate ?? 0);
-                    const batchCount = Math.min(500, displayCount);
+                    // Always source count from /count endpoint (same criteria as the batch run)
+                    // so the button label always matches what will actually be processed.
+                    const totalCount = enrichCount?.count ?? 0;
+                    const totalCost = enrichCount?.costEstimate ?? 0;
+                    const batchCount = Math.min(500, totalCount);
                     const filterOpts = hasEnrichFilters ? { institution: debouncedInstitution || undefined, modality: enrichModality || undefined, tier: enrichTier || undefined, missingField: enrichMissingField || undefined } : undefined;
-                    const noAssets = hasEnrichFilters ? enrichCount?.count === 0 : (miniQueue?.count ?? 0) === 0;
+                    const noAssets = enrichCount?.count === 0;
                     return (<>
                       <Button size="sm"
                         onClick={() => runEnrichment.mutate(filterOpts)}
@@ -3801,21 +3803,19 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                         title={hasEnrichFilters ? `Enrich the top ${batchCount.toLocaleString()} assets matching current filters (completeness DESC)` : `Enrich the top ${batchCount.toLocaleString()} assets (completeness DESC)`}>
                         {isRunning || enrichCountLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                         Run {batchCount.toLocaleString()}{hasEnrichFilters ? " filtered" : " batch"}
-                        {displayCost > 0 && <span className="opacity-70 text-[10px]"> ~${(batchCount * 0.0003).toFixed(2)}</span>}
+                        {totalCost > 0 && <span className="opacity-70 text-[10px]"> ~${(batchCount * 0.0003).toFixed(2)}</span>}
                       </Button>
                       <Button size="sm" variant="outline"
                         onClick={() => {
-                          const tot = hasEnrichFilters ? (enrichCount?.count ?? 0) : (miniQueue?.count ?? 0);
-                          const cost = hasEnrichFilters ? (enrichCount?.costEstimate ?? 0) : (miniQueue?.costEstimate ?? 0);
-                          const label = hasEnrichFilters ? "filtered assets" : "un-scanned assets";
-                          const ok = window.confirm(`Run on ALL ${tot.toLocaleString()} ${label}?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job pulls the next 500 until the queue is empty. You can stop at any time.`);
+                          const label = hasEnrichFilters ? "filtered assets" : "assets in queue";
+                          const ok = window.confirm(`Run on ALL ${totalCount.toLocaleString()} ${label}?\n\nEstimated cost: $${totalCost.toFixed(2)}\n\nThe job pulls the next 500 until the queue is empty. You can stop at any time.`);
                           if (ok) runEnrichment.mutate({ all: true, ...filterOpts });
                         }}
                         disabled={isRunning || runEnrichment.isPending || noAssets || enrichCountLoading}
                         className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
                         data-testid="button-run-enrichment-all">
                         {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                        Run all ({hasEnrichFilters ? (enrichCount?.count ?? "…").toLocaleString() : (miniQueue?.count ?? "…").toLocaleString()})
+                        Run all ({enrichCountLoading ? "…" : totalCount.toLocaleString()})
                       </Button>
                     </>);
                   })()}
