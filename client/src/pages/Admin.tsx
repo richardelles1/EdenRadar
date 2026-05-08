@@ -2781,6 +2781,8 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [classifyConfirm, setClassifyConfirm] = React.useState(false);
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [ttoLicensingFillDone, setTtoLicensingFillDone] = React.useState<{ filled: number; beforeCount: number } | null>(null);
+  const [usptoSpotCheckResults, setUsptoSpotCheckResults] = React.useState<Array<{ institution: string; assigneeName: string; totalFound: number; sample: Array<{ number: string; title: string; date: string | null }>; error?: string }> | null>(null);
+  const [usptoRunResult, setUsptoRunResult] = React.useState<{ matched: number; unmatched: number; skipped: number; total: number; written: number; errors: string[] } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
   const [drInstitution, setDrInstitution] = React.useState("");
@@ -2929,6 +2931,39 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     onSuccess: (data) => {
       setModalityFillDone(data);
       refetchModalityFillCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+    },
+  });
+
+  const { data: usptoCount, refetch: refetchUsptoCount } = useQuery<{ total: number; covered: number }>({
+    queryKey: ["/api/admin/enrichment/uspto-crossref/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto-crossref/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const runUsptoSpotCheck = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto-crossref/spot-check", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error ?? "Spot check failed"); }
+      return res.json() as Promise<{ results: Array<{ institution: string; assigneeName: string; totalFound: number; sample: Array<{ number: string; title: string; date: string | null }>; error?: string }> }>;
+    },
+    onSuccess: (data) => setUsptoSpotCheckResults(data.results),
+  });
+
+  const runUsptoFull = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto-crossref/run", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error((e as any).error ?? "Run failed"); }
+      return res.json() as Promise<{ matched: number; unmatched: number; skipped: number; total: number; written: number; errors: string[] }>;
+    },
+    onSuccess: (data) => {
+      setUsptoRunResult(data);
+      refetchUsptoCount();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
     },
@@ -4067,6 +4102,104 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-modality-fill">
                   {runModalityFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                   Fill {modalityFillCount != null ? `(${modalityFillCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2e: USPTO Patent Cross-Reference */}
+          <div className="border border-blue-200 dark:border-blue-900 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden" data-testid="card-uspto-crossref">
+            <div className="px-4 py-2.5 border-b border-blue-200 dark:border-blue-900 bg-blue-100/60 dark:bg-blue-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold shrink-0">2e</span>
+              <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">USPTO Patent Cross-Reference</span>
+              <span className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Cross-references TTO assets against real USPTO patent records by institution assignee name.
+                Uses Jaccard title similarity (≥ 0.35) to match assets to granted or filed patents.
+                Fills <span className="font-medium text-foreground">ip_type = 'patent'</span> and <span className="font-medium text-foreground">patent_status</span> — never overwrites human-verified fields.
+                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">rule:uspto_patentsview</span> on both fields.
+                Covers 30 top institutions. Run Spot Check first to verify API connectivity before the full run.
+              </p>
+              {usptoCount != null && (
+                <div className="flex items-center gap-4 p-2.5 rounded-lg border border-blue-200 dark:border-blue-800 bg-background">
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold tabular-nums text-blue-700 dark:text-blue-400">{usptoCount.total.toLocaleString()}</span>
+                    <span className="text-[11px] text-muted-foreground">TTO assets missing ip_type</span>
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-lg font-bold tabular-nums text-blue-600 dark:text-blue-500">{usptoCount.covered.toLocaleString()}</span>
+                    <span className="text-[11px] text-muted-foreground">in covered institutions</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Spot check results */}
+              {usptoSpotCheckResults && (
+                <div className="space-y-1.5" data-testid="uspto-spot-check-results">
+                  <p className="text-[11px] font-semibold text-blue-700 dark:text-blue-400">Spot Check Results</p>
+                  {usptoSpotCheckResults.map((r) => (
+                    <div key={r.institution} className={`p-2.5 rounded-lg border text-xs ${r.error ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20" : r.totalFound > 0 ? "border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20" : "border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/20"}`}>
+                      <div className="flex items-center gap-2 mb-1">
+                        {r.error ? <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" /> : r.totalFound > 0 ? <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" /> : <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                        <span className="font-medium">{r.institution}</span>
+                        <span className="ml-auto text-muted-foreground tabular-nums">{r.totalFound.toLocaleString()} patents</span>
+                      </div>
+                      {r.error && <p className="text-red-600 dark:text-red-400 text-[11px]">{r.error}</p>}
+                      {r.sample.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {r.sample.map((s) => (
+                            <p key={s.number} className="text-[11px] text-muted-foreground truncate">{s.number} — {s.title}</p>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Full run result */}
+              {usptoRunResult && !runUsptoFull.isPending && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30" data-testid="uspto-run-result">
+                  <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="text-xs font-medium text-blue-700 dark:text-blue-400 space-y-0.5">
+                    <p>{usptoRunResult.written.toLocaleString()} patents written · {usptoRunResult.matched.toLocaleString()} matched · {usptoRunResult.unmatched.toLocaleString()} unmatched · {usptoRunResult.skipped.toLocaleString()} skipped</p>
+                    {usptoRunResult.errors.length > 0 && <p className="text-amber-600 dark:text-amber-400">{usptoRunResult.errors.length} institution error(s): {usptoRunResult.errors[0]}</p>}
+                  </div>
+                </div>
+              )}
+
+              {(runUsptoSpotCheck.isPending || runUsptoFull.isPending) && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                  <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">{runUsptoFull.isPending ? "Running full cross-reference…" : "Running spot check…"}</span>
+                </div>
+              )}
+
+              {(runUsptoSpotCheck.error || runUsptoFull.error) && (
+                <div className="flex items-start gap-2 p-2.5 rounded-lg border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+                  <AlertTriangle className="h-3.5 w-3.5 text-red-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-red-600 dark:text-red-400">{((runUsptoSpotCheck.error || runUsptoFull.error) as Error).message}</p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" variant="outline" onClick={() => refetchUsptoCount()}
+                  className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30" data-testid="button-uspto-crossref-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => runUsptoSpotCheck.mutate()}
+                  disabled={runUsptoSpotCheck.isPending || runUsptoFull.isPending}
+                  className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30" data-testid="button-uspto-spot-check">
+                  {runUsptoSpotCheck.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <FlaskConical className="h-3.5 w-3.5" />}
+                  Spot Check (5 institutions)
+                </Button>
+                <Button size="sm" onClick={() => runUsptoFull.mutate()}
+                  disabled={runUsptoFull.isPending || runUsptoSpotCheck.isPending || (usptoCount?.covered ?? 0) === 0}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white" data-testid="button-run-uspto-crossref">
+                  {runUsptoFull.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Run Cross-Reference {usptoCount != null ? `(${usptoCount.covered.toLocaleString()})` : ""}
                 </Button>
               </div>
             </div>
