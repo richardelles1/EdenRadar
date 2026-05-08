@@ -41,6 +41,23 @@ async function main() {
 
   console.log(`Found ${rows.rows.length} relevant assets to rescore`);
 
+  // Capture before-stats
+  const beforeStats = await db.execute<{
+    avg_score: string | null;
+    excellent: number; good: number; partial: number; poor: number; unscored: number;
+  }>(sql`
+    SELECT
+      ROUND(AVG(completeness_score)::numeric, 2)::text AS avg_score,
+      COUNT(*) FILTER (WHERE completeness_score >= 80)::int AS excellent,
+      COUNT(*) FILTER (WHERE completeness_score >= 60 AND completeness_score < 80)::int AS good,
+      COUNT(*) FILTER (WHERE completeness_score >= 40 AND completeness_score < 60)::int AS partial,
+      COUNT(*) FILTER (WHERE completeness_score >= 1  AND completeness_score < 40)::int AS poor,
+      COUNT(*) FILTER (WHERE completeness_score IS NULL OR completeness_score = 0)::int AS unscored
+    FROM ingested_assets WHERE relevant = true
+  `);
+  const b = beforeStats.rows[0];
+  console.log(`BEFORE rescore: avg=${b.avg_score}  excellent=${b.excellent}  good=${b.good}  partial=${b.partial}  poor=${b.poor}  unscored=${b.unscored}`);
+
   let changed = 0;
   let unchanged = 0;
   const CHUNK = 500;
@@ -98,7 +115,26 @@ async function main() {
 
   console.log("\nRescore complete.");
 
-  // Band distribution after
+  // After-stats: avg + tier distribution (comparable to BEFORE output)
+  const afterStats = await db.execute<{
+    avg_score: string | null;
+    excellent: number; good: number; partial: number; poor: number; unscored: number;
+  }>(sql`
+    SELECT
+      ROUND(AVG(completeness_score)::numeric, 2)::text AS avg_score,
+      COUNT(*) FILTER (WHERE completeness_score >= 80)::int AS excellent,
+      COUNT(*) FILTER (WHERE completeness_score >= 60 AND completeness_score < 80)::int AS good,
+      COUNT(*) FILTER (WHERE completeness_score >= 40 AND completeness_score < 60)::int AS partial,
+      COUNT(*) FILTER (WHERE completeness_score >= 1  AND completeness_score < 40)::int AS poor,
+      COUNT(*) FILTER (WHERE completeness_score IS NULL OR completeness_score = 0)::int AS unscored
+    FROM ingested_assets WHERE relevant = true
+  `);
+  const a = afterStats.rows[0];
+  console.log(`AFTER  rescore: avg=${a.avg_score}  excellent=${a.excellent}  good=${a.good}  partial=${a.partial}  poor=${a.poor}  unscored=${a.unscored}`);
+  const delta = (parseFloat(a.avg_score ?? "0") - parseFloat(b.avg_score ?? "0")).toFixed(2);
+  console.log(`Delta: avg ${delta >= "0" ? "+" : ""}${delta}  excellent +${a.excellent - b.excellent}  good +${a.good - b.good}`);
+
+  // Band distribution after (named bands for readability)
   const bands = await db.execute(sql`
     SELECT
       CASE
