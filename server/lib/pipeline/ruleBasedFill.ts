@@ -359,6 +359,7 @@ export function applyRulesToAsset(asset: {
   target?: string | null;
   categories?: string[] | null;
   humanVerified: Record<string, boolean> | null;
+  sourceType?: string | null;
 }): { fields: Record<string, string>; dataSparse: boolean } {
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
@@ -366,6 +367,15 @@ export function applyRulesToAsset(asset: {
   const isDrug = looksLikeDrug(text);
   const dataSparse = text.trim().length < SPARSE_THRESHOLD;
   const cats = asset.categories ?? [];
+
+  // ── TTO source rule: listing IS proof of licensing availability ────────────
+  // Applies even to data-sparse assets — sourceType is a structural signal,
+  // not a content signal, so it works regardless of description length.
+  if (asset.sourceType === "tech_transfer" &&
+      !humanV.licensingReadiness &&
+      (!asset.licensingReadiness || asset.licensingReadiness === "unknown")) {
+    fields.licensingReadiness = "available";
+  }
 
   if (!dataSparse) {
     if (!humanV.developmentStage && asset.developmentStage === "unknown") {
@@ -376,7 +386,7 @@ export function applyRulesToAsset(asset: {
       const val = applyRules(IP_RULES, text);
       if (val) fields.ipType = val;
     }
-    if (!humanV.licensingReadiness && (!asset.licensingReadiness || asset.licensingReadiness === "unknown")) {
+    if (!humanV.licensingReadiness && (!asset.licensingReadiness || asset.licensingReadiness === "unknown") && !fields.licensingReadiness) {
       const val = applyRules(LICENSING_RULES, text);
       if (val) fields.licensingReadiness = val;
     }
@@ -433,9 +443,10 @@ export async function runRuleBasedFill(
     target: string | null;
     categories: string[] | null;
     human_verified: Record<string, boolean> | null;
+    source_type: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified
+           indication, modality, target, categories, human_verified, source_type
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -474,6 +485,7 @@ export async function runRuleBasedFill(
       target: row.target,
       categories: row.categories,
       humanVerified: row.human_verified,
+      sourceType: row.source_type,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -553,9 +565,10 @@ export async function estimateRuleBasedFill(): Promise<{
     target: string | null;
     categories: string[] | null;
     human_verified: Record<string, boolean> | null;
+    source_type: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified
+           indication, modality, target, categories, human_verified, source_type
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -588,6 +601,7 @@ export async function estimateRuleBasedFill(): Promise<{
       target: row.target,
       categories: row.categories,
       humanVerified: row.human_verified,
+      sourceType: row.source_type,
     });
     if (Object.keys(fields).length > 0) fillable++;
     if (dataSparse) dataSparseCount++;

@@ -4817,6 +4817,50 @@ export async function registerRoutes(
     }
   });
 
+  // ── TTO Licensing Fill (zero API cost — source_type structural rule) ────────
+
+  app.get("/api/admin/enrichment/tto-licensing-fill/count", requireAdmin, async (req, res) => {
+    try {
+      const result = await db.execute<{ total: number }>(sql`
+        SELECT COUNT(*)::int AS total
+        FROM ingested_assets
+        WHERE relevant = true
+          AND source_type = 'tech_transfer'
+          AND (licensing_readiness IS NULL OR licensing_readiness IN ('unknown', '', 'Unknown'))
+      `);
+      res.json({ total: result.rows[0].total ?? 0 });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/enrichment/tto-licensing-fill", requireAdmin, async (req, res) => {
+    try {
+      const before = await db.execute<{ n: number }>(sql`
+        SELECT COUNT(*)::int AS n FROM ingested_assets
+        WHERE relevant = true AND source_type = 'tech_transfer'
+          AND (licensing_readiness IS NULL OR licensing_readiness IN ('unknown', '', 'Unknown'))
+      `);
+      const beforeCount = before.rows[0].n ?? 0;
+
+      const result = await db.execute(sql`
+        UPDATE ingested_assets
+        SET
+          licensing_readiness = 'available',
+          enrichment_sources = COALESCE(enrichment_sources, '{}'::jsonb) || '{"licensing_readiness":"rule:tto_source"}'::jsonb
+        WHERE relevant = true
+          AND source_type = 'tech_transfer'
+          AND (licensing_readiness IS NULL OR licensing_readiness IN ('unknown', '', 'Unknown'))
+      `);
+      const filled = result.rowCount ?? 0;
+      console.log(`[tto-licensing-fill] Filled licensing_readiness for ${filled} TTO assets (${beforeCount} were missing)`);
+      res.json({ filled, beforeCount });
+    } catch (err: any) {
+      console.error("[tto-licensing-fill] Error:", err.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Modality Fill (Step 2c — rule-based keyword matching, zero API cost) ──
 
   app.get("/api/admin/enrichment/modality-fill/count", requireAdmin, async (req, res) => {

@@ -2780,6 +2780,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [classifyPolling, setClassifyPolling] = React.useState(false);
   const [classifyConfirm, setClassifyConfirm] = React.useState(false);
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
+  const [ttoLicensingFillDone, setTtoLicensingFillDone] = React.useState<{ filled: number; beforeCount: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
   const [drInstitution, setDrInstitution] = React.useState("");
@@ -2883,6 +2884,30 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
       return res.json();
     },
     refetchInterval: classifyPolling ? 2000 : false,
+  });
+
+  const { data: ttoLicensingFillCount, refetch: refetchTtoLicensingFillCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrichment/tto-licensing-fill/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/tto-licensing-fill/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const runTtoLicensingFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/tto-licensing-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json() as Promise<{ filled: number; beforeCount: number }>;
+    },
+    onSuccess: (data) => {
+      setTtoLicensingFillDone(data);
+      refetchTtoLicensingFillCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+    },
   });
 
   const { data: modalityFillCount, refetch: refetchModalityFillCount } = useQuery<{ total: number }>({
@@ -3955,7 +3980,53 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
-          {/* Step 2c: Modality Fill — rule-based, zero cost */}
+          {/* Step 2c: TTO Licensing Fill — structural source rule, zero cost */}
+          <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-tto-licensing-fill">
+            <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2c</span>
+              <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">TTO Licensing Availability Fill</span>
+              <span className="ml-auto text-xs font-medium text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Sets <span className="font-medium text-foreground">licensing_readiness = 'available'</span> for all TTO assets where it is null or unknown.
+                Universities list technologies on TTO portals specifically because they want to license them — the listing itself is proof of availability.
+                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">rule:tto_source</span> so AI enrichment can still override.
+              </p>
+              {ttoLicensingFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400">{ttoLicensingFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">TTO assets with missing licensing_readiness</span>
+                </div>
+              )}
+              {runTtoLicensingFill.isPending && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" />
+                  <span className="text-xs text-teal-700 dark:text-teal-400 font-medium">Filling licensing_readiness…</span>
+                </div>
+              )}
+              {ttoLicensingFillDone && !runTtoLicensingFill.isPending && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/30" data-testid="tto-licensing-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400">Done — {ttoLicensingFillDone.filled.toLocaleString()} assets filled (was {ttoLicensingFillDone.beforeCount.toLocaleString()} missing)</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchTtoLicensingFillCount()}
+                  className="gap-1.5 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30" data-testid="button-tto-licensing-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runTtoLicensingFill.mutate()}
+                  disabled={runTtoLicensingFill.isPending || (ttoLicensingFillCount?.total ?? 1) === 0}
+                  className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-tto-licensing-fill">
+                  {runTtoLicensingFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Fill {ttoLicensingFillCount != null ? `(${ttoLicensingFillCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2d: Modality Fill — rule-based, zero cost */}
           <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-modality-fill">
             <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
               <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2c</span>
