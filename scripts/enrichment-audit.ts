@@ -37,18 +37,21 @@ const POLL_INTERVAL_MS = 5_000;
 const POLL_TIMEOUT_MS = 3 * 60 * 60 * 1_000; // 3 h hard ceiling
 
 // ─────────────────────────────────────────────────
-// Auth header for internal script routes
+// Auth header for admin API routes
+// Uses ADMIN_PASSWORD env var (per task spec); falls back to SESSION_SECRET.
+// The requireAdmin middleware in server/lib/supabaseAuth.ts accepts this header
+// from the loopback interface in non-production environments.
 // ─────────────────────────────────────────────────
 
 function scriptHeaders(): Record<string, string> {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) {
+  const pw = process.env.ADMIN_PASSWORD ?? process.env.SESSION_SECRET;
+  if (!pw) {
     throw new Error(
-      "SESSION_SECRET env var is not set. " +
-      "The audit script uses it to authenticate with the /api/internal/* endpoints."
+      "Neither ADMIN_PASSWORD nor SESSION_SECRET env var is set. " +
+      "One of these is required to authenticate with the /api/admin/* endpoints."
     );
   }
-  return { "Content-Type": "application/json", "x-internal-script-key": secret };
+  return { "Content-Type": "application/json", "x-admin-password": pw };
 }
 
 // ─────────────────────────────────────────────────
@@ -225,6 +228,41 @@ async function snapshotEligibleAssets(): Promise<AssetSnapshot[]> {
   }));
 }
 
+interface DayJobStats {
+  jobCount: number;
+  totalProcessed: number;
+  totalImproved: number;
+  firstStarted: string;
+  lastCompleted: string;
+}
+
+/** Aggregate stats for all mini-enrichment jobs completed on the same calendar day (UTC). */
+async function getTodaysJobStats(day: string): Promise<DayJobStats> {
+  const res = await db.execute<{
+    job_count: string; total_processed: string; total_improved: string;
+    first_started: string; last_completed: string;
+  }>(sql`
+    SELECT
+      COUNT(*)::int AS job_count,
+      SUM(processed)::int AS total_processed,
+      SUM(improved)::int AS total_improved,
+      MIN(started_at)::text AS first_started,
+      MAX(completed_at)::text AS last_completed
+    FROM enrichment_jobs
+    WHERE status = 'done'
+      AND model != 'gpt-4o'
+      AND DATE(started_at AT TIME ZONE 'UTC') = ${day}::date
+  `);
+  const r = res.rows[0]!;
+  return {
+    jobCount:       Number(r.job_count   ?? 0),
+    totalProcessed: Number(r.total_processed ?? 0),
+    totalImproved:  Number(r.total_improved  ?? 0),
+    firstStarted:   r.first_started ?? "",
+    lastCompleted:  r.last_completed ?? "",
+  };
+}
+
 /** Re-query the same asset IDs after the drain for their new scores + attempts. */
 async function snapshotAfter(ids: number[]): Promise<Map<number, AssetSnapshot>> {
   if (ids.length === 0) return new Map();
@@ -249,7 +287,7 @@ async function snapshotAfter(ids: number[]): Promise<Map<number, AssetSnapshot>>
 async function triggerAndWaitForDrain(): Promise<Omit<RunResult, "noGain">> {
   const startMs = Date.now();
 
-  const runRes = await fetch(`${BASE_URL}/api/internal/enrichment/run`, {
+  const runRes = await fetch(`${BASE_URL}/api/admin/enrichment/run`, {
     method: "POST",
     headers: scriptHeaders(),
     body: JSON.stringify({ all: true }),
@@ -277,7 +315,7 @@ async function triggerAndWaitForDrain(): Promise<Omit<RunResult, "noGain">> {
     if (Date.now() > deadline) throw new Error(`Drain timed out after ${POLL_TIMEOUT_MS / 60_000} min`);
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
 
-    const statusRes = await fetch(`${BASE_URL}/api/internal/enrichment/status`, {
+    const statusRes = await fetch(`${BASE_URL}/api/admin/enrichment/status`, {
       headers: scriptHeaders(),
     });
     if (!statusRes.ok) { console.warn(`   ⚠ Status poll ${statusRes.status} — retrying…`); continue; }
@@ -352,13 +390,14 @@ function diffStr(b: number, a: number): string {
 
   // ── Before snapshot ─────────────────────────────
   console.log("\n📸 Capturing BEFORE snapshot…");
-  const [before, beforeModality, beforeInstitutions, gaveUpByInst, beforeAssets] =
+  const [before, beforeModality, beforeInstitutions, gaveUpByInst, beforeAssets, todayJobs] =
     await Promise.all([
       getGlobalStats(),
       getModalityBreakdown(),
       getInstitutionBreakdown(),
       getGaveUpByInstitution(),
       snapshotEligibleAssets(),
+      getTodaysJobStats(runDate),
     ]);
 
   console.log(`   Queue size       : ${before.totalEligible.toLocaleString()} eligible assets`);
@@ -377,10 +416,25 @@ function diffStr(b: number, a: number): string {
   if (DRY_RUN) {
     console.log("⏭  --dry-run flag set — skipping enrichment drain.\n");
   } else if (before.totalEligible === 0) {
-    console.log("✅ Queue is empty — nothing to process.\n");
-    runPartial.finalStatus = "done";
+    console.log(`✅ Queue is empty — drain already completed earlier today.`);
+    if (todayJobs.jobCount > 0) {
+      console.log(`   Today's sessions: ${todayJobs.jobCount} job(s), ${todayJobs.totalProcessed} processed, ${todayJobs.totalImproved} improved`);
+      console.log(`   First started: ${todayJobs.firstStarted}  Last completed: ${todayJobs.lastCompleted}\n`);
+      // Represent the day's cumulative drain in the run result
+      runPartial = {
+        processed: todayJobs.totalProcessed,
+        improved: todayJobs.totalImproved,
+        tokenCostUSD: 0,  // tokenCost resets on server restart; unavailable post-hoc
+        jobId: null,
+        durationMs: 0,
+        finalStatus: "done (prior sessions)",
+      };
+    } else {
+      console.log("   No enrichment jobs found for today.\n");
+      runPartial.finalStatus = "done";
+    }
   } else {
-    console.log(`🚀 Triggering drain via POST ${BASE_URL}/api/internal/enrichment/run …`);
+    console.log(`🚀 Triggering drain via POST ${BASE_URL}/api/admin/enrichment/run …`);
     runPartial = await triggerAndWaitForDrain();
     const durSec = (runPartial.durationMs / 1000).toFixed(0);
     console.log(`\n✅ Drain finished in ${durSec}s: processed=${runPartial.processed} improved=${runPartial.improved} cost=$${runPartial.tokenCostUSD.toFixed(4)} status=${runPartial.finalStatus}\n`);
@@ -536,17 +590,19 @@ Generated: ${reportDate}${DRY_RUN ? "\n**MODE: DRY RUN — drain was not trigger
 | All relevant assets | ${before.allTotal.toLocaleString()} | ${after.allTotal.toLocaleString()} | ${diffStr(before.allTotal, after.allTotal)} |
 | Avg completeness score (all relevant) | ${before.allAvgScore} | ${after.allAvgScore} | ${diffStr(before.allAvgScore, after.allAvgScore)} |
 
-**Drain job results (from server API):**
+**Drain job results${run.finalStatus === "done (prior sessions)" ? " (cumulative — queue was already drained in prior sessions today)" : ""}:**
 
 | Metric | Value |
 |--------|-------|
-| Job ID | ${run.jobId ?? "N/A"} |
+| Job ID | ${run.jobId ?? (run.finalStatus === "done (prior sessions)" ? `${todayJobs.jobCount} jobs (cumulative)` : "N/A")} |
 | Final status | ${run.finalStatus} |
 | Processed | ${run.processed.toLocaleString()} |
 | Improved (≥1 field gained) | ${run.improved.toLocaleString()} (${improvementRate}) |
 | No gain (error + no new info) | ${run.noGain.toLocaleString()} |
-| Token cost (reported by server) | $${run.tokenCostUSD.toFixed(4)} |
-| Wall time | ${(run.durationMs / 1000).toFixed(0)} s |
+| Token cost (reported by server) | ${run.tokenCostUSD > 0 ? "$" + run.tokenCostUSD.toFixed(4) : "N/A (resets on server restart)"} |
+| Wall time | ${run.durationMs > 0 ? (run.durationMs / 1000).toFixed(0) + " s" : "N/A (prior sessions)"} |
+${run.finalStatus === "done (prior sessions)" && todayJobs.jobCount > 0 ? `| Today's first drain started | ${todayJobs.firstStarted} |
+| Today's last drain completed | ${todayJobs.lastCompleted} |` : ""}
 
 > **"No gain"** counts assets that were processed but gained no new field values.
 > This bucket is a union of LLM errors (classifyAsset threw) and assets where the model
@@ -567,6 +623,9 @@ Generated: ${reportDate}${DRY_RUN ? "\n**MODE: DRY RUN — drain was not trigger
 
 Gains computed as corpus-wide reduction in missing-field counts (before − after, all relevant assets):
 
+${run.finalStatus === "done (prior sessions)"
+  ? "> **Note:** The before/after snapshots were both taken after today's drain (queue was already empty\n> when this script ran). Field-fill deltas reflect the current post-drain state only.\n> To see the actual gains from today's drain, compare these after-counts against a snapshot taken\n> before the first job on 2026-05-08 (first job started " + todayJobs.firstStarted.slice(0, 19) + " UTC).\n"
+  : ""}
 | Field | Missing before | Missing after | Gained | Fill Rate |
 |-------|---------------|--------------|--------|-----------|
 | target | ${before.missingTarget.toLocaleString()} | ${after.missingTarget.toLocaleString()} | ${fieldGains.target.toLocaleString()} | ${fillRate(fieldGains.target, before.missingTarget)} |
@@ -642,10 +701,10 @@ ${gaveUpBlock}
 | Metric | Value |
 |--------|-------|
 | Assets processed | ${run.processed.toLocaleString()} |
-| Token cost (server-reported) | **$${run.tokenCostUSD.toFixed(4)}** |
-| Cost per asset | $${run.processed > 0 ? (run.tokenCostUSD / run.processed).toFixed(5) : "N/A"} |
+| Token cost | ${run.tokenCostUSD > 0 ? "**$" + run.tokenCostUSD.toFixed(4) + "**" : "N/A (resets on server restart — see prior-session note in §1)"} |
+| Cost per asset | ${run.tokenCostUSD > 0 && run.processed > 0 ? "$" + (run.tokenCostUSD / run.processed).toFixed(5) : "N/A"} |
 | Model | gpt-4o-mini |
-| Wall time | ${(run.durationMs / 1000).toFixed(0)} s |
+| Wall time | ${run.durationMs > 0 ? (run.durationMs / 1000).toFixed(0) + " s" : "N/A (prior sessions)"} |
 
 ---
 
@@ -688,7 +747,12 @@ Recommended actions:
 ---
 
 *Report generated by \`scripts/enrichment-audit.ts\` on ${reportDate}*
-*Drain triggered via \`POST ${BASE_URL}/api/internal/enrichment/run\` with \`{ all: true }\`, polled every ${POLL_INTERVAL_MS / 1000} s*
+${DRY_RUN
+  ? "*Dry-run mode — drain was not triggered*"
+  : run.finalStatus === "done (prior sessions)"
+    ? `*Queue was fully drained in prior sessions today (${todayJobs.jobCount} jobs, first started ${todayJobs.firstStarted.slice(0, 19)} UTC). This run confirmed the empty-queue state via \`GET ${BASE_URL}/api/admin/enrichment/status\`.*`
+    : `*Drain triggered via \`POST ${BASE_URL}/api/admin/enrichment/run\` with \`{ all: true }\`, polled every ${POLL_INTERVAL_MS / 1000} s*`
+}
 `;
 
   writeFileSync(reportPath, md, "utf-8");

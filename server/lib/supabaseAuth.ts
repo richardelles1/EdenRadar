@@ -112,8 +112,30 @@ export async function getAdminUser(req: Request): Promise<{ id: string; email: s
 /**
  * Express middleware that requires an admin user. Admin routes intentionally
  * never honor x-impersonation-token (impersonationContext skips /api/admin/*).
+ *
+ * Script password bypass (non-production + loopback only):
+ * Maintenance scripts (e.g. scripts/enrichment-audit.ts) that cannot obtain a
+ * Supabase session headlessly may authenticate with an `x-admin-password` header
+ * containing the value of the `ADMIN_PASSWORD` env var (falling back to
+ * `SESSION_SECRET` when `ADMIN_PASSWORD` is unset). Requests are only accepted
+ * from the loopback interface in non-production environments.
  */
 export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (process.env.NODE_ENV !== "production") {
+    const scriptPw = process.env.ADMIN_PASSWORD ?? process.env.SESSION_SECRET;
+    if (scriptPw) {
+      const remote = (req.socket as any)?.remoteAddress ?? "";
+      const isLoopback =
+        remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+      if (isLoopback && req.headers["x-admin-password"] === scriptPw) {
+        req.headers["x-admin-id"] = "script";
+        req.headers["x-admin-email"] = ADMIN_EMAILS[0] ?? "script@internal.local";
+        req.headers["x-user-id"] = "script";
+        return next();
+      }
+    }
+  }
+
   const u = await getAdminUser(req);
   if (!u) {
     return res.status(401).json({ error: "Admin authentication required" });
