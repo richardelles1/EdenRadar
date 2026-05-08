@@ -230,7 +230,7 @@ const CATEGORY_INDICATION_MAP: Array<{ keywords: RegExp; value: string }> = [
   { keywords: /\burology|\burological/i, value: "urological condition" },
   { keywords: /\breproductive\s+health|\bfertility|\bobstetrics|\bgynecology|\bgynecolog/i, value: "reproductive health" },
   { keywords: /\bsurgery|\bsurgical/i, value: "surgical application" },
-  { keywords: /\bmedical\s+imaging|\bradiology|\bnuclear\s+medicine/i, value: "medical imaging" },
+  { keywords: /\bmedical\s+imaging|\bradiology|\bnuclear\s+medicine/i, value: "medical imaging diagnostics" },
 ];
 
 // ── Indication keyword rules ──────────────────────────────────────────────────
@@ -366,6 +366,7 @@ export function applyRulesToAsset(asset: {
   categories?: string[] | null;
   humanVerified: Record<string, boolean> | null;
   sourceType?: string | null;
+  deepEnrichAttempts?: number | null;
 }): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
@@ -450,13 +451,22 @@ export function applyRulesToAsset(asset: {
   // "early stage" is an umbrella for TTO assets where we know the technology is
   // pre-clinical but can't distinguish discovery from preclinical. Safer than
   // forcing "preclinical" (which implies animal data) or leaving "unknown".
-  // Guard: no clinical stage keywords anywhere in the combined text.
+  //
+  // Eligibility: TTO asset with unknown stage, no clinical keywords, AND either:
+  //   (a) dataSparse (thin-text asset where LLM enrichment can't do better), OR
+  //   (b) deepEnrichAttempts >= 2 (LLM tried at least twice and still returned unknown)
+  //
+  // This ensures richer assets with enough text but genuine stage ambiguity are NOT
+  // prematurely defaulted — they remain unknown until LLM enrichment has had a fair shot.
   const CLINICAL_STAGE_SIGNALS = /\bphase\s+[123]\b|\bphase\s+I{1,3}\b|\bclinical\s+trial\b|\bIND\s+(?:filed|approved)\b|\bFDA[- ]approved\b|\bEMA[- ]approved\b|\b510\(k\)\b|\bapproved\b|\bBLA\b|\bNDA\b/i;
+  const enrichAttempts = asset.deepEnrichAttempts ?? 0;
+  const stageThinOrExhausted = dataSparse || enrichAttempts >= 2;
   if (
     asset.sourceType === "tech_transfer" &&
     !humanV.developmentStage &&
     (!asset.developmentStage || asset.developmentStage === "unknown") &&
     !fields.developmentStage &&
+    stageThinOrExhausted &&
     !CLINICAL_STAGE_SIGNALS.test(text)
   ) {
     fields.developmentStage = "early stage";
@@ -484,9 +494,10 @@ export async function runRuleBasedFill(
     categories: string[] | null;
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
+    deep_enrich_attempts: number;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified, source_type
+           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -526,6 +537,7 @@ export async function runRuleBasedFill(
       categories: row.categories,
       humanVerified: row.human_verified,
       sourceType: row.source_type,
+      deepEnrichAttempts: row.deep_enrich_attempts,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -608,9 +620,10 @@ export async function estimateRuleBasedFill(): Promise<{
     categories: string[] | null;
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
+    deep_enrich_attempts: number;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified, source_type
+           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -644,6 +657,7 @@ export async function estimateRuleBasedFill(): Promise<{
       categories: row.categories,
       humanVerified: row.human_verified,
       sourceType: row.source_type,
+      deepEnrichAttempts: row.deep_enrich_attempts,
     });
     if (Object.keys(fields).length > 0) fillable++;
     if (dataSparse) dataSparseCount++;
