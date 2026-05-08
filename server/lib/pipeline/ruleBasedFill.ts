@@ -360,10 +360,12 @@ export function applyRulesToAsset(asset: {
   categories?: string[] | null;
   humanVerified: Record<string, boolean> | null;
   sourceType?: string | null;
-}): { fields: Record<string, string>; dataSparse: boolean } {
+}): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
   const fields: Record<string, string> = {};
+  // provenance tracks the enrichment_sources stamp per field (defaults to "rule")
+  const provenance: Record<string, string> = {};
   const isDrug = looksLikeDrug(text);
   const dataSparse = text.trim().length < SPARSE_THRESHOLD;
   const cats = asset.categories ?? [];
@@ -375,6 +377,7 @@ export function applyRulesToAsset(asset: {
       !humanV.licensingReadiness &&
       (!asset.licensingReadiness || asset.licensingReadiness === "unknown")) {
     fields.licensingReadiness = "available";
+    provenance.licensingReadiness = "rule:tto_source";
   }
 
   if (!dataSparse) {
@@ -423,7 +426,7 @@ export function applyRulesToAsset(asset: {
     }
   }
 
-  return { fields, dataSparse };
+  return { fields, dataSparse, provenance };
 }
 
 export async function runRuleBasedFill(
@@ -467,12 +470,12 @@ export async function runRuleBasedFill(
   let dataSparseTagged = 0;
   const byField: Record<string, number> = {};
   const WRITE_BATCH = 50;
-  const toWrite: Array<{ id: number; fields: Record<string, string>; dataSparse: boolean }> = [];
+  const toWrite: Array<{ id: number; fields: Record<string, string>; dataSparse: boolean; provenance?: Record<string, string> }> = [];
 
   for (const row of rows.rows) {
     if (abortCheck?.()) break;
 
-    const { fields, dataSparse } = applyRulesToAsset({
+    const { fields, dataSparse, provenance } = applyRulesToAsset({
       id: row.id,
       assetName: row.asset_name,
       summary: row.summary,
@@ -489,7 +492,7 @@ export async function runRuleBasedFill(
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
-      toWrite.push({ id: row.id, fields, dataSparse });
+      toWrite.push({ id: row.id, fields, dataSparse, provenance });
       if (Object.keys(fields).length > 0) filled++;
       if (dataSparse) dataSparseTagged++;
       for (const k of Object.keys(fields)) byField[k] = (byField[k] ?? 0) + 1;
@@ -520,7 +523,7 @@ type RuleFillUpdateSet = {
 };
 
 async function flushWrites(
-  batch: Array<{ id: number; fields: Record<string, string>; dataSparse: boolean }>,
+  batch: Array<{ id: number; fields: Record<string, string>; dataSparse: boolean; provenance?: Record<string, string> }>,
 ): Promise<void> {
   for (const item of batch) {
     try {
@@ -535,7 +538,9 @@ async function flushWrites(
       if (item.fields.target) updates.target = item.fields.target;
 
       if (fieldKeys.length > 0) {
-        const sourcesJson = JSON.stringify(Object.fromEntries(fieldKeys.map(k => [k, "rule"])));
+        // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
+        const prov = item.provenance ?? {};
+        const sourcesJson = JSON.stringify(Object.fromEntries(fieldKeys.map(k => [k, prov[k] ?? "rule"])));
         updates.enrichmentSources = sql`COALESCE(${ingestedAssets.enrichmentSources}, '{}'::jsonb) || ${sourcesJson}::jsonb`;
       }
 
