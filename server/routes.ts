@@ -3691,6 +3691,99 @@ export async function registerRoutes(
     }
   });
 
+  // ── USPTO PatentsView Cross-Reference ─────────────────────────────────────
+
+  let usptoRunning = false;
+  let usptoProgress: { processed: number; total: number; matched: number; unmatched: number; skipped: number } | null = null;
+  let usptoResult: { processed: number; matched: number; unmatched: number; skipped: number; missingIpTypeCount: number } | null = null;
+  let usptoShouldStop = false;
+  let usptoSpotCheckValidation: { results: Array<{ institution: string; assignee: string; count: number; hasTitle: boolean; hasValidDate: boolean; sample: { patentNumber: string; patentTitle: string; patentDate: string | null } | null; error?: string; valid: boolean }>; validCount: number; passed: boolean; reason?: string } | null = null;
+
+  app.get("/api/admin/enrichment/uspto/status", async (req, res) => {
+    try {
+      res.json({
+        running: usptoRunning,
+        progress: usptoProgress,
+        result: usptoResult,
+        spotCheck: usptoSpotCheckValidation,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/admin/enrichment/uspto/count", async (req, res) => {
+    try {
+      const { countMissingIpType } = await import("./lib/pipeline/usptoPatentLookup");
+      const count = await countMissingIpType();
+      res.json({ missingIpTypeCount: count });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to count" });
+    }
+  });
+
+  app.post("/api/admin/enrichment/uspto/spot-check", async (req, res) => {
+    try {
+      const apiKey = process.env.USPTO_ODP_API_KEY ?? "";
+      const { runSpotCheck } = await import("./lib/pipeline/usptoPatentLookup");
+      const validation = await runSpotCheck(apiKey);
+      usptoSpotCheckValidation = validation;
+      if (!validation.passed) {
+        return res.status(502).json({
+          error: validation.reason ?? "Spot check gate failed — fewer than 3 institutions returned valid patent data",
+          validation,
+        });
+      }
+      res.json({ validation });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Spot check failed" });
+    }
+  });
+
+  app.post("/api/admin/enrichment/uspto/run", async (req, res) => {
+    try {
+      if (usptoRunning) return res.status(409).json({ error: "USPTO cross-reference already running" });
+      if (!usptoSpotCheckValidation?.passed) {
+        return res.status(400).json({ error: "Spot check must pass (≥3 valid institutions) before running cross-reference" });
+      }
+
+      const apiKey = process.env.USPTO_ODP_API_KEY ?? "";
+      usptoRunning = true;
+      usptoProgress = { processed: 0, total: 0, matched: 0, unmatched: 0, skipped: 0 };
+      usptoResult = null;
+      usptoShouldStop = false;
+
+      res.json({ started: true });
+
+      import("./lib/pipeline/usptoPatentLookup").then(({ runUsptoPatentCrossRef }) => {
+        runUsptoPatentCrossRef({
+          apiKey,
+          onProgress: (p) => { usptoProgress = p; },
+          shouldStop: () => usptoShouldStop,
+        }).then((summary) => {
+          usptoResult = summary;
+          console.log(`[uspto-xref] Done: matched=${summary.matched} unmatched=${summary.unmatched} skipped=${summary.skipped}`);
+        }).catch((err) => {
+          console.error("[uspto-xref] Failed:", err);
+        }).finally(() => {
+          usptoRunning = false;
+        });
+      });
+    } catch (err: any) {
+      usptoRunning = false;
+      res.status(500).json({ error: err.message ?? "Failed to start USPTO cross-reference" });
+    }
+  });
+
+  app.post("/api/admin/enrichment/uspto/stop", async (req, res) => {
+    try {
+      usptoShouldStop = true;
+      res.json({ stopped: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
   // ── Human-Verified Field Locking ──────────────────────────────────────────
 
   app.post("/api/admin/assets/:id/verify-field", async (req, res) => {

@@ -2792,6 +2792,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [tpRefetchPolling, setTpRefetchPolling] = React.useState(false);
   const [dbgPolling, setDbgPolling] = React.useState(false);
   const [dbgConfirm, setDbgConfirm] = React.useState(false);
+  const [usptoPolling, setUsptoPolling] = React.useState(false);
 
   const { data: pipelineStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
@@ -3457,6 +3458,89 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     onError: (err: Error) => toast({ title: "Failed to clear sparse flags", description: err.message, variant: "destructive" }),
   });
 
+  // ── USPTO Patent Cross-Reference hooks ──
+  type UsptoSpotResult = { institution: string; assignee: string; count: number; hasTitle: boolean; hasValidDate: boolean; sample: { patentNumber: string; patentTitle: string; patentDate: string | null } | null; error?: string; valid: boolean };
+  type UsptoSpotValidation = { results: UsptoSpotResult[]; validCount: number; passed: boolean; reason?: string };
+  type UsptoStatus = {
+    running: boolean;
+    progress: { processed: number; total: number; matched: number; unmatched: number; skipped: number } | null;
+    result: { processed: number; matched: number; unmatched: number; skipped: number; missingIpTypeCount: number } | null;
+    spotCheck: UsptoSpotValidation | null;
+  };
+
+  const { data: usptoStatus, refetch: refetchUsptoStatus } = useQuery<UsptoStatus>({
+    queryKey: ["/api/admin/enrichment/uspto/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: usptoPolling ? 2000 : false,
+  });
+
+  const { data: usptoCount, refetch: refetchUsptoCount } = useQuery<{ missingIpTypeCount: number }>({
+    queryKey: ["/api/admin/enrichment/uspto/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (usptoStatus?.running && !usptoPolling) setUsptoPolling(true);
+    if (!usptoStatus?.running && usptoPolling) {
+      setUsptoPolling(false);
+      refetchUsptoCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+    }
+  }, [usptoStatus?.running]);
+
+  const runUsptoSpotCheck = useMutation<{ validation: UsptoSpotValidation }, Error>({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto/spot-check", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Spot check failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      refetchUsptoStatus();
+      if (data.validation.passed) {
+        toast({ title: "Spot check passed", description: `${data.validation.validCount} institutions verified — full run button is now enabled` });
+      } else {
+        toast({ title: "Spot check incomplete", description: data.validation.reason ?? "Fewer than 3 institutions returned valid data", variant: "destructive" });
+      }
+    },
+    onError: (err: Error) => toast({ title: "Spot check failed", description: err.message, variant: "destructive" }),
+  });
+
+  const runUsptoXref = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto/run", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to start");
+      return data;
+    },
+    onSuccess: () => { setUsptoPolling(true); refetchUsptoStatus(); toast({ title: "USPTO cross-reference started", description: "Matching patent titles against TTO assets" }); },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
+  });
+
+  const stopUsptoXref = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/uspto/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Stop signal sent" }),
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
+  const usptoProgressPct = usptoStatus?.progress?.total
+    ? Math.round((usptoStatus.progress.processed / usptoStatus.progress.total) * 100)
+    : 0;
+  const usptoSpotCheckOk = usptoStatus?.spotCheck?.passed === true;
+
   const { data: bandsData, refetch: refetchBands } = useQuery<{ bands: BandInfo[] }>({
     queryKey: ["/api/admin/enrichment/bands", pw],
     queryFn: async () => {
@@ -3673,6 +3757,124 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   className="gap-1.5 bg-slate-600 hover:bg-slate-700 text-white" data-testid="button-clear-sparse">
                   {clearSparse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
                   Clear Data-Sparse Flags
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 1c: USPTO Patent Cross-Reference */}
+          <div className="border border-blue-200 dark:border-blue-900 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden" data-testid="card-uspto-xref">
+            <div className="px-4 py-2.5 border-b border-blue-200 dark:border-blue-900 bg-blue-100/60 dark:bg-blue-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold shrink-0">1c</span>
+              <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">USPTO Patent Cross-Reference</span>
+              <span className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Queries the USPTO PatentsView API by institution assignee, then fuzzy-matches patent titles against TTO asset names (Jaccard ≥ 0.35) to fill <em>ip_type = "patent"</em> and <em>patent_status</em>.
+                Never overwrites existing non-null values or human-verified fields. Run spot check first to verify API connectivity before writing.
+              </p>
+
+              {/* Missing ip_type count */}
+              {usptoCount && (
+                <div className="flex items-center gap-2">
+                  <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-background px-3 py-2 flex items-center gap-2">
+                    <span className="text-base font-bold tabular-nums text-blue-700 dark:text-blue-400" data-testid="stat-uspto-missing-ip-type">{usptoCount.missingIpTypeCount.toLocaleString()}</span>
+                    <span className="text-xs text-muted-foreground">assets with missing ip_type</span>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => refetchUsptoCount()} className="h-7 w-7 p-0 text-muted-foreground" data-testid="button-uspto-refresh-count">
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
+
+              {/* Spot check results */}
+              {usptoStatus?.spotCheck && (
+                <div className="space-y-1.5" data-testid="uspto-spot-check-results">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-muted-foreground">Spot check results:</p>
+                    {usptoStatus.spotCheck.passed
+                      ? <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">{usptoStatus.spotCheck.validCount}/{usptoStatus.spotCheck.results.length} valid — gate passed</span>
+                      : <span className="text-xs text-amber-600 dark:text-amber-400 font-medium">{usptoStatus.spotCheck.validCount}/{usptoStatus.spotCheck.results.length} valid — need ≥3 to run</span>
+                    }
+                  </div>
+                  {usptoStatus.spotCheck.reason && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded px-2 py-1">{usptoStatus.spotCheck.reason}</p>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {usptoStatus.spotCheck.results.map((r) => (
+                      <div key={r.institution}
+                        className={`rounded-lg border px-3 py-2 text-xs ${!r.valid ? "border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20" : "border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/20"}`}
+                        data-testid={`spot-check-row-${r.institution.replace(/\s+/g, "-").toLowerCase()}`}>
+                        <div className="flex items-center gap-1.5">
+                          {!r.valid
+                            ? <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                            : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />}
+                          <span className="font-medium">{r.institution}</span>
+                          <span className="ml-auto tabular-nums text-muted-foreground">{r.count.toLocaleString()} patents</span>
+                        </div>
+                        {r.sample && (
+                          <p className="mt-1 text-muted-foreground truncate pl-5" title={r.sample.patentTitle}>
+                            {r.sample.patentTitle}
+                          </p>
+                        )}
+                        {r.error && <p className="mt-1 text-red-600 dark:text-red-400 pl-5">{r.error}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Progress */}
+              {usptoStatus?.running && usptoStatus.progress && (
+                <div className="space-y-2" data-testid="uspto-xref-progress">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-600" />
+                    <span className="text-xs text-blue-700 dark:text-blue-400 font-medium">Running…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto">
+                      {usptoStatus.progress.processed.toLocaleString()}/{usptoStatus.progress.total.toLocaleString()} ({usptoProgressPct}%)
+                    </span>
+                    <Button variant="ghost" size="sm" onClick={() => stopUsptoXref.mutate()} disabled={stopUsptoXref.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-uspto-stop">Stop</Button>
+                  </div>
+                  <div className="w-full bg-blue-100 dark:bg-blue-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-blue-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${usptoProgressPct}%` }} />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    matched: {usptoStatus.progress.matched.toLocaleString()} · unmatched: {usptoStatus.progress.unmatched.toLocaleString()} · skipped: {usptoStatus.progress.skipped.toLocaleString()}
+                  </p>
+                </div>
+              )}
+
+              {/* Result */}
+              {!usptoStatus?.running && usptoStatus?.result && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/30" data-testid="uspto-xref-result">
+                  <CheckCircle2 className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <p className="text-xs font-medium text-blue-700 dark:text-blue-400">
+                      Done — {usptoStatus.result.matched.toLocaleString()} assets matched &amp; updated
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 mt-1.5">
+                      <span className="text-xs bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400 px-1.5 py-0.5 rounded">matched: {usptoStatus.result.matched.toLocaleString()}</span>
+                      <span className="text-xs bg-slate-100 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">unmatched: {usptoStatus.result.unmatched.toLocaleString()}</span>
+                      <span className="text-xs bg-slate-100 dark:bg-slate-900/40 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">skipped (no mapping): {usptoStatus.result.skipped.toLocaleString()}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" variant="outline" onClick={() => runUsptoSpotCheck.mutate()} disabled={runUsptoSpotCheck.isPending || usptoStatus?.running}
+                  className="gap-1.5 border-blue-300 dark:border-blue-700 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30" data-testid="button-uspto-spot-check">
+                  {runUsptoSpotCheck.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Activity className="h-3.5 w-3.5" />}
+                  Spot Check API
+                </Button>
+                <Button size="sm" onClick={() => runUsptoXref.mutate()} disabled={!usptoSpotCheckOk || usptoStatus?.running || runUsptoXref.isPending}
+                  className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50" data-testid="button-run-uspto-xref"
+                  title={!usptoSpotCheckOk ? "Run spot check first to verify API connectivity" : undefined}>
+                  {usptoStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Run Cross-Reference
                 </Button>
               </div>
             </div>
