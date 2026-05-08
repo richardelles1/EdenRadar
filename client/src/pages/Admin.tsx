@@ -2818,6 +2818,35 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     staleTime: 60_000,
   });
 
+  // ── Targeted enrichment filter state ──
+  const [enrichInstitution, setEnrichInstitution] = useState("");
+  const [enrichModality, setEnrichModality] = useState("");
+  const [enrichTier, setEnrichTier] = useState("");
+  const [enrichMissingField, setEnrichMissingField] = useState("");
+  const [debouncedInstitution, setDebouncedInstitution] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedInstitution(enrichInstitution), 400);
+    return () => clearTimeout(t);
+  }, [enrichInstitution]);
+
+  const hasEnrichFilters = !!(debouncedInstitution || enrichModality || enrichTier || enrichMissingField);
+  const enrichCountParams = new URLSearchParams();
+  if (debouncedInstitution) enrichCountParams.set("institution", debouncedInstitution);
+  if (enrichModality) enrichCountParams.set("modality", enrichModality);
+  if (enrichTier) enrichCountParams.set("tier", enrichTier);
+  if (enrichMissingField) enrichCountParams.set("missingField", enrichMissingField);
+
+  const { data: enrichCount, isFetching: enrichCountLoading } = useQuery<{ count: number; costEstimate: number }>({
+    queryKey: ["/api/admin/enrichment/count", pw, debouncedInstitution, enrichModality, enrichTier, enrichMissingField],
+    queryFn: async () => {
+      const qs = enrichCountParams.toString();
+      const res = await fetch(`/api/admin/enrichment/count${qs ? "?" + qs : ""}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to count enrichment queue");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
   const { data: enrichHealth } = useQuery<{ readyCount: number; needsRefetchCount: number; gaveUpCount: number; enriched24hCount: number }>({
     queryKey: ["/api/admin/enrichment/health", pw],
     queryFn: async () => {
@@ -3263,15 +3292,22 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   }, [status?.status]);
 
   const runEnrichment = useMutation({
-    mutationFn: async (opts?: { all?: boolean }) => {
+    mutationFn: async (opts?: { all?: boolean; institution?: string; modality?: string; tier?: string; missingField?: string }) => {
       const url = opts?.all ? "/api/admin/enrichment/run?all=1" : "/api/admin/enrichment/run";
-      const res = await fetch(url, { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const body: Record<string, string | boolean> = {};
+      if (opts?.all) body.all = true;
+      if (opts?.institution) body.institution = opts.institution;
+      if (opts?.modality) body.modality = opts.modality;
+      if (opts?.tier) body.tier = opts.tier;
+      if (opts?.missingField) body.missingField = opts.missingField;
+      const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) }, body: JSON.stringify(body) });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
     },
     onSuccess: (_data, vars) => {
       setPolling(true); refetchStatus();
-      toast({ title: vars?.all ? "Drain enrichment started" : "Step 2 started", description: vars?.all ? "Running GPT-4o-mini on every un-scanned asset until the queue is empty..." : "Running GPT-4o-mini pass on incomplete assets..." });
+      const isFiltered = vars?.institution || vars?.modality || vars?.tier || vars?.missingField;
+      toast({ title: vars?.all ? "Drain enrichment started" : "Step 2 started", description: vars?.all ? (isFiltered ? "Draining filtered queue until empty…" : "Running GPT-4o-mini on every un-scanned asset until the queue is empty...") : (isFiltered ? "Running enrichment on filtered asset set…" : "Running GPT-4o-mini pass on incomplete assets...") });
     },
     onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
   });
@@ -3694,20 +3730,99 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   <span className="ml-1">— reached 3-attempt cap with fields still unknown. Content change will reset.</span>
                 </p>
               )}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" onClick={() => runEnrichment.mutate(undefined)} disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue !== undefined && miniQueue.count === 0)} className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white" data-testid="button-run-enrichment">
-                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}Run {Math.min(500, miniQueue?.count ?? 500).toLocaleString()} batch
-                </Button>
-                <Button size="sm" variant="outline"
-                  onClick={() => { const rem = miniQueue?.count ?? 0; const cost = miniQueue?.costEstimate ?? 0; const ok = window.confirm(`Run mini-40 enrichment on ALL ${rem.toLocaleString()} un-scanned assets?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job will keep pulling the next 500 until the queue is empty. You can stop it at any time.`); if (ok) runEnrichment.mutate({ all: true }); }}
-                  disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue !== undefined && miniQueue.count === 0)}
-                  className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30" data-testid="button-run-enrichment-all">
-                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
-                </Button>
-                {(miniQueue?.backfillCount ?? 0) > 0 && (
-                  <MiniBackfillButton pw={pw} onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/mini-queue"] })} />
-                )}
+
+              {/* ── Targeted Filter Bar ── */}
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 space-y-2" data-testid="enrichment-filter-bar">
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Target enrichment run</p>
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    type="text"
+                    placeholder="Institution…"
+                    value={enrichInstitution}
+                    onChange={e => setEnrichInstitution(e.target.value)}
+                    className="h-7 px-2 text-xs rounded-md border border-input bg-background w-36 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                    data-testid="input-enrich-institution"
+                  />
+                  <Select value={enrichTier || "__all__"} onValueChange={v => setEnrichTier(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs w-32" data-testid="select-enrich-tier"><SelectValue placeholder="Any tier" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Any tier</SelectItem>
+                      <SelectItem value="excellent">Excellent (≥80)</SelectItem>
+                      <SelectItem value="good">Good (60–79)</SelectItem>
+                      <SelectItem value="partial">Partial (40–59)</SelectItem>
+                      <SelectItem value="poor">Poor (1–39)</SelectItem>
+                      <SelectItem value="unscored">Unscored</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={enrichModality || "__all__"} onValueChange={v => setEnrichModality(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs w-36" data-testid="select-enrich-modality"><SelectValue placeholder="Any modality" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Any modality</SelectItem>
+                      <SelectItem value="small molecule">Small molecule</SelectItem>
+                      <SelectItem value="biologic">Biologic</SelectItem>
+                      <SelectItem value="cell therapy">Cell therapy</SelectItem>
+                      <SelectItem value="gene therapy">Gene therapy</SelectItem>
+                      <SelectItem value="device">Device</SelectItem>
+                      <SelectItem value="diagnostic">Diagnostic</SelectItem>
+                      <SelectItem value="platform">Platform</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={enrichMissingField || "__all__"} onValueChange={v => setEnrichMissingField(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs w-36" data-testid="select-enrich-missing"><SelectValue placeholder="Any field" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Any field</SelectItem>
+                      <SelectItem value="target">Missing: Target</SelectItem>
+                      <SelectItem value="indication">Missing: Indication</SelectItem>
+                      <SelectItem value="modality">Missing: Modality</SelectItem>
+                      <SelectItem value="stage">Missing: Dev Stage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {hasEnrichFilters && (
+                    <button
+                      onClick={() => { setEnrichInstitution(""); setEnrichModality(""); setEnrichTier(""); setEnrichMissingField(""); }}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      data-testid="button-enrich-clear-filters"
+                    >Clear</button>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const displayCount = hasEnrichFilters ? (enrichCount?.count ?? 0) : Math.min(500, miniQueue?.count ?? 0);
+                    const displayCost = hasEnrichFilters ? (enrichCount?.costEstimate ?? 0) : (miniQueue?.costEstimate ?? 0);
+                    const batchCount = Math.min(500, displayCount);
+                    const filterOpts = hasEnrichFilters ? { institution: debouncedInstitution || undefined, modality: enrichModality || undefined, tier: enrichTier || undefined, missingField: enrichMissingField || undefined } : undefined;
+                    const noAssets = hasEnrichFilters ? enrichCount?.count === 0 : (miniQueue?.count ?? 0) === 0;
+                    return (<>
+                      <Button size="sm"
+                        onClick={() => runEnrichment.mutate(filterOpts)}
+                        disabled={isRunning || runEnrichment.isPending || noAssets || enrichCountLoading}
+                        className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+                        data-testid="button-run-enrichment"
+                        title={hasEnrichFilters ? `Enrich the top ${batchCount.toLocaleString()} assets matching current filters (completeness DESC)` : `Enrich the top ${batchCount.toLocaleString()} assets (completeness DESC)`}>
+                        {isRunning || enrichCountLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Run {batchCount.toLocaleString()}{hasEnrichFilters ? " filtered" : " batch"}
+                        {displayCost > 0 && <span className="opacity-70 text-[10px]"> ~${(batchCount * 0.0003).toFixed(2)}</span>}
+                      </Button>
+                      <Button size="sm" variant="outline"
+                        onClick={() => {
+                          const tot = hasEnrichFilters ? (enrichCount?.count ?? 0) : (miniQueue?.count ?? 0);
+                          const cost = hasEnrichFilters ? (enrichCount?.costEstimate ?? 0) : (miniQueue?.costEstimate ?? 0);
+                          const label = hasEnrichFilters ? "filtered assets" : "un-scanned assets";
+                          const ok = window.confirm(`Run on ALL ${tot.toLocaleString()} ${label}?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job pulls the next 500 until the queue is empty. You can stop at any time.`);
+                          if (ok) runEnrichment.mutate({ all: true, ...filterOpts });
+                        }}
+                        disabled={isRunning || runEnrichment.isPending || noAssets || enrichCountLoading}
+                        className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                        data-testid="button-run-enrichment-all">
+                        {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Run all ({hasEnrichFilters ? (enrichCount?.count ?? "…").toLocaleString() : (miniQueue?.count ?? "…").toLocaleString()})
+                      </Button>
+                    </>);
+                  })()}
+                  {(miniQueue?.backfillCount ?? 0) > 0 && (
+                    <MiniBackfillButton pw={pw} onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/mini-queue"] })} />
+                  )}
+                </div>
               </div>
             </div>
           </div>

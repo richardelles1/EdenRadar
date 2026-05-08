@@ -236,7 +236,8 @@ export interface IStorage {
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
   getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
-  getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>>;
+  getMiniEnrichBatch(limit: number, filters?: EnrichFilter): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>>;
+  getFilteredEnrichCount(filters?: EnrichFilter): Promise<{ count: number; costEstimate: number }>;
   getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }>;
   incrementMiniEnrichAttempts(assetId: number): Promise<void>;
   backfillMiniEnrichAttempts(): Promise<number>;
@@ -546,6 +547,57 @@ export type AssetSuggestion = {
   score: number;
   matchedFields: string[];
 };
+
+export type EnrichFilter = {
+  institution?: string;
+  modality?: string;
+  stage?: string;
+  indication?: string;
+  tier?: string;
+  missingField?: string;
+};
+
+// Builds a typed WHERE clause fragment for mini-enrichment batch queries.
+// When a missingField filter is given, the "3+ unknowns" gate is replaced with
+// a predicate for exactly that field so single-field gap-fills are included.
+function buildEnrichWhere(filters: EnrichFilter = {}): SQL {
+  const parts: SQL[] = [
+    sql`relevant = true`,
+    sql`(data_sparse IS NULL OR data_sparse = false)`,
+    sql`char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120`,
+    sql`COALESCE(mini_enrich_attempts, 0) < 3`,
+  ];
+  if (filters.institution) parts.push(sql`institution ILIKE ${'%' + filters.institution + '%'}`);
+  if (filters.modality) parts.push(sql`modality = ${filters.modality}`);
+  if (filters.stage) parts.push(sql`development_stage = ${filters.stage}`);
+  if (filters.indication) parts.push(sql`indication ILIKE ${'%' + filters.indication + '%'}`);
+  if (filters.tier) {
+    const t = filters.tier;
+    if (t === "excellent") parts.push(sql`completeness_score >= 80`);
+    else if (t === "good") parts.push(sql`completeness_score >= 60 AND completeness_score < 80`);
+    else if (t === "partial") parts.push(sql`completeness_score >= 40 AND completeness_score < 60`);
+    else if (t === "poor") parts.push(sql`completeness_score >= 1 AND completeness_score < 40`);
+    else if (t === "unscored") parts.push(sql`(completeness_score IS NULL OR completeness_score = 0)`);
+  }
+  if (filters.missingField) {
+    const mf = filters.missingField;
+    if (mf === "target") parts.push(sql`(target IS NULL OR target IN ('unknown',''))`);
+    else if (mf === "indication") parts.push(sql`(indication IS NULL OR indication IN ('unknown',''))`);
+    else if (mf === "modality") parts.push(sql`(modality IS NULL OR modality IN ('unknown',''))`);
+    else if (mf === "stage") parts.push(sql`(development_stage IS NULL OR development_stage IN ('unknown',''))`);
+  } else {
+    parts.push(sql`(
+      (completeness_score IS NULL OR completeness_score = 0)
+      OR (
+        (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+        (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+        (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+        (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+      ) >= 3
+    )`);
+  }
+  return parts.reduce((a, b) => sql`${a} AND ${b}`);
+}
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -2300,12 +2352,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ingestedAssets.id, assetId));
   }
 
-  async getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>> {
-    // Same criteria as getMiniEnrichQueue: relevant, non-sparse, >=120 chars, 3+ unknown key fields.
-    // Capped by `limit` so each run is a bounded, cost-controlled cycle.
-    // We also pull abstract + ctx fields (categories/patent/licensing/inventors/sourceUrl)
-    // so the mini classifier has the same context the deep classifier gets — many of
-    // these assets are short on summary but rich in abstract.
+  async getMiniEnrichBatch(limit: number, filters: EnrichFilter = {}): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>> {
+    // Builds a filtered, prioritized batch for mini-enrichment.
+    // Order: completeness_score DESC (closest to tier threshold first),
+    // then drug_biologic priority as tiebreaker.
+    // Filters are applied via buildEnrichWhere; the "3+ unknowns" gate is
+    // relaxed to a single-field predicate when missingField is set.
+    const where = buildEnrichWhere(filters);
     const rows = await db.execute(sql`
       SELECT id, asset_name AS "assetName", summary, abstract,
              COALESCE(target, 'unknown') AS target,
@@ -2318,26 +2371,23 @@ export class DatabaseStorage implements IStorage {
              inventors,
              source_url AS "sourceUrl"
       FROM ingested_assets
-      WHERE relevant = true
-        AND (data_sparse IS NULL OR data_sparse = false)
-        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 120
-        AND COALESCE(mini_enrich_attempts, 0) < 3
-        AND (
-          (completeness_score IS NULL OR completeness_score = 0)
-          OR (
-            (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-            (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
-          ) >= 3
-        )
+      WHERE ${where}
       ORDER BY
-        (CASE WHEN asset_class = 'drug_biologic' THEN 0 ELSE 1 END) ASC,
-        char_length(COALESCE(summary, '') || COALESCE(abstract, '')) DESC,
-        COALESCE(completeness_score, 0) ASC
+        COALESCE(completeness_score, 0) DESC,
+        (CASE WHEN asset_class = 'drug_biologic' THEN 0 ELSE 1 END) ASC
       LIMIT ${limit}
     `);
     return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>;
+  }
+
+  async getFilteredEnrichCount(filters: EnrichFilter = {}): Promise<{ count: number; costEstimate: number }> {
+    const where = buildEnrichWhere(filters);
+    type CountRow = { count: number };
+    const rows = await db.execute<CountRow>(sql`
+      SELECT COUNT(*)::int AS count FROM ingested_assets WHERE ${where}
+    `);
+    const count = rows.rows[0]?.count ?? 0;
+    return { count, costEstimate: count * 0.0003 };
   }
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }> {

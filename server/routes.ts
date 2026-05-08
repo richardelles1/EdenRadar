@@ -7,7 +7,7 @@ import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-import { storage } from "./storage";
+import { storage, type EnrichFilter } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db } from "./db";
@@ -3480,6 +3480,7 @@ export async function registerRoutes(
     startImproved: number,
     resumed: boolean,
     drain: boolean = false,
+    filters: EnrichFilter = {},
   ) {
     liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain, tokenCost: 0 };
     const MINI_INPUT_PER_M = 0.15;   // gpt-4o-mini input $/1M tokens
@@ -3577,7 +3578,7 @@ export async function registerRoutes(
       // criteria already exclude assets we've just scored, so we will not pay
       // twice for the same asset.
       while (drain && !standardEnrichShouldStop) {
-        const next = await storage.getMiniEnrichBatch(500);
+        const next = await storage.getMiniEnrichBatch(500, filters);
         if (next.length === 0) break;
         idx = 0;
         assets = next;
@@ -4337,6 +4338,22 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/enrichment/count", requireAdmin, async (req, res) => {
+    try {
+      const filters: EnrichFilter = {};
+      if (req.query.institution) filters.institution = String(req.query.institution);
+      if (req.query.modality) filters.modality = String(req.query.modality);
+      if (req.query.stage) filters.stage = String(req.query.stage);
+      if (req.query.indication) filters.indication = String(req.query.indication);
+      if (req.query.tier) filters.tier = String(req.query.tier);
+      if (req.query.missingField) filters.missingField = String(req.query.missingField);
+      const result = await storage.getFilteredEnrichCount(filters);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to count enrichment queue" });
+    }
+  });
+
   app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
 
@@ -4355,19 +4372,26 @@ export async function registerRoutes(
       // for the same asset.
       const drainAll = req.query.all === "1" || req.body?.all === true;
 
-      // Use mini-queue criteria (relevant, non-sparse, >150 chars, 3+ unknowns) capped at
-      // 500 assets per cycle so each run is cost-controlled and predictable.
+      // Extract optional targeting filters from the POST body.
+      const filters: EnrichFilter = {};
+      if (req.body?.institution) filters.institution = String(req.body.institution);
+      if (req.body?.modality) filters.modality = String(req.body.modality);
+      if (req.body?.stage) filters.stage = String(req.body.stage);
+      if (req.body?.indication) filters.indication = String(req.body.indication);
+      if (req.body?.tier) filters.tier = String(req.body.tier);
+      if (req.body?.missingField) filters.missingField = String(req.body.missingField);
+
       const MINI_BATCH_CAP = 500;
-      const assets = await storage.getMiniEnrichBatch(MINI_BATCH_CAP);
+      const assets = await storage.getMiniEnrichBatch(MINI_BATCH_CAP, filters);
       if (assets.length === 0) {
-        return res.json({ message: "No assets in mini-enrich queue" });
+        return res.json({ message: "No assets in mini-enrich queue matching filters" });
       }
 
       const job = await storage.createEnrichmentJob(assets.length);
-      res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, jobId: job.id, drain: drainAll });
+      res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, jobId: job.id, drain: drainAll, filters });
 
       standardEnrichShouldStop = false;
-      runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll);
+      runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll, filters);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
     }
