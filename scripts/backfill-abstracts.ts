@@ -321,35 +321,11 @@ async function fetchTechPublisherAbstract(url: string): Promise<FetchResult | nu
 
   const $ = load(html);
 
-  // Primary: .c_tp_description — the canonical TechnologyPublisher description block
+  // .c_tp_description is the canonical TechnologyPublisher description field
   const descText = cleanText(stripHtml($(".c_tp_description").first().html() ?? ""));
-  if (descText.length >= MIN_USEFUL_LENGTH) {
-    // Also extract patent status and inventors as the retroactive-refetch script does
-    let patentStatus: string | null = null;
-    const patentRows = $(".c_tp_patent tr").slice(1);
-    if (patentRows.length > 0) {
-      const cells = patentRows.first().find("td");
-      const appType = cells.eq(1).text().trim();
-      const patTitle = cells.eq(0).text().trim();
-      if (appType || patTitle) patentStatus = [appType, patTitle].filter(Boolean).join(" — ").slice(0, 200);
-    }
-    void patentStatus; // available for future write-back; not in schema yet
-    return { abstract: descText.slice(0, 5000) };
-  }
+  if (descText.length >= MIN_USEFUL_LENGTH) return { abstract: descText.slice(0, 5000) };
 
-  // Fallback: other well-known TechnologyPublisher description selectors
-  const fallbackSelectors = [
-    ".tech-description", ".field--name-body .field__item", ".field--name-body",
-    ".technology-listing-description", "#field-description",
-    ".views-field-body .field-content", ".tech-detail__description",
-    ".technology-description",
-  ];
-  for (const sel of fallbackSelectors) {
-    const text = cleanText(stripHtml($(sel).first().html() ?? $(sel).first().text()));
-    if (text.length >= MIN_USEFUL_LENGTH) return { abstract: text.slice(0, 5000) };
-  }
-
-  return null; // page loaded but no description found → caller counts as skipped
+  return null; // page loaded but .c_tp_description absent or empty → caller counts as skipped
 }
 
 async function processTechPublisher(assets: AssetRow[]): Promise<void> {
@@ -422,43 +398,39 @@ async function fetchFlintboxAbstract(url: string): Promise<FetchResult | null> {
   const [, slug, uuid] = m;
 
   const creds = await discoverFlintboxCreds(slug);
-  if (!creds) return null;
+  if (!creds) throw new Error(`Credential discovery failed for ${slug}.flintbox.com`);
 
-  try {
-    const apiUrl =
-      `https://${slug}.flintbox.com/api/v1/technologies/${uuid}` +
-      `?organizationId=${creds.orgId}&organizationAccessKey=${creds.accessKey}`;
-    const res = await fetch(apiUrl, {
-      headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest", "User-Agent": UA },
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
+  const apiUrl =
+    `https://${slug}.flintbox.com/api/v1/technologies/${uuid}` +
+    `?organizationId=${creds.orgId}&organizationAccessKey=${creds.accessKey}`;
+  const res = await fetch(apiUrl, {
+    headers: { Accept: "application/json", "X-Requested-With": "XMLHttpRequest", "User-Agent": UA },
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${apiUrl}`);
 
-    const json = await res.json() as Record<string, unknown>;
-    const attrs = (json?.data as Record<string, unknown>)?.attributes
-      ?? (json?.attributes as Record<string, unknown>)
-      ?? json as Record<string, unknown>;
+  const json = await res.json() as Record<string, unknown>;
+  const attrs = (json?.data as Record<string, unknown>)?.attributes
+    ?? (json?.attributes as Record<string, unknown>)
+    ?? json as Record<string, unknown>;
 
-    const descRaw = cleanText(stripHtml(
-      String(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract
-             ?? attrs?.briefDescription ?? attrs?.brief_description ?? ""),
-    ));
-    const benefitRaw = cleanText(stripHtml(String(attrs?.benefit ?? "")));
-    const marketRaw  = cleanText(stripHtml(String(attrs?.marketApplication ?? "")));
-    const kp1 = cleanText(stripHtml(String(attrs?.keyPoint1 ?? "")));
-    const kp2 = cleanText(stripHtml(String(attrs?.keyPoint2 ?? "")));
-    const kp3 = cleanText(stripHtml(String(attrs?.keyPoint3 ?? "")));
-    const otherRaw = cleanText(stripHtml(String(attrs?.other ?? "")));
+  const descRaw = cleanText(stripHtml(
+    String(attrs?.description ?? attrs?.fullDescription ?? attrs?.abstract
+           ?? attrs?.briefDescription ?? attrs?.brief_description ?? ""),
+  ));
+  const benefitRaw = cleanText(stripHtml(String(attrs?.benefit ?? "")));
+  const marketRaw  = cleanText(stripHtml(String(attrs?.marketApplication ?? "")));
+  const kp1 = cleanText(stripHtml(String(attrs?.keyPoint1 ?? "")));
+  const kp2 = cleanText(stripHtml(String(attrs?.keyPoint2 ?? "")));
+  const kp3 = cleanText(stripHtml(String(attrs?.keyPoint3 ?? "")));
+  const otherRaw = cleanText(stripHtml(String(attrs?.other ?? "")));
 
-    const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw]
-      .filter((s) => s.length > 0).join(" ").slice(0, 5000);
-    if (combined.length < MIN_USEFUL_LENGTH) return null;
+  const combined = [descRaw, benefitRaw, marketRaw, kp1, kp2, kp3, otherRaw]
+    .filter((s) => s.length > 0).join(" ").slice(0, 5000);
+  if (combined.length < MIN_USEFUL_LENGTH) return null;
 
-    const abstractText = descRaw.length >= MIN_USEFUL_LENGTH ? descRaw.slice(0, 5000) : combined;
-    return { abstract: abstractText, summary: combined };
-  } catch {
-    return null;
-  }
+  const abstractText = descRaw.length >= MIN_USEFUL_LENGTH ? descRaw.slice(0, 5000) : combined;
+  return { abstract: abstractText, summary: combined };
 }
 
 async function processFlintbox(assets: AssetRow[]): Promise<void> {
@@ -512,8 +484,13 @@ async function processFlintbox(assets: AssetRow[]): Promise<void> {
 // ══════════════════════════════════════════════════════════════════════════════
 
 async function fetchGenericAbstract(url: string): Promise<FetchResult | null> {
-  const html = await fetchHtml(url);
-  if (!html) return null;
+  const res = await fetch(url, {
+    headers: { "User-Agent": UA, "Accept": "text/html,application/xhtml+xml" },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url}`);
+  const html = await res.text();
+  if (html.length < 500) throw new Error(`Response too short (${html.length} bytes) for ${url}`);
   const $ = load(html);
 
   // Pass 1: well-known TTO selectors — pick the LONGEST text from all matching elements
