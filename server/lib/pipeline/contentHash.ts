@@ -20,6 +20,13 @@ export type CompletenessAsset = {
   ipType?: string | null;
   patentStatus?: string | null;
   summary?: string | null;
+  /**
+   * source_type from ingested_assets (e.g. "tech_transfer", "paper", "patent").
+   * TTO listings are published on "available technologies" portals, so their presence
+   * on the portal IS proof of IP availability — we don't require an explicit ipType
+   * or patentStatus field to award IP credit for tech_transfer assets.
+   */
+  sourceType?: string | null;
   // Retained for backwards-compat with callers that still pass these — not scored
   target?: string | null;
   innovationClaim?: string | null;
@@ -50,9 +57,15 @@ function hasValue(val: unknown): boolean {
  *   developmentStage  = 20 pts  (how ready is it)
  *   summary quality   = 15 pts  (≥300 chars=15, ≥150=10, ≥50=5)
  *   mechanismOfAction = 12 pts  (how it works — critical for EDEN matching)
- *   IP protection     =  8 pts  (ipType OR patentStatus, either earns full credit)
+ *   IP protection     =  8 pts  (ipType OR patentStatus, either earns full credit;
+ *                                OR sourceType === 'tech_transfer' — TTO portal
+ *                                listing IS proof of licensing availability)
  *   ──────────────────────────
  *   Total             = 100 pts
+ *
+ * IP credit rationale: universities publish technologies on TTO portals specifically
+ * because they are available for licensing. The listing IS the IP availability signal.
+ * We no longer require an explicit ipType/patentStatus field for TTO assets.
  *
  * Removed from scoring: inventors, abstract, licensingReadiness, comparableDrugs,
  * target, innovationClaim, deviceAttributes. These live in the dossier or are
@@ -79,10 +92,14 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
   // mechanismOfAction (12 pts) — how it works; also critical for EDEN vector matching
   if (hasValue(asset.mechanismOfAction)) score += 12;
 
-  // IP protection (8 pts) — ipType OR patentStatus, either earns full credit
-  const hasIp = hasValue(asset.ipType) ||
+  // IP protection (8 pts) — explicit ipType OR patentStatus earns credit.
+  // TTO portal listings (source_type = 'tech_transfer') also earn full credit:
+  // universities list technologies on these portals specifically because they are
+  // available for licensing — the listing IS the IP availability proof.
+  const hasExplicitIp = hasValue(asset.ipType) ||
     (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown");
-  if (hasIp) score += 8;
+  const isTtoListing = asset.sourceType === "tech_transfer";
+  if (hasExplicitIp || isTtoListing) score += 8;
 
   return Math.min(100, score);
 }

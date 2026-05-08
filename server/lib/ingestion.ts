@@ -276,6 +276,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
                 categories: classification.categories,
                 inventors: origData?.inventors,
                 patentStatus: origData?.patentStatus,
+                sourceType: origData?.sourceType ?? "tech_transfer",
               });
               await storage.updateIngestedAssetEnrichment(id, {
                 ...classification,

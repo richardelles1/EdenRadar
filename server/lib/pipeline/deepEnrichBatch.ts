@@ -28,6 +28,8 @@ export interface DeepEnrichAssetInput {
   summary: string;
   abstract: string | null;
   ctx?: AssetContext;
+  /** source_type from ingested_assets — "tech_transfer" earns automatic IP credit */
+  sourceType?: string | null;
 }
 
 export interface DeepEnrichBatchResult {
@@ -176,6 +178,7 @@ export async function deepEnrichBatch(
           categories: asset.ctx?.categories ?? null,
           inventors: asset.ctx?.inventors ?? null,
           patentStatus: asset.ctx?.patentStatus ?? null,
+          sourceType: asset.sourceType,
         });
 
         const result: DeepEnrichResult = {

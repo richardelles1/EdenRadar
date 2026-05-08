@@ -4981,6 +4981,7 @@ export async function registerRoutes(
                    AND ia.ip_type NOT IN ('unknown',''))
                OR (ia.patent_status IS NOT NULL AND length(ia.patent_status) >= 3
                    AND ia.patent_status NOT IN ('unknown',''))
+               OR ia.source_type = 'tech_transfer'
              THEN 8 ELSE 0 END
       )`;
 

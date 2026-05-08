@@ -2258,6 +2258,7 @@ export class DatabaseStorage implements IStorage {
             categories: ingestedAssets.categories,
             inventors: ingestedAssets.inventors,
             patentStatus: ingestedAssets.patentStatus,
+            sourceType: ingestedAssets.sourceType,
           }).from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
 
           if (!cur) continue;
@@ -2320,6 +2321,7 @@ export class DatabaseStorage implements IStorage {
             categories: cur.categories,
             inventors: cur.inventors,
             patentStatus: cur.patentStatus,
+            sourceType: cur.sourceType,
           };
           update.completenessScore = computeCompletenessScore(merged);
           update.enrichmentSources = newSources;
@@ -2489,6 +2491,7 @@ export class DatabaseStorage implements IStorage {
         licensingReadiness: ingestedAssets.licensingReadiness,
         inventors: ingestedAssets.inventors,
         patentStatus: ingestedAssets.patentStatus,
+        sourceType: ingestedAssets.sourceType,
         completenessScore: ingestedAssets.completenessScore,
       })
       .from(ingestedAssets)
@@ -2516,6 +2519,7 @@ export class DatabaseStorage implements IStorage {
         licensingReadiness: row.licensingReadiness,
         inventors: row.inventors,
         patentStatus: row.patentStatus,
+        sourceType: row.sourceType,
       });
       const oldScore = row.completenessScore != null ? Number(row.completenessScore) : null;
       if (oldScore !== newScore) {
