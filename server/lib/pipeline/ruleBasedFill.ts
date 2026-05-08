@@ -494,7 +494,7 @@ export async function runRuleBasedFill(
     categories: string[] | null;
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
-    deep_enrich_attempts: number;
+    deep_enrich_attempts: number | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
@@ -620,7 +620,7 @@ export async function estimateRuleBasedFill(): Promise<{
     categories: string[] | null;
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
-    deep_enrich_attempts: number;
+    deep_enrich_attempts: number | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
