@@ -1985,18 +1985,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async captureInstitutionQualitySnapshot(institution: string): Promise<void> {
-    try {
-      const quality = await this.getInstitutionEnrichmentQuality(institution);
-      await db.insert(institutionQualitySnapshots).values({
-        institution,
-        relevantCount: quality.relevantCount,
-        avgCompleteness: quality.avgCompletenessScore,
-        enrichQueueCount: quality.enrichQueueCount,
-        enrichedLast24h: quality.enrichedLast24h,
-      });
-    } catch (e) {
-      console.error(`[snapshot] Failed to capture quality snapshot for ${institution}:`, e);
-    }
+    const quality = await this.getInstitutionEnrichmentQuality(institution);
+    await db.insert(institutionQualitySnapshots).values({
+      institution,
+      relevantCount: quality.relevantCount,
+      avgCompleteness: quality.avgCompletenessScore,
+      enrichQueueCount: quality.enrichQueueCount,
+      enrichedLast24h: quality.enrichedLast24h,
+    });
   }
 
   async getInstitutionQualityHistory(institution: string, limit = 10): Promise<Array<{
@@ -2011,7 +2007,7 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select()
       .from(institutionQualitySnapshots)
-      .where(sql`institution ILIKE ${'%' + institution + '%'}`)
+      .where(eq(institutionQualitySnapshots.institution, institution))
       .orderBy(desc(institutionQualitySnapshots.capturedAt))
       .limit(limit);
     return rows.map(r => ({
