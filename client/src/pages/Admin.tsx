@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
+import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Dot } from "recharts";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
@@ -322,6 +323,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
   type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueCount: number; enrichedLast24h: number };
   type EnrichStatus = { status: string; processed?: number; total?: number; improved?: number };
   type EnrichJobRow = { id: number; status: string; total: number; processed: number; improved: number; startedAt: string; completedAt: string | null; filters: Record<string, string> | null };
+  type QualitySnapshot = { id: number; institution: string; capturedAt: string; relevantCount: number; avgCompleteness: number | null; enrichQueueCount: number; enrichedLast24h: number };
 
   function fmtDuration(startedAt: string, completedAt: string | null): string {
     if (!completedAt) return "—";
@@ -369,12 +371,38 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     refetchInterval: 5_000,
   });
 
+  const { data: qualityHistory } = useQuery<QualitySnapshot[]>({
+    queryKey: ["/api/admin/enrichment/institution-quality/history", institution],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/enrichment/institution-quality/history?institution=${encodeURIComponent(institution)}`, {
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  const snapshotMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/admin/enrichment/institution-quality/snapshot?institution=${encodeURIComponent(institution)}`, {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) throw new Error("Snapshot failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/institution-quality/history", institution] });
+    },
+  });
+
   const prevEnrichStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (prevEnrichStatusRef.current === "running" && enrichStatus?.status !== "running") {
       refetchQuality();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/jobs", institution] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/institution-quality/history", institution] });
     }
     prevEnrichStatusRef.current = enrichStatus?.status;
   }, [enrichStatus?.status]);
@@ -440,6 +468,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     onSuccess: (data) => {
       refetchQuality();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/health", pw] });
+      snapshotMutation.mutate();
       toast({
         title: "Fields refreshed",
         description: data.message,
@@ -976,6 +1005,41 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       )}
                     </div>
                   )}
+                  <div className="mt-3 border-t border-border/30 pt-3" data-testid="completeness-trend-panel">
+                    <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Completeness trend</div>
+                    {!qualityHistory || qualityHistory.length < 2 ? (
+                      <div className="text-[11px] text-muted-foreground italic">No trend data yet — appears after the first enrichment run</div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height={80}>
+                        <LineChart data={[...qualityHistory].reverse().map(s => ({
+                          ...s,
+                          label: new Date(s.capturedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+                          score: s.avgCompleteness,
+                        }))}>
+                          <XAxis dataKey="label" tick={{ fontSize: 9 }} tickLine={false} axisLine={false} />
+                          <YAxis hide domain={["auto", "auto"]} />
+                          <RechartsTooltip
+                            contentStyle={{ fontSize: 11, padding: "4px 8px" }}
+                            formatter={(value: number, _name: string, props: { payload?: QualitySnapshot }) => {
+                              const s = props.payload;
+                              if (!s) return [value, "Completeness"];
+                              return [`${value} completeness · ${s.enrichQueueCount} queued`, new Date(s.capturedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })];
+                            }}
+                            labelFormatter={() => ""}
+                          />
+                          <Line
+                            type="monotone"
+                            dataKey="score"
+                            stroke="var(--color-primary, #6366f1)"
+                            strokeWidth={1.5}
+                            dot={<Dot r={2} />}
+                            activeDot={{ r: 3 }}
+                            connectNulls
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
                 </>
               ) : null}
             </div>

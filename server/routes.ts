@@ -3607,6 +3607,10 @@ export async function registerRoutes(
       lastRunTokenCost = liveEnrichment!.tokenCost;
       await storage.updateEnrichmentJob(jobId, { status: "done", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
       console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed · $${lastRunTokenCost.toFixed(4)} spent`);
+      // Fire-and-forget quality snapshot for institution-scoped runs.
+      if (filters.institution) {
+        storage.captureInstitutionQualitySnapshot(filters.institution).catch(() => {});
+      }
     } catch (e: any) {
       await storage.updateEnrichmentJob(jobId, { status: "error", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
       console.error("[enrichment] Job failed:", e);
@@ -3621,6 +3625,30 @@ export async function registerRoutes(
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch enrichment stats" });
+    }
+  });
+
+  // Per-institution quality snapshot history.
+  app.get("/api/admin/enrichment/institution-quality/history", requireAdmin, async (req, res) => {
+    const institution = String(req.query.institution ?? "").trim();
+    if (!institution) return res.status(400).json({ error: "institution query param required" });
+    try {
+      const history = await storage.getInstitutionQualityHistory(institution);
+      res.json(history);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch quality history" });
+    }
+  });
+
+  // On-demand snapshot — lets the admin manually bookmark current quality state.
+  app.post("/api/admin/enrichment/institution-quality/snapshot", requireAdmin, async (req, res) => {
+    const institution = String(req.query.institution ?? "").trim();
+    if (!institution) return res.status(400).json({ error: "institution query param required" });
+    try {
+      await storage.captureInstitutionQualitySnapshot(institution);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to capture snapshot" });
     }
   });
 

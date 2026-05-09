@@ -41,6 +41,7 @@ import {
   relevanceMetrics, type RelevanceMetricsRow,
   inviteTokens, type InviteToken,
   enrichmentRunLog,
+  institutionQualitySnapshots,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -271,6 +272,17 @@ export interface IStorage {
     enrichQueueCount: number;
     enrichedLast24h: number;
   }>;
+
+  captureInstitutionQualitySnapshot(institution: string): Promise<void>;
+  getInstitutionQualityHistory(institution: string, limit?: number): Promise<Array<{
+    id: number;
+    institution: string;
+    capturedAt: string;
+    relevantCount: number;
+    avgCompleteness: number | null;
+    enrichQueueCount: number;
+    enrichedLast24h: number;
+  }>>;
 
   getDeepEnrichmentCoverage(): Promise<{
     totalRelevant: number;
@@ -1970,6 +1982,47 @@ export class DatabaseStorage implements IStorage {
       enrichQueueCount,
       enrichedLast24h: Number(row?.enriched_last_24h ?? 0),
     };
+  }
+
+  async captureInstitutionQualitySnapshot(institution: string): Promise<void> {
+    try {
+      const quality = await this.getInstitutionEnrichmentQuality(institution);
+      await db.insert(institutionQualitySnapshots).values({
+        institution,
+        relevantCount: quality.relevantCount,
+        avgCompleteness: quality.avgCompletenessScore,
+        enrichQueueCount: quality.enrichQueueCount,
+        enrichedLast24h: quality.enrichedLast24h,
+      });
+    } catch (e) {
+      console.error(`[snapshot] Failed to capture quality snapshot for ${institution}:`, e);
+    }
+  }
+
+  async getInstitutionQualityHistory(institution: string, limit = 10): Promise<Array<{
+    id: number;
+    institution: string;
+    capturedAt: string;
+    relevantCount: number;
+    avgCompleteness: number | null;
+    enrichQueueCount: number;
+    enrichedLast24h: number;
+  }>> {
+    const rows = await db
+      .select()
+      .from(institutionQualitySnapshots)
+      .where(sql`institution ILIKE ${'%' + institution + '%'}`)
+      .orderBy(desc(institutionQualitySnapshots.capturedAt))
+      .limit(limit);
+    return rows.map(r => ({
+      id: r.id,
+      institution: r.institution,
+      capturedAt: r.capturedAt.toISOString(),
+      relevantCount: r.relevantCount,
+      avgCompleteness: r.avgCompleteness ?? null,
+      enrichQueueCount: r.enrichQueueCount,
+      enrichedLast24h: r.enrichedLast24h,
+    }));
   }
 
   async getDeepEnrichmentCoverage(): Promise<{

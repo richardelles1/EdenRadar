@@ -1275,3 +1275,16 @@ export const enrichmentRunLog = pgTable("enrichment_run_log", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 export type EnrichmentRunLog = typeof enrichmentRunLog.$inferSelect;
+
+// Point-in-time quality snapshots per institution, written automatically after
+// each institution-scoped enrichment run and on-demand via the admin panel.
+export const institutionQualitySnapshots = pgTable("institution_quality_snapshots", {
+  id: serial("id").primaryKey(),
+  institution: text("institution").notNull(),
+  capturedAt: timestamp("captured_at", { withTimezone: true }).default(sql`NOW()`).notNull(),
+  relevantCount: integer("relevant_count").notNull().default(0),
+  avgCompleteness: integer("avg_completeness"),
+  enrichQueueCount: integer("enrich_queue_count").notNull().default(0),
+  enrichedLast24h: integer("enriched_last_24h").notNull().default(0),
+});
+export type InstitutionQualitySnapshot = typeof institutionQualitySnapshots.$inferSelect;
