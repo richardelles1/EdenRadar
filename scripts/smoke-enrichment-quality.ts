@@ -180,26 +180,30 @@ try {
     // ── Semantic cross-check ───────────────────────────────────────────────
     // After the refresh, re-fetch quality and verify the enrichQueueCount increased
     // by exactly queuedRelevant. Since buildEnrichWhere now includes `enrichedAt IS NULL`
-    // as an OR condition, refresh-reset assets appear in the count immediately.
-    // The delta must equal queuedRelevant (not just >= pre).
-    console.log("\n[3b] Cross-check: post-refresh enrichQueueCount >= pre-refresh");
+    // as an OR condition, refresh-reset assets appear in the count immediately and
+    // the delta must equal queuedRelevant exactly (not just >= pre).
+    console.log("\n[3b] Cross-check: post-refresh enrichQueueCount delta == queuedRelevant");
     const postQuality = await fetchQuality();
     const postQueueCount = typeof postQuality?.enrichQueueCount === "number" ? postQuality.enrichQueueCount : undefined;
 
     if (typeof preQueueCount !== "number" || typeof postQueueCount !== "number") {
       fail("cross-check data available", `pre=${preQueueCount} post=${postQueueCount}`);
-    } else if (postQueueCount < 0) {
-      fail("cross-check: postQueueCount >= 0", `got ${postQueueCount}`);
-    } else if (postQueueCount < preQueueCount) {
-      fail(
-        "cross-check: post >= pre (refresh only adds to queue)",
-        `pre=${preQueueCount} post=${postQueueCount}`,
-      );
+    } else if (typeof body.queuedRelevant !== "number") {
+      fail("cross-check: queuedRelevant available", "not a number");
     } else {
-      pass(
-        "cross-check: enrichQueueCount post >= pre",
-        `pre=${preQueueCount} post=${postQueueCount} (delta=${postQueueCount - preQueueCount}, queuedRelevant=${body.queuedRelevant})`,
-      );
+      const delta = postQueueCount - preQueueCount;
+      const expected = body.queuedRelevant as number;
+      if (delta !== expected) {
+        fail(
+          "cross-check: enrichQueueCount delta == queuedRelevant",
+          `pre=${preQueueCount} post=${postQueueCount} delta=${delta} but queuedRelevant=${expected}`,
+        );
+      } else {
+        pass(
+          "cross-check: enrichQueueCount delta == queuedRelevant",
+          `pre=${preQueueCount} post=${postQueueCount} delta=${delta} queuedRelevant=${expected}`,
+        );
+      }
     }
   }
 } catch (err: any) {
