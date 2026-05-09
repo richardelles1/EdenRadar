@@ -233,6 +233,7 @@ interface SyncStatusResponse {
 
 function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institution: string; pw: string; onCollapse: () => void; liveInDb?: number }) {
   const [polling, setPolling] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
   const { toast } = useToast();
 
   const { data: statusData, refetch: refetchStatus } = useQuery<SyncStatusResponse>({
@@ -919,31 +920,41 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                   )}
                   {jobHistory && jobHistory.length > 0 && (
                     <div className="mt-3 border-t border-border/30 pt-3" data-testid="enrichment-job-history">
-                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Recent enrichment runs</div>
-                      <table className="w-full text-[11px]">
-                        <thead>
-                          <tr className="text-muted-foreground">
-                            <th className="text-left font-medium pb-1 pr-3">Started</th>
-                            <th className="text-right font-medium pb-1 pr-3">Processed</th>
-                            <th className="text-right font-medium pb-1 pr-3">Improved</th>
-                            <th className="text-right font-medium pb-1 pr-3">Hit rate</th>
-                            <th className="text-right font-medium pb-1">Duration</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {jobHistory.slice(0, 5).map((job) => (
-                            <tr key={job.id} className="border-t border-border/20" data-testid={`enrichment-job-row-${job.id}`}>
-                              <td className="py-1 pr-3 text-muted-foreground">{fmtAgo(job.startedAt)}</td>
-                              <td className="py-1 pr-3 text-right tabular-nums">{job.processed}</td>
-                              <td className="py-1 pr-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{job.improved}</td>
-                              <td className={`py-1 pr-3 text-right tabular-nums font-medium ${job.processed > 0 && (job.improved / job.processed) >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : job.processed > 0 && (job.improved / job.processed) >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
-                                {fmtHitRate(job.improved, job.processed)}
-                              </td>
-                              <td className="py-1 text-right tabular-nums text-muted-foreground">{fmtDuration(job.startedAt, job.completedAt)}</td>
+                      <button
+                        type="button"
+                        className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wide hover:text-foreground transition-colors w-full text-left"
+                        onClick={() => setShowHistory((v) => !v)}
+                        data-testid="toggle-enrichment-history"
+                      >
+                        <span className="text-[9px]">{showHistory ? "▾" : "▸"}</span>
+                        Recent enrichment runs ({jobHistory.length})
+                      </button>
+                      {showHistory && (
+                        <table className="w-full text-[11px] mt-1.5">
+                          <thead>
+                            <tr className="text-muted-foreground">
+                              <th className="text-left font-medium pb-1 pr-3">Started</th>
+                              <th className="text-right font-medium pb-1 pr-3">Processed</th>
+                              <th className="text-right font-medium pb-1 pr-3">Improved</th>
+                              <th className="text-right font-medium pb-1 pr-3">Hit rate</th>
+                              <th className="text-right font-medium pb-1">Duration</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {jobHistory.slice(0, 5).map((job) => (
+                              <tr key={job.id} className="border-t border-border/20" data-testid={`enrichment-job-row-${job.id}`}>
+                                <td className="py-1 pr-3 text-muted-foreground">{fmtAgo(job.startedAt)}</td>
+                                <td className="py-1 pr-3 text-right tabular-nums">{job.processed}</td>
+                                <td className="py-1 pr-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{job.improved}</td>
+                                <td className={`py-1 pr-3 text-right tabular-nums font-medium ${job.processed > 0 && (job.improved / job.processed) >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : job.processed > 0 && (job.improved / job.processed) >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                                  {fmtHitRate(job.improved, job.processed)}
+                                </td>
+                                <td className="py-1 text-right tabular-nums text-muted-foreground">{fmtDuration(job.startedAt, job.completedAt)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
                     </div>
                   )}
                 </>
