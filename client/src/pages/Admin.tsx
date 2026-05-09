@@ -353,14 +353,19 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
         body: JSON.stringify({ institution }),
       });
       const data = await res.json();
+      if (res.status === 409) return { alreadyRunning: true, message: data.error ?? "Enrichment already running", total: 0, jobId: null };
       if (!res.ok) throw new Error(data.error || "Failed to start enrichment");
-      return data as { message: string; total: number; jobId: number };
+      return { alreadyRunning: false, message: data.message as string, total: data.total as number, jobId: data.jobId as number };
     },
     onSuccess: (data) => {
-      toast({
-        title: "Enrichment started",
-        description: `${data.total} asset${data.total !== 1 ? "s" : ""} queued for AI enrichment (job #${data.jobId})`,
-      });
+      if (data.alreadyRunning) {
+        toast({ title: "Enrichment already running", description: "A job is in progress — check the Data Quality tab to monitor it." });
+      } else {
+        toast({
+          title: "Enrichment started",
+          description: `${data.total} asset${data.total !== 1 ? "s" : ""} queued for AI enrichment (job #${data.jobId})`,
+        });
+      }
       refetchQuality();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/status"] });
     },
@@ -822,35 +827,34 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                   </div>
                   {qualityData.enrichQueueCount > 0 && (
                     <div className="mt-2.5" data-testid="quality-enrich-action">
-                      {enrichStatus?.status === "running" ? (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
-                          <span>Enrichment running globally ({enrichStatus.processed ?? 0}/{enrichStatus.total ?? 0} processed) — <a href="#enrichment" className="underline text-primary">view progress</a></span>
-                        </div>
-                      ) : (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span className="inline-block">
                             <Button
                               size="sm"
                               variant="outline"
-                              className="h-7 text-xs gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                              className="h-7 text-xs gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 disabled:opacity-50"
                               onClick={() => enrichNowMutation.mutate()}
-                              disabled={enrichNowMutation.isPending}
+                              disabled={enrichNowMutation.isPending || enrichStatus?.status === "running"}
                               data-testid="button-enrich-now"
                             >
                               {enrichNowMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : enrichStatus?.status === "running" ? (
                                 <Loader2 className="h-3 w-3 animate-spin" />
                               ) : (
                                 <Zap className="h-3 w-3" />
                               )}
                               Enrich {qualityData.enrichQueueCount} asset{qualityData.enrichQueueCount !== 1 ? "s" : ""} now
                             </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="text-xs max-w-xs">
-                            Starts GPT-4o-mini enrichment for the {qualityData.enrichQueueCount} relevant assets from {institution} that still have missing or incomplete fields.
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" className="text-xs max-w-xs">
+                          {enrichStatus?.status === "running"
+                            ? `Enrichment already running (${enrichStatus.processed ?? 0}/${enrichStatus.total ?? 0} processed globally) — wait for it to finish.`
+                            : `Starts GPT-4o-mini enrichment for the ${qualityData.enrichQueueCount} relevant assets from ${institution} that still have missing or incomplete fields.`}
+                        </TooltipContent>
+                      </Tooltip>
                     </div>
                   )}
                 </>
