@@ -322,7 +322,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
   type RefreshResult = { checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number; message: string };
   type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueCount: number; enrichedLast24h: number };
   type EnrichStatus = { status: string; processed?: number; total?: number; improved?: number };
-  type EnrichJobRow = { id: number; status: string; total: number; processed: number; improved: number; startedAt: string; completedAt: string | null; filters: Record<string, string> | null };
+  type EnrichJobRow = { id: number; status: string; total: number; processed: number; improved: number; startedAt: string; completedAt: string | null; filters: Record<string, string> | null; completenessBeforeRun: number | null; completenessAfterRun: number | null };
   type QualitySnapshot = { id: number; institution: string; capturedAt: string; relevantCount: number; avgCompleteness: number | null; enrichQueueCount: number; enrichedLast24h: number };
 
   function fmtDuration(startedAt: string, completedAt: string | null): string {
@@ -1039,21 +1039,30 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                               <th className="text-right font-medium pb-1 pr-3">Processed</th>
                               <th className="text-right font-medium pb-1 pr-3">Improved</th>
                               <th className="text-right font-medium pb-1 pr-3">Hit rate</th>
+                              <th className="text-right font-medium pb-1 pr-3">Δ Score</th>
                               <th className="text-right font-medium pb-1">Duration</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {jobHistory.slice(0, 5).map((job) => (
-                              <tr key={job.id} className="border-t border-border/20" data-testid={`enrichment-job-row-${job.id}`}>
-                                <td className="py-1 pr-3 text-muted-foreground">{fmtAgo(job.startedAt)}</td>
-                                <td className="py-1 pr-3 text-right tabular-nums">{job.processed}</td>
-                                <td className="py-1 pr-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{job.improved}</td>
-                                <td className={`py-1 pr-3 text-right tabular-nums font-medium ${job.processed > 0 && (job.improved / job.processed) >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : job.processed > 0 && (job.improved / job.processed) >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
-                                  {fmtHitRate(job.improved, job.processed)}
-                                </td>
-                                <td className="py-1 text-right tabular-nums text-muted-foreground">{fmtDuration(job.startedAt, job.completedAt)}</td>
-                              </tr>
-                            ))}
+                            {jobHistory.slice(0, 5).map((job) => {
+                              const delta = job.completenessAfterRun !== null && job.completenessBeforeRun !== null
+                                ? job.completenessAfterRun - job.completenessBeforeRun
+                                : null;
+                              return (
+                                <tr key={job.id} className="border-t border-border/20" data-testid={`enrichment-job-row-${job.id}`}>
+                                  <td className="py-1 pr-3 text-muted-foreground">{fmtAgo(job.startedAt)}</td>
+                                  <td className="py-1 pr-3 text-right tabular-nums">{job.processed}</td>
+                                  <td className="py-1 pr-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{job.improved}</td>
+                                  <td className={`py-1 pr-3 text-right tabular-nums font-medium ${job.processed > 0 && (job.improved / job.processed) >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : job.processed > 0 && (job.improved / job.processed) >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                                    {fmtHitRate(job.improved, job.processed)}
+                                  </td>
+                                  <td className={`py-1 pr-3 text-right tabular-nums font-medium ${delta !== null && delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta !== null && delta < 0 ? "text-red-500 dark:text-red-400" : "text-muted-foreground"}`} data-testid={`enrichment-job-delta-${job.id}`}>
+                                    {delta !== null && delta !== 0 ? (delta > 0 ? `+${delta} pts` : `${delta} pts`) : "—"}
+                                  </td>
+                                  <td className="py-1 text-right tabular-nums text-muted-foreground">{fmtDuration(job.startedAt, job.completedAt)}</td>
+                                </tr>
+                              );
+                            })}
                           </tbody>
                         </table>
                       )}

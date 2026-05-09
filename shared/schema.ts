@@ -326,6 +326,8 @@ export const enrichmentJobs = pgTable("enrichment_jobs", {
   startedAt: timestamp("started_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   completedAt: timestamp("completed_at"),
   filters: jsonb("filters").$type<Record<string, string>>(),
+  completenessBeforeRun: integer("completeness_before_run"),
+  completenessAfterRun: integer("completeness_after_run"),
 });
 
 export type EnrichmentJob = typeof enrichmentJobs.$inferSelect;

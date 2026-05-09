@@ -1750,8 +1750,13 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createEnrichmentJob(total: number, filters?: Record<string, string>): Promise<EnrichmentJob> {
-    const [row] = await db.insert(enrichmentJobs).values({ total, status: "running", ...(filters && Object.keys(filters).length > 0 ? { filters } : {}) }).returning();
+  async createEnrichmentJob(total: number, filters?: Record<string, string>, completenessBeforeRun?: number | null): Promise<EnrichmentJob> {
+    const [row] = await db.insert(enrichmentJobs).values({
+      total,
+      status: "running",
+      ...(filters && Object.keys(filters).length > 0 ? { filters } : {}),
+      ...(completenessBeforeRun != null ? { completenessBeforeRun } : {}),
+    }).returning();
     return row;
   }
 
@@ -1765,7 +1770,7 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
-  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void> {
+  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total" | "completenessBeforeRun" | "completenessAfterRun">>): Promise<void> {
     await db.update(enrichmentJobs).set(data).where(eq(enrichmentJobs.id, id));
   }
 

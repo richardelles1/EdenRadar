@@ -3605,7 +3605,23 @@ export async function registerRoutes(
       }
 
       lastRunTokenCost = liveEnrichment!.tokenCost;
-      await storage.updateEnrichmentJob(jobId, { status: "done", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
+
+      // Capture avg_completeness after the run for institution-scoped jobs.
+      let completenessAfterRun: number | null = null;
+      if (filters.institution) {
+        try {
+          const quality = await storage.getInstitutionEnrichmentQuality(filters.institution);
+          completenessAfterRun = quality.avgCompletenessScore;
+        } catch { /* non-fatal */ }
+      }
+
+      await storage.updateEnrichmentJob(jobId, {
+        status: "done",
+        processed: liveEnrichment!.processed,
+        improved: liveEnrichment!.improved,
+        completedAt: new Date(),
+        ...(completenessAfterRun !== null ? { completenessAfterRun } : {}),
+      });
       console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed · $${lastRunTokenCost.toFixed(4)} spent`);
       // Fire-and-forget quality snapshot for institution-scoped runs.
       if (filters.institution) {
@@ -4553,7 +4569,20 @@ export async function registerRoutes(
         deferred = Math.max(0, totalCount - MINI_BATCH_CAP);
       }
 
-      const job = await storage.createEnrichmentJob(assets.length, Object.keys(filters).length > 0 ? filters as Record<string, string> : undefined);
+      // Capture avg_completeness before the run so we can compute the delta on completion.
+      let completenessBeforeRun: number | null = null;
+      if (filters.institution) {
+        try {
+          const quality = await storage.getInstitutionEnrichmentQuality(filters.institution);
+          completenessBeforeRun = quality.avgCompletenessScore;
+        } catch { /* non-fatal */ }
+      }
+
+      const job = await storage.createEnrichmentJob(
+        assets.length,
+        Object.keys(filters).length > 0 ? filters as Record<string, string> : undefined,
+        completenessBeforeRun,
+      );
       res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, deferred, jobId: job.id, drain: drainAll, filters });
 
       standardEnrichShouldStop = false;
