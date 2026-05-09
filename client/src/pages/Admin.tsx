@@ -317,7 +317,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     },
   });
 
-  type RefreshResult = { checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number; enrichmentStarted: boolean; enrichmentJobId?: number; message: string };
+  type RefreshResult = { checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number; message: string };
   type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueBreakdown: { fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number }; enrichedLast24h: number };
 
   const { data: qualityData, isLoading: qualityLoading, refetch: refetchQuality } = useQuery<InstitutionQuality>({
@@ -347,7 +347,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     onSuccess: (data) => {
       refetchQuality();
       toast({
-        title: data.enrichmentStarted ? "Refresh + enrichment started" : "Fields refreshed",
+        title: "Fields refreshed",
         description: data.message,
       });
     },
@@ -749,63 +749,70 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
             </div>
           )}
 
-          {!isRunning && qualityData && (
+          {!isRunning && (
             <div className="px-5 pb-4 pt-3 border-t border-border/40" data-testid="enrichment-quality-panel">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">Enrichment Quality</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-relevant-count">
-                  <div className="text-lg font-bold tabular-nums text-foreground">{qualityData.relevantCount}</div>
-                  <div className="text-[10px] text-muted-foreground">Relevant Assets</div>
+              {qualityLoading && !qualityData ? (
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="quality-skeleton">
+                  {[0,1,2,3].map((i) => (
+                    <div key={i} className="rounded-lg border border-border bg-muted/40 p-2.5 text-center animate-pulse">
+                      <div className="h-6 w-12 bg-muted rounded mx-auto mb-1" />
+                      <div className="h-2.5 w-16 bg-muted rounded mx-auto" />
+                    </div>
+                  ))}
                 </div>
-                <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-avg-completeness">
-                  <div className={`text-lg font-bold tabular-nums ${qualityData.avgCompletenessScore == null ? "text-muted-foreground" : qualityData.avgCompletenessScore >= 20 ? "text-emerald-600 dark:text-emerald-400" : qualityData.avgCompletenessScore >= 10 ? "text-amber-600 dark:text-amber-400" : "text-red-500"}`}>
-                    {qualityData.avgCompletenessScore != null ? qualityData.avgCompletenessScore : "—"}
+              ) : qualityData ? (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-relevant-count">
+                      <div className="text-lg font-bold tabular-nums text-foreground">{qualityData.relevantCount}</div>
+                      <div className="text-[10px] text-muted-foreground">Relevant Assets</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-avg-completeness">
+                      <div className={`text-lg font-bold tabular-nums ${qualityData.avgCompletenessScore == null ? "text-muted-foreground" : qualityData.avgCompletenessScore >= 20 ? "text-emerald-600 dark:text-emerald-400" : qualityData.avgCompletenessScore >= 10 ? "text-amber-600 dark:text-amber-400" : "text-red-500"}`}>
+                        {qualityData.avgCompletenessScore != null ? qualityData.avgCompletenessScore : "—"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">Avg Completeness</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-enriched-24h">
+                      <div className={`text-lg font-bold tabular-nums ${qualityData.enrichedLast24h > 0 ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>{qualityData.enrichedLast24h}</div>
+                      <div className="text-[10px] text-muted-foreground">Enriched (24 h)</div>
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-enrich-queue">
+                      <div className={`text-lg font-bold tabular-nums ${qualityData.enrichQueueBreakdown.total > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{qualityData.enrichQueueBreakdown.total}</div>
+                      <div className="text-[10px] text-muted-foreground">In Enrich Queue</div>
+                    </div>
                   </div>
-                  <div className="text-[10px] text-muted-foreground">Avg Completeness</div>
-                </div>
-                <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-enriched-24h">
-                  <div className={`text-lg font-bold tabular-nums ${qualityData.enrichedLast24h > 0 ? "text-blue-600 dark:text-blue-400" : "text-foreground"}`}>{qualityData.enrichedLast24h}</div>
-                  <div className="text-[10px] text-muted-foreground">Enriched (24 h)</div>
-                </div>
-                <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-enrich-queue">
-                  <div className={`text-lg font-bold tabular-nums ${qualityData.enrichQueueBreakdown.total > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{qualityData.enrichQueueBreakdown.total}</div>
-                  <div className="text-[10px] text-muted-foreground">In Enrich Queue</div>
-                </div>
-              </div>
-              {qualityData.enrichQueueBreakdown.total > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1.5" data-testid="quality-queue-breakdown">
-                  {qualityData.enrichQueueBreakdown.fresh > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-                      {qualityData.enrichQueueBreakdown.fresh} fresh
-                    </span>
+                  {qualityData.enrichQueueBreakdown.total > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="quality-queue-breakdown">
+                      {qualityData.enrichQueueBreakdown.fresh > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
+                          {qualityData.enrichQueueBreakdown.fresh} fresh
+                        </span>
+                      )}
+                      {qualityData.enrichQueueBreakdown.legacy > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
+                          {qualityData.enrichQueueBreakdown.legacy} legacy (no score)
+                        </span>
+                      )}
+                      {qualityData.enrichQueueBreakdown.lowQualityRetry > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
+                          {qualityData.enrichQueueBreakdown.lowQualityRetry} low-quality retry
+                        </span>
+                      )}
+                      {qualityData.enrichQueueBreakdown.nullCategory > 0 && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
+                          {qualityData.enrichQueueBreakdown.nullCategory} no category
+                        </span>
+                      )}
+                    </div>
                   )}
-                  {qualityData.enrichQueueBreakdown.legacy > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-                      {qualityData.enrichQueueBreakdown.legacy} legacy (no score)
-                    </span>
-                  )}
-                  {qualityData.enrichQueueBreakdown.lowQualityRetry > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                      {qualityData.enrichQueueBreakdown.lowQualityRetry} low-quality retry
-                    </span>
-                  )}
-                  {qualityData.enrichQueueBreakdown.nullCategory > 0 && (
-                    <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                      <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
-                      {qualityData.enrichQueueBreakdown.nullCategory} no category
-                    </span>
-                  )}
-                </div>
-              )}
-              {qualityLoading && (
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  Loading quality data…
-                </div>
-              )}
+                </>
+              ) : null}
             </div>
           )}
 

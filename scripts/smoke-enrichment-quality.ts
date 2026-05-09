@@ -166,9 +166,6 @@ try {
     if (typeof body.queuedRelevant !== "number") fail("queuedRelevant", "not a number");
     else pass("queuedRelevant", String(body.queuedRelevant));
 
-    if (typeof body.enrichmentStarted !== "boolean") fail("enrichmentStarted", "not a boolean");
-    else pass("enrichmentStarted", String(body.enrichmentStarted));
-
     if (typeof body.message !== "string" || !body.message) fail("message", "missing or not a string");
     else pass("message", body.message);
 

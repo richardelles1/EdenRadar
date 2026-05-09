@@ -3442,35 +3442,20 @@ export async function registerRoutes(
     }
   });
 
-  // ── Refresh scraped fields for an institution (Task #881) ────────────────
+  // ── Refresh scraped fields for an institution (Task #881 / #946) ────────────
   // Re-runs the scraper and null-fills rich fields on already-indexed assets
   // without touching the sync staging pipeline or new-asset detection.
-  // Auto-triggers AI enrichment inline for any relevant assets that were reset
-  // so the admin doesn't need a separate "Run Enrichment" step.
+  // Assets whose content grew substantially have enrichedAt reset so they will
+  // be picked up by the next enrichment run; this endpoint does not start
+  // enrichment itself — use the /api/admin/enrichment/start endpoint for that.
   app.post("/api/ingest/sync/:institution/refresh-scraped-fields", requireAdmin, async (req, res) => {
     const institution = decodeURIComponent(String(req.params.institution));
     try {
       const result = await runScrapedFieldRefresh(institution);
 
-      // If relevant assets were reset for re-enrichment and no enrichment job is
-      // currently running, start one immediately for this institution so the
-      // improved descriptions go through AI without a manual step.
-      let enrichmentStarted = false;
-      let enrichmentJobId: number | undefined;
-      if (result.queuedRelevant > 0 && !liveEnrichment) {
-        const assets = await storage.getMiniEnrichBatch(500, { institution });
-        if (assets.length > 0) {
-          const job = await storage.createEnrichmentJob(assets.length);
-          enrichmentJobId = job.id;
-          enrichmentStarted = true;
-          standardEnrichShouldStop = false;
-          runEnrichmentWorker(job.id, assets, 0, 0, false, false, { institution });
-        }
-      }
-
       const parts: string[] = [`Checked ${result.checked} assets — ${result.fieldsUpdated} fields filled`];
       if (result.queuedRelevant > 0) {
-        parts.push(`${result.queuedRelevant} relevant asset${result.queuedRelevant !== 1 ? "s" : ""} sent to AI enrichment now`);
+        parts.push(`${result.queuedRelevant} relevant asset${result.queuedRelevant !== 1 ? "s" : ""} queued for AI enrichment`);
         if (result.queuedTotal > result.queuedRelevant) {
           parts.push(`${result.queuedTotal - result.queuedRelevant} non-relevant skipped`);
         }
@@ -3480,8 +3465,6 @@ export async function registerRoutes(
 
       res.json({
         ...result,
-        enrichmentStarted,
-        enrichmentJobId,
         message: parts.join(" · "),
       });
     } catch (err: any) {
