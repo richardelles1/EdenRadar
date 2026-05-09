@@ -4,7 +4,7 @@ import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -15,6 +15,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { Textarea } from "@/components/ui/textarea";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
@@ -3201,7 +3203,19 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [enrichModality, setEnrichModality] = useState("");
   const [enrichTier, setEnrichTier] = useState("");
   const [enrichMissingField, setEnrichMissingField] = useState("");
+  const [enrichInstOpen, setEnrichInstOpen] = useState(false);
   const [debouncedInstitution, setDebouncedInstitution] = useState("");
+
+  const enrichInstitutionsQuery = useQuery<{ institutions: string[] }>({
+    queryKey: ["/api/admin/institutions"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/institutions", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!r.ok) return { institutions: [] };
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!pw,
+  });
   useEffect(() => {
     const t = setTimeout(() => setDebouncedInstitution(enrichInstitution), 400);
     return () => clearTimeout(t);
@@ -4388,14 +4402,48 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
               <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 space-y-2" data-testid="enrichment-filter-bar">
                 <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Target enrichment run</p>
                 <div className="flex flex-wrap gap-2">
-                  <input
-                    type="text"
-                    placeholder="Institution…"
-                    value={enrichInstitution}
-                    onChange={e => setEnrichInstitution(e.target.value)}
-                    className="h-7 px-2 text-xs rounded-md border border-input bg-background w-36 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                    data-testid="input-enrich-institution"
-                  />
+                  <Popover open={enrichInstOpen} onOpenChange={setEnrichInstOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="h-7 px-2 text-xs rounded-md border border-input bg-background w-44 focus:outline-none focus:ring-1 focus:ring-amber-400 flex items-center justify-between gap-1 truncate"
+                        data-testid="input-enrich-institution"
+                      >
+                        <span className={`truncate ${enrichInstitution ? "text-foreground" : "text-muted-foreground"}`}>
+                          {enrichInstitution || "All institutions"}
+                        </span>
+                        <ChevronsUpDown className="w-3 h-3 shrink-0 opacity-50" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-64 p-0">
+                      <Command>
+                        <CommandInput placeholder="Search institutions…" className="h-8 text-xs" />
+                        <CommandList className="max-h-56">
+                          <CommandEmpty className="py-2 text-xs text-center text-muted-foreground">No institution found</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="__all__"
+                              onSelect={() => { setEnrichInstitution(""); setEnrichInstOpen(false); }}
+                              className="text-xs"
+                            >
+                              <Check className={`mr-2 h-3 w-3 ${!enrichInstitution ? "opacity-100" : "opacity-0"}`} />
+                              All institutions
+                            </CommandItem>
+                            {(enrichInstitutionsQuery.data?.institutions ?? []).map(inst => (
+                              <CommandItem
+                                key={inst}
+                                value={inst}
+                                onSelect={(val) => { setEnrichInstitution(val); setEnrichInstOpen(false); }}
+                                className="text-xs"
+                              >
+                                <Check className={`mr-2 h-3 w-3 shrink-0 ${enrichInstitution === inst ? "opacity-100" : "opacity-0"}`} />
+                                {inst}
+                              </CommandItem>
+                            ))}
+                          </CommandGroup>
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
                   <Select value={enrichTier || "__all__"} onValueChange={v => setEnrichTier(v === "__all__" ? "" : v)}>
                     <SelectTrigger className="h-7 text-xs w-32" data-testid="select-enrich-tier"><SelectValue placeholder="Any tier" /></SelectTrigger>
                     <SelectContent>
