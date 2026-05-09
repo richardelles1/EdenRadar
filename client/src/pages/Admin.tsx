@@ -399,6 +399,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     },
     onSuccess: (data) => {
       refetchQuality();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/health", pw] });
       toast({
         title: "Fields refreshed",
         description: data.message,
