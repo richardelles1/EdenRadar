@@ -2961,7 +2961,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
       if (!res.ok) throw new Error("Failed to load enrichment status");
       return res.json();
     },
-    refetchInterval: polling ? 1500 : false,
+    refetchInterval: polling ? 1500 : 10_000,
   });
 
   const { data: miniQueue } = useQuery<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }>({
@@ -3011,7 +3011,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
       return res.json();
     },
     staleTime: 30_000,
-    refetchInterval: polling ? 5000 : 30_000,
+    refetchInterval: status?.status === "running" ? 12_000 : 30_000,
   });
 
   const { data: classifyCount, refetch: refetchClassifyCount } = useQuery<{
