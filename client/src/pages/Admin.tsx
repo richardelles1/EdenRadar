@@ -355,11 +355,13 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
       const data = await res.json();
       if (res.status === 409) return { alreadyRunning: true, message: data.error ?? "Enrichment already running", total: 0, jobId: null };
       if (!res.ok) throw new Error(data.error || "Failed to start enrichment");
-      return { alreadyRunning: false, message: data.message as string, total: data.total as number, jobId: data.jobId as number };
+      return { alreadyRunning: false, message: data.message as string, total: (data.total as number) ?? 0, jobId: (data.jobId as number) ?? null };
     },
     onSuccess: (data) => {
       if (data.alreadyRunning) {
         toast({ title: "Enrichment already running", description: "A job is in progress — check the Data Quality tab to monitor it." });
+      } else if (!data.total || !data.jobId) {
+        toast({ title: "No eligible assets", description: "All assets for this institution already meet enrichment criteria or are at the attempt cap." });
       } else {
         toast({
           title: "Enrichment started",
