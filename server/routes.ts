@@ -4518,8 +4518,15 @@ export async function registerRoutes(
         return res.json({ message: "No assets in mini-enrich queue matching filters" });
       }
 
+      // When the batch is capped, compute how many assets remain after this run.
+      let deferred = 0;
+      if (assets.length === MINI_BATCH_CAP) {
+        const { count: totalCount } = await storage.getFilteredEnrichCount(filters);
+        deferred = Math.max(0, totalCount - MINI_BATCH_CAP);
+      }
+
       const job = await storage.createEnrichmentJob(assets.length, Object.keys(filters).length > 0 ? filters as Record<string, string> : undefined);
-      res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, jobId: job.id, drain: drainAll, filters });
+      res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, deferred, jobId: job.id, drain: drainAll, filters });
 
       standardEnrichShouldStop = false;
       runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll, filters);

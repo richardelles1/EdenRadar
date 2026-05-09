@@ -401,7 +401,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
       const data = await res.json();
       if (res.status === 409) return { alreadyRunning: true, message: data.error ?? "Enrichment already running", total: 0, jobId: null };
       if (!res.ok) throw new Error(data.error || "Failed to start enrichment");
-      return { alreadyRunning: false, message: data.message as string, total: (data.total as number) ?? 0, jobId: (data.jobId as number) ?? null };
+      return { alreadyRunning: false, message: data.message as string, total: (data.total as number) ?? 0, deferred: (data.deferred as number) ?? 0, jobId: (data.jobId as number) ?? null };
     },
     onSuccess: (data) => {
       if (data.alreadyRunning) {
@@ -409,9 +409,12 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
       } else if (!data.total || !data.jobId) {
         toast({ title: "No eligible assets", description: "All assets for this institution already meet enrichment criteria or are at the attempt cap." });
       } else {
+        const deferredNote = (data.deferred ?? 0) > 0
+          ? ` (${data.deferred} deferred — run again after this batch finishes)`
+          : "";
         toast({
           title: "Enrichment started",
-          description: `${data.total} asset${data.total !== 1 ? "s" : ""} queued for AI enrichment (job #${data.jobId})`,
+          description: `${data.total} asset${data.total !== 1 ? "s" : ""} queued for AI enrichment (job #${data.jobId})${deferredNote}`,
         });
       }
       refetchQuality();
@@ -906,7 +909,9 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                               ) : (
                                 <Zap className="h-3 w-3" />
                               )}
-                              Enrich {qualityData.enrichQueueCount} asset{qualityData.enrichQueueCount !== 1 ? "s" : ""} now
+                              {qualityData.enrichQueueCount > 500
+                                ? `Enrich 500 of ${qualityData.enrichQueueCount} assets now (first batch)`
+                                : `Enrich ${qualityData.enrichQueueCount} asset${qualityData.enrichQueueCount !== 1 ? "s" : ""} now`}
                             </Button>
                           </span>
                         </TooltipTrigger>
@@ -916,6 +921,20 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                             : `Starts GPT-4o-mini enrichment for the ${qualityData.enrichQueueCount} relevant assets from ${institution} that still have missing or incomplete fields.`}
                         </TooltipContent>
                       </Tooltip>
+                    </div>
+                  )}
+                  {jobHistory && jobHistory.length > 0 && enrichStatus?.status !== "running" && qualityData.enrichQueueCount > 0 && (
+                    <div className="mt-2 flex items-center gap-2 text-[11px] text-amber-700 dark:text-amber-400" data-testid="enrich-queue-remaining-notice">
+                      <span>↻ {qualityData.enrichQueueCount} asset{qualityData.enrichQueueCount !== 1 ? "s" : ""} still in queue — run again to continue</span>
+                      <button
+                        type="button"
+                        className="underline underline-offset-2 font-medium hover:text-amber-900 dark:hover:text-amber-200 transition-colors disabled:opacity-50"
+                        onClick={() => enrichNowMutation.mutate()}
+                        disabled={enrichNowMutation.isPending}
+                        data-testid="button-enrich-run-again"
+                      >
+                        Run again
+                      </button>
                     </div>
                   )}
                   {jobHistory && jobHistory.length > 0 && (
