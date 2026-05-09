@@ -3698,6 +3698,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/institution-queues"] });
       if (status.status === "done") {
         const costStr = status.tokenCost != null && status.tokenCost > 0 ? ` · $${status.tokenCost.toFixed(3)} spent` : "";
         toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed${costStr}` });
