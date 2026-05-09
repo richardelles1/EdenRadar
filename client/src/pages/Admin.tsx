@@ -392,13 +392,35 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
       if (!res.ok) throw new Error("Snapshot failed");
     },
     onSuccess: () => {
+      clearImprovementBadge();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/institution-quality/history", institution] });
     },
   });
 
+  const [completenessImprovement, setCompletenessImprovement] = useState<number | null>(null);
+  const [improvementFading, setImprovementFading] = useState(false);
+  const improvementTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const improvementFadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justCompletedRef = useRef(false);
+
+  function clearImprovementBadge() {
+    if (improvementTimerRef.current) clearTimeout(improvementTimerRef.current);
+    if (improvementFadeTimerRef.current) clearTimeout(improvementFadeTimerRef.current);
+    setCompletenessImprovement(null);
+    setImprovementFading(false);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (improvementTimerRef.current) clearTimeout(improvementTimerRef.current);
+      if (improvementFadeTimerRef.current) clearTimeout(improvementFadeTimerRef.current);
+    };
+  }, [institution]);
+
   const prevEnrichStatusRef = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (prevEnrichStatusRef.current === "running" && enrichStatus?.status !== "running") {
+      justCompletedRef.current = true;
       refetchQuality();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/jobs", institution] });
@@ -406,6 +428,30 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     }
     prevEnrichStatusRef.current = enrichStatus?.status;
   }, [enrichStatus?.status]);
+
+  useEffect(() => {
+    if (!justCompletedRef.current) return;
+    if (!qualityHistory || qualityHistory.length < 2) {
+      justCompletedRef.current = false;
+      return;
+    }
+    justCompletedRef.current = false;
+    const newest = qualityHistory[0];
+    const previous = qualityHistory[1];
+    if (newest.avgCompleteness !== null && previous.avgCompleteness !== null) {
+      const delta = Math.round(newest.avgCompleteness - previous.avgCompleteness);
+      if (delta > 0) {
+        clearImprovementBadge();
+        setCompletenessImprovement(delta);
+        setImprovementFading(false);
+        improvementFadeTimerRef.current = setTimeout(() => setImprovementFading(true), 9_000);
+        improvementTimerRef.current = setTimeout(() => {
+          setCompletenessImprovement(null);
+          setImprovementFading(false);
+        }, 10_000);
+      }
+    }
+  }, [qualityHistory]);
 
   const { data: jobHistory } = useQuery<EnrichJobRow[]>({
     queryKey: ["/api/admin/enrichment/jobs", institution],
@@ -892,8 +938,16 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       <div className="text-[10px] text-muted-foreground">Relevant Assets</div>
                     </div>
                     <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-avg-completeness">
-                      <div className={`text-lg font-bold tabular-nums ${qualityData.avgCompletenessScore == null ? "text-muted-foreground" : qualityData.avgCompletenessScore >= 20 ? "text-emerald-600 dark:text-emerald-400" : qualityData.avgCompletenessScore >= 10 ? "text-amber-600 dark:text-amber-400" : "text-red-500"}`}>
+                      <div className={`text-lg font-bold tabular-nums flex items-center justify-center gap-1 ${qualityData.avgCompletenessScore == null ? "text-muted-foreground" : qualityData.avgCompletenessScore >= 20 ? "text-emerald-600 dark:text-emerald-400" : qualityData.avgCompletenessScore >= 10 ? "text-amber-600 dark:text-amber-400" : "text-red-500"}`}>
                         {qualityData.avgCompletenessScore != null ? qualityData.avgCompletenessScore : "—"}
+                        {completenessImprovement !== null && (
+                          <span
+                            data-testid="completeness-improvement-badge"
+                            className={`inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/40 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 transition-opacity duration-1000 ${improvementFading ? "opacity-0" : "opacity-100"}`}
+                          >
+                            +{completenessImprovement} pts
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-muted-foreground">Avg Completeness</div>
                     </div>
