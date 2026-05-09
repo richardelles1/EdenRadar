@@ -93,8 +93,25 @@ export async function verifyConceptAuth(
 /**
  * Resolve the Supabase user from the Bearer token and return their identity
  * iff their email is in the admin allowlist.
+ *
+ * Smoke-test bypass: when ENABLE_SMOKE_AUTH_BYPASS=true and NODE_ENV is not
+ * production and the request comes from loopback, x-smoke-is-admin=true grants
+ * a synthetic admin identity — same defense-in-depth constraints as the
+ * verifyAnyAuth bypass (Task #946).
  */
 export async function getAdminUser(req: Request): Promise<{ id: string; email: string } | null> {
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ENABLE_SMOKE_AUTH_BYPASS === "true"
+  ) {
+    const remote = req.socket?.remoteAddress ?? "";
+    const isLoopback = remote === "127.0.0.1" || remote === "::1" || remote === "::ffff:127.0.0.1";
+    if (isLoopback && req.headers["x-smoke-is-admin"] === "true") {
+      const smokeId = (req.headers["x-smoke-user-id"] as string | undefined) ?? "smoke-admin";
+      return { id: smokeId, email: `${smokeId}@smoke.invalid` };
+    }
+  }
+
   const token = req.headers.authorization?.replace("Bearer ", "");
   if (!token) return null;
   try {

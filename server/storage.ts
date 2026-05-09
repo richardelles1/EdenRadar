@@ -262,7 +262,14 @@ export interface IStorage {
       technologyId: string | null;
       description: string | null;
     }>,
-  ): Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number }>;
+  ): Promise<{ checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number }>;
+
+  getInstitutionEnrichmentQuality(institution: string): Promise<{
+    relevantCount: number;
+    avgCompletenessScore: number | null;
+    enrichQueueBreakdown: { fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number };
+    enrichedLast24h: number;
+  }>;
 
   getDeepEnrichmentCoverage(): Promise<{
     totalRelevant: number;
@@ -847,14 +854,14 @@ export class DatabaseStorage implements IStorage {
     const allFingerprints = listings.map((l) => l.fingerprint);
 
     // 1. Find which fingerprints already exist (chunked SELECT) — also grab contentHash and sourceUrl for change detection
-    const existingSet = new Map<string, { id: number; contentHash: string | null; sourceUrl: string | null }>(); 
+    const existingSet = new Map<string, { id: number; contentHash: string | null; sourceUrl: string | null; humanVerified: Record<string, boolean> | null }>();
     for (let i = 0; i < allFingerprints.length; i += CHUNK) {
       const chunk = allFingerprints.slice(i, i + CHUNK);
       const rows = await db
-        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, contentHash: ingestedAssets.contentHash, sourceUrl: ingestedAssets.sourceUrl })
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, contentHash: ingestedAssets.contentHash, sourceUrl: ingestedAssets.sourceUrl, humanVerified: ingestedAssets.humanVerified })
         .from(ingestedAssets)
         .where(inArray(ingestedAssets.fingerprint, chunk));
-      for (const row of rows) existingSet.set(row.fingerprint, { id: row.id, contentHash: row.contentHash, sourceUrl: row.sourceUrl });
+      for (const row of rows) existingSet.set(row.fingerprint, { id: row.id, contentHash: row.contentHash, sourceUrl: row.sourceUrl, humanVerified: row.humanVerified as Record<string, boolean> | null });
     }
 
     const fingerprintNewListings = listings.filter((l) => !existingSet.has(l.fingerprint));
@@ -884,15 +891,15 @@ export class DatabaseStorage implements IStorage {
 
     // Step 2: Query DB for remaining URL candidates already present under a different fingerprint
     const urlCandidates = fingerprintNewDeduped.filter((l) => l.sourceUrl);
-    const urlDeduped = new Map<string, { id: number; fingerprint: string; contentHash: string | null }>();
+    const urlDeduped = new Map<string, { id: number; fingerprint: string; contentHash: string | null; humanVerified: Record<string, boolean> | null }>();
     for (let i = 0; i < urlCandidates.length; i += CHUNK) {
       const chunkUrls = urlCandidates.slice(i, i + CHUNK).map((l) => l.sourceUrl!);
       const rows = await db
-        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl, contentHash: ingestedAssets.contentHash })
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl, contentHash: ingestedAssets.contentHash, humanVerified: ingestedAssets.humanVerified })
         .from(ingestedAssets)
         .where(inArray(ingestedAssets.sourceUrl, chunkUrls));
       for (const row of rows) {
-        if (row.sourceUrl) urlDeduped.set(row.sourceUrl, { id: row.id, fingerprint: row.fingerprint, contentHash: row.contentHash });
+        if (row.sourceUrl) urlDeduped.set(row.sourceUrl, { id: row.id, fingerprint: row.fingerprint, contentHash: row.contentHash, humanVerified: row.humanVerified as Record<string, boolean> | null });
       }
     }
 
@@ -909,27 +916,25 @@ export class DatabaseStorage implements IStorage {
         // null-stored → new-hash is first-time population, not a real change.
         const contentChanged = !!(listing.contentHash && existing.contentHash && listing.contentHash !== existing.contentHash);
         if (contentChanged) contentUpdatedCount++;
+        // Respect human-verified locks — never overwrite a field that an admin has
+        // manually corrected, even when the scraper returns a different value.
+        const hv = existing.humanVerified ?? {};
+        const hv_has = (key: string) => Object.prototype.hasOwnProperty.call(hv, key);
         await db
           .update(ingestedAssets)
           .set({
             lastSeenAt: now,
             runId,
             contentHash: listing.contentHash,
-            // Refresh all mutable display metadata so the canonical row stays current
             ...(listing.assetName ? { assetName: listing.assetName } : {}),
             summary: listing.summary || undefined,
             abstract: listing.abstract || undefined,
-            ...(listing.categories?.length ? { categories: listing.categories } : {}),
-            ...(listing.inventors?.length ? { inventors: listing.inventors } : {}),
-            ...(listing.patentStatus ? { patentStatus: listing.patentStatus } : {}),
-            ...(listing.licensingStatus ? { licensingStatus: listing.licensingStatus } : {}),
-            ...(listing.contactEmail ? { contactEmail: listing.contactEmail } : {}),
-            ...(listing.technologyId ? { technologyId: listing.technologyId } : {}),
-            // Reset enrichedAt when content changes so re-enrichment is triggered.
-            // Also reset deepEnrichAttempts so the asset is eligible for bucket-C
-            // low-quality retry again if the fresh deep-enrich result is still thin.
-            // miniEnrichAttempts and classifyAttempts are also reset so the fresh
-            // content gets a clean mini and classify pass.
+            ...(listing.categories?.length && !hv_has("categories") ? { categories: listing.categories } : {}),
+            ...(listing.inventors?.length && !hv_has("inventors") ? { inventors: listing.inventors } : {}),
+            ...(listing.patentStatus && !hv_has("patentStatus") ? { patentStatus: listing.patentStatus } : {}),
+            ...(listing.licensingStatus && !hv_has("licensingStatus") ? { licensingStatus: listing.licensingStatus } : {}),
+            ...(listing.contactEmail && !hv_has("contactEmail") ? { contactEmail: listing.contactEmail } : {}),
+            ...(listing.technologyId && !hv_has("technologyId") ? { technologyId: listing.technologyId } : {}),
             ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0, miniEnrichAttempts: 0, classifyAttempts: 0 } : {}),
           })
           .where(eq(ingestedAssets.id, existing.id));
@@ -1016,6 +1021,10 @@ export class DatabaseStorage implements IStorage {
       const chunkListings = existingListings.filter((l) => chunk.includes(l.fingerprint));
       for (const listing of chunkListings) {
         const existing = existingSet.get(listing.fingerprint);
+        // Respect human-verified locks — never overwrite a field that an admin has
+        // manually corrected, even when the scraper returns a different value.
+        const hv = existing?.humanVerified ?? {};
+        const hv_has = (key: string) => Object.prototype.hasOwnProperty.call(hv, key);
         await db
           .update(ingestedAssets)
           .set({
@@ -1025,16 +1034,13 @@ export class DatabaseStorage implements IStorage {
             lastContentChangeAt: now,
             summary: listing.summary || undefined,
             abstract: listing.abstract || undefined,
-            ...(listing.categories?.length ? { categories: listing.categories } : {}),
-            ...(listing.inventors?.length ? { inventors: listing.inventors } : {}),
-            ...(listing.patentStatus ? { patentStatus: listing.patentStatus } : {}),
-            ...(listing.licensingStatus ? { licensingStatus: listing.licensingStatus } : {}),
-            ...(listing.contactEmail ? { contactEmail: listing.contactEmail } : {}),
-            ...(listing.technologyId ? { technologyId: listing.technologyId } : {}),
-            // Heal sourceUrl if it was previously null and we now have a real URL
+            ...(listing.categories?.length && !hv_has("categories") ? { categories: listing.categories } : {}),
+            ...(listing.inventors?.length && !hv_has("inventors") ? { inventors: listing.inventors } : {}),
+            ...(listing.patentStatus && !hv_has("patentStatus") ? { patentStatus: listing.patentStatus } : {}),
+            ...(listing.licensingStatus && !hv_has("licensingStatus") ? { licensingStatus: listing.licensingStatus } : {}),
+            ...(listing.contactEmail && !hv_has("contactEmail") ? { contactEmail: listing.contactEmail } : {}),
+            ...(listing.technologyId && !hv_has("technologyId") ? { technologyId: listing.technologyId } : {}),
             ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
-            // Reset enrichedAt so the asset gets re-enriched with improved content.
-            // Also reset deepEnrichAttempts, miniEnrichAttempts, and classifyAttempts so retry buckets are available again.
             enrichedAt: null,
             deepEnrichAttempts: 0,
             miniEnrichAttempts: 0,
@@ -1773,8 +1779,8 @@ export class DatabaseStorage implements IStorage {
       technologyId: string | null;
       description: string | null;
     }>,
-  ): Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number }> {
-    if (!listings.length) return { checked: 0, fieldsUpdated: 0, queuedForReenrichment: 0 };
+  ): Promise<{ checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number }> {
+    if (!listings.length) return { checked: 0, fieldsUpdated: 0, queuedTotal: 0, queuedRelevant: 0 };
 
     // Fetch just the fields we need to compare — avoids pulling full asset rows
     const existing = await db
@@ -1899,11 +1905,75 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const queuedForReenrichment = uniqueReenrichIds.length;
+    // Count only the relevant=true subset — those are the ones that will actually
+    // enter the AI enrichment queue. The total reset count is reported separately
+    // so the UI can show both without misleading the admin.
+    let queuedRelevant = 0;
+    if (uniqueReenrichIds.length > 0) {
+      for (let i = 0; i < uniqueReenrichIds.length; i += CHUNK) {
+        const chunk = uniqueReenrichIds.slice(i, i + CHUNK);
+        const [row] = await db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(ingestedAssets)
+          .where(and(inArray(ingestedAssets.id, chunk), eq(ingestedAssets.relevant, true)));
+        queuedRelevant += Number(row?.count ?? 0);
+      }
+    }
+
+    const queuedTotal = uniqueReenrichIds.length;
     console.log(
-      `[storage] bulkRefreshScrapedFields(${institution}): checked=${listings.length} fieldsUpdated=${fieldsUpdated} queued=${queuedForReenrichment}`,
+      `[storage] bulkRefreshScrapedFields(${institution}): checked=${listings.length} fieldsUpdated=${fieldsUpdated} queuedTotal=${queuedTotal} queuedRelevant=${queuedRelevant}`,
     );
-    return { checked: listings.length, fieldsUpdated, queuedForReenrichment };
+    return { checked: listings.length, fieldsUpdated, queuedTotal, queuedRelevant };
+  }
+
+  async getInstitutionEnrichmentQuality(institution: string): Promise<{
+    relevantCount: number;
+    avgCompletenessScore: number | null;
+    enrichQueueBreakdown: { fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number };
+    enrichedLast24h: number;
+  }> {
+    const result = await db.execute<{
+      relevant_count: string;
+      avg_completeness: string | null;
+      enriched_last_24h: string;
+      fresh: string;
+      legacy: string;
+      low_quality_retry: string;
+      null_category: string;
+      enrich_queue_total: string;
+    }>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE relevant = true)::int                                                                                                                      AS relevant_count,
+        AVG(completeness_score) FILTER (WHERE relevant = true AND completeness_score IS NOT NULL)                                                                         AS avg_completeness,
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND enriched_at > NOW() - INTERVAL '24 hours')::int                                            AS enriched_last_24h,
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NULL)::int                                                                                              AS fresh,
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                                           AS legacy,
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)::int AS low_quality_retry,
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)::int                                     AS null_category,
+        COUNT(*) FILTER (WHERE relevant = true AND (
+          enriched_at IS NULL
+          OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
+          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)
+          OR (enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)
+        ))::int                                                                                                                                                            AS enrich_queue_total
+      FROM ingested_assets
+      WHERE institution = ${institution}
+    `);
+    const row = result.rows[0];
+    const avg = row?.avg_completeness != null ? Math.round(Number(row.avg_completeness)) : null;
+    return {
+      relevantCount: Number(row?.relevant_count ?? 0),
+      avgCompletenessScore: avg,
+      enrichQueueBreakdown: {
+        fresh: Number(row?.fresh ?? 0),
+        legacy: Number(row?.legacy ?? 0),
+        lowQualityRetry: Number(row?.low_quality_retry ?? 0),
+        nullCategory: Number(row?.null_category ?? 0),
+        total: Number(row?.enrich_queue_total ?? 0),
+      },
+      enrichedLast24h: Number(row?.enriched_last_24h ?? 0),
+    };
   }
 
   async getDeepEnrichmentCoverage(): Promise<{

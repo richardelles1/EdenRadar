@@ -695,7 +695,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
 // full sync pipeline or touching new-asset detection.
 export async function runScrapedFieldRefresh(
   institutionName: string,
-): Promise<{ checked: number; fieldsUpdated: number; queuedForReenrichment: number }> {
+): Promise<{ checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number }> {
   if (ingestionRunning) throw new Error("Full ingestion is running — cannot refresh");
   if (activeSyncs.has(institutionName)) {
     throw new Error(`A sync is already running for ${institutionName} — wait for it to complete`);

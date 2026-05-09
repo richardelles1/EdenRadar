@@ -3445,13 +3445,44 @@ export async function registerRoutes(
   // ── Refresh scraped fields for an institution (Task #881) ────────────────
   // Re-runs the scraper and null-fills rich fields on already-indexed assets
   // without touching the sync staging pipeline or new-asset detection.
+  // Auto-triggers AI enrichment inline for any relevant assets that were reset
+  // so the admin doesn't need a separate "Run Enrichment" step.
   app.post("/api/ingest/sync/:institution/refresh-scraped-fields", requireAdmin, async (req, res) => {
     const institution = decodeURIComponent(String(req.params.institution));
     try {
       const result = await runScrapedFieldRefresh(institution);
+
+      // If relevant assets were reset for re-enrichment and no enrichment job is
+      // currently running, start one immediately for this institution so the
+      // improved descriptions go through AI without a manual step.
+      let enrichmentStarted = false;
+      let enrichmentJobId: number | undefined;
+      if (result.queuedRelevant > 0 && !liveEnrichment) {
+        const assets = await storage.getMiniEnrichBatch(500, { institution });
+        if (assets.length > 0) {
+          const job = await storage.createEnrichmentJob(assets.length);
+          enrichmentJobId = job.id;
+          enrichmentStarted = true;
+          standardEnrichShouldStop = false;
+          runEnrichmentWorker(job.id, assets, 0, 0, false, false, { institution });
+        }
+      }
+
+      const parts: string[] = [`Checked ${result.checked} assets — ${result.fieldsUpdated} fields filled`];
+      if (result.queuedRelevant > 0) {
+        parts.push(`${result.queuedRelevant} relevant asset${result.queuedRelevant !== 1 ? "s" : ""} sent to AI enrichment now`);
+        if (result.queuedTotal > result.queuedRelevant) {
+          parts.push(`${result.queuedTotal - result.queuedRelevant} non-relevant skipped`);
+        }
+      } else if (result.queuedTotal > 0) {
+        parts.push(`${result.queuedTotal} reset (none are biotech-relevant)`);
+      }
+
       res.json({
         ...result,
-        message: `Checked ${result.checked} assets — updated ${result.fieldsUpdated}, queued ${result.queuedForReenrichment} for re-enrichment`,
+        enrichmentStarted,
+        enrichmentJobId,
+        message: parts.join(" · "),
       });
     } catch (err: any) {
       console.error(`[refresh-scraped-fields] ${institution}: ${err.message}`);
@@ -3607,6 +3638,18 @@ export async function registerRoutes(
       res.json(stats);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch enrichment stats" });
+    }
+  });
+
+  // Per-institution enrichment quality snapshot used by the ExpandedSyncPanel.
+  app.get("/api/admin/enrichment/institution-quality", requireAdmin, async (req, res) => {
+    const institution = String(req.query.institution ?? "").trim();
+    if (!institution) return res.status(400).json({ error: "institution query param required" });
+    try {
+      const quality = await storage.getInstitutionEnrichmentQuality(institution);
+      res.json(quality);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch institution quality" });
     }
   });
 
