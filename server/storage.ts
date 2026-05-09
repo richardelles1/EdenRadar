@@ -2000,7 +2000,8 @@ export class DatabaseStorage implements IStorage {
       SELECT institution, COUNT(*)::int AS queue_count
       FROM ingested_assets
       WHERE
-        relevant = true
+        institution IS NOT NULL AND btrim(institution) <> ''
+        AND relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
         AND COALESCE(mini_enrich_attempts, 0) < 3
