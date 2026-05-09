@@ -52,7 +52,8 @@ interface RunResult {
   scraped: number;
   checked: number;
   fieldsUpdated: number;
-  queuedForReenrichment: number;
+  queuedTotal: number;
+  queuedRelevant: number;
   thinReset?: number;
   error?: string;
   skipped?: boolean;
@@ -71,7 +72,7 @@ async function main() {
       console.log(`  scraped ${listings.length} listings`);
 
       if (!listings.length) {
-        rows.push({ institution: inst, scraped: 0, checked: 0, fieldsUpdated: 0, queuedForReenrichment: 0, skipped: true });
+        rows.push({ institution: inst, scraped: 0, checked: 0, fieldsUpdated: 0, queuedTotal: 0, queuedRelevant: 0, skipped: true });
         continue;
       }
 
@@ -112,11 +113,11 @@ async function main() {
       `);
 
       const thinReset = thinResult.rowCount ?? 0;
-      console.log(`  checked=${refreshResult.checked} fieldsUpdated=${refreshResult.fieldsUpdated} queuedByGrowth=${refreshResult.queuedForReenrichment} thinReset=${thinReset}`);
+      console.log(`  checked=${refreshResult.checked} fieldsUpdated=${refreshResult.fieldsUpdated} queuedByGrowth=${refreshResult.queuedTotal} (relevant=${refreshResult.queuedRelevant}) thinReset=${thinReset}`);
       rows.push({ institution: inst, scraped: listings.length, ...refreshResult, thinReset });
     } catch (err: any) {
       console.error(`  ERROR: ${err.message}`);
-      rows.push({ institution: inst, scraped: 0, checked: 0, fieldsUpdated: 0, queuedForReenrichment: 0, error: err.message });
+      rows.push({ institution: inst, scraped: 0, checked: 0, fieldsUpdated: 0, queuedTotal: 0, queuedRelevant: 0, error: err.message });
     }
   }
 
@@ -144,14 +145,14 @@ async function main() {
     totScraped += r.scraped;
     totChecked += r.checked;
     totFields  += r.fieldsUpdated;
-    totGrowth  += r.queuedForReenrichment;
+    totGrowth  += r.queuedTotal;
     totThin    += r.thinReset ?? 0;
     console.log(
       r.institution.padEnd(42) +
       String(r.scraped).padStart(8) +
       String(r.checked).padStart(8) +
       String(r.fieldsUpdated).padStart(8) +
-      String(r.queuedForReenrichment).padStart(9) +
+      `${r.queuedTotal}(${r.queuedRelevant}r)`.padStart(9) +
       String(r.thinReset ?? 0).padStart(11),
     );
   }
@@ -168,7 +169,7 @@ async function main() {
   console.log("  Scraped    — raw listings returned by the scraper");
   console.log("  Checked    — listings matched to existing DB assets");
   console.log("  FldUpd     — fields null-filled (abstract, patent, licensing, etc.)");
-  console.log("  GrowthQ    — assets queued for AI re-enrichment (description grew >20%)");
+  console.log("  GrowthQ    — assets reset for re-enrichment (description grew >20%); format: total(relevantR)");
   console.log("  ThinReset  — assets with thin summaries (<150 chars) force-queued for re-enrichment");
   console.log("\nAll queued assets will be processed by the background AI enrichment pipeline.");
 }

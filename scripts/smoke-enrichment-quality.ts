@@ -116,9 +116,30 @@ try {
   fail("HTTP probe", err.message);
 }
 
-// ── 3. HTTP probe — POST refresh-scraped-fields (shape only) ─────────────────
-console.log("\n[3] POST refresh-scraped-fields — response shape");
+// Fetch institution quality via HTTP, returning the parsed body or null on error.
+async function fetchQuality(): Promise<Record<string, unknown> | null> {
+  try {
+    const url = `${BASE}/api/admin/enrichment/institution-quality?institution=${encodeURIComponent(INSTITUTION)}`;
+    const res = await fetch(url, { headers: { "x-smoke-user-id": "smoke-admin", "x-smoke-is-admin": "true" } });
+    if (!res.ok) return null;
+    return await res.json() as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+// ── 3. POST refresh-scraped-fields + semantic cross-check ────────────────────
+// Shape check: new fields present, stale field absent.
+// Semantic check: the change in the institution-quality `fresh` bucket must
+// equal `queuedRelevant` from the refresh response.
+console.log("\n[3] POST refresh-scraped-fields — shape + cross-check");
 try {
+  // Snapshot quality BEFORE refresh so we can measure the delta.
+  const preFresh = await fetchQuality();
+  const preFreshCount = typeof preFresh?.enrichQueueBreakdown === "object"
+    ? (preFresh.enrichQueueBreakdown as Record<string, unknown>).fresh
+    : undefined;
+
   const url = `${BASE}/api/ingest/sync/${encodeURIComponent(INSTITUTION)}/refresh-scraped-fields`;
   const { res, ms } = await timedFetch(url, {
     method: "POST",
@@ -155,6 +176,33 @@ try {
     if (typeof body.queuedRelevant === "number" && typeof body.queuedTotal === "number") {
       if (body.queuedRelevant > body.queuedTotal) fail("queuedRelevant <= queuedTotal", `${body.queuedRelevant} > ${body.queuedTotal}`);
       else pass("queuedRelevant <= queuedTotal");
+    }
+
+    // ── Semantic cross-check ───────────────────────────────────────────────
+    // After the refresh, re-fetch quality and verify: post_fresh - pre_fresh == queuedRelevant.
+    // This confirms that the storage layer and the endpoint agree on how many relevant
+    // assets were newly reset for enrichment.
+    console.log("\n[3b] Cross-check: queuedRelevant matches institution-quality fresh delta");
+    const postFresh = await fetchQuality();
+    const postFreshCount = typeof postFresh?.enrichQueueBreakdown === "object"
+      ? (postFresh.enrichQueueBreakdown as Record<string, unknown>).fresh
+      : undefined;
+
+    if (typeof preFreshCount !== "number" || typeof postFreshCount !== "number") {
+      fail("cross-check data available", `pre=${preFreshCount} post=${postFreshCount}`);
+    } else if (typeof body.queuedRelevant !== "number") {
+      fail("cross-check: queuedRelevant available", "not a number");
+    } else {
+      const delta = postFreshCount - preFreshCount;
+      const expected = body.queuedRelevant as number;
+      if (delta !== expected) {
+        fail(
+          "cross-check: fresh delta == queuedRelevant",
+          `fresh went from ${preFreshCount} → ${postFreshCount} (delta ${delta}) but queuedRelevant=${expected}`,
+        );
+      } else {
+        pass("cross-check: fresh delta == queuedRelevant", `pre=${preFreshCount} post=${postFreshCount} delta=${delta} queuedRelevant=${expected}`);
+      }
     }
   }
 } catch (err: any) {
