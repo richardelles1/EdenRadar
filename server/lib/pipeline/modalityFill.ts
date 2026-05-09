@@ -228,6 +228,9 @@ export async function runModalityFill(
   const { dryRun = false, skipGpt = false, gptBatchSize = 50, onProgress } = opts;
 
   // ── Step 1: Normalize fragmented existing values ──────────────────────────
+  // Note: ingested_assets does not have an updated_at column; row recency is
+  // tracked via last_seen_at (set by the ingestion pipeline on each scrape).
+  // These UPDATE statements intentionally omit any timestamp column.
   let normalized = 0;
   if (!dryRun) {
     const r = await dbClient.query(`
@@ -237,8 +240,7 @@ export async function runModalityFill(
         WHEN LOWER(modality) = 'car-t'                             THEN 'cell therapy'
         WHEN LOWER(modality) = 'bispecific antibody'               THEN 'antibody'
         ELSE modality
-      END,
-      updated_at = NOW()
+      END
       WHERE relevant = true
         AND modality IS NOT NULL
         AND LOWER(modality) IN ('mrna', 'mrna therapy', 'sirna', 'car-t', 'bispecific antibody')
@@ -318,7 +320,7 @@ export async function runModalityFill(
         summary: u.asset.summary,
       });
       await dbClient.query(
-        `UPDATE ingested_assets SET modality = $1, completeness_score = $2, updated_at = NOW() WHERE id = $3`,
+        `UPDATE ingested_assets SET modality = $1, completeness_score = $2 WHERE id = $3`,
         [u.modality, score, u.id],
       );
       totalUpdated++;
