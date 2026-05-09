@@ -242,11 +242,12 @@ export interface IStorage {
   incrementMiniEnrichAttempts(assetId: number): Promise<void>;
   backfillMiniEnrichAttempts(): Promise<number>;
 
-  createEnrichmentJob(total: number): Promise<EnrichmentJob>;
+  createEnrichmentJob(total: number, filters?: Record<string, string>): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void>;
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   resetLatestEnrichmentJob(): Promise<void>;
+  getEnrichmentJobsForInstitution(institution: string, limit?: number): Promise<EnrichmentJob[]>;
   stampEnrichedAt(assetId: number): Promise<void>;
 
   bulkRefreshScrapedFields(
@@ -1737,9 +1738,19 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createEnrichmentJob(total: number): Promise<EnrichmentJob> {
-    const [row] = await db.insert(enrichmentJobs).values({ total, status: "running" }).returning();
+  async createEnrichmentJob(total: number, filters?: Record<string, string>): Promise<EnrichmentJob> {
+    const [row] = await db.insert(enrichmentJobs).values({ total, status: "running", ...(filters && Object.keys(filters).length > 0 ? { filters } : {}) }).returning();
     return row;
+  }
+
+  async getEnrichmentJobsForInstitution(institution: string, limit = 10): Promise<EnrichmentJob[]> {
+    const rows = await db
+      .select()
+      .from(enrichmentJobs)
+      .where(sql`filters->>'institution' ILIKE ${'%' + institution + '%'}`)
+      .orderBy(desc(enrichmentJobs.startedAt))
+      .limit(limit);
+    return rows;
   }
 
   async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void> {

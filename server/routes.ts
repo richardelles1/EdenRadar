@@ -4474,6 +4474,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/enrichment/jobs", requireAdmin, async (req, res) => {
+    try {
+      const institution = req.query.institution ? String(req.query.institution) : undefined;
+      if (!institution) return res.status(400).json({ error: "institution query param required" });
+      const jobs = await storage.getEnrichmentJobsForInstitution(institution);
+      res.json(jobs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch enrichment jobs" });
+    }
+  });
+
   app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
 
@@ -4507,7 +4518,7 @@ export async function registerRoutes(
         return res.json({ message: "No assets in mini-enrich queue matching filters" });
       }
 
-      const job = await storage.createEnrichmentJob(assets.length);
+      const job = await storage.createEnrichmentJob(assets.length, Object.keys(filters).length > 0 ? filters as Record<string, string> : undefined);
       res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, jobId: job.id, drain: drainAll, filters });
 
       standardEnrichShouldStop = false;

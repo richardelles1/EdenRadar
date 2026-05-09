@@ -320,6 +320,29 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
   type RefreshResult = { checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number; message: string };
   type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueCount: number; enrichedLast24h: number };
   type EnrichStatus = { status: string; processed?: number; total?: number; improved?: number };
+  type EnrichJobRow = { id: number; status: string; total: number; processed: number; improved: number; startedAt: string; completedAt: string | null; filters: Record<string, string> | null };
+
+  function fmtDuration(startedAt: string, completedAt: string | null): string {
+    if (!completedAt) return "—";
+    const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+    if (ms < 0) return "—";
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60), rem = s % 60;
+    return `${m}m ${rem}s`;
+  }
+  function fmtHitRate(improved: number, processed: number): string {
+    if (!processed) return "—";
+    return `${Math.round((improved / processed) * 100)}%`;
+  }
+  function fmtAgo(ts: string): string {
+    const ms = Date.now() - new Date(ts).getTime();
+    const m = Math.floor(ms / 60000);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.floor(m / 60);
+    if (h < 24) return `${h}h ago`;
+    return `${Math.floor(h / 24)}d ago`;
+  }
 
   const { data: qualityData, isLoading: qualityLoading, refetch: refetchQuality } = useQuery<InstitutionQuality>({
     queryKey: ["/api/admin/enrichment/institution-quality", institution],
@@ -350,9 +373,22 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     if (prevEnrichStatusRef.current === "running" && enrichStatus?.status !== "running") {
       refetchQuality();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/jobs", institution] });
     }
     prevEnrichStatusRef.current = enrichStatus?.status;
   }, [enrichStatus?.status]);
+
+  const { data: jobHistory } = useQuery<EnrichJobRow[]>({
+    queryKey: ["/api/admin/enrichment/jobs", institution],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/enrichment/jobs?institution=${encodeURIComponent(institution)}`, {
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
 
   const enrichNowMutation = useMutation({
     mutationFn: async () => {
@@ -879,6 +915,35 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                             : `Starts GPT-4o-mini enrichment for the ${qualityData.enrichQueueCount} relevant assets from ${institution} that still have missing or incomplete fields.`}
                         </TooltipContent>
                       </Tooltip>
+                    </div>
+                  )}
+                  {jobHistory && jobHistory.length > 0 && (
+                    <div className="mt-3 border-t border-border/30 pt-3" data-testid="enrichment-job-history">
+                      <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Recent enrichment runs</div>
+                      <table className="w-full text-[11px]">
+                        <thead>
+                          <tr className="text-muted-foreground">
+                            <th className="text-left font-medium pb-1 pr-3">Started</th>
+                            <th className="text-right font-medium pb-1 pr-3">Processed</th>
+                            <th className="text-right font-medium pb-1 pr-3">Improved</th>
+                            <th className="text-right font-medium pb-1 pr-3">Hit rate</th>
+                            <th className="text-right font-medium pb-1">Duration</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {jobHistory.slice(0, 5).map((job) => (
+                            <tr key={job.id} className="border-t border-border/20" data-testid={`enrichment-job-row-${job.id}`}>
+                              <td className="py-1 pr-3 text-muted-foreground">{fmtAgo(job.startedAt)}</td>
+                              <td className="py-1 pr-3 text-right tabular-nums">{job.processed}</td>
+                              <td className="py-1 pr-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{job.improved}</td>
+                              <td className={`py-1 pr-3 text-right tabular-nums font-medium ${job.processed > 0 && (job.improved / job.processed) >= 0.7 ? "text-emerald-600 dark:text-emerald-400" : job.processed > 0 && (job.improved / job.processed) >= 0.4 ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                                {fmtHitRate(job.improved, job.processed)}
+                              </td>
+                              <td className="py-1 text-right tabular-nums text-muted-foreground">{fmtDuration(job.startedAt, job.completedAt)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </>
