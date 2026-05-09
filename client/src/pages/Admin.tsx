@@ -345,6 +345,15 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     refetchInterval: 5_000,
   });
 
+  const prevEnrichStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    if (prevEnrichStatusRef.current === "running" && enrichStatus?.status !== "running") {
+      refetchQuality();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    }
+    prevEnrichStatusRef.current = enrichStatus?.status;
+  }, [enrichStatus?.status]);
+
   const enrichNowMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/enrichment/run", {
@@ -823,11 +832,23 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       <div className="text-[10px] text-muted-foreground">Enriched (24 h)</div>
                     </div>
                     <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-enrich-queue">
-                      <div className={`text-lg font-bold tabular-nums ${qualityData.enrichQueueCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{qualityData.enrichQueueCount}</div>
-                      <div className="text-[10px] text-muted-foreground">Ready to Enrich</div>
+                      {enrichStatus?.status === "running" ? (
+                        <>
+                          <div className="text-lg font-bold tabular-nums text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            {enrichStatus.processed ?? 0}/{enrichStatus.total ?? "?"}
+                          </div>
+                          <div className="text-[10px] text-muted-foreground">Enriching...</div>
+                        </>
+                      ) : (
+                        <>
+                          <div className={`text-lg font-bold tabular-nums ${qualityData.enrichQueueCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{qualityData.enrichQueueCount}</div>
+                          <div className="text-[10px] text-muted-foreground">Ready to Enrich</div>
+                        </>
+                      )}
                     </div>
                   </div>
-                  {qualityData.enrichQueueCount > 0 && (
+                  {(qualityData.enrichQueueCount > 0 || enrichStatus?.status === "running") && (
                     <div className="mt-2.5" data-testid="quality-enrich-action">
                       <Tooltip>
                         <TooltipTrigger asChild>
