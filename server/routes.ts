@@ -3644,6 +3644,17 @@ export async function registerRoutes(
     }
   });
 
+  // Institution-level enrichment queue breakdown — used by the enrichment
+  // filter combobox to show only institutions with pending work + their counts.
+  app.get("/api/admin/enrichment/institution-queues", requireAdmin, async (req, res) => {
+    try {
+      const institutions = await storage.getEnrichmentInstitutionQueues();
+      res.json({ institutions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch institution queues" });
+    }
+  });
+
   // Per-institution quality snapshot history.
   app.get("/api/admin/enrichment/institution-quality/history", requireAdmin, async (req, res) => {
     const institution = String(req.query.institution ?? "").trim();

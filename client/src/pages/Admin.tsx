@@ -3206,14 +3206,14 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [enrichInstOpen, setEnrichInstOpen] = useState(false);
   const [debouncedInstitution, setDebouncedInstitution] = useState("");
 
-  const enrichInstitutionsQuery = useQuery<{ institutions: string[] }>({
-    queryKey: ["/api/admin/institutions"],
+  const enrichInstitutionsQuery = useQuery<{ institutions: { name: string; queueCount: number }[] }>({
+    queryKey: ["/api/admin/enrichment/institution-queues"],
     queryFn: async () => {
-      const r = await fetch("/api/admin/institutions", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const r = await fetch("/api/admin/enrichment/institution-queues", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) return { institutions: [] };
       return r.json();
     },
-    staleTime: 5 * 60 * 1000,
+    staleTime: 2 * 60 * 1000,
     enabled: !!pw,
   });
   useEffect(() => {
@@ -4428,18 +4428,32 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                               <Check className={`mr-2 h-3 w-3 ${!enrichInstitution ? "opacity-100" : "opacity-0"}`} />
                               All institutions
                             </CommandItem>
-                            {(enrichInstitutionsQuery.data?.institutions ?? []).map(inst => (
-                              <CommandItem
-                                key={inst}
-                                value={inst}
-                                onSelect={(val) => { setEnrichInstitution(val); setEnrichInstOpen(false); }}
-                                className="text-xs"
-                              >
-                                <Check className={`mr-2 h-3 w-3 shrink-0 ${enrichInstitution === inst ? "opacity-100" : "opacity-0"}`} />
-                                {inst}
-                              </CommandItem>
-                            ))}
                           </CommandGroup>
+                          {(() => {
+                            const queues = enrichInstitutionsQuery.data?.institutions ?? [];
+                            if (enrichInstitutionsQuery.isLoading) return (
+                              <div className="py-3 text-xs text-center text-muted-foreground">Loading…</div>
+                            );
+                            if (queues.length === 0) return (
+                              <div className="py-3 text-xs text-center text-muted-foreground">All caught up ✓</div>
+                            );
+                            return (
+                              <CommandGroup heading={`${queues.length} institution${queues.length === 1 ? "" : "s"} with pending work`}>
+                                {queues.map(inst => (
+                                  <CommandItem
+                                    key={inst.name}
+                                    value={inst.name}
+                                    onSelect={(val) => { setEnrichInstitution(val); setEnrichInstOpen(false); }}
+                                    className="text-xs"
+                                  >
+                                    <Check className={`mr-2 h-3 w-3 shrink-0 ${enrichInstitution === inst.name ? "opacity-100" : "opacity-0"}`} />
+                                    <span className="flex-1 truncate">{inst.name}</span>
+                                    <span className="ml-2 text-muted-foreground tabular-nums">({inst.queueCount})</span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            );
+                          })()}
                         </CommandList>
                       </Command>
                     </PopoverContent>

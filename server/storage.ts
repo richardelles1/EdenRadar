@@ -273,6 +273,8 @@ export interface IStorage {
     enrichedLast24h: number;
   }>;
 
+  getEnrichmentInstitutionQueues(): Promise<{ name: string; queueCount: number }[]>;
+
   captureInstitutionQualitySnapshot(institution: string): Promise<void>;
   getInstitutionQualityHistory(institution: string, limit?: number): Promise<Array<{
     id: number;
@@ -1988,6 +1990,35 @@ export class DatabaseStorage implements IStorage {
       enrichQueueCount,
       enrichedLast24h: Number(row?.enriched_last_24h ?? 0),
     };
+  }
+
+  async getEnrichmentInstitutionQueues(): Promise<{ name: string; queueCount: number }[]> {
+    // Single GROUP BY query using the same base criteria as buildEnrichWhere
+    // (no institution filter applied, no missingField filter so the default
+    // enriched_at / score=0 / 3-unknowns clause is included).
+    const result = await db.execute<{ institution: string; queue_count: string }>(sql`
+      SELECT institution, COUNT(*)::int AS queue_count
+      FROM ingested_assets
+      WHERE
+        relevant = true
+        AND (data_sparse IS NULL OR data_sparse = false)
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
+        AND COALESCE(mini_enrich_attempts, 0) < 3
+        AND (
+          enriched_at IS NULL
+          OR (completeness_score IS NULL OR completeness_score = 0)
+          OR (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+          ) >= 3
+        )
+      GROUP BY institution
+      HAVING COUNT(*) > 0
+      ORDER BY COUNT(*) DESC
+    `);
+    return result.rows.map(r => ({ name: r.institution, queueCount: Number(r.queue_count) }));
   }
 
   async captureInstitutionQualitySnapshot(institution: string): Promise<void> {
