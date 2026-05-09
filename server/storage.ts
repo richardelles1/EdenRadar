@@ -1142,7 +1142,7 @@ export class DatabaseStorage implements IStorage {
     if (!hv.ipType && data.ipType) { updateData.ipType = data.ipType; newSources.ipType = "mini"; }
     if (!hv.unmetNeed && data.unmetNeed !== undefined) { updateData.unmetNeed = data.unmetNeed || null; newSources.unmetNeed = "mini"; }
     if (!hv.comparableDrugs && data.comparableDrugs !== undefined) { updateData.comparableDrugs = data.comparableDrugs || null; newSources.comparableDrugs = "mini"; }
-    if (shouldWritePrimary("licensingReadiness", data.licensingReadiness, existing?.licensingReadiness)) { updateData.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "mini"; }
+    if (data.licensingReadiness !== undefined && shouldWritePrimary("licensingReadiness", data.licensingReadiness, existing?.licensingReadiness)) { updateData.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "mini"; }
     if (data.completenessScore != null) {
       // Never downgrade: atomic SQL GREATEST so concurrent workers can't race past a high score.
       // COALESCE handles NULL existing values (treats them as 0 so any non-null score wins).
