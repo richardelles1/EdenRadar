@@ -267,7 +267,7 @@ export interface IStorage {
   getInstitutionEnrichmentQuality(institution: string): Promise<{
     relevantCount: number;
     avgCompletenessScore: number | null;
-    enrichQueueBreakdown: { fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number };
+    enrichQueueCount: number;
     enrichedLast24h: number;
   }>;
 
@@ -1930,48 +1930,32 @@ export class DatabaseStorage implements IStorage {
   async getInstitutionEnrichmentQuality(institution: string): Promise<{
     relevantCount: number;
     avgCompletenessScore: number | null;
-    enrichQueueBreakdown: { fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number };
+    enrichQueueCount: number;
     enrichedLast24h: number;
   }> {
+    // Stats query for relevantCount, avgCompletenessScore, enrichedLast24h.
     const result = await db.execute<{
       relevant_count: string;
       avg_completeness: string | null;
       enriched_last_24h: string;
-      fresh: string;
-      legacy: string;
-      low_quality_retry: string;
-      null_category: string;
-      enrich_queue_total: string;
     }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE relevant = true)::int                                                                                                                      AS relevant_count,
-        AVG(completeness_score) FILTER (WHERE relevant = true AND completeness_score IS NOT NULL)                                                                         AS avg_completeness,
-        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND enriched_at > NOW() - INTERVAL '24 hours')::int                                            AS enriched_last_24h,
-        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NULL)::int                                                                                              AS fresh,
-        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                                           AS legacy,
-        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)::int AS low_quality_retry,
-        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)::int                                     AS null_category,
-        COUNT(*) FILTER (WHERE relevant = true AND (
-          enriched_at IS NULL
-          OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
-          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)
-          OR (enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)
-        ))::int                                                                                                                                                            AS enrich_queue_total
+        COUNT(*) FILTER (WHERE relevant = true)::int AS relevant_count,
+        AVG(completeness_score) FILTER (WHERE relevant = true AND completeness_score IS NOT NULL) AS avg_completeness,
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND enriched_at > NOW() - INTERVAL '24 hours')::int AS enriched_last_24h
       FROM ingested_assets
       WHERE institution = ${institution}
     `);
+    // Queue count uses getFilteredEnrichCount so it exactly matches the global
+    // enrichment page's "Ready to enrich" counter (same buildEnrichWhere criteria:
+    // relevant, not data_sparse, char_length >= 50, mini_enrich_attempts < 3, score=0 or 3+ unknowns).
+    const { count: enrichQueueCount } = await this.getFilteredEnrichCount({ institution });
     const row = result.rows[0];
     const avg = row?.avg_completeness != null ? Math.round(Number(row.avg_completeness)) : null;
     return {
       relevantCount: Number(row?.relevant_count ?? 0),
       avgCompletenessScore: avg,
-      enrichQueueBreakdown: {
-        fresh: Number(row?.fresh ?? 0),
-        legacy: Number(row?.legacy ?? 0),
-        lowQualityRetry: Number(row?.low_quality_retry ?? 0),
-        nullCategory: Number(row?.null_category ?? 0),
-        total: Number(row?.enrich_queue_total ?? 0),
-      },
+      enrichQueueCount,
       enrichedLast24h: Number(row?.enriched_last_24h ?? 0),
     };
   }

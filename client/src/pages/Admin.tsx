@@ -318,7 +318,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
   });
 
   type RefreshResult = { checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number; message: string };
-  type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueBreakdown: { fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number }; enrichedLast24h: number };
+  type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueCount: number; enrichedLast24h: number };
+  type EnrichStatus = { status: string; processed?: number; total?: number; improved?: number };
 
   const { data: qualityData, isLoading: qualityLoading, refetch: refetchQuality } = useQuery<InstitutionQuality>({
     queryKey: ["/api/admin/enrichment/institution-quality", institution],
@@ -330,6 +331,42 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
       return res.json();
     },
     staleTime: 60_000,
+  });
+
+  const { data: enrichStatus } = useQuery<EnrichStatus>({
+    queryKey: ["/api/admin/enrichment/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/status", {
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) throw new Error("Failed to fetch enrichment status");
+      return res.json();
+    },
+    refetchInterval: 5_000,
+  });
+
+  const enrichNowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ institution }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to start enrichment");
+      return data as { message: string; total: number; jobId: number };
+    },
+    onSuccess: (data) => {
+      toast({
+        title: "Enrichment started",
+        description: `${data.total} asset${data.total !== 1 ? "s" : ""} queued for AI enrichment (job #${data.jobId})`,
+      });
+      refetchQuality();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/status"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Enrichment failed to start", description: err.message, variant: "destructive" });
+    },
   });
 
   const refreshScrapedFieldsMutation = useMutation({
@@ -779,35 +816,40 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       <div className="text-[10px] text-muted-foreground">Enriched (24 h)</div>
                     </div>
                     <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-enrich-queue">
-                      <div className={`text-lg font-bold tabular-nums ${qualityData.enrichQueueBreakdown.total > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{qualityData.enrichQueueBreakdown.total}</div>
-                      <div className="text-[10px] text-muted-foreground">In Enrich Queue</div>
+                      <div className={`text-lg font-bold tabular-nums ${qualityData.enrichQueueCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-foreground"}`}>{qualityData.enrichQueueCount}</div>
+                      <div className="text-[10px] text-muted-foreground">Ready to Enrich</div>
                     </div>
                   </div>
-                  {qualityData.enrichQueueBreakdown.total > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1.5" data-testid="quality-queue-breakdown">
-                      {qualityData.enrichQueueBreakdown.fresh > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />
-                          {qualityData.enrichQueueBreakdown.fresh} fresh
-                        </span>
-                      )}
-                      {qualityData.enrichQueueBreakdown.legacy > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                          <span className="w-1.5 h-1.5 rounded-full bg-violet-400 inline-block" />
-                          {qualityData.enrichQueueBreakdown.legacy} legacy (no score)
-                        </span>
-                      )}
-                      {qualityData.enrichQueueBreakdown.lowQualityRetry > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />
-                          {qualityData.enrichQueueBreakdown.lowQualityRetry} low-quality retry
-                        </span>
-                      )}
-                      {qualityData.enrichQueueBreakdown.nullCategory > 0 && (
-                        <span className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />
-                          {qualityData.enrichQueueBreakdown.nullCategory} no category
-                        </span>
+                  {qualityData.enrichQueueCount > 0 && (
+                    <div className="mt-2.5" data-testid="quality-enrich-action">
+                      {enrichStatus?.status === "running" ? (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
+                          <span>Enrichment running globally ({enrichStatus.processed ?? 0}/{enrichStatus.total ?? 0} processed) — <a href="#enrichment" className="underline text-primary">view progress</a></span>
+                        </div>
+                      ) : (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1.5 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                              onClick={() => enrichNowMutation.mutate()}
+                              disabled={enrichNowMutation.isPending}
+                              data-testid="button-enrich-now"
+                            >
+                              {enrichNowMutation.isPending ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <Zap className="h-3 w-3" />
+                              )}
+                              Enrich {qualityData.enrichQueueCount} asset{qualityData.enrichQueueCount !== 1 ? "s" : ""} now
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent side="bottom" className="text-xs max-w-xs">
+                            Starts GPT-4o-mini enrichment for the {qualityData.enrichQueueCount} relevant assets from {institution} that still have missing or incomplete fields.
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                     </div>
                   )}
