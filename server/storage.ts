@@ -594,7 +594,8 @@ function buildEnrichWhere(filters: EnrichFilter = {}): SQL {
     else if (mf === "stage") parts.push(sql`(development_stage IS NULL OR development_stage IN ('unknown',''))`);
   } else {
     parts.push(sql`(
-      (completeness_score IS NULL OR completeness_score = 0)
+      enriched_at IS NULL
+      OR (completeness_score IS NULL OR completeness_score = 0)
       OR (
         (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
         (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +

@@ -178,9 +178,10 @@ try {
     }
 
     // ── Semantic cross-check ───────────────────────────────────────────────
-    // After the refresh, re-fetch quality and verify the enrichQueueCount is a
-    // plausible number (>= 0) and that the post-refresh count >= pre-refresh count
-    // (refresh can only add to the queue, never remove from it).
+    // After the refresh, re-fetch quality and verify the enrichQueueCount increased
+    // by exactly queuedRelevant. Since buildEnrichWhere now includes `enrichedAt IS NULL`
+    // as an OR condition, refresh-reset assets appear in the count immediately.
+    // The delta must equal queuedRelevant (not just >= pre).
     console.log("\n[3b] Cross-check: post-refresh enrichQueueCount >= pre-refresh");
     const postQuality = await fetchQuality();
     const postQueueCount = typeof postQuality?.enrichQueueCount === "number" ? postQuality.enrichQueueCount : undefined;
