@@ -367,7 +367,10 @@ export function scoreAvailability(asset: Partial<ScoredAsset>): DimensionResult 
   const days = daysSince(dateStr);
 
   if (days >= 999) {
-    return { score: 35, hasData: false, basis: "No portal confirmation date available" };
+    // hasData: true so the 10% weight is applied and the demotion takes effect.
+    // An asset with no confirmation date IS scored (as stale/uncertain) rather
+    // than exempted — consistent with the spec's "absent → 35" rule.
+    return { score: 35, hasData: true, basis: "No portal confirmation date — availability uncertain" };
   }
 
   let score: number;
