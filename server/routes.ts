@@ -967,6 +967,7 @@ export async function registerRoutes(
           owner_name: r.institution,
           owner_type: "university",
           source_types: ["tech_transfer"],
+          target: r.target ?? undefined,
           modality: r.modality ?? undefined,
           indication: r.indication ?? undefined,
           matching_tags: [],
