@@ -209,67 +209,31 @@ export interface QueryExpansion {
 // Indices reference SYNONYM_GROUPS positions (0-based). If new groups are
 // appended to SYNONYM_GROUPS, add their index to the relevant set here.
 
-const MODALITY_GROUP_INDICES = new Set<number>([
-  4,  // CAR-T
-  5,  // CAR-NK
-  6,  // TCR-T
-  7,  // TIL
-  8,  // mAb
-  9,  // bsAb / BiTE
-  10, // ADC
-  11, // scFv
-  12, // nanobody / VHH
-  13, // siRNA
-  14, // shRNA
-  15, // ASO
-  16, // mRNA vaccine
-  17, // LNP
-  18, // AAV
-  19, // PROTAC
-  20, // LYTAC
-  21, // small molecule
+// Build modality/indication sets programmatically by matching the canonical
+// first member of each SYNONYM_GROUPS entry — immune to index drift when new
+// groups are added anywhere in the array.
+const _MODALITY_CANONICAL = new Set([
+  "CAR-T", "CAR-NK", "TCR-T", "TIL",
+  "mAb", "bsAb", "ADC", "scFv", "nanobody",
+  "siRNA", "shRNA", "ASO", "mRNA vaccine", "LNP", "AAV",
+  "PROTAC", "LYTAC", "small molecule",
+]);
+const _INDICATION_CANONICAL = new Set([
+  // Oncology
+  "NSCLC", "SCLC", "TNBC", "HCC", "CRC", "GBM", "AML", "ALL", "CLL", "CML",
+  "MM", "DLBCL", "RCC", "mCRPC", "PDAC",
+  // Non-oncology
+  "T2D", "T1D", "NASH", "IBD", "UC", "RA", "MS", "AD", "PD", "ALS",
+  "DMD", "SMA", "CF", "SCD", "AMD",
 ]);
 
-const INDICATION_GROUP_INDICES = new Set<number>([
-  22, // PD-1 / PDCD1 (checkpoint as oncology indicator)
-  23, // PD-L1
-  24, // CTLA-4
-  25, // LAG-3
-  26, // TIGIT
-  27, // TIM-3
-  // Oncology indications (lines 84-116 of this file, group indices 33–49)
-  33, // NSCLC
-  34, // SCLC
-  35, // TNBC
-  36, // HCC
-  37, // CRC
-  38, // GBM
-  39, // AML
-  40, // ALL
-  41, // CLL
-  42, // CML
-  43, // MM / multiple myeloma
-  44, // DLBCL
-  45, // RCC
-  46, // mCRPC
-  47, // PDAC
-  // Non-oncology indications
-  48, // T2D
-  49, // T1D
-  50, // NASH / MASH
-  51, // IBD
-  52, // UC
-  53, // RA
-  54, // MS
-  55, // AD / Alzheimer
-  56, // PD / Parkinson
-  57, // ALS
-  58, // DMD
-  59, // SMA
-  60, // CF
-  61, // SCD
-  62, // AMD
-]);
+const MODALITY_GROUP_INDICES = new Set<number>(
+  SYNONYM_GROUPS.flatMap((g, i) => (_MODALITY_CANONICAL.has(g[0]) ? [i] : []))
+);
+
+const INDICATION_GROUP_INDICES = new Set<number>(
+  SYNONYM_GROUPS.flatMap((g, i) => (_INDICATION_CANONICAL.has(g[0]) ? [i] : []))
+);
 
 export interface QueryFitTerms {
   /** Canonical modality strings extracted from the query (e.g. "CAR-T", "mAb"). */

@@ -367,7 +367,7 @@ export function scoreAvailability(asset: Partial<ScoredAsset>): DimensionResult 
   const days = daysSince(dateStr);
 
   if (days >= 999) {
-    return { score: 50, hasData: false, basis: "No portal confirmation date available" };
+    return { score: 35, hasData: false, basis: "No portal confirmation date available" };
   }
 
   let score: number;

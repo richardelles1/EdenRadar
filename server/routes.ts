@@ -903,23 +903,51 @@ export async function registerRoutes(
       // the raw search query and fold them into the buyer profile so assets that
       // match *both* the live query and the saved thesis rank highest on fit.
       // Saved profile criteria are preserved; query terms are purely additive.
+
+      // Step 1: load the user's saved thesis (therapeuticAreas + modalities from industry profile).
+      let savedFitBasis: { therapeutic_areas: string[]; modalities: string[] } | undefined;
+      if (scoutUserId) {
+        try {
+          const industryProfile = await storage.getIndustryProfileByUserId(scoutUserId);
+          if (industryProfile && (industryProfile.therapeuticAreas.length > 0 || industryProfile.modalities.length > 0)) {
+            savedFitBasis = {
+              therapeutic_areas: industryProfile.therapeuticAreas,
+              modalities: industryProfile.modalities,
+            };
+          }
+        } catch (profileLoadErr) {
+          console.warn("[scout/search] saved profile load failed:", profileLoadErr instanceof Error ? profileLoadErr.message : profileLoadErr);
+        }
+      }
+
+      // Step 2: extract query-derived terms and merge with saved thesis.
       let scoutFitProfile: import("./lib/types").BuyerProfile | undefined;
-      if (trimmedQuery) {
+      {
         try {
           const { expandQuery: _expandQ, classifyQueryTerms } = await import("./lib/biotechSynonyms");
-          const expansion = _expandQ(trimmedQuery);
-          const { modalities: qMods, therapeuticAreas: qTAs, keywords: qKws } = classifyQueryTerms(expansion);
-          // Only construct a profile if the query yielded classifiable terms
-          if (qMods.length > 0 || qTAs.length > 0 || qKws.length > 0) {
-            const { DEFAULT_BUYER_PROFILE } = await import("./lib/types");
+          const qTAs: string[] = [];
+          const qMods: string[] = [];
+          const qKws: string[] = [];
+          if (trimmedQuery) {
+            const expansion = _expandQ(trimmedQuery);
+            const classified = classifyQueryTerms(expansion);
+            qTAs.push(...classified.therapeuticAreas);
+            qMods.push(...classified.modalities);
+            qKws.push(...classified.keywords);
+          }
+          // Merge: saved profile criteria + query-derived (union, deduped).
+          const mergedTAs  = [...new Set([...(savedFitBasis?.therapeutic_areas ?? []), ...qTAs])];
+          const mergedMods = [...new Set([...(savedFitBasis?.modalities ?? []), ...qMods])];
+          // Only build a profile if at least one dimension is non-empty.
+          if (mergedTAs.length > 0 || mergedMods.length > 0 || qKws.length > 0) {
             scoutFitProfile = {
               ...DEFAULT_BUYER_PROFILE,
-              therapeutic_areas: qTAs,
-              modalities: qMods,
-              preferred_stages: [],
-              excluded_stages: [],
+              therapeutic_areas: mergedTAs,
+              modalities:        mergedMods,
+              preferred_stages:  [],
+              excluded_stages:   [],
               indication_keywords: qKws,
-              target_keywords: [],
+              target_keywords:   [],
               owner_type_preference: "any",
             };
           }
@@ -1031,42 +1059,36 @@ export async function registerRoutes(
         };
       });
 
-      // Final ordering:
-      //   1. Exact-name matches pinned to the top (carried over from #759).
-      //   2. For queried searches, FTS text_relevance (ts_rank_cd from Tier 1,
-      //      task #760) drives the primary order so the strongest text matches
-      //      come first regardless of completeness/recency. Score is the
-      //      tiebreaker.
-      //   3. For filter-only browsing (no query), text_relevance is 0 for all
-      //      rows so the existing score-first behavior is preserved.
-      const hasQuery = !!query.trim();
       const isExact = (a: ScoredAsset) => exactNameIds.has(Number(a.id));
       const textRel = (a: ScoredAsset) => a.score_breakdown?.text_relevance ?? 0;
-      // When hybrid is on, RRF score drives primary order so semantic-only
-      // matches can surface above token-only matches and vice versa. Without
-      // hybrid we fall back to the previous text_relevance-first behavior.
       const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
       const completenessOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.completeness ?? 0;
       const recencyOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.recencyMs ?? 0;
+      // TTO fit-first sort (Task #980):
+      //   1. Exact-name matches pinned to top.
+      //   2. Score (fit-weighted) is the primary order — the new 3-dimension model
+      //      already encodes query fit (75%), so score IS the fit signal.
+      //   3. For queried searches, text_relevance / RRF acts as a secondary
+      //      tiebreaker to keep strong text-match assets from being buried behind
+      //      same-scoring records that happen to have a marginally better fit.
+      //   4. Completeness → recency as final tiebreakers.
       assets.sort((a, b) => {
         const ax = isExact(a) ? 1 : 0;
         const bx = isExact(b) ? 1 : 0;
         if (ax !== bx) return bx - ax;
-        if (hasQuery) {
-          if (runHybrid) {
-            const dr = rrfOf(b) - rrfOf(a);
-            if (Math.abs(dr) > 1e-9) return dr;
-          }
-          const dt = textRel(b) - textRel(a);
-          if (Math.abs(dt) > 1e-6) return dt;
-        }
-        // Existing scoring pipeline
+        // Primary: fit-weighted score
         const ds = b.score - a.score;
         if (ds !== 0) return ds;
-        // Tie-break #1: completeness desc (#762 step 3)
+        // Secondary: text relevance / hybrid RRF as tiebreaker
+        if (runHybrid) {
+          const dr = rrfOf(b) - rrfOf(a);
+          if (Math.abs(dr) > 1e-9) return dr;
+        }
+        const dt = textRel(b) - textRel(a);
+        if (Math.abs(dt) > 1e-6) return dt;
+        // Tie-break: completeness desc, then recency desc
         const dc = completenessOf(b) - completenessOf(a);
         if (dc !== 0) return dc;
-        // Tie-break #2: recency desc (stageChangedAt)
         return recencyOf(b) - recencyOf(a);
       });
 
