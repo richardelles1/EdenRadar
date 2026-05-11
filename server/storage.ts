@@ -106,6 +106,9 @@ export type RetrievedAsset = {
   /** ts_rank_cd from FTS query when available (Tier 1 of search smartness work).
    *  Null/0 for non-FTS retrieval paths (vector, by-institution) or filter-only browsing. */
   textRelevance?: number | null;
+  /** ISO string: when this asset was last confirmed available on its source portal.
+   *  Used by scoreAvailability() in the TTO 3-dimension scoring model (Task #980). */
+  lastSeenAt?: string | null;
 };
 
 export interface IStorage {
@@ -3205,6 +3208,7 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
+        last_seen_at,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -3235,6 +3239,7 @@ export class DatabaseStorage implements IStorage {
       stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
       previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
+      lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
     }));
   }
 
@@ -3422,7 +3427,7 @@ export class DatabaseStorage implements IStorage {
           mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
-          data_sparse, category_confidence, asset_class,
+          data_sparse, category_confidence, asset_class, last_seen_at,
           ${exactMatchExpr} AS exact_name_match,
           ${tsRankExpr}     AS ts_rank,
           ${trgmSimExpr}    AS trgm_sim,
@@ -3483,6 +3488,7 @@ export class DatabaseStorage implements IStorage {
       assetClass: typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null,
       similarity: 0,
       textRelevance: r.ts_rank != null ? parseFloat(String(r.ts_rank)) : 0,
+      lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
     }));
   }
 

@@ -201,6 +201,119 @@ export interface QueryExpansion {
   original: string;
 }
 
+// ─── Fit-profile term classifier (Task #980) ─────────────────────────────────
+// Groups known synonym group indices by semantic category so the scout search
+// route can extract therapeutic area, modality, and keyword terms from the
+// query without re-building the entire synonym table from scratch.
+//
+// Indices reference SYNONYM_GROUPS positions (0-based). If new groups are
+// appended to SYNONYM_GROUPS, add their index to the relevant set here.
+
+const MODALITY_GROUP_INDICES = new Set<number>([
+  4,  // CAR-T
+  5,  // CAR-NK
+  6,  // TCR-T
+  7,  // TIL
+  8,  // mAb
+  9,  // bsAb / BiTE
+  10, // ADC
+  11, // scFv
+  12, // nanobody / VHH
+  13, // siRNA
+  14, // shRNA
+  15, // ASO
+  16, // mRNA vaccine
+  17, // LNP
+  18, // AAV
+  19, // PROTAC
+  20, // LYTAC
+  21, // small molecule
+]);
+
+const INDICATION_GROUP_INDICES = new Set<number>([
+  22, // PD-1 / PDCD1 (checkpoint as oncology indicator)
+  23, // PD-L1
+  24, // CTLA-4
+  25, // LAG-3
+  26, // TIGIT
+  27, // TIM-3
+  // Oncology indications (lines 84-116 of this file, group indices 33–49)
+  33, // NSCLC
+  34, // SCLC
+  35, // TNBC
+  36, // HCC
+  37, // CRC
+  38, // GBM
+  39, // AML
+  40, // ALL
+  41, // CLL
+  42, // CML
+  43, // MM / multiple myeloma
+  44, // DLBCL
+  45, // RCC
+  46, // mCRPC
+  47, // PDAC
+  // Non-oncology indications
+  48, // T2D
+  49, // T1D
+  50, // NASH / MASH
+  51, // IBD
+  52, // UC
+  53, // RA
+  54, // MS
+  55, // AD / Alzheimer
+  56, // PD / Parkinson
+  57, // ALS
+  58, // DMD
+  59, // SMA
+  60, // CF
+  61, // SCD
+  62, // AMD
+]);
+
+export interface QueryFitTerms {
+  /** Canonical modality strings extracted from the query (e.g. "CAR-T", "mAb"). */
+  modalities: string[];
+  /** Canonical therapeutic area / indication strings (e.g. "NSCLC", "rheumatoid arthritis"). */
+  therapeuticAreas: string[];
+  /** Remaining terms (targets, generic keywords) for keyword matching. */
+  keywords: string[];
+}
+
+/**
+ * Classify expanded query groups into modality, therapeutic-area, and keyword
+ * buckets for use as a transient fit profile in the Scout TTO scoring path.
+ * Negated groups are skipped — they represent exclusions, not preferences.
+ */
+export function classifyQueryTerms(expansion: QueryExpansion): QueryFitTerms {
+  const modalities: string[] = [];
+  const therapeuticAreas: string[] = [];
+  const keywords: string[] = [];
+
+  for (const group of expansion.groups) {
+    if (group.negated) continue;
+    // Find which SYNONYM_GROUPS index this group belongs to by matching its
+    // first member against every group. The lookupIndex maps normalized member
+    // → group index, so use that for efficiency.
+    const firstMemberNorm = group.members[0]
+      ? group.members[0].toLowerCase().replace(/[^a-z0-9\s]/g, " ").replace(/\s+/g, " ").trim()
+      : "";
+    const idx = firstMemberNorm ? lookupIndex.get(firstMemberNorm) : undefined;
+
+    if (idx !== undefined && MODALITY_GROUP_INDICES.has(idx)) {
+      modalities.push(group.members[0]);
+    } else if (idx !== undefined && INDICATION_GROUP_INDICES.has(idx)) {
+      therapeuticAreas.push(group.members[0]);
+    } else {
+      // Pass the first 2 synonyms as keywords so both the canonical name and
+      // the most common alias (e.g. "KRAS" + "K-Ras") hit the keyword search.
+      keywords.push(...group.members.slice(0, 2));
+    }
+  }
+
+  return { modalities, therapeuticAreas, keywords };
+}
+
 /**
  * Parse and expand a user query into ordered groups suitable for building a
  * tsquery on the SQL side. Empty / pure-stopword input returns no groups.

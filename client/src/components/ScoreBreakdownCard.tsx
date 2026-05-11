@@ -1,4 +1,4 @@
-import { Sparkles, Clock, Activity, Key, Target, Shield } from "lucide-react";
+import { Sparkles, Clock, Activity, Key, Target, Shield, BarChart2, CalendarCheck } from "lucide-react";
 
 interface ScoreBreakdown {
   novelty: number;
@@ -7,6 +7,8 @@ interface ScoreBreakdown {
   licensability: number;
   fit: number;
   competition: number;
+  record_quality?: number;
+  availability?: number;
   total: number;
   signal_coverage?: number;
   scored_dimensions?: string[];
@@ -18,14 +20,24 @@ interface ScoreBreakdownCardProps {
   className?: string;
 }
 
-const DIMS = [
-  { key: "novelty" as const,       label: "Novelty",        icon: Sparkles, weight: "20%", fallback: "How novel the mechanism/target appears" },
-  { key: "freshness" as const,     label: "Freshness",      icon: Clock,    weight: "15%", fallback: "Recency of latest signal" },
-  { key: "readiness" as const,     label: "Readiness",      icon: Activity, weight: "15%", fallback: "Clinical development stage" },
-  { key: "licensability" as const, label: "Licensability",  icon: Key,      weight: "25%", fallback: "Likelihood of licensing access" },
-  { key: "fit" as const,           label: "Buyer Fit",      icon: Target,   weight: "15%", fallback: "Alignment with your thesis" },
-  { key: "competition" as const,   label: "Low Competition",icon: Shield,   weight: "10%", fallback: "Absence of competitive threat" },
+const LEGACY_DIMS = [
+  { key: "novelty" as const,       label: "Novelty",         icon: Sparkles,     weight: "20%", fallback: "How novel the mechanism/target appears" },
+  { key: "freshness" as const,     label: "Freshness",       icon: Clock,        weight: "15%", fallback: "Recency of latest signal" },
+  { key: "readiness" as const,     label: "Readiness",       icon: Activity,     weight: "15%", fallback: "Clinical development stage" },
+  { key: "licensability" as const, label: "Licensability",   icon: Key,          weight: "25%", fallback: "Likelihood of licensing access" },
+  { key: "fit" as const,           label: "Buyer Fit",       icon: Target,       weight: "15%", fallback: "Alignment with your thesis" },
+  { key: "competition" as const,   label: "Low Competition", icon: Shield,       weight: "10%", fallback: "Absence of competitive threat" },
 ];
+
+const TTO_DIMS = [
+  { key: "fit" as const,            label: "Query Fit",         icon: Target,       weight: "75%", fallback: "Alignment with your search query and thesis" },
+  { key: "record_quality" as const, label: "Record Completeness", icon: BarChart2, weight: "15%", fallback: "Richness of the asset record" },
+  { key: "availability" as const,   label: "Availability",      icon: CalendarCheck, weight: "10%", fallback: "Licensing status and recency" },
+];
+
+function isTTOBreakdown(breakdown: ScoreBreakdown): boolean {
+  return typeof breakdown.record_quality === "number" || typeof breakdown.availability === "number";
+}
 
 function scoreColor(score: number) {
   if (score >= 75) return { bar: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400" };
@@ -41,9 +53,14 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
   const basis = breakdown.dimension_basis ?? {};
   const hasScore = breakdown.total > 0 || scoredDims.length > 0;
 
+  const isTTO = isTTOBreakdown(breakdown);
+  const DIMS = isTTO ? TTO_DIMS : LEGACY_DIMS;
+
+  const allBreakdown = breakdown as unknown as Record<string, unknown>;
+
   const scoredRows = isLegacyPayload
     ? DIMS
-    : DIMS.filter(({ key }) => scoredDims.includes(key));
+    : DIMS.filter(({ key }) => scoredDims.includes(key) || typeof allBreakdown[key] === "number");
 
   return (
     <div className={`rounded-xl border border-border bg-card p-4 ${className}`} data-testid="score-breakdown-card">
@@ -74,7 +91,7 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
       {hasScore && scoredRows.length > 0 && (
         <div className="space-y-3">
           {scoredRows.map(({ key, label, icon: Icon, fallback }) => {
-            const val = breakdown[key];
+            const val = typeof allBreakdown[key] === "number" ? (allBreakdown[key] as number) : 0;
             const { bar, text } = scoreColor(val);
             const basisText = basis[key] ?? fallback;
 
@@ -100,7 +117,7 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
 
           {!isLegacyPayload && scoredRows.length < DIMS.length && scoredRows.length <= 2 && (
             <p className="text-[10px] text-muted-foreground/60 pt-1 border-t border-border">
-              {scoredRows.length} of 6 signals available
+              {scoredRows.length} of {DIMS.length} signals available
             </p>
           )}
         </div>

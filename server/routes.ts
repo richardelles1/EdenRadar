@@ -25,7 +25,7 @@ import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreFit as scoreFitTTO, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
@@ -898,6 +898,40 @@ export async function registerRoutes(
         tieBreakById.set(r.id, { completeness, recencyMs });
       }
 
+      // ── TTO fit-profile: merge saved buyer profile with query-derived terms ──
+      // (Task #980) Extract therapeutic area, modality, and keyword signals from
+      // the raw search query and fold them into the buyer profile so assets that
+      // match *both* the live query and the saved thesis rank highest on fit.
+      // Saved profile criteria are preserved; query terms are purely additive.
+      let scoutFitProfile: import("./lib/types").BuyerProfile | undefined;
+      if (trimmedQuery) {
+        try {
+          const { expandQuery: _expandQ, classifyQueryTerms } = await import("./lib/biotechSynonyms");
+          const expansion = _expandQ(trimmedQuery);
+          const { modalities: qMods, therapeuticAreas: qTAs, keywords: qKws } = classifyQueryTerms(expansion);
+          // Only construct a profile if the query yielded classifiable terms
+          if (qMods.length > 0 || qTAs.length > 0 || qKws.length > 0) {
+            const { DEFAULT_BUYER_PROFILE } = await import("./lib/types");
+            scoutFitProfile = {
+              ...DEFAULT_BUYER_PROFILE,
+              therapeutic_areas: qTAs,
+              modalities: qMods,
+              preferred_stages: [],
+              excluded_stages: [],
+              indication_keywords: qKws,
+              target_keywords: [],
+              owner_type_preference: "any",
+            };
+          }
+        } catch (fitExtractErr) {
+          console.warn("[scout/search] fit-profile extraction failed:", fitExtractErr instanceof Error ? fitExtractErr.message : fitExtractErr);
+        }
+      }
+
+      // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
+      // Uses: Fit (75%, query-bridged), Record Quality (15%), Availability (10%)
+      // Replaces the 6-dimension legacy model which produced near-constant scores
+      // for TTO corpus (Licensability/Novelty/Competition don't differentiate).
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
           development_stage: r.developmentStage,
@@ -905,31 +939,28 @@ export async function registerRoutes(
           owner_name: r.institution,
           owner_type: "university",
           source_types: ["tech_transfer"],
-          latest_signal_date: "",
+          modality: r.modality ?? undefined,
+          indication: r.indication ?? undefined,
+          matching_tags: [],
           evidence_count: 1,
           patent_status: "unknown",
+          completeness_score: r.completenessScore,
+          last_seen_at: r.lastSeenAt ?? undefined,
+          latest_signal_date: r.lastSeenAt ?? "",
         };
 
-        const freshnessResult  = { score: 0, hasData: false, basis: "No signal date available" };
-        const noveltyResult    = scoreNovelty(partialAsset);
-        const readinessResult  = scoreReadiness(partialAsset);
-        const licensabilityResult = scoreLicensability(partialAsset);
-        const competitionResult = scoreCompetition(partialAsset);
-        const fitResult = { score: 0, hasData: false, basis: "No buyer profile configured" };
+        const fitRes             = scoreFitTTO(partialAsset, scoutFitProfile);
+        const completenessResult = scoreCompleteness(partialAsset);
+        const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
-          freshness:    freshnessResult,
-          novelty:      noveltyResult,
-          readiness:    readinessResult,
-          licensability: licensabilityResult,
-          fit:          fitResult,
-          competition:  competitionResult,
+          fit:            fitRes,
+          record_quality: completenessResult,
+          availability:   availabilityResult,
         };
 
-        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults);
+        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
 
-        // ── Confidence-aware ranking (Task #693) — applied here too because the
-        // scout path scores inline without going through scoreAssets().
         const catConf = typeof r.categoryConfidence === "number"
           ? Math.max(0, Math.min(1, r.categoryConfidence))
           : undefined;
@@ -955,12 +986,14 @@ export async function registerRoutes(
           source_types: ["tech_transfer"],
           score: total,
           score_breakdown: {
-            freshness:    freshnessResult.score,
-            novelty:      noveltyResult.score,
-            readiness:    readinessResult.score,
-            licensability: licensabilityResult.score,
-            fit:          fitResult.score,
-            competition:  competitionResult.score,
+            fit:            fitRes.score,
+            record_quality: completenessResult.score,
+            availability:   availabilityResult.score,
+            novelty:      0,
+            freshness:    0,
+            readiness:    0,
+            licensability: 0,
+            competition:  0,
             total,
             signal_coverage,
             scored_dimensions,
@@ -979,7 +1012,7 @@ export async function registerRoutes(
                 })()
               : {}),
           },
-          latest_signal_date: "",
+          latest_signal_date: r.lastSeenAt ?? "",
           matching_tags: [],
           evidence_count: 1,
           confidence,
@@ -993,6 +1026,8 @@ export async function registerRoutes(
           stage_changed_at: r.stageChangedAt ? r.stageChangedAt.toISOString() : null,
           previous_stage: r.previousStage ?? null,
           dataSparse: r.dataSparse ?? false,
+          completeness_score: r.completenessScore,
+          last_seen_at: r.lastSeenAt,
         };
       });
 
@@ -1083,7 +1118,7 @@ export async function registerRoutes(
           mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
-          first_seen_at, category_confidence, asset_class
+          first_seen_at, last_seen_at, category_confidence, asset_class
         FROM ingested_assets
         WHERE relevant = true AND completeness_score >= 40
         ORDER BY first_seen_at DESC NULLS LAST
@@ -1094,45 +1129,45 @@ export async function registerRoutes(
         const developmentStage = typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? "");
         const licensingReadiness = typeof r.licensing_readiness === "string" ? r.licensing_readiness : null;
         const firstSeenAt = r.first_seen_at ? String(r.first_seen_at) : null;
+        const lastSeenAt = r.last_seen_at ? String(r.last_seen_at) : null;
         const sourceUrl = typeof r.source_url === "string" ? r.source_url : null;
         const catConfRaw = r.category_confidence;
         const catConf = catConfRaw != null && !Number.isNaN(parseFloat(String(catConfRaw)))
           ? Math.max(0, Math.min(1, parseFloat(String(catConfRaw))))
           : undefined;
         const assetClass = typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null;
+        const completenessScoreVal = r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null;
 
-        // Inline confidence-aware scoring (Task #695) — mirrors /api/scout/search
-        // so the same asset shows the same score & confidence pill on every screen.
+        // TTO 3-dimension scoring (Task #980) — Fit (75%), Record Quality (15%), Availability (10%).
+        // This is a "what's new" feed so fit has no buyer profile; completeness and availability
+        // drive the score to maintain parity with the Scout search breakdown.
         const partialAsset: Partial<ScoredAsset> = {
           development_stage: developmentStage,
           licensing_status: licensingReadiness ?? "unknown",
           owner_name: institution,
           owner_type: "university",
           source_types: ["tech_transfer"],
-          latest_signal_date: firstSeenAt ?? "",
+          modality: typeof r.modality === "string" ? r.modality : undefined,
+          indication: typeof r.indication === "string" ? r.indication : undefined,
+          matching_tags: [],
           evidence_count: 1,
           patent_status: "unknown",
+          completeness_score: completenessScoreVal,
+          last_seen_at: lastSeenAt,
+          latest_signal_date: lastSeenAt ?? firstSeenAt ?? "",
         };
 
-        const freshnessResult = firstSeenAt
-          ? scoreFreshness(partialAsset)
-          : { score: 0, hasData: false, basis: "No signal date available" };
-        const noveltyResult = scoreNovelty(partialAsset);
-        const readinessResult = scoreReadiness(partialAsset);
-        const licensabilityResult = scoreLicensability(partialAsset);
-        const competitionResult = scoreCompetition(partialAsset);
-        const fitResult = { score: 0, hasData: false, basis: "No buyer profile configured" };
+        const fitResult          = scoreFitTTO(partialAsset, undefined);
+        const completenessResult = scoreCompleteness(partialAsset);
+        const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
-          freshness: freshnessResult,
-          novelty: noveltyResult,
-          readiness: readinessResult,
-          licensability: licensabilityResult,
-          fit: fitResult,
-          competition: competitionResult,
+          fit:            fitResult,
+          record_quality: completenessResult,
+          availability:   availabilityResult,
         };
 
-        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults);
+        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
 
         const coverageNorm = signal_coverage / 100;
         const confidenceFactor = catConf !== undefined ? Math.min(catConf, coverageNorm) : coverageNorm;
@@ -1153,7 +1188,7 @@ export async function registerRoutes(
           summary: typeof r.summary === "string" ? r.summary : null,
           source_url: sourceUrl,
           source_name: typeof r.source_name === "string" ? r.source_name : null,
-          completeness_score: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
+          completeness_score: completenessScoreVal,
           licensing_readiness: licensingReadiness,
           ip_type: typeof r.ip_type === "string" ? r.ip_type : null,
           innovation_claim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
@@ -1162,12 +1197,14 @@ export async function registerRoutes(
           first_seen_at: firstSeenAt,
           score: total,
           score_breakdown: {
-            freshness: freshnessResult.score,
-            novelty: noveltyResult.score,
-            readiness: readinessResult.score,
-            licensability: licensabilityResult.score,
-            fit: fitResult.score,
-            competition: competitionResult.score,
+            fit:            fitResult.score,
+            record_quality: completenessResult.score,
+            availability:   availabilityResult.score,
+            novelty:      0,
+            freshness:    0,
+            readiness:    0,
+            licensability: 0,
+            competition:  0,
             total,
             signal_coverage,
             scored_dimensions,
@@ -1182,7 +1219,7 @@ export async function registerRoutes(
           why_it_matters: typeof r.innovation_claim === "string" ? r.innovation_claim : "",
           source_urls: sourceUrl ? [sourceUrl] : [],
           source_types: ["tech_transfer" as const],
-          latest_signal_date: firstSeenAt ?? "",
+          latest_signal_date: lastSeenAt ?? firstSeenAt ?? "",
           matching_tags: [],
           evidence_count: 1,
           confidence,

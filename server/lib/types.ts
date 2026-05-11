@@ -28,6 +28,9 @@ export interface ScoreBreakdown {
   licensability: number;
   fit: number;
   competition: number;
+  /** TTO 3-dimension model (Task #980). Present when the new TTO weights are used. */
+  record_quality?: number;
+  availability?: number;
   total: number;
   signal_coverage?: number;
   scored_dimensions?: string[];
@@ -72,6 +75,11 @@ export interface ScoredAsset {
   asset_class?: string | null;
   contact_office?: string;
   signals: RawSignal[];
+  /** Completeness score 0-100 from the ingestion pipeline. Used by TTO scoring. */
+  completeness_score?: number | null;
+  /** ISO date string: when this TTO asset was last confirmed available on its
+   *  source portal. Used by scoreAvailability() in TTO mode. */
+  last_seen_at?: string | null;
 }
 
 export interface BuyerProfile {

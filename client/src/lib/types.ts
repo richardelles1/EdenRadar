@@ -26,12 +26,15 @@ export interface ScoreBreakdown {
   licensability: number;
   fit: number;
   competition: number;
+  record_quality?: number;
+  availability?: number;
   total: number;
   signal_coverage?: number;
   scored_dimensions?: string[];
   dimension_basis?: Record<string, string>;
   confidence_factor?: number;
   category_confidence?: number;
+  text_relevance?: number;
 }
 
 export interface ScoredAsset {
@@ -63,6 +66,8 @@ export interface ScoredAsset {
   previous_stage?: string | null;
   signals: RawSignal[];
   dataSparse?: boolean;
+  completeness_score?: number | null;
+  last_seen_at?: string | null;
 }
 
 export interface BuyerProfile {

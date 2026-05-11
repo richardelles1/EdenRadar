@@ -7,6 +7,11 @@ const LARGE_PHARMA_SPONSORS = [
   "regeneron", "boehringer", "bayer", "gsk", "glaxosmithkline", "takeda",
 ];
 
+// ─── Weight models ────────────────────────────────────────────────────────────
+
+// Legacy 6-dimension model: used for non-TTO mixed-corpus assets (papers,
+// patents, clinical trials). These dimensions produce real differentiation for
+// heterogeneous corpora where source type, stage and IP status vary widely.
 const WEIGHTS: Record<string, number> = {
   freshness: 0.15,
   novelty: 0.20,
@@ -16,15 +21,16 @@ const WEIGHTS: Record<string, number> = {
   competition: 0.10,
 };
 
+// TTO 3-dimension model (Task #980): used for tech_transfer assets in Scout.
+// Licensability/Novelty/Competition are near-constants for TTO corpus (~95/90/80)
+// so they produce zero differentiation. Fit is the reason a buyer opens Scout.
+export const TTO_WEIGHTS: Record<string, number> = {
+  fit: 0.75,
+  record_quality: 0.15,
+  availability: 0.10,
+};
+
 // ─── Confidence-aware ranking (Task #693) ─────────────────────────────────────
-// Multiplies the final score by `(FLOOR + (1-FLOOR) * confidence_factor)` so
-// low-confidence rows are demoted but never zeroed out. Gated by env flag for
-// quick rollback.  confidence_factor = min(categoryConfidence, signalCoverage).
-//
-// Default policy: ON in non-prod, OFF in prod unless `EDEN_CONFIDENCE_AWARE_RANKING`
-// is explicitly set to "true". Lets us validate in dev/preview before production.
-// `LOW_CONFIDENCE_THRESHOLD` is the cutoff below which an asset is demoted out
-// of the top 5 when at least 5 higher-confidence alternatives exist.
 export const CONFIDENCE_FLOOR = 0.4;
 export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 const isProdEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
@@ -61,7 +67,7 @@ export function clamp(v: number): number {
   return Math.max(0, Math.min(100, Math.round(v)));
 }
 
-function daysSince(dateStr: string): number {
+function daysSince(dateStr: string | null | undefined): number {
   if (!dateStr) return 999;
   const d = new Date(dateStr);
   if (isNaN(d.getTime())) {
@@ -204,7 +210,17 @@ export function scoreLicensability(asset: Partial<ScoredAsset>): DimensionResult
   return { score: clamp(score), hasData: true, basis };
 }
 
-function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): DimensionResult {
+// ─── scoreFit (TTO-aware, Task #980) ─────────────────────────────────────────
+// Sub-criteria rebalance vs old model:
+//   - Removed: owner_type_preference (always "university" for TTO — wasted slot)
+//   - Therapeutic area: 40 pts (was 30)
+//   - Modality: 30 pts (was 25)
+//   - Keywords: 30 pts (was 25)
+//   - Stage: +20 bonus if buyer specified stages AND asset matches
+//             (not a miss-penalty — early-stage TTO assets are valid targets)
+//   - excluded_stages: -50 hard penalty (unchanged)
+// Scoring baseline 25 when criteria are set (vs 50 neutral for no profile).
+export function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): DimensionResult {
   if (!buyerProfile) {
     return { score: 50, hasData: false, basis: "No buyer profile configured" };
   }
@@ -213,7 +229,6 @@ function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): Dim
     buyerProfile.therapeutic_areas.length > 0 ||
     buyerProfile.modalities.length > 0 ||
     buyerProfile.preferred_stages.length > 0 ||
-    buyerProfile.owner_type_preference !== "any" ||
     buyerProfile.indication_keywords.length > 0 ||
     buyerProfile.target_keywords.length > 0;
 
@@ -229,7 +244,7 @@ function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): Dim
   if (buyerProfile.therapeutic_areas.length > 0) {
     const assetText = `${asset.indication ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
     const hit = buyerProfile.therapeutic_areas.some((ta) => assetText.includes(ta.toLowerCase()));
-    score += hit ? 30 : 0;
+    score += hit ? 40 : 0;
     checks++;
     if (hit) matched.push("therapeutic area");
     else missed.push("therapeutic area");
@@ -239,38 +254,37 @@ function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): Dim
     const hit = buyerProfile.modalities.some((m) =>
       (asset.modality ?? "").toLowerCase().includes(m.toLowerCase())
     );
-    score += hit ? 25 : 0;
+    score += hit ? 30 : 0;
     checks++;
     if (hit) matched.push("modality");
     else missed.push("modality");
-  }
-
-  if (buyerProfile.preferred_stages.length > 0) {
-    const hit = buyerProfile.preferred_stages.some((ps) =>
-      (asset.development_stage ?? "").toLowerCase().includes(ps.toLowerCase())
-    );
-    score += hit ? 20 : 0;
-    checks++;
-    if (hit) matched.push("stage");
-    else missed.push("stage");
-  }
-
-  if (buyerProfile.owner_type_preference !== "any") {
-    const hit = asset.owner_type === buyerProfile.owner_type_preference;
-    score += hit ? 15 : -10;
-    checks++;
-    if (hit) matched.push("owner type");
   }
 
   const kwAll = [...buyerProfile.indication_keywords, ...buyerProfile.target_keywords];
   if (kwAll.length > 0) {
     const keywordText = `${asset.indication ?? ""} ${asset.target ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
     const hits = kwAll.filter((kw) => keywordText.includes(kw.toLowerCase())).length;
-    score += (hits / kwAll.length) * 25;
+    score += (hits / kwAll.length) * 30;
     checks++;
     if (hits > 0) matched.push(`${hits}/${kwAll.length} keywords`);
+    else missed.push("keywords");
   }
 
+  // Stage: bonus boost when buyer specified stages and asset matches.
+  // No penalty when stage doesn't match — early-stage assets are valid TTO targets.
+  if (buyerProfile.preferred_stages.length > 0) {
+    const hit = buyerProfile.preferred_stages.some((ps) =>
+      (asset.development_stage ?? "").toLowerCase().includes(ps.toLowerCase())
+    );
+    checks++;
+    if (hit) {
+      score += 20;
+      matched.push("stage");
+    }
+    // Deliberate: no `else missed.push("stage")` — stage mismatch is not a miss in TTO context
+  }
+
+  // Excluded stages: hard penalty (buyer explicitly does not want these)
   if (
     buyerProfile.excluded_stages.some((es) =>
       (asset.development_stage ?? "").toLowerCase().includes(es.toLowerCase())
@@ -279,7 +293,9 @@ function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): Dim
     score -= 50;
   }
 
-  const total = checks === 0 ? 50 : clamp(50 + score);
+  // Scoring baseline: 25 when criteria are set but nothing matches.
+  // (Old model used 50, which felt neutral when the asset actually doesn't fit.)
+  const total = checks === 0 ? 50 : clamp(25 + score);
   let basis: string;
   if (matched.length === 0) {
     basis = `No thesis criteria matched (${checks} checked)`;
@@ -323,11 +339,73 @@ export function scoreCompetition(asset: Partial<ScoredAsset>): DimensionResult {
   return { score: clamp(score), hasData: true, basis };
 }
 
+// ─── TTO-specific dimension: Record Completeness (Task #980) ─────────────────
+// Maps the pipeline-computed completeness_score (0–100) directly to this
+// dimension. Completeness is a data hygiene signal: thin records are demoted
+// modestly, not hidden — the buyer can still review them.
+export function scoreCompleteness(asset: Partial<ScoredAsset>): DimensionResult {
+  const raw = asset.completeness_score;
+  if (raw == null || isNaN(Number(raw))) {
+    return { score: 55, hasData: false, basis: "Completeness score not yet computed" };
+  }
+  const cs = Math.max(0, Math.min(100, Number(raw)));
+  let basis: string;
+  if (cs >= 80) basis = `Record completeness: ${cs}/100 (complete)`;
+  else if (cs >= 60) basis = `Record completeness: ${cs}/100 (good)`;
+  else if (cs >= 40) basis = `Record completeness: ${cs}/100 (partial)`;
+  else basis = `Record completeness: ${cs}/100 (thin record)`;
+  return { score: cs, hasData: true, basis };
+}
+
+// ─── TTO-specific dimension: Availability Confirmation (Task #980) ────────────
+// Uses last_seen_at (confirmed crawled on TTO portal) for TTO/factory-scraped
+// assets, and latest_signal_date for publication sources. An asset not seen on
+// its TTO portal in >6 months is quietly demoted — not hidden.
+export function scoreAvailability(asset: Partial<ScoredAsset>): DimensionResult {
+  // Prefer last_seen_at (confirms portal availability) over latest_signal_date
+  const dateStr = asset.last_seen_at || asset.latest_signal_date;
+  const days = daysSince(dateStr);
+
+  if (days >= 999) {
+    return { score: 50, hasData: false, basis: "No portal confirmation date available" };
+  }
+
+  let score: number;
+  let basis: string;
+
+  if (days <= 30) {
+    score = 90;
+    basis = `Confirmed on TTO portal ${days} day${days === 1 ? "" : "s"} ago`;
+  } else if (days <= 90) {
+    score = 80;
+    basis = `Confirmed on TTO portal ${days} days ago`;
+  } else if (days <= 180) {
+    const months = Math.round(days / 30);
+    score = 65;
+    basis = `Last confirmed ~${months} months ago`;
+  } else if (days <= 365) {
+    const months = Math.round(days / 30);
+    score = 45;
+    basis = `Last confirmed ~${months} months ago — may have moved`;
+  } else {
+    const months = Math.round(days / 30);
+    score = 35;
+    basis = `Not confirmed in ~${months} months — availability uncertain`;
+  }
+
+  return { score, hasData: true, basis };
+}
+
+// ─── computeTotal ─────────────────────────────────────────────────────────────
+// Accepts an optional `weights` override so the TTO model can supply
+// TTO_WEIGHTS without changing the function signature for existing callers.
 export function computeTotal(
-  results: Record<string, DimensionResult>
+  results: Record<string, DimensionResult>,
+  weights?: Record<string, number>,
 ): { total: number; signal_coverage: number; scored_dimensions: string[]; dimension_basis: Record<string, string> } {
+  const w = weights ?? WEIGHTS;
   const available = Object.entries(results).filter(([, r]) => r.hasData);
-  const totalAvailableWeight = available.reduce((sum, [k]) => sum + (WEIGHTS[k] ?? 0), 0);
+  const totalAvailableWeight = available.reduce((sum, [k]) => sum + (w[k] ?? 0), 0);
 
   const dimension_basis: Record<string, string> = {};
   for (const [k, r] of Object.entries(results)) {
@@ -346,7 +424,7 @@ export function computeTotal(
   }
 
   const weightedSum = available.reduce((sum, [k, r]) => {
-    return sum + r.score * ((WEIGHTS[k] ?? 0) / totalAvailableWeight);
+    return sum + r.score * ((w[k] ?? 0) / totalAvailableWeight);
   }, 0);
 
   const signal_coverage = Math.round(totalAvailableWeight * 100);
@@ -372,9 +450,6 @@ async function runWithConcurrency<T>(
 }
 
 // ─── Per-user feedback offset (Task #694) ────────────────────────────────────
-// Adds a capped additive bonus per asset class based on a user's prior
-// save/dismiss history. Applied AFTER confidence-aware scaling so the offset
-// nudges ranking without distorting the raw score components.
 export const USER_OFFSET_CAP = 10;
 
 export type UserClassOffsets = Record<string, number>;
@@ -396,34 +471,86 @@ function applyUserOffset(total: number, assetClass: string | null | undefined, o
   return clamp(total + capped);
 }
 
+// ─── Detect TTO context ───────────────────────────────────────────────────────
+// An asset is in TTO context when ALL of its source types are tech_transfer.
+// Mixed assets (e.g. a TTO + patent signal merged cluster) use the legacy model.
+function isTTOAsset(asset: Partial<ScoredAsset>): boolean {
+  const types = asset.source_types ?? [];
+  return types.length > 0 && types.every((t) => t === "tech_transfer");
+}
+
 export async function scoreAssets(
   normalized: Partial<ScoredAsset>[],
   buyerProfile?: BuyerProfile,
   userClassOffsets?: UserClassOffsets,
 ): Promise<ScoredAsset[]> {
   const scored: ScoredAsset[] = normalized.map((asset) => {
-    const freshnessResult = scoreFreshness(asset);
-    const noveltyResult = scoreNovelty(asset);
-    const readinessResult = scoreReadiness(asset);
-    const licensabilityResult = scoreLicensability(asset);
-    const fitResult = scoreFit(asset, buyerProfile);
-    const competitionResult = scoreCompetition(asset);
+    const tto = isTTOAsset(asset);
 
-    const results: Record<string, DimensionResult> = {
-      freshness: freshnessResult,
-      novelty: noveltyResult,
-      readiness: readinessResult,
-      licensability: licensabilityResult,
-      fit: fitResult,
-      competition: competitionResult,
-    };
+    let rawTotal: number;
+    let signal_coverage: number;
+    let scored_dimensions: string[];
+    let dimension_basis: Record<string, string>;
+    let score_breakdown_dims: Partial<ScoreBreakdown>;
 
-    const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(results);
+    if (tto) {
+      // ── TTO 3-dimension model ───────────────────────────────────────────
+      const fitResult       = scoreFit(asset, buyerProfile);
+      const completenessResult = scoreCompleteness(asset);
+      const availabilityResult = scoreAvailability(asset);
 
-    // ── Confidence-aware ranking ─────────────────────────────────────────────
-    // Combine classifier confidence (how sure we are this row IS what we think)
-    // with signal coverage (how many scoring dimensions had real data) and
-    // demote rows where either is weak.
+      const dimResults: Record<string, DimensionResult> = {
+        fit:          fitResult,
+        record_quality: completenessResult,
+        availability: availabilityResult,
+      };
+
+      ({ total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } =
+        computeTotal(dimResults, TTO_WEIGHTS));
+
+      score_breakdown_dims = {
+        fit:            fitResult.score,
+        record_quality: completenessResult.score,
+        availability:   availabilityResult.score,
+        // Zero out legacy fields so the breakdown object is well-formed
+        novelty:      0,
+        freshness:    0,
+        readiness:    0,
+        licensability: 0,
+        competition:  0,
+      };
+    } else {
+      // ── Legacy 6-dimension model (non-TTO: papers, patents, trials) ─────
+      const freshnessResult    = scoreFreshness(asset);
+      const noveltyResult      = scoreNovelty(asset);
+      const readinessResult    = scoreReadiness(asset);
+      const licensabilityResult = scoreLicensability(asset);
+      const fitResult          = scoreFit(asset, buyerProfile);
+      const competitionResult  = scoreCompetition(asset);
+
+      const dimResults: Record<string, DimensionResult> = {
+        freshness:    freshnessResult,
+        novelty:      noveltyResult,
+        readiness:    readinessResult,
+        licensability: licensabilityResult,
+        fit:          fitResult,
+        competition:  competitionResult,
+      };
+
+      ({ total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } =
+        computeTotal(dimResults));
+
+      score_breakdown_dims = {
+        freshness:    freshnessResult.score,
+        novelty:      noveltyResult.score,
+        readiness:    readinessResult.score,
+        licensability: licensabilityResult.score,
+        fit:          fitResult.score,
+        competition:  competitionResult.score,
+      };
+    }
+
+    // ── Confidence-aware ranking ─────────────────────────────────────────
     const categoryConfidence = typeof asset.category_confidence === "number"
       ? Math.max(0, Math.min(1, asset.category_confidence))
       : undefined;
@@ -437,25 +564,18 @@ export async function scoreAssets(
       : rawTotal;
     const total = applyUserOffset(totalAfterConfidence, asset.asset_class, userClassOffsets);
 
-    // Confidence label now reflects the *combined* factor, not just coverage,
-    // so a high-coverage but mis-classified row no longer reads as "high".
     const confidence: "high" | "medium" | "low" =
       confidenceFactor >= 0.75 ? "high" : confidenceFactor >= 0.5 ? "medium" : "low";
 
     const score_breakdown: ScoreBreakdown = {
-      freshness: freshnessResult.score,
-      novelty: noveltyResult.score,
-      readiness: readinessResult.score,
-      licensability: licensabilityResult.score,
-      fit: fitResult.score,
-      competition: competitionResult.score,
+      ...score_breakdown_dims,
       total,
       signal_coverage,
       scored_dimensions,
       dimension_basis,
       confidence_factor: Math.round(confidenceFactor * 100) / 100,
       ...(categoryConfidence !== undefined ? { category_confidence: categoryConfidence } : {}),
-    };
+    } as ScoreBreakdown;
 
     return {
       id: asset.id ?? crypto.randomUUID().slice(0, 8),
@@ -482,6 +602,8 @@ export async function scoreAssets(
       ...(categoryConfidence !== undefined ? { category_confidence: categoryConfidence } : {}),
       asset_class: asset.asset_class ?? null,
       signals: asset.signals ?? [],
+      completeness_score: asset.completeness_score,
+      last_seen_at: asset.last_seen_at,
     };
   });
 
