@@ -1310,9 +1310,13 @@ export const warfScraper: InstitutionScraper = {
       throw new SiteHttpError(503, `${WARF_SEARCH_BASE}${WARF_PARENT_CATEGORIES[0]}`);
     }
 
-    // Force detail fetch for ALL listings: the list page provides only a truncated
-    // entry-summary snippet. We always want the full WARF detail-page sections.
-    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings, fetching detail descriptions (all)...`);
+    // Attempt detail enrichment only for listings that are still thin after the
+    // list-page extraction. WARF detail pages are blocked from Replit cloud IPs
+    // (returns 0 bytes), so this is a best-effort pass — listings already carrying
+    // a truncated description (~150 chars) from div.entry-summary are accepted as-is
+    // and will be further enriched by the AI pipeline later.
+    const thinWarf = results.filter(l => !l.description || l.description.length < 50).length;
+    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings (${thinWarf} thin), attempting detail enrichment for thin only...`);
     await enrichWithDetailPages(results, {
       description: [
         ".section-content",
@@ -1320,7 +1324,7 @@ export const warfScraper: InstitutionScraper = {
         ".entry-content",
         "main p",
       ],
-    }, 9999, undefined, 9999);
+    }, 9999, undefined, 50);
     const enrichedCount = results.filter(l => (l.description?.length ?? 0) >= 50).length;
     console.log(`[scraper] University of Wisconsin (WARF): detail fetch complete: ${enrichedCount} of ${results.length} enriched`);
     const sample = results.find(l => (l.description?.length ?? 0) > 200);
@@ -6712,9 +6716,12 @@ export const embl = createInPartScraper("embl-em", "EMBLEM Technology Transfer (
 
 // ── Tier 2: Flintbox (3 new institutions — credentials from portal HTML) ──────
 
-export const unthscScraper = createFlintboxScraper(
-  { slug: "unthsc", orgId: 13, accessKey: "533cffd9-c553-4942-8f15-92b06b96a089" },
-  "University of North Texas Health Science Center"
+// UNTHSC Flintbox portal (unthsc.flintbox.com) returns {"data":[]} — no public
+// technologies. Direct website also not accessible from Replit cloud IPs.
+// Replaced with stub to eliminate false "Parser failure" in admin health dashboard.
+export const unthscScraper = createStubScraper(
+  "University of North Texas Health Science Center",
+  "Flintbox portal returned empty — no public technologies listed"
 );
 
 export const qatarUniversityScraper = createFlintboxScraper(

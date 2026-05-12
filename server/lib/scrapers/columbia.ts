@@ -74,19 +74,35 @@ export async function fetchColumbiaJson(
   timeoutMs = 12_000,
   externalSignal?: AbortSignal,
 ): Promise<ColumbiaJsonResponse | null> {
+  const attemptFetch = async (): Promise<Response | null> => {
+    try {
+      const timeoutSig = AbortSignal.timeout(timeoutMs);
+      const signal = externalSignal
+        ? AbortSignal.any([externalSignal, timeoutSig])
+        : timeoutSig;
+      return await fetch(`${url}.json`, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+        signal,
+      });
+    } catch {
+      return null;
+    }
+  };
+
   try {
-    const timeoutSig = AbortSignal.timeout(timeoutMs);
-    const signal = externalSignal
-      ? AbortSignal.any([externalSignal, timeoutSig])
-      : timeoutSig;
-    const res = await fetch(`${url}.json`, {
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        Accept: "application/json",
-      },
-      signal,
-    });
+    let res = await attemptFetch();
+    if (!res) return null;
+
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 5_000));
+      res = await attemptFetch();
+      if (!res || !res.ok) return null;
+    }
+
     if (!res.ok) return null;
     return (await res.json()) as ColumbiaJsonResponse;
   } catch {
@@ -167,30 +183,49 @@ export async function fetchColumbiaSitemapUrls(): Promise<string[] | null> {
 
 export const columbiaScraper: InstitutionScraper = {
   institution: INST,
+  // Columbia's .json endpoint rate-limits at high request rates; each fetch
+  // needs ~1.5 s spacing. With ~1,200 URLs on a full scan, CONCURRENCY=3 +
+  // DELAY=600ms keeps rate ≤ 5 req/s and finishes in ~4 min. We extend the
+  // timeout to 10 min to stay safe even if some 429-retries fire.
+  scraperTimeoutMs: 10 * 60 * 1000,
 
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
     console.log(`[scraper] ${INST}: fetching sitemap…`);
     try {
-      const techUrls = await fetchColumbiaSitemapUrls();
-      if (!techUrls || techUrls.length === 0) {
+      const allUrls = await fetchColumbiaSitemapUrls();
+      if (!allUrls || allUrls.length === 0) {
         console.warn(
           `[scraper] ${INST}: sitemap unavailable — skipping full scrape this cycle`,
         );
         return [];
       }
+
+      // Only fetch .json for URLs not already in the DB. This keeps rate-limited
+      // repeat runs fast (only new listings need a network call). Known listings
+      // stay in the DB untouched; the AI pipeline handles re-enrichment.
+      const newUrls = knownUrls
+        ? allUrls.filter((u) => !knownUrls.has(u))
+        : allUrls;
+
       console.log(
-        `[scraper] ${INST}: ${techUrls.length} technology URLs — fetching JSON details…`,
+        `[scraper] ${INST}: ${allUrls.length} sitemap URLs, ${newUrls.length} new (not yet indexed) — fetching JSON…`,
       );
 
-      const results: ScrapedListing[] = [];
-      const CONCURRENCY = 5;
-      const DELAY_MS = 300;
+      if (newUrls.length === 0) {
+        console.log(`[scraper] ${INST}: no new listings this cycle`);
+        return [];
+      }
 
-      for (let i = 0; i < techUrls.length; i += CONCURRENCY) {
-        const batch = techUrls.slice(i, i + CONCURRENCY);
+      const results: ScrapedListing[] = [];
+      const CONCURRENCY = 3;
+      const DELAY_MS = 600;
+
+      for (let i = 0; i < newUrls.length; i += CONCURRENCY) {
+        if (signal?.aborted) break;
+        const batch = newUrls.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
           batch.map(async (url) => {
-            const data = await fetchColumbiaJson(url);
+            const data = await fetchColumbiaJson(url, 12_000, signal);
             if (!data) return null;
             return columbiaJsonToListing(url, data);
           }),
@@ -198,7 +233,7 @@ export const columbiaScraper: InstitutionScraper = {
         for (const r of batchResults) {
           if (r) results.push(r);
         }
-        if (i + CONCURRENCY < techUrls.length) {
+        if (i + CONCURRENCY < newUrls.length) {
           await new Promise((r) => setTimeout(r, DELAY_MS));
         }
       }
