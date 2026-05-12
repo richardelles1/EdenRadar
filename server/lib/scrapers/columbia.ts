@@ -183,10 +183,13 @@ export async function fetchColumbiaSitemapUrls(): Promise<string[] | null> {
 
 export const columbiaScraper: InstitutionScraper = {
   institution: INST,
-  // Columbia's .json endpoint rate-limits at high request rates; each fetch
-  // needs ~1.5 s spacing. With ~1,200 URLs on a full scan, CONCURRENCY=3 +
-  // DELAY=600ms keeps rate ≤ 5 req/s and finishes in ~4 min. We extend the
-  // timeout to 10 min to stay safe even if some 429-retries fire.
+  // Columbia's .json endpoint rate-limits when hit too quickly.
+  // Diagnosis: 5 concurrent / 300 ms delay (~17 req/s) → HTTP 429.
+  // Safe rate: CONCURRENCY=1, DELAY=1500ms (~0.67 req/s).
+  // On repeat syncs knownUrls filters to only NEW listings (typically 0–50),
+  // plus a small health-validation sample so the scraper always returns a
+  // non-zero count and the admin panel shows "OK" rather than "0 collected".
+  // scraperTimeoutMs raised to 10 min in case a first-time full scan is needed.
   scraperTimeoutMs: 10 * 60 * 1000,
 
   async scrape(signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
@@ -200,29 +203,35 @@ export const columbiaScraper: InstitutionScraper = {
         return [];
       }
 
-      // Only fetch .json for URLs not already in the DB. This keeps rate-limited
-      // repeat runs fast (only new listings need a network call). Known listings
-      // stay in the DB untouched; the AI pipeline handles re-enrichment.
+      // Separate sitemap URLs into new (never indexed) and known (already in DB).
       const newUrls = knownUrls
         ? allUrls.filter((u) => !knownUrls.has(u))
         : allUrls;
 
+      // Always fetch a small sample of known URLs so repeat syncs return a
+      // non-zero result — this keeps institution health monitoring accurate.
+      const HEALTH_SAMPLE = 15;
+      const knownSample: string[] = knownUrls
+        ? allUrls.filter((u) => knownUrls.has(u)).slice(0, HEALTH_SAMPLE)
+        : [];
+
+      const fetchUrls = [...newUrls, ...knownSample];
+
       console.log(
-        `[scraper] ${INST}: ${allUrls.length} sitemap URLs, ${newUrls.length} new (not yet indexed) — fetching JSON…`,
+        `[scraper] ${INST}: ${allUrls.length} sitemap URLs — ${newUrls.length} new + ${knownSample.length} health-sample — fetching ${fetchUrls.length} JSON endpoints…`,
       );
 
-      if (newUrls.length === 0) {
-        console.log(`[scraper] ${INST}: no new listings this cycle`);
+      if (fetchUrls.length === 0) {
         return [];
       }
 
       const results: ScrapedListing[] = [];
-      const CONCURRENCY = 3;
-      const DELAY_MS = 600;
+      const CONCURRENCY = 1;
+      const DELAY_MS = 1500;
 
-      for (let i = 0; i < newUrls.length; i += CONCURRENCY) {
+      for (let i = 0; i < fetchUrls.length; i += CONCURRENCY) {
         if (signal?.aborted) break;
-        const batch = newUrls.slice(i, i + CONCURRENCY);
+        const batch = fetchUrls.slice(i, i + CONCURRENCY);
         const batchResults = await Promise.all(
           batch.map(async (url) => {
             const data = await fetchColumbiaJson(url, 12_000, signal);
@@ -233,7 +242,7 @@ export const columbiaScraper: InstitutionScraper = {
         for (const r of batchResults) {
           if (r) results.push(r);
         }
-        if (i + CONCURRENCY < newUrls.length) {
+        if (i + CONCURRENCY < fetchUrls.length) {
           await new Promise((r) => setTimeout(r, DELAY_MS));
         }
       }
@@ -242,7 +251,7 @@ export const columbiaScraper: InstitutionScraper = {
         (r) => !r.description || r.description.length < 50,
       ).length;
       console.log(
-        `[scraper] ${INST}: ${results.length} listings (${results.length - thinCount} with description, ${thinCount} thin)`,
+        `[scraper] ${INST}: ${results.length} listings collected (${results.length - thinCount} with description, ${thinCount} thin)`,
       );
       return results;
     } catch (err: any) {
