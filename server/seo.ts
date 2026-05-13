@@ -178,6 +178,7 @@ export function renderSeoHtml(
 
   const headTags = `
     <title>${escapeHtml(page.title)}</title>
+    <meta name="robots" content="index, follow" />
     <meta name="description" content="${escapeHtml(page.description)}" />
     <meta name="theme-color" content="#059669" />
     <link rel="canonical" href="${escapeHtml(canonical)}" />
@@ -211,6 +212,7 @@ ${FONT_BLOCK}
   out = out.replace(/<link\s+rel=["']preconnect["'][^>]*fonts\.googleapis\.com[^>]*\/?>/gi, "");
   out = out.replace(/<link\s+rel=["']preconnect["'][^>]*fonts\.gstatic\.com[^>]*\/?>/gi, "");
   out = out.replace(/<link[^>]*fonts\.googleapis\.com\/css2[^>]*\/?>/gi, "");
+  out = out.replace(/<meta\s+name=["']robots["'][^>]*\/?>/gi, "");
   out = out.replace(/<meta\s+property=["']og:[^"']+["'][^>]*\/?>/gi, "");
   out = out.replace(/<meta\s+name=["']twitter:[^"']+["'][^>]*\/?>/gi, "");
 
@@ -303,6 +305,7 @@ export function registerSeoRoutes(
           .set({
             "Content-Type": "text/html; charset=utf-8",
             "Cache-Control": "public, max-age=300, must-revalidate",
+            "X-Robots-Tag": "index, follow",
           })
           .end(html);
       } catch (err) {

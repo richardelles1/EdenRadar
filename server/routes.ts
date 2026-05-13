@@ -12679,9 +12679,14 @@ If multiple assets appear, return each as a separate array item.`;
       return res.status(400).json({ error: "Missing stripe-signature header" });
     }
 
+    const rawBody = req.rawBody as Buffer | string | undefined;
+    if (!rawBody) {
+      console.warn("[stripe/webhook] rawBody is missing — body-parser verify callback did not fire. Returning 200 to stop Stripe retries.");
+      return res.status(200).json({ received: true, skipped: "no_raw_body" });
+    }
+
     let event: { type: string; data: { object: Record<string, unknown> } };
     try {
-      const rawBody = req.rawBody as Buffer | string;
       event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET) as unknown as { type: string; data: { object: Record<string, unknown> } };
     } catch (err: any) {
       console.error("[stripe/webhook] Signature verification failed:", err?.message);
