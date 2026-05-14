@@ -3871,9 +3871,19 @@ export async function registerRoutes(
 
   let biologyFillRunning = false;
   let biologyFillResult: import("./lib/pipeline/biologyFill").BiologyFillSummary | null = null;
+  let biologyFillProgress: { processed: number; total: number; phase: string } | null = null;
+  let biologyFillAbortController: AbortController | null = null;
 
   app.get("/api/admin/enrich/biology-fill/status", requireAdmin, (_req, res) => {
-    res.json({ running: biologyFillRunning, result: biologyFillResult });
+    res.json({ running: biologyFillRunning, result: biologyFillResult, progress: biologyFillProgress });
+  });
+
+  app.post("/api/admin/enrich/biology-fill/stop", requireAdmin, (_req, res) => {
+    if (!biologyFillRunning || !biologyFillAbortController) {
+      return res.status(409).json({ error: "Biology fill is not running" });
+    }
+    biologyFillAbortController.abort();
+    res.json({ stopped: true });
   });
 
   app.get("/api/admin/enrich/biology-fill/count", requireAdmin, async (req, res) => {
@@ -3903,6 +3913,8 @@ export async function registerRoutes(
       }
       biologyFillRunning = true;
       biologyFillResult = null;
+      biologyFillProgress = null;
+      biologyFillAbortController = new AbortController();
       res.json({ started: true });
 
       (async () => {
@@ -3911,7 +3923,12 @@ export async function registerRoutes(
         const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
         const client = await dbPool.connect();
         try {
-          const summary = await runBiologyFill(client);
+          const summary = await runBiologyFill(client, {
+            signal: biologyFillAbortController!.signal,
+            onProgress: (processed, total, phase) => {
+              biologyFillProgress = { processed, total, phase };
+            },
+          });
           biologyFillResult = summary;
           console.log(
             `[biology-fill] Done — updated ${summary.totalUpdated} assets` +
@@ -3923,13 +3940,16 @@ export async function registerRoutes(
           client.release();
           await dbPool.end();
           biologyFillRunning = false;
+          biologyFillAbortController = null;
         }
       })().catch(err => {
         console.error("[biology-fill] Async error:", err);
         biologyFillRunning = false;
+        biologyFillAbortController = null;
       });
     } catch (err: any) {
       biologyFillRunning = false;
+      biologyFillAbortController = null;
       res.status(500).json({ error: err.message ?? "Failed to start biology fill" });
     }
   });

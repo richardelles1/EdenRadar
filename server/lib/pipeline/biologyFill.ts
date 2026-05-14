@@ -104,7 +104,8 @@ export type BiologyFillOptions = {
   dryRun?: boolean;
   skipGpt?: boolean;
   gptBatchSize?: number;
-  onProgress?: (processed: number, total: number) => void;
+  signal?: AbortSignal;
+  onProgress?: (processed: number, total: number, phase: string) => void;
 };
 
 // ── Tier 0: Derive from known target (zero cost, highest confidence) ──────────
@@ -353,7 +354,7 @@ export async function runBiologyFill(
   dbClient: import("pg").PoolClient,
   opts: BiologyFillOptions = {},
 ): Promise<BiologyFillSummary> {
-  const { dryRun = false, skipGpt = false, gptBatchSize = 50, onProgress } = opts;
+  const { dryRun = false, skipGpt = false, gptBatchSize = 50, signal, onProgress } = opts;
 
   const { rows: assets } = await dbClient.query<BiologyAsset>(`
     SELECT id, asset_name, summary, abstract, indication, modality, target,
@@ -364,11 +365,15 @@ export async function runBiologyFill(
     ORDER BY completeness_score DESC NULLS LAST, id
   `);
 
+  const total = assets.length;
+  onProgress?.(0, total, "classifying");
+
   const targetDerived: Array<{ id: number; biology: string; asset: BiologyAsset }> = [];
   const ruleMatches: Array<{ id: number; biology: string; asset: BiologyAsset }> = [];
   const unmatched: BiologyAsset[] = [];
 
   for (const asset of assets) {
+    if (signal?.aborted) break;
     const fromTarget = deriveFromTarget(asset.target);
     if (fromTarget) {
       targetDerived.push({ id: asset.id, biology: fromTarget, asset });
@@ -382,17 +387,23 @@ export async function runBiologyFill(
     }
   }
 
+  const fastResolved = targetDerived.length + ruleMatches.length;
+  onProgress?.(fastResolved, total, `GPT fallback (0 / ${unmatched.length})`);
+
   const gptMatches: Array<{ id: number; biology: string; asset: BiologyAsset }> = [];
 
-  if (!skipGpt && unmatched.length > 0) {
+  if (!skipGpt && unmatched.length > 0 && !signal?.aborted) {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     for (let i = 0; i < unmatched.length; i += gptBatchSize) {
+      if (signal?.aborted) break;
       const batch = unmatched.slice(i, i + gptBatchSize);
       const gptResult = await gptFallback(batch, openai);
       for (const asset of batch) {
         const b = gptResult.get(asset.id);
         if (b) gptMatches.push({ id: asset.id, biology: b, asset });
       }
+      const gptDone = Math.min(i + gptBatchSize, unmatched.length);
+      onProgress?.(fastResolved + gptDone, total, `GPT fallback (${gptDone} / ${unmatched.length})`);
       if (i + gptBatchSize < unmatched.length) {
         await new Promise(r => setTimeout(r, 200));
       }
@@ -404,6 +415,7 @@ export async function runBiologyFill(
 
   if (!dryRun) {
     for (let i = 0; i < allUpdates.length; i++) {
+      if (signal?.aborted) break;
       const u = allUpdates[i];
       await dbClient.query(
         `UPDATE ingested_assets
@@ -417,8 +429,8 @@ export async function runBiologyFill(
         ],
       );
       totalUpdated++;
-      if (onProgress && (i % 100 === 0 || i === allUpdates.length - 1)) {
-        onProgress(totalUpdated, allUpdates.length);
+      if (onProgress && (i % 50 === 0 || i === allUpdates.length - 1)) {
+        onProgress(totalUpdated, allUpdates.length, `writing (${totalUpdated} / ${allUpdates.length})`);
       }
     }
   }

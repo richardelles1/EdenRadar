@@ -4,7 +4,7 @@ import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -3321,14 +3321,14 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     staleTime: 30_000,
   });
 
-  const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null }>({
+  const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null; progress: { processed: number; total: number; phase: string } | null }>({
     queryKey: ["/api/admin/enrich/biology-fill/status", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/enrich/biology-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    refetchInterval: 3000,
+    refetchInterval: (query) => query.state.data?.running ? 1500 : 5000,
   });
 
   const runBiologyFill = useMutation({
@@ -3341,6 +3341,14 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
       refetchBiologyFillCount();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+    },
+  });
+
+  const stopBiologyFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrich/biology-fill/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
     },
   });
 
@@ -4788,12 +4796,35 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   <span className="text-xs text-muted-foreground">relevant assets without a biology value</span>
                 </div>
               )}
-              {(biologyFillStatus?.running || runBiologyFill.isPending) && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
-                  <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">Running biology fill — target derivation → rules → GPT fallback…</span>
-                </div>
-              )}
+              {(biologyFillStatus?.running || runBiologyFill.isPending) && (() => {
+                const prog = biologyFillStatus?.progress;
+                const pct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
+                return (
+                  <div className="space-y-2 p-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
+                        <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">
+                          {prog ? prog.phase : "Starting…"}
+                        </span>
+                      </div>
+                      {prog && prog.total > 0 && (
+                        <span className="text-xs tabular-nums text-purple-600 dark:text-purple-400 font-mono">
+                          {prog.processed.toLocaleString()} / {prog.total.toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                    {prog && prog.total > 0 && (
+                      <div className="w-full bg-purple-100 dark:bg-purple-900/40 rounded-full h-1.5">
+                        <div
+                          className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {biologyFillDone && !biologyFillStatus?.running && (
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30" data-testid="biology-fill-result">
                   <CheckCircle2 className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
@@ -4810,12 +4841,20 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30" data-testid="button-biology-fill-count">
                   <RefreshCw className="h-3.5 w-3.5" />Count
                 </Button>
-                <Button size="sm" onClick={() => runBiologyFill.mutate()}
-                  disabled={runBiologyFill.isPending || biologyFillStatus?.running || (biologyFillCount?.total ?? 0) === 0}
-                  className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-run-biology-fill">
-                  {(runBiologyFill.isPending || biologyFillStatus?.running) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                  Fill {biologyFillCount != null ? `(${biologyFillCount.total.toLocaleString()})` : ""}
-                </Button>
+                {biologyFillStatus?.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stopBiologyFill.mutate()}
+                    disabled={stopBiologyFill.isPending}
+                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-stop-biology-fill">
+                    <Square className="h-3.5 w-3.5 fill-current" />Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => runBiologyFill.mutate()}
+                    disabled={runBiologyFill.isPending || (biologyFillCount?.total ?? 0) === 0}
+                    className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-run-biology-fill">
+                    {runBiologyFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Fill {biologyFillCount != null ? `(${biologyFillCount.total.toLocaleString()})` : ""}
+                  </Button>
+                )}
               </div>
             </div>
           </div>
