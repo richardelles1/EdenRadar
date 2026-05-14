@@ -228,22 +228,16 @@ export const columbiaScraper: InstitutionScraper = {
         ? allUrls.filter((u) => !knownUrls.has(u))
         : allUrls;
 
-      // Always fetch a small sample of known URLs so repeat syncs return a
-      // non-zero result — keeps institution health monitoring accurate.
-      const HEALTH_SAMPLE = 15;
-      const knownSample: string[] = knownUrls
-        ? allUrls.filter((u) => knownUrls.has(u)).slice(0, HEALTH_SAMPLE)
-        : [];
-
-      const fetchUrls = [...newUrls, ...knownSample];
-
-      console.log(
-        `[scraper] ${INST}: ${allUrls.length} sitemap URLs — ${newUrls.length} new + ${knownSample.length} health-sample — fetching ${fetchUrls.length} JSON endpoints…`,
-      );
-
-      if (fetchUrls.length === 0) {
+      if (newUrls.length === 0) {
+        console.log(`[scraper] ${INST}: no new listings this cycle (${allUrls.length} sitemap URLs all already indexed)`);
         return [];
       }
+
+      const fetchUrls = newUrls;
+
+      console.log(
+        `[scraper] ${INST}: ${allUrls.length} sitemap URLs — ${newUrls.length} new — fetching ${fetchUrls.length} JSON endpoints…`,
+      );
 
       const results: ScrapedListing[] = [];
       const CONCURRENCY = 1;

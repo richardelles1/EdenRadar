@@ -3095,7 +3095,13 @@ export async function registerRoutes(
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           if ((session.rawCount ?? 0) === 0) {
-            health = classifyByError(session.errorMessage);
+            // No error message + existing DB records = sitemap-based scraper found nothing new.
+            // That is healthy ("index is current"), not a parser failure.
+            if (!session.errorMessage && totalInDb > 0) {
+              health = "ok";
+            } else {
+              health = classifyByError(session.errorMessage);
+            }
           } else {
             health = "ok";
           }
