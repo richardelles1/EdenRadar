@@ -1,0 +1,259 @@
+I actually think your instinct is correct here.
+
+This is an important moment because you’re resisting “feature gravity.”
+
+A lot of founders accidentally turn:
+
+a sharp intelligence product
+
+into:
+
+a cluttered analytics suite.
+
+And biotech especially is full of overbuilt dashboards nobody uses.
+
+So let’s strip this down to the core truth.
+
+⸻
+
+Your Core Value Is NOT:
+
+* valuation
+* finance tooling
+* deal economics
+* rNPV math
+
+Your core value is:
+
+EARLY DISCOVERY.
+
+Specifically:
+
+“seeing commercially relevant science before competitors.”
+
+That is the killer proposition.
+
+And honestly?
+That alone is already enormous.
+
+⸻
+
+So Where Does the Modeling Fit?
+
+Not as:
+
+“the product.”
+
+As:
+
+confidence reinforcement.
+
+Small but important distinction.
+
+⸻
+
+The Comp Engine Is NOT Meant To Become:
+
+“Here’s the valuation.”
+
+It’s meant to answer:
+
+“Has pharma cared about things like this before?”
+
+THAT is the actual utility.
+
+Very lightweight.
+Very contextual.
+
+⸻
+
+The Correct UX Is Probably:
+
+Inside dossier:
+
+“Relevant Historical Activity”
+
+NOT:
+
+“Valuation Model”
+
+That wording matters enormously.
+
+⸻
+
+Example
+
+Instead of:
+
+❌
+
+“Predicted value: $340M”
+
+You show:
+
+✅
+
+“7 comparable licensing transactions identified in radiopharma oncology since 2022.”
+
+Then:
+
+* median stage
+* median upfront
+* recent acquirers
+* partnership velocity
+
+That’s enough.
+
+No giant finance engine required.
+
+⸻
+
+Why This Matters
+
+Because your users are:
+
+* scouts
+* BD teams
+* innovation groups
+* strategic partnerships people
+
+Their FIRST question is:
+
+“Should we pay attention?”
+
+NOT:
+
+“What is the DCF?”
+
+That happens later.
+
+Much later.
+
+⸻
+
+The More I Think About It…
+
+The real game-breaker for Eden is probably NOT valuation.
+
+It’s:
+
+signal aggregation + prioritization.
+
+Meaning:
+
+“What should I care about this week?”
+
+That’s the billion-dollar layer.
+
+⸻
+
+The Most Valuable Future Features Are Probably:
+
+1. Emergence Detection
+
+“This area is accelerating unusually fast.”
+
+⸻
+
+2. Hidden Convergence
+
+“Three institutions are independently moving toward the same target class.”
+
+⸻
+
+3. White Space Discovery
+
+“Strong publication activity, weak partnership activity.”
+
+This is HUGE.
+
+⸻
+
+4. Scientist/PI Tracking
+
+“This lab repeatedly commercializes successful assets.”
+
+VERY valuable.
+
+⸻
+
+5. Institutional Momentum
+
+“University X suddenly becoming highly active in radiopharma.”
+
+Again:
+massive signal.
+
+⸻
+
+The Important Insight
+
+The comp engine is:
+
+supporting evidence.
+
+NOT:
+
+the hero feature.
+
+That’s the key distinction.
+
+And honestly?
+That’s GOOD news.
+
+Because it means:
+
+* smaller build
+* lower complexity
+* cleaner UX
+* stronger positioning
+* less enterprise skepticism
+
+⸻
+
+My Strong Recommendation
+
+Do NOT reposition Eden around:
+
+* valuation
+* deal pricing
+* finance modeling
+
+Stay anchored on:
+
+discovery intelligence.
+
+Then use:
+
+* historical transactions
+* partnership activity
+* comparable programs
+
+as:
+
+trust-building context layers.
+
+That’s the correct balance.
+
+⸻
+
+The Real Vision
+
+The best version of Eden probably feels like:
+
+“The earliest reliable signal layer for commercially relevant biotech innovation.”
+
+THAT is differentiated.
+
+And importantly:
+AI alone does not magically replace that,
+because the hard part is:
+
+* ingestion
+* normalization
+* tracking
+* emergence detection
+* workflow integration
+* trust
+
+Not “answering questions.”

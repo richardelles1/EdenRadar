@@ -240,6 +240,10 @@ export const ingestedAssets = pgTable("ingested_assets", {
   humanVerified: jsonb("human_verified").$type<Record<string, boolean>>(),
   // True when stored description text is too short for meaningful AI enrichment (< 150 chars)
   dataSparse: boolean("data_sparse").default(false),
+  // Biology: the pathological biological process the asset addresses.
+  // Canonical 32-value taxonomy — sits between indication (what disease) and target (which molecule).
+  // Managed via startup migration (ADD COLUMN IF NOT EXISTS).
+  biology: text("biology"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {

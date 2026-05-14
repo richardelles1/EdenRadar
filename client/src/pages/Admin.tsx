@@ -3158,6 +3158,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [classifyConfirm, setClassifyConfirm] = React.useState(false);
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [ttoLicensingFillDone, setTtoLicensingFillDone] = React.useState<{ filled: number; beforeCount: number } | null>(null);
+  const [biologyFillDone, setBiologyFillDone] = React.useState<{ totalUpdated: number; targetDerived: number; ruleMatched: number; gptResolved: number; unresolved: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [detailRefetchPolling, setDetailRefetchPolling] = React.useState(false);
   const [drInstitution, setDrInstitution] = React.useState("");
@@ -3309,6 +3310,45 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     },
     staleTime: 30_000,
   });
+
+  const { data: biologyFillCount, refetch: refetchBiologyFillCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrich/biology-fill/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrich/biology-fill/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
+  const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null }>({
+    queryKey: ["/api/admin/enrich/biology-fill/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrich/biology-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: 3000,
+  });
+
+  const runBiologyFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrich/biology-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json() as Promise<{ started: boolean }>;
+    },
+    onSuccess: () => {
+      refetchBiologyFillCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+    },
+  });
+
+  React.useEffect(() => {
+    if (biologyFillStatus?.result && !biologyFillStatus.running) {
+      setBiologyFillDone(biologyFillStatus.result as any);
+    }
+  }, [biologyFillStatus?.result, biologyFillStatus?.running]);
 
   const runModalityFill = useMutation({
     mutationFn: async () => {
@@ -4722,6 +4762,59 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-modality-fill">
                   {runModalityFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                   Fill {modalityFillCount != null ? `(${modalityFillCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2e: Biology Fill — target-derived + rule-based + GPT fallback */}
+          <div className="border border-purple-200 dark:border-purple-900 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 overflow-hidden" data-testid="card-biology-fill">
+            <div className="px-4 py-2.5 border-b border-purple-200 dark:border-purple-900 bg-purple-100/60 dark:bg-purple-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-xs font-bold shrink-0">2e</span>
+              <span className="text-sm font-semibold text-purple-800 dark:text-purple-300">Biology Fill</span>
+              <span className="ml-auto text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 rounded-full">Tier A free · Tier B GPT-mini fallback</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fills the <span className="font-medium text-foreground">biology</span> field — the pathological mechanism between indication and target — using a 32-value closed taxonomy.
+                Three layers run in order: <span className="font-mono text-[10px] bg-muted px-1 rounded">target→biology derivation</span> (zero cost),
+                <span className="font-mono text-[10px] bg-muted px-1 rounded">regex rules</span> (zero cost),
+                then <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> fallback for unresolved assets.
+                Respects <span className="font-mono text-[10px] bg-muted px-1 rounded">enrichment_sources</span> provenance tracking.
+              </p>
+              {biologyFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-purple-700 dark:text-purple-400">{biologyFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">relevant assets without a biology value</span>
+                </div>
+              )}
+              {(biologyFillStatus?.running || runBiologyFill.isPending) && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
+                  <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">Running biology fill — target derivation → rules → GPT fallback…</span>
+                </div>
+              )}
+              {biologyFillDone && !biologyFillStatus?.running && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30" data-testid="biology-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
+                  <div className="text-xs font-medium text-purple-700 dark:text-purple-400 space-y-0.5">
+                    <p>Done — <strong>{biologyFillDone.totalUpdated.toLocaleString()}</strong> biology fields written</p>
+                    <p className="text-purple-600/80 dark:text-purple-500/80">
+                      Target-derived: {biologyFillDone.targetDerived.toLocaleString()} · Rule: {biologyFillDone.ruleMatched.toLocaleString()} · GPT-mini: {biologyFillDone.gptResolved.toLocaleString()} · Unresolved: {biologyFillDone.unresolved.toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchBiologyFillCount()}
+                  className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30" data-testid="button-biology-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runBiologyFill.mutate()}
+                  disabled={runBiologyFill.isPending || biologyFillStatus?.running || (biologyFillCount?.total ?? 0) === 0}
+                  className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-run-biology-fill">
+                  {(runBiologyFill.isPending || biologyFillStatus?.running) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Fill {biologyFillCount != null ? `(${biologyFillCount.total.toLocaleString()})` : ""}
                 </Button>
               </div>
             </div>

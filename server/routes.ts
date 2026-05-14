@@ -3867,6 +3867,73 @@ export async function registerRoutes(
     }
   });
 
+  // ── Biology Fill ───────────────────────────────────────────────────────────
+
+  let biologyFillRunning = false;
+  let biologyFillResult: import("./lib/pipeline/biologyFill").BiologyFillSummary | null = null;
+
+  app.get("/api/admin/enrich/biology-fill/status", requireAdmin, (_req, res) => {
+    res.json({ running: biologyFillRunning, result: biologyFillResult });
+  });
+
+  app.get("/api/admin/enrich/biology-fill/count", requireAdmin, async (req, res) => {
+    try {
+      const { Pool } = await import("pg");
+      const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+      const client = await dbPool.connect();
+      try {
+        const { rows } = await client.query(
+          `SELECT COUNT(*) AS total FROM ingested_assets
+           WHERE relevant = true AND (biology IS NULL OR biology = '' OR biology = 'unknown')`,
+        );
+        res.json({ total: parseInt(rows[0].total, 10) });
+      } finally {
+        client.release();
+        await dbPool.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to count" });
+    }
+  });
+
+  app.post("/api/admin/enrich/biology-fill", requireAdmin, async (req, res) => {
+    try {
+      if (biologyFillRunning) {
+        return res.status(409).json({ error: "Biology fill already running" });
+      }
+      biologyFillRunning = true;
+      biologyFillResult = null;
+      res.json({ started: true });
+
+      (async () => {
+        const { Pool } = await import("pg");
+        const { runBiologyFill } = await import("./lib/pipeline/biologyFill");
+        const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+        const client = await dbPool.connect();
+        try {
+          const summary = await runBiologyFill(client);
+          biologyFillResult = summary;
+          console.log(
+            `[biology-fill] Done — updated ${summary.totalUpdated} assets` +
+            ` (target_derived:${summary.targetDerived} rule:${summary.ruleMatched}` +
+            ` gpt_sent:${summary.gptSent} gpt_resolved:${summary.gptResolved}` +
+            ` unresolved:${summary.unresolved})`,
+          );
+        } finally {
+          client.release();
+          await dbPool.end();
+          biologyFillRunning = false;
+        }
+      })().catch(err => {
+        console.error("[biology-fill] Async error:", err);
+        biologyFillRunning = false;
+      });
+    } catch (err: any) {
+      biologyFillRunning = false;
+      res.status(500).json({ error: err.message ?? "Failed to start biology fill" });
+    }
+  });
+
   // ── Data-Sparse Flag Reset ─────────────────────────────────────────────────
 
   app.post("/api/admin/enrichment/clear-sparse", async (req, res) => {
