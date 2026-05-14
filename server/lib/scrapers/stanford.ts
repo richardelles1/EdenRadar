@@ -8,17 +8,18 @@ const INST = "Stanford University";
 // CDN cache sharding causes specific page numbers to take 10-12s (confirmed).
 // PAGE_WINDOW=5 is correct: slow pages run alongside fast ones in parallel —
 // each batch finishes in max(page times) ≈ 12s. 150 pages ÷ 5 = 30 batches
-// × 12s = 360s ≈ 6 min, well within the 20-min scraperTimeoutMs.
-// PAGE_WINDOW=2 caused 75 batches × 30s worst-case = 37 min — too slow.
+// × 12s = 360s ≈ 6 min, well within the scraperTimeoutMs.
 const PAGE_WINDOW = 5;
 // Per-page timeout: 30s. Cold-cache pages hit 10-12s; 30s gives headroom.
-// 30 batches × avg 5-12s = 150-360s — well within the 20-min scraperTimeoutMs.
 const PAGE_TIMEOUT_MS = 30_000;
 
 export const stanfordScraper: InstitutionScraper = {
   institution: INST,
-  scraperTimeoutMs: 25 * 60 * 1000, // 25 min — detail fetch for all ~916 thin listings adds ~15 min on top of ~6 min list scan
-  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+  // 25 min covers the full first-time run (6 min list + 15 min ~916 detail pages).
+  // On repeat syncs with knownUrls supplied, detail enrichment is skipped for
+  // already-indexed listings so the run completes in ~6 min (just list scan).
+  scraperTimeoutMs: 25 * 60 * 1000,
+  async scrape(signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
@@ -34,9 +35,8 @@ export const stanfordScraper: InstitutionScraper = {
       // Extract listings from a parsed page.
       // Returns the RAW count of matching elements so the adaptive window scan
       // can detect a genuinely empty page regardless of deduplication.
-      // Uses the Drupal 11 class h3.teaser__title a — this is the dedicated
-      // title anchor for technology listings and avoids picking up any nav or
-      // category links that also happen to start with /technology/.
+      // Uses the Drupal 11 class h3.teaser__title a — the dedicated title anchor
+      // for technology listings, avoids picking up nav or category links.
       const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): number => {
         let raw = 0;
         $("h3.teaser__title a").each((_, el) => {
@@ -65,10 +65,7 @@ export const stanfordScraper: InstitutionScraper = {
       // zero matching elements (end of results), OR when N consecutive batches
       // ALL fail to load (true CDN block). Sporadic individual page failures
       // (1 to PAGE_WINDOW-1 per batch) are tolerated — just skipped and logged.
-      // EMERGENCY_CEIL is a runaway-loop guard only.
-      // Stanford ~150 pages ÷ PAGE_WINDOW=5 = 30 batches × ≤12s each ≈ 6 min.
       const EMERGENCY_CEIL = 500;
-      // Stop only after this many consecutive batches where EVERY page failed.
       const CDN_BLOCK_CEIL = 2;
       let offset = 1;
       let skipped = 0;
@@ -101,7 +98,6 @@ export const stanfordScraper: InstitutionScraper = {
         if (hitEmpty) break;
 
         if (fetchFails >= pageNums.length) {
-          // Every page in the batch failed — possible full CDN block.
           consecutiveFullFails++;
           if (consecutiveFullFails >= CDN_BLOCK_CEIL) {
             console.warn(
@@ -110,7 +106,7 @@ export const stanfordScraper: InstitutionScraper = {
             break;
           }
         } else {
-          consecutiveFullFails = 0; // partial failures are sporadic, reset counter
+          consecutiveFullFails = 0;
         }
 
         offset += PAGE_WINDOW;
@@ -120,41 +116,44 @@ export const stanfordScraper: InstitutionScraper = {
         console.warn(`[scraper] ${INST}: ${skipped} list page(s) skipped due to timeout/error`);
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings total, fetching detail pages for all thin assets...`);
+      // Step 3: enrich detail pages — but ONLY for listings not already indexed.
+      // On first-time runs knownUrls is empty/undefined so all ~916 listings are
+      // enriched (~15 min). On repeat syncs knownUrls contains the full catalog
+      // so only genuinely new listings get detail-fetched, cutting the sync to
+      // ~6 min (list scan only). This prevents server-restart kills on repeat runs.
+      const toEnrich = knownUrls
+        ? results.filter((r) => !knownUrls.has(r.url))
+        : results;
 
-      // Step 3: enrich detail pages with Drupal 11 selectors — no arbitrary cap.
-      // Only listings with missing/thin descriptions (<30 chars) are fetched;
-      // enrichWithDetailPages skips listings that already have good descriptions.
-      // Stanford list pages do NOT include descriptions, so virtually every listing
-      // needs a detail fetch. Global DETAIL_CONCURRENCY=5 handles throttling.
-      // Timing: ~916 thin listings / 5 workers × ~5s avg/page ≈ 15 min + 6 min
-      //   list scraping ≈ 21 min. scraperTimeoutMs covers this on CDN-warm pages.
-      // Prior cap of 25 was far too low — left 94%+ of listings description-less.
-      // Confirmed selectors on live pages (Drupal 11 upgrade, Apr 2026):
-      //   description/abstract: .docket__text (main body container)
-      //   inventors: .docket__related-people a (Innovators section links)
-      //   patentStatus: no longer a structured field — removed
-      await enrichWithDetailPages(
-        results,
-        {
-          description: [
-            ".docket__text",
-            "article p",
-          ],
-          abstract: [
-            ".docket__text",
-          ],
-          inventors: [
-            ".docket__related-people a",
-            ".docket__related-people li",
-          ],
-          patentStatus: [],
-        },
-        9999,
-        signal
+      const knownCount = results.length - toEnrich.length;
+      console.log(
+        `[scraper] ${INST}: ${results.length} listings total — ` +
+        `${toEnrich.length} new (need detail fetch), ${knownCount} already indexed (skipping detail fetch)`
       );
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      if (toEnrich.length > 0) {
+        await enrichWithDetailPages(
+          toEnrich,
+          {
+            description: [
+              ".docket__text",
+              "article p",
+            ],
+            abstract: [
+              ".docket__text",
+            ],
+            inventors: [
+              ".docket__related-people a",
+              ".docket__related-people li",
+            ],
+            patentStatus: [],
+          },
+          9999,
+          signal
+        );
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched for ${toEnrich.length} new)`);
       return results;
     } catch (err: unknown) {
       if (err instanceof SiteHttpError) throw err;

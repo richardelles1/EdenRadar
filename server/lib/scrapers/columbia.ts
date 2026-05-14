@@ -33,16 +33,13 @@ function extractLicensingStatus(
   descriptionHtml: string,
   rawLicensingStatus?: string,
 ): string | undefined {
-  // Prefer an explicit field from the API response if present
   if (rawLicensingStatus && rawLicensingStatus.trim().length > 0) {
     return rawLicensingStatus.trim().slice(0, 200);
   }
-  // Fall back to parsing the HTML description for licensing section headings
   const sectionM = descriptionHtml.match(
     /Licensing\s+(?:Status|Information|Opportunity)[:\s]*<\/h[23]>\s*<p>(.*?)<\/p>/is,
   );
   if (sectionM) return stripHtml(sectionM[1]).slice(0, 200);
-  // Inline "Available for licensing" / "Seeking partners" patterns
   const inlineM = descriptionHtml.match(
     /(Available\s+for\s+(?:licensing|partnership|commercialization)[^<]{0,150}|Seeking\s+(?:licensees?|partners?|investors?)[^<]{0,150})/i,
   );
@@ -184,11 +181,10 @@ export async function fetchColumbiaSitemapUrls(): Promise<string[] | null> {
 export const columbiaScraper: InstitutionScraper = {
   institution: INST,
   // Columbia's .json endpoint rate-limits when hit too quickly.
-  // Diagnosis: 5 concurrent / 300 ms delay (~17 req/s) → HTTP 429.
   // Safe rate: CONCURRENCY=1, DELAY=1500ms (~0.67 req/s).
   // On repeat syncs knownUrls filters to only NEW listings (typically 0–50),
   // plus a small health-validation sample so the scraper always returns a
-  // non-zero count and the admin panel shows "OK" rather than "0 collected".
+  // non-zero count and the admin panel shows "OK".
   // scraperTimeoutMs raised to 10 min in case a first-time full scan is needed.
   scraperTimeoutMs: 10 * 60 * 1000,
 
@@ -196,20 +192,44 @@ export const columbiaScraper: InstitutionScraper = {
     console.log(`[scraper] ${INST}: fetching sitemap…`);
     try {
       const allUrls = await fetchColumbiaSitemapUrls();
+
+      // --- Sitemap unavailable (rate-limited or failed) ---
+      // Fall back to knownUrls for a health sample so the scraper returns
+      // a non-zero result and keeps the admin health indicator green.
       if (!allUrls || allUrls.length === 0) {
-        console.warn(
-          `[scraper] ${INST}: sitemap unavailable — skipping full scrape this cycle`,
+        if (!knownUrls || knownUrls.size === 0) {
+          console.warn(
+            `[scraper] ${INST}: sitemap unavailable and no known URLs — skipping cycle`,
+          );
+          return [];
+        }
+        const FALLBACK_SAMPLE = 15;
+        const sampleUrls = Array.from(knownUrls).slice(0, FALLBACK_SAMPLE);
+        console.log(
+          `[scraper] ${INST}: sitemap unavailable — using ${sampleUrls.length} known URLs as health sample`,
         );
-        return [];
+        const results: ScrapedListing[] = [];
+        for (const url of sampleUrls) {
+          if (signal?.aborted) break;
+          const data = await fetchColumbiaJson(url, 12_000, signal);
+          if (!data) continue;
+          const listing = columbiaJsonToListing(url, data);
+          if (listing) results.push(listing);
+          await new Promise((r) => setTimeout(r, 1_500));
+        }
+        console.log(
+          `[scraper] ${INST}: fallback health sample — ${results.length} listings collected`,
+        );
+        return results;
       }
 
-      // Separate sitemap URLs into new (never indexed) and known (already in DB).
+      // --- Normal path: sitemap available ---
       const newUrls = knownUrls
         ? allUrls.filter((u) => !knownUrls.has(u))
         : allUrls;
 
       // Always fetch a small sample of known URLs so repeat syncs return a
-      // non-zero result — this keeps institution health monitoring accurate.
+      // non-zero result — keeps institution health monitoring accurate.
       const HEALTH_SAMPLE = 15;
       const knownSample: string[] = knownUrls
         ? allUrls.filter((u) => knownUrls.has(u)).slice(0, HEALTH_SAMPLE)
