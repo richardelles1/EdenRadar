@@ -479,8 +479,9 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     // repeat runs (e.g. OSU: 400+ detail fetches → only truly new ones fetched).
     // Old pending staging rows (not yet pushed) are included so assets already queued
     // from a previous scan are not re-staged as "new" on this scan.
-    const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
-    console.log(`[sync] ${institutionName}: ${existingUrls.size} URLs already indexed (passing to scraper for skip-optimization)`);
+    const { fingerprints: existingFps, sourceUrls: existingUrls, indexedUrls } = await storage.getExistingFingerprints(institutionName);
+    console.log(`[sync] ${institutionName}: ${indexedUrls.size} URLs in published index, ${existingUrls.size} total known (index + staging)`);
+
 
     let listings: ScrapedListing[] | undefined;
     let lastScrapeError: Error | null = null;
@@ -489,7 +490,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
       let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
       try {
         listings = await Promise.race([
-          scraper.scrape(scrapeController.signal, existingUrls),
+          scraper.scrape(scrapeController.signal, indexedUrls),
           new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
               scrapeController.abort();

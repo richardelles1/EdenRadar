@@ -1487,7 +1487,7 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getExistingFingerprints(institution: string): Promise<{ fingerprints: Set<string>; sourceUrls: Set<string> }> {
+  async getExistingFingerprints(institution: string): Promise<{ fingerprints: Set<string>; sourceUrls: Set<string>; indexedUrls: Set<string> }> {
     // 1. Fingerprints + source URLs already committed to the main table
     const dbRows = await db
       .select({ fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl })
@@ -1496,6 +1496,11 @@ export class DatabaseStorage implements IStorage {
 
     const fingerprints = new Set(dbRows.map(r => r.fingerprint));
     const sourceUrls = new Set<string>(dbRows.filter(r => r.sourceUrl).map(r => r.sourceUrl!));
+    // indexedUrls: ONLY from ingested_assets — used by scrapers to determine what is
+    // truly in the published index.  sourceUrls (below) adds staging rows too and is
+    // used by the pipeline for dedup, but must NOT be passed to scrapers because
+    // staging URLs block discovery of genuinely new listings.
+    const indexedUrls = new Set<string>(sourceUrls);
 
     // 1b. Domain-based cross-institution URL dedup for shared TTO portals.
     //     Multiple institutions may share a single web portal (e.g., all UC campuses
@@ -1549,7 +1554,7 @@ export class DatabaseStorage implements IStorage {
       if (r.sourceUrl) sourceUrls.add(r.sourceUrl);
     }
 
-    return { fingerprints, sourceUrls };
+    return { fingerprints, sourceUrls, indexedUrls };
   }
 
   async supersedeStagingForInstitution(institution: string): Promise<number> {
