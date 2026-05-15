@@ -2835,13 +2835,13 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
     onError: (err: Error) => toast({ title: "Verify failed", description: err.message, variant: "destructive" }),
   });
 
-  const activeFilters = [institution, modality, stage, indication, tier, missing, q].filter(Boolean).length;
+  const activeFilters = [institution, modality, stage, indication, biology, tier, missing, q].filter(Boolean).length;
   const total = data?.total ?? 0;
   const globalTotal = data?.globalTotal ?? 0;
   const totalPages = Math.ceil(total / 50);
 
   const clearFilters = () => {
-    setInstitution(""); setModality(""); setStage(""); setIndication("");
+    setInstitution(""); setModality(""); setStage(""); setIndication(""); setBiology("");
     setTier(""); setMissing(""); setQ(""); setPage(1);
   };
 
@@ -2957,6 +2957,15 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
             <SelectItem value="capped">Gave up (≥3 attempts)</SelectItem>
           </SelectContent>
         </Select>
+        {biology && (
+          <button
+            onClick={() => { setBiology(""); setPage(1); }}
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-teal-100 dark:bg-teal-900/40 text-teal-700 dark:text-teal-300 border border-teal-300 dark:border-teal-700 hover:bg-teal-200 dark:hover:bg-teal-900/70 transition-colors"
+            data-testid="chip-biology-filter"
+          >
+            Biology: {biology} <X className="h-2.5 w-2.5" />
+          </button>
+        )}
       </div>
 
       <div className="px-5 py-2 border-b border-border text-xs text-muted-foreground flex items-center justify-between">
