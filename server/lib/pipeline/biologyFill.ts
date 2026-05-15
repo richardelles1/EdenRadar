@@ -296,17 +296,21 @@ async function gptFallback(
   const result = new Map<number, string>();
   if (batch.length === 0) return result;
 
+  // Build a 1-based index → DB id map so we can handle GPT returning either
+  const idxToDbId = new Map<number, number>();
   const items = batch.map((a, i) => {
+    idxToDbId.set(i + 1, a.id);
     const ctx = [a.indication ?? "", a.summary ?? "", a.abstract ?? ""].join(" ").slice(0, 500);
-    return `${i + 1}. [ID:${a.id}] ${a.asset_name} | Modality: ${a.modality ?? "unknown"} | ${ctx}`;
+    return `${i + 1}. ${a.asset_name} | Modality: ${a.modality ?? "unknown"} | ${ctx}`;
   });
 
-  const prompt = `You are a biotech asset classifier. Assign each asset to exactly one "biology" value from this list — the pathological biological process the asset addresses:
+  const prompt = `You are a biotech asset classifier. Assign each asset to exactly one "biology" value from this closed list — the pathological biological process the asset addresses:
 
 ${CANONICAL_BIOLOGY.join(" | ")}
 
-Reply with ONLY a JSON object: {"results": [{"id": N, "biology": "..."},...]}
-Use "unknown" if genuinely unclear. Do not invent new values. Do not use values outside the list.
+Reply with ONLY a JSON object using the list position (1, 2, 3…) as the "idx":
+{"results": [{"idx": 1, "biology": "..."}, {"idx": 2, "biology": "..."}, ...]}
+Include every asset. Use "unknown" if genuinely unclear. Never invent values outside the list.
 
 Assets:
 ${items.join("\n")}`;
@@ -323,15 +327,21 @@ ${items.join("\n")}`;
     let parsed: any;
     try { parsed = JSON.parse(raw); } catch { return result; }
 
-    const arr: Array<{ id: number; biology: string }> =
+    const arr: Array<{ idx?: number; id?: number; biology: string }> =
       Array.isArray(parsed) ? parsed : (parsed.results ?? []);
 
     for (const item of arr) {
-      if (typeof item.id === "number" && typeof item.biology === "string") {
-        const b = item.biology.toLowerCase().trim();
-        if (b !== "unknown" && CANONICAL_BIOLOGY.includes(b)) {
-          result.set(item.id, b);
-        }
+      if (typeof item.biology !== "string") continue;
+      const b = item.biology.toLowerCase().trim();
+      if (b === "unknown" || !CANONICAL_BIOLOGY.includes(b)) continue;
+
+      // Prefer idx (1-based list position); fall back to id in case GPT used it
+      const listPos = typeof item.idx === "number" ? item.idx : (typeof item.id === "number" ? item.id : null);
+      if (listPos === null) continue;
+
+      const dbId = idxToDbId.get(listPos);
+      if (dbId !== undefined) {
+        result.set(dbId, b);
       }
     }
   } catch (err: any) {
@@ -410,28 +420,39 @@ export async function runBiologyFill(
     }
   }
 
-  const allUpdates = [...targetDerived, ...ruleMatches, ...gptMatches];
+  // Tag each update with its provenance source
+  const taggedUpdates = [
+    ...targetDerived.map(u => ({ ...u, source: "target_derived" as const })),
+    ...ruleMatches.map(u => ({ ...u, source: "rule" as const })),
+    ...gptMatches.map(u => ({ ...u, source: "gpt4o-mini" as const })),
+  ];
   let totalUpdated = 0;
 
-  if (!dryRun) {
-    for (let i = 0; i < allUpdates.length; i++) {
+  if (!dryRun && taggedUpdates.length > 0) {
+    const WRITE_BATCH = 500;
+    for (let i = 0; i < taggedUpdates.length; i += WRITE_BATCH) {
       if (signal?.aborted) break;
-      const u = allUpdates[i];
+      const batch = taggedUpdates.slice(i, i + WRITE_BATCH);
+
+      // Build a single UPDATE … FROM (VALUES …) query for the whole batch
+      const values: unknown[] = [];
+      const rows = batch.map((u, j) => {
+        const base = j * 3;
+        values.push(u.id, u.biology, JSON.stringify({ biology: u.source }));
+        return `($${base + 1}::int, $${base + 2}::text, $${base + 3}::text)`;
+      });
+
       await dbClient.query(
-        `UPDATE ingested_assets
-         SET biology = $1,
-             enrichment_sources = COALESCE(enrichment_sources, '{}'::jsonb) || $2::jsonb
-         WHERE id = $3`,
-        [
-          u.biology,
-          JSON.stringify({ biology: targetDerived.includes(u) ? "target_derived" : ruleMatches.includes(u) ? "rule" : "gpt4o-mini" }),
-          u.id,
-        ],
+        `UPDATE ingested_assets AS t
+         SET biology = v.biology,
+             enrichment_sources = COALESCE(t.enrichment_sources, '{}'::jsonb) || v.src::jsonb
+         FROM (VALUES ${rows.join(", ")}) AS v(id, biology, src)
+         WHERE t.id = v.id`,
+        values,
       );
-      totalUpdated++;
-      if (onProgress && (i % 50 === 0 || i === allUpdates.length - 1)) {
-        onProgress(totalUpdated, allUpdates.length, `writing (${totalUpdated} / ${allUpdates.length})`);
-      }
+
+      totalUpdated += batch.length;
+      onProgress?.(totalUpdated, taggedUpdates.length, `writing (${totalUpdated} / ${taggedUpdates.length})`);
     }
   }
 
