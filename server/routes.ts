@@ -4987,6 +4987,7 @@ export async function registerRoutes(
           summary: a.summary,
           abstract: a.abstract,
           sourceType: a.sourceType,
+          biology: a.biology,
           ctx: {
             categories: a.categories,
             patentStatus: a.patentStatus,
@@ -5200,10 +5201,10 @@ export async function registerRoutes(
       const rows = await db.execute<{
         id: number; asset_name: string; summary: string; abstract: string | null;
         categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
-        inventors: string[] | null; source_url: string | null; source_type: string;
+        inventors: string[] | null; source_url: string | null; source_type: string; biology: string | null;
       }>(sql`
         SELECT id, asset_name, summary, abstract, categories, patent_status,
-               licensing_readiness, inventors, source_url, source_type
+               licensing_readiness, inventors, source_url, source_type, biology
         FROM ingested_assets
         WHERE relevant = true
           AND (asset_class IS NULL OR asset_class = '')
@@ -5221,6 +5222,7 @@ export async function registerRoutes(
         summary: r.summary,
         abstract: r.abstract,
         sourceType: r.source_type,
+        biology: r.biology,
         ctx: {
           categories: r.categories,
           patentStatus: r.patent_status,
@@ -5907,11 +5909,12 @@ Do not respond with anything else.`;
           categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
           inventors: string[] | null; source_url: string | null; source_type: string;
           target: string | null; modality: string | null; indication: string | null; development_stage: string;
+          biology: string | null;
         }>(sql`
           SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
                  comparable_drugs, innovation_claim,
                  categories, patent_status, licensing_readiness, inventors, source_url, source_type,
-                 target, modality, indication, development_stage
+                 target, modality, indication, development_stage, biology
           FROM ingested_assets
           WHERE relevant = true
             AND asset_class = 'drug_biologic'
@@ -5937,6 +5940,7 @@ Do not respond with anything else.`;
           categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
           inventors: r.inventors, sourceUrl: r.source_url, sourceType: r.source_type,
           target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
+          biology: r.biology,
         }));
       } else {
         // Full pass: all assets in this band
@@ -5953,11 +5957,12 @@ Do not respond with anything else.`;
           categories: string[] | null; patent_status: string | null; licensing_readiness: string | null;
           inventors: string[] | null; source_url: string | null; source_type: string;
           target: string | null; modality: string | null; indication: string | null; development_stage: string;
+          biology: string | null;
         }>(sql`
           SELECT id, asset_name, summary, abstract, asset_class, mechanism_of_action, unmet_need,
                  comparable_drugs, innovation_claim,
                  categories, patent_status, licensing_readiness, inventors, source_url, source_type,
-                 target, modality, indication, development_stage
+                 target, modality, indication, development_stage, biology
           FROM ingested_assets
           WHERE relevant = true
             AND ${rangeClause}
@@ -5972,6 +5977,7 @@ Do not respond with anything else.`;
           categories: r.categories, patentStatus: r.patent_status, licensingStatus: r.licensing_readiness,
           inventors: r.inventors, sourceUrl: r.source_url, sourceType: r.source_type,
           target: r.target, modality: r.modality, indication: r.indication, developmentStage: r.development_stage,
+          biology: r.biology,
         }));
       }
 

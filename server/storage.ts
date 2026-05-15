@@ -242,7 +242,7 @@ export interface IStorage {
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
   getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
-  getMiniEnrichBatch(limit: number, filters?: EnrichFilter): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>>;
+  getMiniEnrichBatch(limit: number, filters?: EnrichFilter): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null; biology: string | null }>>;
   getFilteredEnrichCount(filters?: EnrichFilter): Promise<{ count: number; costEstimate: number }>;
   getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }>;
   incrementMiniEnrichAttempts(assetId: number): Promise<void>;
@@ -308,7 +308,7 @@ export interface IStorage {
   getAssetsNeedingDeepEnrich(): Promise<Array<{
     id: number; assetName: string; summary: string; abstract: string | null;
     categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
-    inventors: string[] | null; sourceUrl: string | null; sourceType: string;
+    inventors: string[] | null; sourceUrl: string | null; sourceType: string; biology: string | null;
   }>>;
   getAssetsNeedingDeepEnrichCount(): Promise<number>;
   updateIngestedAssetDeepEnrichment(id: number, data: {
@@ -2161,7 +2161,7 @@ export class DatabaseStorage implements IStorage {
   async getAssetsNeedingDeepEnrich(): Promise<Array<{
     id: number; assetName: string; summary: string; abstract: string | null;
     categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
-    inventors: string[] | null; sourceUrl: string | null; sourceType: string;
+    inventors: string[] | null; sourceUrl: string | null; sourceType: string; biology: string | null;
   }>> {
     return db
       .select({
@@ -2175,6 +2175,7 @@ export class DatabaseStorage implements IStorage {
         inventors: ingestedAssets.inventors,
         sourceUrl: ingestedAssets.sourceUrl,
         sourceType: ingestedAssets.sourceType,
+        biology: ingestedAssets.biology,
       })
       .from(ingestedAssets)
       // Four selection buckets. Buckets can overlap in edge cases (e.g., an asset
@@ -2554,7 +2555,7 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ingestedAssets.id, assetId));
   }
 
-  async getMiniEnrichBatch(limit: number, filters: EnrichFilter = {}): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>> {
+  async getMiniEnrichBatch(limit: number, filters: EnrichFilter = {}): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null; biology: string | null }>> {
     // Builds a filtered, prioritized batch for mini-enrichment.
     // Order: completeness_score DESC (closest to tier threshold first),
     // then drug_biologic priority as tiebreaker.
@@ -2571,7 +2572,8 @@ export class DatabaseStorage implements IStorage {
              patent_status AS "patentStatus",
              licensing_status AS "licensingStatus",
              inventors,
-             source_url AS "sourceUrl"
+             source_url AS "sourceUrl",
+             biology
       FROM ingested_assets
       WHERE ${where}
       ORDER BY
@@ -2579,7 +2581,7 @@ export class DatabaseStorage implements IStorage {
         (CASE WHEN asset_class = 'drug_biologic' THEN 0 ELSE 1 END) ASC
       LIMIT ${limit}
     `);
-    return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>;
+    return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null; biology: string | null }>;
   }
 
   async getFilteredEnrichCount(filters: EnrichFilter = {}): Promise<{ count: number; costEstimate: number }> {
