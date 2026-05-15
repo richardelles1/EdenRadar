@@ -93,6 +93,18 @@ function forLabel(opt: { value: RangeOption; label: string }): string {
   return opt.value === "all" ? "for all time" : `for the ${opt.label}`;
 }
 
+function calcTooltipPos(e: React.MouseEvent): { x: number; y: number } {
+  const PAD = 12;
+  const TIP_HALF_W = 140;
+  const TIP_MIN_SPACE_ABOVE = 75;
+  const x = Math.max(
+    TIP_HALF_W + PAD,
+    Math.min(e.clientX, window.innerWidth - TIP_HALF_W - PAD),
+  );
+  const y = Math.max(TIP_MIN_SPACE_ABOVE, e.clientY);
+  return { x, y };
+}
+
 function buildDrawerParams(ctx: DrawerContext, pageOffset: number): string {
   const p = new URLSearchParams({ limit: String(DRAWER_PAGE), offset: String(pageOffset) });
   if (!ctx) return p.toString();
@@ -384,11 +396,12 @@ function WhitespacePanel({
                     cursor: "pointer",
                   }}
                   onMouseEnter={(e) => {
+                    const pos = calcTooltipPos(e);
                     setTooltip({
                       title: `${capitalize(bio)} × ${capitalize(mod)}`,
                       sub: framing,
-                      x: e.clientX,
-                      y: e.clientY,
+                      x: pos.x,
+                      y: pos.y,
                     });
                   }}
                   onMouseLeave={() => setTooltip(null)}
@@ -511,11 +524,12 @@ function WeeklyVelocityPanel({
                   minHeight: entry.count > 0 ? `${MIN_BAR_H}px` : "0px",
                 }}
                 onMouseEnter={(e) => {
+                  const pos = calcTooltipPos(e);
                   setTooltip({
                     title: weekLabel,
                     sub: `${entry.count.toLocaleString()} assets added`,
-                    x: e.clientX,
-                    y: e.clientY,
+                    x: pos.x,
+                    y: pos.y,
                   });
                 }}
                 onMouseLeave={() => setTooltip(null)}
