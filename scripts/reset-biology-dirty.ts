@@ -147,7 +147,7 @@ async function run() {
       WHERE relevant = true
         AND biology IS NOT NULL
         AND (
-          LOWER(modality) ~ '\\m(software|algorithm|research tool|assay|software/algorithm|computational|in silico|platform technology|platform)\\M'
+          LOWER(modality) ~ '\\m(software|algorithm|research tool|assay|software/algorithm|computational|in silico)\\M'
         )
     `;
     const toolResult = await client.query(toolQuery);
