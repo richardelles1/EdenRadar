@@ -115,13 +115,22 @@ function BiologyLandscapePanel({ data }: { data: BiologyEntry[] }) {
   );
 }
 
+const WHITESPACE_MAX_BIO = 8;
+const WHITESPACE_MAX_MOD = 6;
+
 function WhitespacePanel({ matrix }: { matrix: WhitespaceMatrix }) {
-  const { biologies, modalities, cells } = matrix;
-  if (!biologies.length || !modalities.length) {
+  const rawBiologies = matrix.biologies.slice(0, WHITESPACE_MAX_BIO);
+  const rawModalities = matrix.modalities.slice(0, WHITESPACE_MAX_MOD);
+  const cells = matrix.cells;
+
+  if (!rawBiologies.length || !rawModalities.length) {
     return (
       <EmptyState message="Whitespace data requires biology and modality fields — more assets are being enriched now." />
     );
   }
+
+  const biologies = rawBiologies;
+  const modalities = rawModalities;
 
   const allCounts = Object.values(cells);
   const maxCount = allCounts.length ? Math.max(...allCounts) : 1;
