@@ -307,18 +307,19 @@ function isDeviceModality(asset: BiologyAsset): boolean {
 
 /**
  * Returns true if the modality is a software tool, algorithm, research reagent,
- * or assay — assets that describe workflows or measurement tools rather than a
- * therapeutic intervention. These have no molecular biology mechanism in the
- * pharma sense and should not receive a biology label.
+ * assay, or generic platform — assets that describe workflows, measurement
+ * tools, or delivery scaffolds without a specific therapeutic indication.
+ * These have no intrinsic molecular biology mechanism and should not receive
+ * a biology label.
  *
- * Deliberately excludes "platform technology" and "platform" (delivery platforms
- * whose biology IS derivable from their indication/payload).
- * Deliberately excludes "diagnostic" (diagnostic assays can have biology, e.g.
- * a COVID PCR test correctly maps to "pathogen replication").
+ * Deliberately excludes "diagnostic" (diagnostic assays can correctly derive
+ * biology from their indication, e.g. a COVID PCR → "pathogen replication").
+ * Deliberately excludes "nanoparticle" (nanoparticle carriers derive biology
+ * from their payload/indication via the TIER1/TIER2 indication-text rules).
  */
 function isToolModality(asset: BiologyAsset): boolean {
   const modLower = (asset.modality ?? "").toLowerCase();
-  return /\b(?:software|algorithm|research\s+tool|assay|software\/algorithm|computational|in\s+silico)\b/.test(modLower);
+  return /\b(?:software|algorithm|research\s+tool|assay|software\/algorithm|computational|in\s+silico|platform\s+technology|platform)\b/.test(modLower);
 }
 
 /**
