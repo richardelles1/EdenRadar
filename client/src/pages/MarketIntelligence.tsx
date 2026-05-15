@@ -694,7 +694,7 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
 // ── MarketIntelligence ────────────────────────────────────────────────────────
 
 export default function MarketIntelligence() {
-  const [range, setRange] = useState<RangeOption>("90d");
+  const [range, setRange] = useState<RangeOption>("all");
   const [drawerCtx, setDrawerCtx] = useState<DrawerContext>(null);
 
   const { data, isLoading, isError } = useQuery<MarketIntelligenceData>({
