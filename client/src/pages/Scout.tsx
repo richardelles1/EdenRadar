@@ -276,6 +276,7 @@ export default function Scout() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [modalityFilter, setModalityFilter] = useState<string>("all");
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
+  const [biologyFilter, setBiologyFilter] = useState<string>("all");
   // Multi-value filters populated from URL (e.g. when arriving from an Alerts
   // "Explore matches" link with multiple stages/modalities/institutions). When
   // non-empty, these AND with the single-select filters above. Cleared via the
@@ -489,6 +490,7 @@ export default function Scout() {
       setStageFilter("all");
       setModalityFilter("all");
       setInstitutionFilter("all");
+      setBiologyFilter("all");
       setSortMode("score");
       setMinScore(0);
       if (data.assets.length === 0 && !camePrePopulated) {
@@ -736,6 +738,7 @@ export default function Scout() {
     setStageFilter("all");
     setModalityFilter("all");
     setInstitutionFilter("all");
+    setBiologyFilter("all");
     setSortMode("score");
     setMinScore(0);
     setTrialPhaseFilter("all");
@@ -776,18 +779,28 @@ export default function Scout() {
       .sort();
   }, [searchResults]);
 
+  const availableBiologies = useMemo(() => {
+    const seen = new Set<string>();
+    return searchResults
+      .map((a) => a.biology)
+      .filter((b): b is string => !!b && b !== "unknown" && b.length > 2)
+      .filter((b) => { if (seen.has(b)) return false; seen.add(b); return true; })
+      .sort();
+  }, [searchResults]);
+
   const filteredResults = useMemo(() => {
     let results = searchResults.filter((asset) => {
       const stageOk = stageFilter === "all" || asset.development_stage?.toLowerCase() === stageFilter;
       const modalityOk = modalityFilter === "all" || asset.modality?.toLowerCase() === modalityFilter;
       const institutionOk = institutionFilter === "all" || asset.institution === institutionFilter;
+      const biologyOk = biologyFilter === "all" || asset.biology === biologyFilter;
       // Multi-filters from URL (e.g. Alerts "Explore matches"): asset must match
       // at least one value in each non-empty list (AND across lists, OR within).
       const stageMultiOk = stagesMulti.length === 0 || stagesMulti.some((s) => (asset.development_stage ?? "").toLowerCase() === s.toLowerCase());
       const modalityMultiOk = modalitiesMulti.length === 0 || modalitiesMulti.some((m) => (asset.modality ?? "").toLowerCase() === m.toLowerCase());
       const instMultiOk = institutionsMulti.length === 0 || institutionsMulti.some((i) => (asset.institution ?? "").toLowerCase() === i.toLowerCase());
       const scoreOk = minScore === 0 || asset.score >= minScore;
-      return stageOk && modalityOk && institutionOk && stageMultiOk && modalityMultiOk && instMultiOk && scoreOk;
+      return stageOk && modalityOk && institutionOk && biologyOk && stageMultiOk && modalityMultiOk && instMultiOk && scoreOk;
     });
     if (sortMode === "recency") {
       results = [...results].sort((a, b) => {
@@ -804,7 +817,7 @@ export default function Scout() {
       });
     }
     return results;
-  }, [searchResults, stageFilter, modalityFilter, institutionFilter, stagesMulti, modalitiesMulti, institutionsMulti, sortMode, minScore]);
+  }, [searchResults, stageFilter, modalityFilter, institutionFilter, biologyFilter, stagesMulti, modalitiesMulti, institutionsMulti, sortMode, minScore]);
 
   const filteredPatentResults = useMemo(() => {
     const now = Date.now();
@@ -929,6 +942,7 @@ export default function Scout() {
     stageFilter !== "all",
     modalityFilter !== "all",
     institutionFilter !== "all",
+    biologyFilter !== "all",
     stagesMulti.length > 0,
     modalitiesMulti.length > 0,
     institutionsMulti.length > 0,
@@ -1219,6 +1233,11 @@ export default function Scout() {
                 {institutionFilter !== "all" && (
                   <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution">
                     {institutionFilter} ×
+                  </Badge>
+                )}
+                {biologyFilter !== "all" && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20" onClick={() => setBiologyFilter("all")} data-testid="active-filter-biology">
+                    {biologyFilter} ×
                   </Badge>
                 )}
                 {(stagesMulti.length > 0 || modalitiesMulti.length > 0 || institutionsMulti.length > 0) && (
@@ -2124,12 +2143,30 @@ export default function Scout() {
               </div>
             )}
 
+            {availableBiologies.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Biology</p>
+                <Select value={biologyFilter} onValueChange={setBiologyFilter} data-testid="filter-biology-select">
+                  <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Biology</SelectItem>
+                    {availableBiologies.map((b) => (
+                      <SelectItem key={b} value={b} className="capitalize">{b}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {activeFilterCount > 0 && (
               <button
                 onClick={() => {
                   setStageFilter("all");
                   setModalityFilter("all");
                   setInstitutionFilter("all");
+                  setBiologyFilter("all");
                   setStagesMulti([]);
                   setModalitiesMulti([]);
                   setInstitutionsMulti([]);

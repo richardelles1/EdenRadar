@@ -1058,6 +1058,7 @@ export async function registerRoutes(
           dataSparse: r.dataSparse ?? false,
           completeness_score: r.completenessScore,
           last_seen_at: r.lastSeenAt,
+          biology: r.biology ?? null,
         };
       });
 

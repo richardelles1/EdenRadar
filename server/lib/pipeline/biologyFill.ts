@@ -258,6 +258,14 @@ const TIER2: Array<{ pattern: RegExp; biology: string }> = [
   { pattern: /HIV\s+infection|COVID.?19|SARS.?CoV|HBV|HCV|hepatitis\s+[BC]\s+virus|RSV|cytomegalovirus|EBV\s+infection|herpes\s+(?:simplex|zoster)|influenza\s+virus|malaria\s+(?:infection|parasite)|tuberculosis\s+infection/i, biology: "pathogen replication" },
   { pattern: /kinase.*cancer|inhibitor.*kinase.*oncol|oncogenic.*(?:signal|pathway|mutation).*kinase|fusion.*kinase|amplified.*RTK/i, biology: "aberrant kinase signaling" },
   { pattern: /mitochondrial\s+(?:myopathy|encephalopathy|neuropathy|disease|disorder)|Leigh\s+syndrome|MELAS|MERRF|Kearns.Sayre/i, biology: "mitochondrial dysfunction" },
+  // Expanded TIER2: pain / nociception → ion channel dysfunction
+  { pattern: /\b(?:chronic\s+pain|neuropathic\s+pain|nociception|pain\s+(?:management|relief|treatment|therapy)|analgesic|opioid.*pain|allodynia|hyperalgesia|fibromyalgia|migraine|headache\s+disorder)\b/i, biology: "ion channel dysfunction" },
+  // Expanded TIER2: wound healing / tissue repair → fibrosis
+  { pattern: /\b(?:wound\s+healing|tissue\s+repair|skin\s+regeneration|chronic\s+wound|diabetic\s+(?:wound|ulcer)|pressure\s+ulcer|dermal\s+repair|regenerative\s+wound|burn\s+wound|wound\s+closure)\b/i, biology: "fibrosis" },
+  // Expanded TIER2: cardiovascular / heart failure → ischemia and oxidative stress
+  { pattern: /\b(?:heart\s+failure|cardiac\s+arrest|cardiomyopathy|coronary\s+artery\s+disease|angina|atherosclerosis|hypertension.*cardiac|arrhythmia\s+(?:ischemia|oxidative)|acute\s+coronary\s+syndrome|cardioprotection)\b/i, biology: "ischemia and oxidative stress" },
+  // Expanded TIER2: chronic kidney disease / renal → fibrosis
+  { pattern: /\b(?:chronic\s+kidney\s+disease|CKD|diabetic\s+nephropathy|glomerulosclerosis|renal\s+(?:insufficiency|failure|disease)|end.stage\s+renal|nephritis\s+fibrosis|kidney\s+fibrosis)\b/i, biology: "fibrosis" },
 ];
 
 /**
@@ -272,13 +280,53 @@ function deriveFromTarget(target: string | null): string | null {
   return null;
 }
 
+// ── Accuracy guards ────────────────────────────────────────────────────────────
+
+/** Returns true if the asset is a medical device/equipment with no molecular target. */
+function isDeviceWithNoMolecularTarget(asset: BiologyAsset): boolean {
+  const modLower = (asset.modality ?? "").toLowerCase();
+  const isDevice = /\b(?:medical\s+device|device|surgical|implant|equipment|instrument|diagnostic\s+tool|imaging|wearable)\b/.test(modLower);
+  if (!isDevice) return false;
+  // Allow through if an explicit molecular target is set
+  const tgt = (asset.target ?? "").toLowerCase().trim();
+  if (tgt && tgt !== "unknown" && tgt.length > 2) return false;
+  return true;
+}
+
+/** Autoimmune overrides immune evasion when the context is clearly autoimmune. */
+function isAutoimmune(text: string): boolean {
+  return /\b(?:autoimmune|autoantibody|self.antigen|autoreactive|rheumatoid|lupus|Sjogren|multiple\s+sclerosis|inflammatory\s+bowel|Crohn|celiac|psoriatic|ankylosing|myasthenia|vasculitis)\b/i.test(text);
+}
+
+/** Returns true if text has infectious disease context (for viral-vector guard). */
+function hasInfectiousContext(text: string): boolean {
+  return /\b(?:virus|viral|bacterial|infection|infect|pathogen|SARS|HIV|HCV|HBV|RSV|CMV|EBV|HSV|influenza|malaria|tuberculosis|TB|antimicrobial|antibiotic)\b/i.test(text);
+}
+
+/** Returns true if modality is gene therapy / gene editing / nanoparticle (delivery vector). */
+function isVectorDeliveryModality(asset: BiologyAsset): boolean {
+  const modLower = (asset.modality ?? "").toLowerCase();
+  return /\b(?:gene\s+therapy|gene\s+editing|nanoparticle|lipid\s+nanoparticle|LNP|AAV|lentiviral\s+vector|viral\s+vector|mRNA\s+(?:therapy|vaccine))\b/.test(modLower);
+}
+
 /**
- * Step 1 — Apply tiered text rules.
+ * Step 1 — Apply tiered text rules with accuracy guards.
  * Returns biology string or null if nothing matched.
  */
 export function applyBiologyRules(asset: BiologyAsset): string | null {
+  // Guard 1: medical devices with no molecular target → skip all rules
+  if (isDeviceWithNoMolecularTarget(asset)) return null;
+
   const targetDerived = deriveFromTarget(asset.target);
-  if (targetDerived) return targetDerived;
+  if (targetDerived) {
+    // Guard 2: viral-vector guard — gene therapy/nanoparticle assets only map to
+    // "pathogen replication" when the context is genuinely infectious.
+    if (targetDerived === "pathogen replication" && isVectorDeliveryModality(asset)) {
+      const fullText = [asset.indication ?? "", asset.summary ?? "", asset.abstract ?? ""].join(" ");
+      if (!hasInfectiousContext(fullText)) return null;
+    }
+    return targetDerived;
+  }
 
   const text = [
     asset.asset_name ?? "",
@@ -289,10 +337,32 @@ export function applyBiologyRules(asset: BiologyAsset): string | null {
   ].join(" ");
 
   for (const rule of TIER1) {
-    if (rule.pattern.test(text)) return rule.biology;
+    const matched = rule.pattern.test(text);
+    if (matched) {
+      // Guard 3: "immune evasion" rules can misfire for autoimmune checkpoint use-cases.
+      // If indication/text is clearly autoimmune, downgrade to autoimmune dysregulation.
+      if (rule.biology === "immune evasion" && isAutoimmune(text)) {
+        return "autoimmune dysregulation";
+      }
+      // Guard 4: viral-vector assets matched to "pathogen replication" via TIER1 text
+      // need infectious context confirmation.
+      if (rule.biology === "pathogen replication" && isVectorDeliveryModality(asset)) {
+        if (!hasInfectiousContext(text)) continue;
+      }
+      return rule.biology;
+    }
   }
   for (const rule of TIER2) {
-    if (rule.pattern.test(text)) return rule.biology;
+    const matched = rule.pattern.test(text);
+    if (matched) {
+      if (rule.biology === "immune evasion" && isAutoimmune(text)) {
+        return "autoimmune dysregulation";
+      }
+      if (rule.biology === "pathogen replication" && isVectorDeliveryModality(asset)) {
+        if (!hasInfectiousContext(text)) continue;
+      }
+      return rule.biology;
+    }
   }
   return null;
 }
@@ -312,8 +382,14 @@ async function gptFallback(
   const idxToDbId = new Map<number, number>();
   const items = batch.map((a, i) => {
     idxToDbId.set(i + 1, a.id);
-    const ctx = [a.indication ?? "", a.summary ?? "", a.abstract ?? ""].join(" ").slice(0, 500);
-    return `${i + 1}. ${a.asset_name} | Modality: ${a.modality ?? "unknown"} | ${ctx}`;
+    // Prefer abstract over summary (richer scientific context), strip HTML tags,
+    // and cap to 900 chars for reliable JSON output within token budget.
+    const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const raw = a.abstract
+      ? [a.abstract, a.summary ?? "", a.indication ?? ""].join(" ")
+      : [a.summary ?? "", a.indication ?? "", a.mechanism_of_action ?? ""].join(" ");
+    const ctx = stripHtml(raw).slice(0, 900);
+    return `${i + 1}. ${a.asset_name} | Modality: ${a.modality ?? "unknown"} | Target: ${a.target ?? "unknown"} | ${ctx}`;
   });
 
   const prompt = `You are a biotech asset classifier. Assign each asset to exactly one "biology" value from this closed list — the pathological biological process the asset addresses:

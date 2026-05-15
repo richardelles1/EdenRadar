@@ -109,6 +109,8 @@ export type RetrievedAsset = {
   /** ISO string: when this asset was last confirmed available on its source portal.
    *  Used by scoreAvailability() in the TTO 3-dimension scoring model (Task #980). */
   lastSeenAt?: string | null;
+  /** Canonical biology value from the biologyFill pipeline. */
+  biology?: string | null;
 };
 
 export interface IStorage {
@@ -3239,7 +3241,7 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
-        last_seen_at,
+        last_seen_at, biology,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -3271,6 +3273,7 @@ export class DatabaseStorage implements IStorage {
       previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
       lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
     }));
   }
 
@@ -3458,7 +3461,7 @@ export class DatabaseStorage implements IStorage {
           mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
-          data_sparse, category_confidence, asset_class, last_seen_at,
+          data_sparse, category_confidence, asset_class, last_seen_at, biology,
           ${exactMatchExpr} AS exact_name_match,
           ${tsRankExpr}     AS ts_rank,
           ${trgmSimExpr}    AS trgm_sim,
@@ -3520,6 +3523,7 @@ export class DatabaseStorage implements IStorage {
       similarity: 0,
       textRelevance: r.ts_rank != null ? parseFloat(String(r.ts_rank)) : 0,
       lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
     }));
   }
 

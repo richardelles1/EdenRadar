@@ -68,6 +68,7 @@ export interface ScoredAsset {
   dataSparse?: boolean;
   completeness_score?: number | null;
   last_seen_at?: string | null;
+  biology?: string | null;
 }
 
 export interface BuyerProfile {

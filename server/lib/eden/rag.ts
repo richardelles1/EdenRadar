@@ -27,6 +27,7 @@ export type QueryFilters = {
   stage?: string;
   indication?: string;
   institution?: string;
+  biology?: string;
 };
 
 export type SessionFocusContext = {
@@ -35,6 +36,7 @@ export type SessionFocusContext = {
   stage?: string;
   indication?: string;
   institution?: string;
+  biology?: string;
 };
 
 // In-session engagement signals: tracks which modalities/indications the user
@@ -283,6 +285,49 @@ function detectIndication(text: string): string | undefined {
   return undefined;
 }
 
+// Biology keyword detection — matches canonical taxonomy values from biologyFill.ts
+const BIOLOGY_DETECT: Array<[RegExp, string]> = [
+  [/\baberrant\s+kinase\s+signaling\b|kinase\s+signal/i, "aberrant kinase signaling"],
+  [/\bcell\s+cycle\s+dysregulation\b|cell\s+cycle\s+(?:arrest|defect)/i, "cell cycle dysregulation"],
+  [/\bepigenetic\s+dysregulation\b|epigenetic\s+(?:modifier|driver)/i, "epigenetic dysregulation"],
+  [/\bdna\s+damage\s+response\s+deficiency\b|ddr\s+deficiency|parp\s+inhibit/i, "dna damage response deficiency"],
+  [/\bimmune\s+evasion\b|checkpoint\s+(?:inhibitor|immunotherapy)/i, "immune evasion"],
+  [/\bapoptosis\s+resistance\b|anti.apoptotic/i, "apoptosis resistance"],
+  [/\boncogenic\s+transcription\b/i, "oncogenic transcription"],
+  [/\bangiogenesis\b|tumor\s+vascular/i, "angiogenesis"],
+  [/\btumor\s+microenvironment\b|\bTME\b/i, "tumor microenvironment"],
+  [/\bprotein\s+aggregation\b|amyloid|tau\s+pathology|alpha.synuclein/i, "protein aggregation"],
+  [/\bneuroinflammation\b|microglial\s+activation/i, "neuroinflammation"],
+  [/\bsynaptic\s+dysfunction\b|neurotransmitter\s+(?:deficiency|dysregulation)/i, "synaptic dysfunction"],
+  [/\bmitochondrial\s+dysfunction\b/i, "mitochondrial dysfunction"],
+  [/\bmyelin\s+disruption\b|demyelination/i, "myelin disruption"],
+  [/\bneuronal\s+excitotoxicity\b|excitotoxicity/i, "neuronal excitotoxicity"],
+  [/\bautoimmune\s+dysregulation\b|autoimmune\s+disease/i, "autoimmune dysregulation"],
+  [/\bcytokine\s+dysregulation\b|cytokine\s+storm/i, "cytokine dysregulation"],
+  [/\bcomplement\s+dysregulation\b/i, "complement dysregulation"],
+  [/\ballergic\s+dysregulation\b|IgE.mediated/i, "allergic dysregulation"],
+  [/\bimmune\s+deficiency\b|immunodeficiency/i, "immune deficiency"],
+  [/\binsulin\s+resistance\b|type\s+[12]\s+diabetes/i, "insulin resistance"],
+  [/\blipid\s+metabolism\s+dysfunction\b|hypercholesterolemia/i, "lipid metabolism dysfunction"],
+  [/\benzyme\s+deficiency\b|lysosomal\s+storage/i, "enzyme deficiency"],
+  [/\bhormonal\s+dysregulation\b|androgen\s+receptor\s+signaling/i, "hormonal dysregulation"],
+  [/\bgene\s+expression\s+deficiency\b|haploinsufficiency/i, "gene expression deficiency"],
+  [/\bion\s+channel\s+dysfunction\b|channelopathy/i, "ion channel dysfunction"],
+  [/\bstructural\s+protein\s+defect\b|dystrophin\s+deficiency/i, "structural protein defect"],
+  [/\brna\s+splicing\s+defect\b|splicing\s+(?:factor\s+mutation|error)/i, "rna splicing defect"],
+  [/\bpathogen\s+replication\b|viral\s+replication|antiviral/i, "pathogen replication"],
+  [/\bantimicrobial\s+resistance\b|antibiotic\s+resistance|\bAMR\b/i, "antimicrobial resistance"],
+  [/\bfibrosis\b|anti.?fibrotic|fibrotic\s+disease/i, "fibrosis"],
+  [/\bischemia\b|oxidative\s+stress.*disease|reperfusion\s+injury/i, "ischemia and oxidative stress"],
+];
+
+function detectBiology(text: string): string | undefined {
+  for (const [rx, canonical] of BIOLOGY_DETECT) {
+    if (rx.test(text)) return canonical;
+  }
+  return undefined;
+}
+
 // ── Public filter API ─────────────────────────────────────────────────────
 
 export function parseQueryFilters(query: string, sessionContext?: SessionFocusContext): QueryFilters {
@@ -306,11 +351,15 @@ export function parseQueryFilters(query: string, sessionContext?: SessionFocusCo
 
   if (sessionContext?.institution) filters.institution = sessionContext.institution;
 
+  const biology = detectBiology(query);
+  if (biology) filters.biology = biology;
+  else if (sessionContext?.biology) filters.biology = sessionContext.biology;
+
   return filters;
 }
 
 export function hasMeaningfulFilters(filters: QueryFilters): boolean {
-  return !!(filters.modality || filters.geography || filters.stage || filters.indication || filters.institution);
+  return !!(filters.modality || filters.geography || filters.stage || filters.indication || filters.institution || filters.biology);
 }
 
 // ── Session focus management ──────────────────────────────────────────────
@@ -336,6 +385,8 @@ function extractRawFilters(message: string, portfolioInstitutions?: string[]): S
   if (indication) filters.indication = indication;
   const institution = detectInstitutionName(message, portfolioInstitutions);
   if (institution) filters.institution = institution;
+  const biology = detectBiology(message);
+  if (biology) filters.biology = biology;
   return filters;
 }
 
@@ -698,6 +749,7 @@ function buildExtraSQL(filters: QueryFilters, geoRx?: string): ExtraSQL | undefi
   if (filters.stage) parts.push(sql`development_stage ILIKE ${`%${filters.stage}%`}`);
   if (filters.indication) parts.push(sql`indication ILIKE ${`%${filters.indication}%`}`);
   if (filters.institution) parts.push(sql`institution ILIKE ${`%${filters.institution}%`}`);
+  if (filters.biology) parts.push(sql`biology = ${filters.biology}`);
   if (!parts.length) return undefined;
   return parts.reduce((acc, cond) => sql`${acc} AND ${cond}`);
 }

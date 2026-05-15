@@ -115,7 +115,8 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
   const stageLabel = normalizePillValue(asset.development_stage);
   const modalityLabel = normalizePillValue(asset.modality);
-  const hasPills = stageLabel || modalityLabel || classUnknown;
+  const biologyLabel = asset.biology && asset.biology !== "unknown" ? asset.biology : null;
+  const hasPills = stageLabel || modalityLabel || biologyLabel || classUnknown;
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
@@ -316,6 +317,14 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   data-testid={`pill-modality-${asset.id}`}
                 >
                   {modalityLabel}
+                </span>
+              )}
+              {biologyLabel && (
+                <span
+                  className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-teal-50 dark:bg-teal-900/30 border border-teal-200/70 dark:border-teal-700/40 text-teal-700 dark:text-teal-400"
+                  data-testid={`pill-biology-${asset.id}`}
+                >
+                  {biologyLabel}
                 </span>
               )}
               {classUnknown && (
