@@ -5892,6 +5892,7 @@ Do not respond with anything else.`;
         categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
         inventors: string[] | null; sourceUrl: string | null; sourceType: string;
         target: string | null; modality: string | null; indication: string | null; developmentStage: string;
+        biology: string | null;
       }>;
 
       if (gapFill) {
@@ -6049,6 +6050,7 @@ Do not respond with anything else.`;
             summary: a.summary,
             abstract: a.abstract,
             sourceType: a.sourceType,
+            biology: a.biology,
             ctx: {
               categories: a.categories,
               patentStatus: a.patentStatus,
