@@ -3923,6 +3923,9 @@ export async function registerRoutes(
       biologyFillAbortController = new AbortController();
       res.json({ started: true });
 
+      const cap = typeof req.body?.cap === "number" && req.body.cap > 0 ? req.body.cap : undefined;
+      console.log(`[biology-fill] Starting${cap ? ` (cap=${cap})` : " (full run)"}`);
+
       (async () => {
         const { Pool } = await import("pg");
         const { runBiologyFill } = await import("./lib/pipeline/biologyFill");
@@ -3930,6 +3933,7 @@ export async function registerRoutes(
         const client = await dbPool.connect();
         try {
           const summary = await runBiologyFill(client, {
+            cap,
             signal: biologyFillAbortController!.signal,
             onProgress: (processed, total, phase) => {
               biologyFillProgress = { processed, total, phase };
@@ -3937,7 +3941,7 @@ export async function registerRoutes(
           });
           biologyFillResult = summary;
           console.log(
-            `[biology-fill] Done — updated ${summary.totalUpdated} assets` +
+            `[biology-fill] Done — fetched ${summary.total}, updated ${summary.totalUpdated} assets` +
             ` (target_derived:${summary.targetDerived} rule:${summary.ruleMatched}` +
             ` gpt_sent:${summary.gptSent} gpt_resolved:${summary.gptResolved}` +
             ` unresolved:${summary.unresolved})`,

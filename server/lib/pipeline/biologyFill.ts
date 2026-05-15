@@ -104,6 +104,7 @@ export type BiologyFillOptions = {
   dryRun?: boolean;
   skipGpt?: boolean;
   gptBatchSize?: number;
+  cap?: number;
   signal?: AbortSignal;
   onProgress?: (processed: number, total: number, phase: string) => void;
 };
@@ -364,16 +365,17 @@ export async function runBiologyFill(
   dbClient: import("pg").PoolClient,
   opts: BiologyFillOptions = {},
 ): Promise<BiologyFillSummary> {
-  const { dryRun = false, skipGpt = false, gptBatchSize = 50, signal, onProgress } = opts;
+  const { dryRun = false, skipGpt = false, gptBatchSize = 50, cap, signal, onProgress } = opts;
 
-  const { rows: assets } = await dbClient.query<BiologyAsset>(`
-    SELECT id, asset_name, summary, abstract, indication, modality, target,
-           mechanism_of_action, source_type, ip_type, patent_status, development_stage
-    FROM ingested_assets
-    WHERE relevant = true
-      AND (biology IS NULL OR biology = '' OR biology = 'unknown')
-    ORDER BY completeness_score DESC NULLS LAST, id
-  `);
+  const { rows: assets } = await dbClient.query<BiologyAsset>(
+    `SELECT id, asset_name, summary, abstract, indication, modality, target,
+            mechanism_of_action, source_type, ip_type, patent_status, development_stage
+     FROM ingested_assets
+     WHERE relevant = true
+       AND (biology IS NULL OR biology = '' OR biology = 'unknown')
+     ORDER BY completeness_score DESC NULLS LAST, id
+     ${cap ? `LIMIT ${cap}` : ""}`,
+  );
 
   const total = assets.length;
   onProgress?.(0, total, "classifying");
