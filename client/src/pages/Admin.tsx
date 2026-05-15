@@ -991,7 +991,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                       <div className={`text-lg font-bold tabular-nums ${qualityData.biologyFillPct == null ? "text-muted-foreground" : qualityData.biologyFillPct >= 80 ? "text-teal-600 dark:text-teal-400" : qualityData.biologyFillPct >= 30 ? "text-amber-600 dark:text-amber-400" : "text-red-500"}`}>
                         {qualityData.biologyFillPct != null ? `${qualityData.biologyFillPct}%` : "—"}
                       </div>
-                      <div className="text-[10px] text-muted-foreground">Biology Fill</div>
+                      <div className="text-[10px] text-muted-foreground">Biology Fill %</div>
                     </div>
                   </div>
                   {(qualityData.enrichQueueCount > 0 || enrichStatus?.status === "running") && (
