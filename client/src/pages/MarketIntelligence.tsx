@@ -125,7 +125,7 @@ function WhitespacePanel({ matrix }: { matrix: WhitespaceMatrix }) {
 
   if (!rawBiologies.length || !rawModalities.length) {
     return (
-      <EmptyState message="Whitespace data requires biology and modality fields — more assets are being enriched now." />
+      <EmptyState message="Whitespace data requires biology and modality fields. More assets are being enriched now." />
     );
   }
 
@@ -461,7 +461,7 @@ export default function MarketIntelligence() {
                 </span>
               </div>
               <p className="text-sm text-muted-foreground">
-                Cross-portfolio signals across {data ? "the entire TTO corpus" : "23,000+ TTO assets"} — biology drivers, therapeutic whitespace, modality momentum, and institution velocity.
+                Cross-portfolio signals across {data ? "the entire TTO corpus" : "23,000+ TTO assets"}: biology drivers, therapeutic whitespace, modality momentum, and institution velocity.
               </p>
             </div>
             <Link href="/scout">
@@ -528,7 +528,7 @@ export default function MarketIntelligence() {
               <SectionPanel
                 icon={Layers}
                 title="Therapeutic Whitespace"
-                subtitle="Biology × modality density — darker = more assets, dashed = gap"
+                subtitle="Biology × modality density. Darker = more assets, dashed = gap"
                 delay={90}
                 className="col-span-12 lg:col-span-7 min-h-[480px]"
               >
@@ -559,7 +559,7 @@ export default function MarketIntelligence() {
               </SectionPanel>
             </div>
 
-            {/* Row 3: Corpus Growth — full-width accent strip */}
+            {/* Row 3: Corpus Growth - full-width accent strip */}
             <SectionPanel
               icon={BarChart2}
               title="Corpus Growth"
