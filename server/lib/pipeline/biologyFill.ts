@@ -302,9 +302,21 @@ function isDeviceWithNoMolecularTarget(asset: BiologyAsset): boolean {
   return !tgt || tgt === "unknown" || tgt.length <= 2;
 }
 
-/** Autoimmune overrides immune evasion when the context is clearly autoimmune. */
-function isAutoimmune(text: string): boolean {
-  return /\b(?:autoimmune|autoantibody|self.antigen|autoreactive|rheumatoid|lupus|Sjogren|multiple\s+sclerosis|inflammatory\s+bowel|Crohn|celiac|psoriatic|ankylosing|myasthenia|vasculitis)\b/i.test(text);
+/**
+ * Returns true if the asset has clear autoimmune disease context.
+ * Prioritises indication (higher-weight signal) then falls back to the full
+ * text blob. Checking indication first prevents autoimmune background terms
+ * in a research abstract from over-downgrading oncology checkpoint assets.
+ */
+function isAutoimmune(text: string, indication?: string | null): boolean {
+  const AUTOIMMUNE_RE = /\b(?:autoimmune|autoantibody|self.antigen|autoreactive|rheumatoid|lupus|Sjogren|multiple\s+sclerosis|inflammatory\s+bowel|Crohn|celiac|psoriatic|ankylosing|myasthenia|vasculitis)\b/i;
+  // If indication is available and clearly autoimmune, trust it.
+  if (indication && AUTOIMMUNE_RE.test(indication)) return true;
+  // If indication is present but not autoimmune, don't over-downgrade based on
+  // background text (e.g. oncology checkpoint paper with autoimmune side-effect
+  // mention). Only use full text when indication is absent / uninformative.
+  if (indication && indication.trim().length > 5) return false;
+  return AUTOIMMUNE_RE.test(text);
 }
 
 /**
@@ -368,7 +380,7 @@ export function applyBiologyRules(asset: BiologyAsset): string | null {
     if (matched) {
       // Guard 3: "immune evasion" rules can misfire for autoimmune checkpoint use-cases.
       // If indication/text is clearly autoimmune, downgrade to autoimmune dysregulation.
-      if (rule.biology === "immune evasion" && isAutoimmune(text)) {
+      if (rule.biology === "immune evasion" && isAutoimmune(text, asset.indication)) {
         return "autoimmune dysregulation";
       }
       // Guard 4: viral-vector assets matched to "pathogen replication" via TIER1 text
@@ -382,7 +394,7 @@ export function applyBiologyRules(asset: BiologyAsset): string | null {
   for (const rule of TIER2) {
     const matched = rule.pattern.test(text);
     if (matched) {
-      if (rule.biology === "immune evasion" && isAutoimmune(text)) {
+      if (rule.biology === "immune evasion" && isAutoimmune(text, asset.indication)) {
         return "autoimmune dysregulation";
       }
       if (rule.biology === "pathogen replication" && isVectorDeliveryModality(asset)) {
