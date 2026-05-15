@@ -1461,9 +1461,9 @@ export async function registerRoutes(
       const totalAssetsIndexed = Number((totalRow.rows[0] as Record<string, unknown>)?.total ?? 0);
 
       // recentDeltaWindow: the period label for `recentDelta` on each modality entry.
-      // Only present for range=all (where delta = last 90d vs all-time total).
-      // For specific ranges, total IS the period count — no separate delta period applies.
-      const recentDeltaWindow: string | null = range === "all" ? "90d" : null;
+      // For range=all: "90d" (backend computes delta as last 90 days vs all-time total).
+      // For specific ranges: the range itself (e.g. "30d") — delta = total for that window.
+      const recentDeltaWindow: string = range === "all" ? "90d" : range;
 
       const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow };
       cacheSet(CACHE_KEY, result, TTL_MS);

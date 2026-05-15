@@ -34,7 +34,7 @@ type MarketIntelligenceData = {
   weeklyTrend: WeekEntry[];
   institutionVelocity: VelocityEntry[];
   totalAssetsIndexed: number;
-  recentDeltaWindow: string | null;
+  recentDeltaWindow: string;
 };
 
 type DrawerAsset = {
@@ -189,7 +189,7 @@ function ModalityMomentumPanel({
   recentDeltaWindow,
 }: {
   data: ModalityEntry[];
-  recentDeltaWindow: string | null;
+  recentDeltaWindow: string;
 }) {
   if (!data.length) {
     return <EmptyState message="No modality data available." />;
