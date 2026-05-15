@@ -27,6 +27,8 @@ export type CompletenessAsset = {
    * or patentStatus field to award IP credit for tech_transfer assets.
    */
   sourceType?: string | null;
+  /** biology bucket (e.g. "aberrant kinase signaling") — earns a +5 soft bonus */
+  biology?: string | null;
   // Retained for backwards-compat with callers that still pass these — not scored
   target?: string | null;
   innovationClaim?: string | null;
@@ -60,8 +62,10 @@ function hasValue(val: unknown): boolean {
  *   IP protection     =  8 pts  (ipType OR patentStatus, either earns full credit;
  *                                OR sourceType === 'tech_transfer' — TTO portal
  *                                listing IS proof of licensing availability)
+ *   biology (soft)    =  5 pts  (canonical biology bucket assigned — not part of the
+ *                                100 pt base; acts as a tie-breaker bonus)
  *   ──────────────────────────
- *   Total             = 100 pts
+ *   Base max          = 100 pts  (clamped — biology bonus can push past 100 → capped)
  *
  * IP credit rationale: universities publish technologies on TTO portals specifically
  * because they are available for licensing. The listing IS the IP availability signal.
@@ -100,6 +104,11 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
     (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown");
   const isTtoListing = asset.sourceType === "tech_transfer";
   if (hasExplicitIp || isTtoListing) score += 8;
+
+  // biology soft bonus (5 pts) — canonical biology bucket raises signal quality;
+  // excluded values: null / '' / 'unknown' / 'other'.
+  const bio = (asset.biology ?? "").toLowerCase().trim();
+  if (bio && bio !== "unknown" && bio !== "other") score += 5;
 
   return Math.min(100, score);
 }

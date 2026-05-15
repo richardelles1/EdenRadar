@@ -91,6 +91,7 @@ export type ModalityAsset = {
   ip_type: string | null;
   patent_status: string | null;
   source_type: string | null;
+  biology: string | null;
 };
 
 export type ModalityFillSummary = {
@@ -259,7 +260,7 @@ export async function runModalityFill(
   // ── Step 2: Fetch assets with null/unknown modality ───────────────────────
   const { rows: assets } = await dbClient.query<ModalityAsset>(`
     SELECT id, asset_name, summary, abstract, indication, development_stage,
-           mechanism_of_action, ip_type, patent_status, source_type
+           mechanism_of_action, ip_type, patent_status, source_type, biology
     FROM ingested_assets
     WHERE relevant = true
       AND (modality IS NULL OR modality IN ('unknown', ''))
@@ -318,6 +319,7 @@ export async function runModalityFill(
         patentStatus: u.asset.patent_status,
         sourceType: u.asset.source_type,
         summary: u.asset.summary,
+        biology: u.asset.biology,
       });
       await dbClient.query(
         `UPDATE ingested_assets SET modality = $1, completeness_score = $2 WHERE id = $3`,

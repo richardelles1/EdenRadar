@@ -30,6 +30,8 @@ export interface DeepEnrichAssetInput {
   ctx?: AssetContext;
   /** source_type from ingested_assets — "tech_transfer" earns automatic IP credit */
   sourceType?: string | null;
+  /** biology bucket already assigned (used to preserve +5 soft bonus during re-enrichment) */
+  biology?: string | null;
 }
 
 export interface DeepEnrichBatchResult {
@@ -179,6 +181,7 @@ export async function deepEnrichBatch(
           inventors: asset.ctx?.inventors ?? null,
           patentStatus: asset.ctx?.patentStatus ?? null,
           sourceType: asset.sourceType,
+          biology: asset.biology,
         });
 
         const result: DeepEnrichResult = {

@@ -518,20 +518,21 @@ ${items.join("\n")}`;
 /** Write a batch of tagged updates to DB immediately. */
 async function flushToDB(
   dbClient: import("pg").PoolClient,
-  updates: Array<{ id: number; biology: string; source: string }>,
+  updates: Array<{ id: number; biology: string; source: string; completenessScore?: number | null }>,
 ): Promise<void> {
   if (updates.length === 0) return;
   const values: unknown[] = [];
   const rows = updates.map((u, j) => {
-    const base = j * 3;
-    values.push(u.id, u.biology, JSON.stringify({ biology: u.source }));
-    return `($${base + 1}::int, $${base + 2}::text, $${base + 3}::text)`;
+    const base = j * 4;
+    values.push(u.id, u.biology, JSON.stringify({ biology: u.source }), u.completenessScore ?? null);
+    return `($${base + 1}::int, $${base + 2}::text, $${base + 3}::text, $${base + 4}::numeric)`;
   });
   await dbClient.query(
     `UPDATE ingested_assets AS t
      SET biology = v.biology,
-         enrichment_sources = COALESCE(t.enrichment_sources, '{}'::jsonb) || v.src::jsonb
-     FROM (VALUES ${rows.join(", ")}) AS v(id, biology, src)
+         enrichment_sources = COALESCE(t.enrichment_sources, '{}'::jsonb) || v.src::jsonb,
+         completeness_score = COALESCE(v.cs, t.completeness_score)
+     FROM (VALUES ${rows.join(", ")}) AS v(id, biology, src, cs)
      WHERE t.id = v.id`,
     values,
   );
@@ -583,21 +584,43 @@ export async function runBiologyFill(
   emit("classifying (target + rules)");
 
   // ── Phase 1: fast classification ─────────────────────────────────────────
-  const fastTarget: Array<{ id: number; biology: string; source: string }> = [];
-  const fastRule: Array<{ id: number; biology: string; source: string }> = [];
+  const fastTarget: Array<{ id: number; biology: string; source: string; completenessScore?: number | null }> = [];
+  const fastRule: Array<{ id: number; biology: string; source: string; completenessScore?: number | null }> = [];
   const unmatched: BiologyAsset[] = [];
 
   for (const asset of assets) {
     if (signal?.aborted) break;
     const fromTarget = deriveFromTarget(asset.target);
     if (fromTarget) {
-      fastTarget.push({ id: asset.id, biology: fromTarget, source: "target_derived" });
+      fastTarget.push({
+        id: asset.id,
+        biology: fromTarget,
+        source: "target_derived",
+        completenessScore: computeCompletenessScore({
+          modality: asset.modality, indication: asset.indication,
+          developmentStage: asset.development_stage, mechanismOfAction: asset.mechanism_of_action,
+          ipType: asset.ip_type, patentStatus: asset.patent_status,
+          sourceType: asset.source_type, summary: asset.summary,
+          biology: fromTarget,
+        }),
+      });
       targetDerivedCount++;
       continue;
     }
     const fromRules = applyBiologyRules(asset);
     if (fromRules) {
-      fastRule.push({ id: asset.id, biology: fromRules, source: "rule" });
+      fastRule.push({
+        id: asset.id,
+        biology: fromRules,
+        source: "rule",
+        completenessScore: computeCompletenessScore({
+          modality: asset.modality, indication: asset.indication,
+          developmentStage: asset.development_stage, mechanismOfAction: asset.mechanism_of_action,
+          ipType: asset.ip_type, patentStatus: asset.patent_status,
+          sourceType: asset.source_type, summary: asset.summary,
+          biology: fromRules,
+        }),
+      });
       ruleMatchedCount++;
     } else {
       unmatched.push(asset);
@@ -619,11 +642,22 @@ export async function runBiologyFill(
       const batch = unmatched.slice(i, i + gptBatchSize);
       const gptResult = await gptFallback(batch, openai);
 
-      const batchWrites: Array<{ id: number; biology: string; source: string }> = [];
+      const batchWrites: Array<{ id: number; biology: string; source: string; completenessScore?: number | null }> = [];
       for (const asset of batch) {
         const b = gptResult.get(asset.id);
         if (b) {
-          batchWrites.push({ id: asset.id, biology: b, source: "gpt4o-mini" });
+          batchWrites.push({
+            id: asset.id,
+            biology: b,
+            source: "gpt4o-mini",
+            completenessScore: computeCompletenessScore({
+              modality: asset.modality, indication: asset.indication,
+              developmentStage: asset.development_stage, mechanismOfAction: asset.mechanism_of_action,
+              ipType: asset.ip_type, patentStatus: asset.patent_status,
+              sourceType: asset.source_type, summary: asset.summary,
+              biology: b,
+            }),
+          });
           gptResolvedCount++;
         }
       }
