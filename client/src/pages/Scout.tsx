@@ -64,6 +64,31 @@ const CANONICAL_BIOLOGY = [
   "fibrosis", "ischemia and oxidative stress",
 ];
 
+// Maps buyer profile therapeutic areas (as stored by BuyerProfileForm) to
+// the closest biology values from the 32-value CANONICAL_BIOLOGY taxonomy.
+// Used to auto-populate the biology chip filter when a buyer's focus is set.
+const THERAPEUTIC_AREA_TO_BIOLOGY: Record<string, string[]> = {
+  "Oncology":           ["oncogenic transcription", "tumor microenvironment", "immune evasion"],
+  "Immunology":         ["autoimmune dysregulation", "cytokine dysregulation", "immune evasion"],
+  "Neurology":          ["neuroinflammation", "protein aggregation", "synaptic dysfunction"],
+  "Cardiology":         ["ischemia and oxidative stress", "ion channel dysfunction", "fibrosis"],
+  "Rare Disease":       ["gene expression deficiency", "enzyme deficiency", "structural protein defect"],
+  "Infectious Disease": ["pathogen replication", "antimicrobial resistance"],
+  "Metabolic":          ["insulin resistance", "hormonal dysregulation", "lipid metabolism dysfunction"],
+  "CNS":                ["neuroinflammation", "synaptic dysfunction", "protein aggregation"],
+  "Pulmonology":        ["fibrosis", "cytokine dysregulation"],
+  "Ophthalmology":      ["angiogenesis", "ion channel dysfunction"],
+};
+
+function getBiologyFromProfile(therapeuticAreas: string[]): string[] {
+  const result = new Set<string>();
+  for (const ta of therapeuticAreas) {
+    const bios = THERAPEUTIC_AREA_TO_BIOLOGY[ta] ?? [];
+    bios.forEach((b) => result.add(b));
+  }
+  return [...result];
+}
+
 function getCutoffDate(filter: string): Date {
   const now = Date.now();
   if (filter === "30d") return new Date(now - 30 * 24 * 60 * 60 * 1000);
@@ -290,6 +315,9 @@ export default function Scout() {
   const [modalityFilter, setModalityFilter] = useState<string>("all");
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
   const [biologiesFilter, setBiologiesFilter] = useState<string[]>([]);
+  // true once the user has manually toggled a biology chip, false while still
+  // showing the auto-suggested set derived from their profile's therapeutic areas.
+  const [biologiesManuallySet, setBiologiesManuallySet] = useState(false);
   // Multi-value filters populated from URL (e.g. when arriving from an Alerts
   // "Explore matches" link with multiple stages/modalities/institutions). When
   // non-empty, these AND with the single-select filters above. Cleared via the
@@ -302,6 +330,7 @@ export default function Scout() {
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
+  const didAutoInitBiology = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [patentFiltersOpen, setPatentFiltersOpen] = useState(false);
   const [trialFiltersOpen, setTrialFiltersOpen] = useState(false);
@@ -436,6 +465,28 @@ export default function Scout() {
       localStorage.removeItem(BUYER_PROFILE_KEY);
     } catch {}
   }
+
+  // Derive the biology set that corresponds to the buyer's therapeutic focus.
+  // Recomputed whenever the profile changes so the "Reset to my focus" link
+  // always reflects the current profile state.
+  const profileBiologies = useMemo(
+    () => getBiologyFromProfile(buyerProfile.therapeutic_areas),
+    [buyerProfile.therapeutic_areas],
+  );
+
+  // On first mount, auto-populate the biology filter from the buyer's profile
+  // therapeutic areas if (a) the profile has therapeutic areas set and
+  // (b) the user has not already made a manual selection in this session.
+  useEffect(() => {
+    if (didAutoInitBiology.current) return;
+    didAutoInitBiology.current = true;
+    const suggested = getBiologyFromProfile(buyerProfile.therapeutic_areas);
+    if (suggested.length > 0 && biologiesFilter.length === 0) {
+      setBiologiesFilter(suggested);
+      // biologiesManuallySet stays false — these are profile suggestions, not manual picks
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
   const { data: institutionsData } = useQuery<InstitutionsResponse>({
@@ -2167,7 +2218,10 @@ export default function Scout() {
                     return (
                       <button
                         key={b}
-                        onClick={() => setBiologiesFilter((prev) => active ? prev.filter((v) => v !== b) : [...prev, b])}
+                        onClick={() => {
+                          setBiologiesManuallySet(true);
+                          setBiologiesFilter((prev) => active ? prev.filter((v) => v !== b) : [...prev, b]);
+                        }}
                         className={`text-[10px] font-medium px-2 py-0.5 rounded-full border capitalize transition-colors ${
                           active
                             ? "bg-teal-600 text-white border-teal-600"
@@ -2180,6 +2234,32 @@ export default function Scout() {
                     );
                   })}
                 </div>
+                {/* Profile-suggestion label — shown when chips were auto-populated and not yet manually changed */}
+                {!biologiesManuallySet && biologiesFilter.length > 0 && profileBiologies.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
+                    <span>Based on your focus</span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <button
+                      className="text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
+                      onClick={() => { setBiologiesFilter([]); setBiologiesManuallySet(true); }}
+                      data-testid="button-biology-clear-suggestion"
+                    >
+                      Clear
+                    </button>
+                  </p>
+                )}
+                {/* Reset link — shown only when user has manually diverged from their profile default */}
+                {biologiesManuallySet && profileBiologies.length > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    <button
+                      className="text-primary/70 hover:text-primary underline underline-offset-2 transition-colors"
+                      onClick={() => { setBiologiesFilter(profileBiologies); setBiologiesManuallySet(false); }}
+                      data-testid="button-biology-reset-to-focus"
+                    >
+                      Reset to my focus
+                    </button>
+                  </p>
+                )}
               </div>
             )}
 
@@ -2189,7 +2269,13 @@ export default function Scout() {
                   setStageFilter("all");
                   setModalityFilter("all");
                   setInstitutionFilter("all");
-                  setBiologiesFilter([]);
+                  // Restore profile-suggested biology chips when resetting all filters
+                  if (profileBiologies.length > 0) {
+                    setBiologiesFilter(profileBiologies);
+                    setBiologiesManuallySet(false);
+                  } else {
+                    setBiologiesFilter([]);
+                  }
                   setStagesMulti([]);
                   setModalitiesMulti([]);
                   setInstitutionsMulti([]);
