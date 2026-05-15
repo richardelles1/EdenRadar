@@ -262,8 +262,9 @@ const TIER2: Array<{ pattern: RegExp; biology: string }> = [
   { pattern: /\b(?:chronic\s+pain|neuropathic\s+pain|nociception|pain\s+(?:management|relief|treatment|therapy)|analgesic|opioid.*pain|allodynia|hyperalgesia|fibromyalgia|migraine|headache\s+disorder)\b/i, biology: "ion channel dysfunction" },
   // Expanded TIER2: wound healing / tissue repair → fibrosis
   { pattern: /\b(?:wound\s+healing|tissue\s+repair|skin\s+regeneration|chronic\s+wound|diabetic\s+(?:wound|ulcer)|pressure\s+ulcer|dermal\s+repair|regenerative\s+wound|burn\s+wound|wound\s+closure)\b/i, biology: "fibrosis" },
-  // Expanded TIER2: cardiovascular / heart failure → ischemia and oxidative stress
-  { pattern: /\b(?:heart\s+failure|cardiac\s+arrest|cardiomyopathy|coronary\s+artery\s+disease|angina|atherosclerosis|hypertension.*cardiac|arrhythmia\s+(?:ischemia|oxidative)|acute\s+coronary\s+syndrome|cardioprotection)\b/i, biology: "ischemia and oxidative stress" },
+  // Expanded TIER2: cardiovascular → ischemia and oxidative stress
+  // Includes plain hypertension, remodeling variants, valve disease, arrhythmia
+  { pattern: /\b(?:heart\s+failure|cardiac\s+arrest|cardiomyopathy|dilated\s+cardiomyopathy|coronary\s+artery\s+disease|angina|atherosclerosis|hypertension(?!\s+(?:portal|pulmonary\s+arterial))\b|cardiac\s+remodeling|ventricular\s+(?:remodeling|hypertrophy|dysfunction)|arrhythmia|acute\s+coronary\s+syndrome|cardioprotection|aortic\s+(?:stenosis|valve\s+disease)|cardiogenic\s+shock|heart\s+disease)\b/i, biology: "ischemia and oxidative stress" },
   // Expanded TIER2: acute kidney injury → ischemia (distinct from CKD → fibrosis)
   { pattern: /\b(?:acute\s+kidney\s+injury|AKI\b|renal\s+(?:ischemia|reperfusion\s+injury|ischemia.reperfusion)|ischemic\s+nephropathy|contrast.induced\s+(?:nephropathy|AKI)|hepatorenal\s+syndrome|acute\s+tubular\s+necrosis)\b/i, biology: "ischemia and oxidative stress" },
   // Expanded TIER2: chronic kidney disease / renal → fibrosis

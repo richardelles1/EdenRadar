@@ -659,8 +659,9 @@ export async function registerRoutes(
         indication: z.string().optional(),
         institution: z.string().optional(),
         biology: z.string().optional(),
-        // Multi-value lists (used by Alerts "Explore matches" links).
+        // Multi-value lists (used by Alerts "Explore matches" links + biology chip filter).
         // Each list is OR'd within itself; lists are AND'd across each other.
+        biologies: z.array(z.string()).optional(),
         modalities: z.array(z.string()).optional(),
         stages: z.array(z.string()).optional(),
         institutions: z.array(z.string()).optional(),
@@ -668,9 +669,9 @@ export async function registerRoutes(
         since: z.string().optional(),
         before: z.string().optional(),
       });
-      const { query, minSimilarity, modality, stage, indication, institution, biology, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
+      const { query, minSimilarity, modality, stage, indication, institution, biology, biologies, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
       const hasAnyFilter = !!(modality || stage || indication || institution || biology || since || before
-        || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
+        || (biologies && biologies.length) || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
       if (!query.trim() && !hasAnyFilter) {
         return res.json({ assets: [], query, assetsFound: 0, sources: ["tech_transfer"], fallback: false });
       }
@@ -681,6 +682,7 @@ export async function registerRoutes(
 
       const searchOpts = {
         modality, stage, indication, institution, biology,
+        biologies: biologies && biologies.length ? biologies : undefined,
         modalities: modalities && modalities.length ? modalities : undefined,
         stages: stages && stages.length ? stages : undefined,
         institutions: institutions && institutions.length ? institutions : undefined,
