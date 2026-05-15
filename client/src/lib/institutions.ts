@@ -10,9 +10,24 @@ export type Institution = {
   accessRestricted: boolean;
   count: number;
   activeListings: number;
+  topBiology: string[];
 };
 
 export type InstitutionsListResponse = {
   institutions: Institution[];
   total: number;
+};
+
+export type InstitutionProfile = {
+  biologyBreakdown: { label: string; count: number }[];
+  stageBreakdown: { stage: string; count: number }[];
+  topIndications: string[];
+  standoutAssets: {
+    id: number;
+    assetName: string;
+    completenessScore: number;
+    developmentStage: string | null;
+    indication: string | null;
+  }[];
+  totalAssets: number;
 };

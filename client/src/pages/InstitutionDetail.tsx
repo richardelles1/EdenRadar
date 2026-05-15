@@ -6,10 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw,
-  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown,
+  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown, Dna, TrendingUp,
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
-import type { InstitutionsListResponse } from "@/lib/institutions";
+import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
 import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
@@ -178,6 +178,185 @@ function AssetRow({ asset, index, savedIngestedIds }: {
   );
 }
 
+const STAGE_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
+
+const STAGE_BAR_COLORS: Record<string, string> = {
+  "discovery":   "bg-violet-500",
+  "preclinical": "bg-amber-500",
+  "phase 1":     "bg-cyan-500",
+  "phase 2":     "bg-sky-500",
+  "phase 3":     "bg-blue-500",
+  "approved":    "bg-emerald-500",
+};
+
+const BIOLOGY_COLORS = [
+  "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20",
+  "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20",
+  "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/20",
+  "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20",
+];
+
+function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institutions").InstitutionProfile | null; loading: boolean }) {
+  const hasBiology = (profile?.biologyBreakdown?.length ?? 0) > 0;
+  const hasStage = (profile?.stageBreakdown?.length ?? 0) > 0;
+  const hasIndications = (profile?.topIndications?.length ?? 0) > 0;
+  const hasStandout = (profile?.standoutAssets?.length ?? 0) > 0;
+  const hasAny = hasBiology || hasStage || hasIndications || hasStandout;
+
+  if (!loading && !hasAny) return null;
+
+  const maxBiologyCnt = profile?.biologyBreakdown?.[0]?.count ?? 1;
+  const totalStageCnt = profile?.stageBreakdown?.reduce((s, r) => s + r.count, 0) ?? 1;
+
+  const sortedStages = profile?.stageBreakdown
+    ? [...profile.stageBreakdown].sort((a, b) => {
+        const ai = STAGE_ORDER.indexOf(a.stage?.toLowerCase() ?? "");
+        const bi = STAGE_ORDER.indexOf(b.stage?.toLowerCase() ?? "");
+        return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+      })
+    : [];
+
+  return (
+    <div className="rounded-xl border border-card-border bg-card p-5 space-y-5" data-testid="research-dna-panel">
+      <div className="flex items-center gap-2">
+        <Dna className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Research DNA</h2>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {/* Biology Drivers */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Biology Drivers</p>
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-5 w-full rounded" />)}
+            </div>
+          ) : hasBiology ? (
+            <div className="space-y-1.5">
+              {profile!.biologyBreakdown.map((b, i) => (
+                <div key={b.label} className="flex items-center gap-2" data-testid={`biology-bar-${i}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${BIOLOGY_COLORS[i % BIOLOGY_COLORS.length]}`}>
+                        {b.label}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground tabular-nums ml-2 shrink-0">{b.count}</span>
+                    </div>
+                    <div className="h-1 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary/40 transition-all"
+                        style={{ width: `${Math.round((b.count / maxBiologyCnt) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground/60 italic">No biology data yet</p>
+          )}
+        </div>
+
+        {/* Stage Distribution */}
+        <div className="space-y-2">
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Stage Mix</p>
+          {loading ? (
+            <div className="space-y-1.5">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-5 w-full rounded" />)}
+            </div>
+          ) : hasStage ? (
+            <div className="space-y-1.5">
+              {sortedStages.map((s) => {
+                const key = s.stage?.toLowerCase() ?? "";
+                const pct = Math.round((s.count / totalStageCnt) * 100);
+                const barColor = STAGE_BAR_COLORS[key] ?? "bg-muted-foreground/40";
+                const labelColor = STAGE_COLORS[key] ?? "bg-muted text-muted-foreground";
+                return (
+                  <div key={s.stage} className="flex items-center gap-2" data-testid={`stage-bar-${key}`}>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${labelColor}`}>
+                      {s.stage}
+                    </span>
+                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{s.count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground/60 italic">No stage data yet</p>
+          )}
+        </div>
+      </div>
+
+      {(hasIndications || hasStandout || loading) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-3 border-t border-card-border/60">
+          {/* Top Indications */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Indication Focus</p>
+            {loading ? (
+              <div className="space-y-1.5">
+                {[1, 2, 3].map((i) => <Skeleton key={i} className="h-4 w-3/4 rounded" />)}
+              </div>
+            ) : hasIndications ? (
+              <ul className="space-y-1">
+                {profile!.topIndications.map((ind, i) => (
+                  <li key={ind} className="flex items-center gap-1.5 text-xs text-foreground" data-testid={`indication-${i}`}>
+                    <span className="w-3.5 h-3.5 rounded-full bg-primary/15 text-primary text-[9px] font-bold flex items-center justify-center shrink-0">
+                      {i + 1}
+                    </span>
+                    {ind}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-xs text-muted-foreground/60 italic">No indication data yet</p>
+            )}
+          </div>
+
+          {/* Standout Assets */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="w-3 h-3 text-muted-foreground" />
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Standout Assets</p>
+            </div>
+            {loading ? (
+              <div className="space-y-2">
+                {[1, 2].map((i) => <Skeleton key={i} className="h-10 w-full rounded" />)}
+              </div>
+            ) : hasStandout ? (
+              <div className="space-y-1.5">
+                {profile!.standoutAssets.map((a) => (
+                  <Link
+                    key={a.id}
+                    href={`/asset/${a.id}`}
+                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-card-border bg-background hover:border-primary/30 transition-colors group"
+                    data-testid={`standout-asset-${a.id}`}
+                  >
+                    <span className="text-xs text-foreground truncate group-hover:text-primary transition-colors leading-snug">
+                      {a.assetName}
+                    </span>
+                    <span className="text-[10px] font-bold tabular-nums text-primary shrink-0 bg-primary/10 px-1.5 py-0.5 rounded-full">
+                      {Math.round(a.completenessScore)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground/60 italic">No enriched assets yet</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 type SavedAssetsResponse = { assets: Array<{ ingestedAssetId: number | null }> };
 
 export default function InstitutionDetail() {
@@ -194,6 +373,13 @@ export default function InstitutionDetail() {
   const { data, isLoading } = useQuery<{ assets: IngestedAsset[]; institution: string }>({
     queryKey: ["/api/institutions", slug, "assets"],
     queryFn: () => fetch(`/api/institutions/${slug}/assets`).then((r) => r.json()),
+    enabled: !!slug,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: profile, isLoading: profileLoading } = useQuery<InstitutionProfile>({
+    queryKey: ["/api/institutions", slug, "profile"],
+    queryFn: () => fetch(`/api/institutions/${slug}/profile`).then((r) => r.json()),
     enabled: !!slug,
     staleTime: 5 * 60 * 1000,
   });
@@ -308,6 +494,8 @@ export default function InstitutionDetail() {
             )}
           </div>
         </div>
+
+        <ResearchDnaPanel profile={profile ?? null} loading={profileLoading} />
 
         {inst?.specialties && inst.specialties.length > 0 && (
           <div>

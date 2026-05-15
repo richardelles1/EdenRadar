@@ -2430,16 +2430,26 @@ export async function registerRoutes(
   // Stub scrapers (no real portal) and orphaned ingested_assets rows are
   // excluded so the public Institutions grid matches Data Health (~330–340).
   // ingested_assets is still LEFT-joined for per-card "active listings".
-  const INSTITUTIONS_CACHE_KEY = "institutions:all:v3";
+  const INSTITUTIONS_CACHE_KEY = "institutions:all:v4";
   const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
   app.get("/api/institutions", async (_req, res) => {
     try {
       const cached = cacheGet<object>(INSTITUTIONS_CACHE_KEY);
       if (cached) return res.json(cached);
 
-      const [metadataRows, counts] = await Promise.all([
+      const [metadataRows, counts, biologyAgg] = await Promise.all([
         db.select().from(institutionMetadata),
         storage.getInstitutionAssetCounts(),
+        db.execute<{ institution: string; biologies: string[] }>(sql`
+          SELECT institution, array_agg(biology ORDER BY cnt DESC) AS biologies
+          FROM (
+            SELECT institution, biology, COUNT(*) AS cnt
+            FROM ingested_assets
+            WHERE biology IS NOT NULL AND biology NOT IN ('unknown', '')
+            GROUP BY institution, biology
+          ) sub
+          GROUP BY institution
+        `),
       ]);
 
       const metaBySlug = new Map(metadataRows.map((m) => [m.slug, m]));
@@ -2452,6 +2462,17 @@ export async function registerRoutes(
         const slug = slugifyInstitutionName(rawName);
         countBySlug.set(slug, (countBySlug.get(slug) ?? 0) + n);
         if (!nameBySlug.has(slug)) nameBySlug.set(slug, rawName);
+      }
+
+      // Build top-2 biology map in canonical slug space.
+      const biologyBySlug = new Map<string, string[]>();
+      for (const row of biologyAgg.rows) {
+        const slug = slugifyInstitutionName(row.institution);
+        const existing = biologyBySlug.get(slug) ?? [];
+        biologyBySlug.set(slug, existing);
+        for (const b of (row.biologies ?? [])) {
+          if (!existing.includes(b) && existing.length < 2) existing.push(b);
+        }
       }
 
       // Membership: only non-stub scrapers (mirrors Admin Data Health).
@@ -2481,6 +2502,7 @@ export async function registerRoutes(
           // both until migration completes.
           count: countBySlug.get(slug) ?? 0,
           activeListings: countBySlug.get(slug) ?? 0,
+          topBiology: biologyBySlug.get(slug) ?? [],
         };
       });
 
@@ -2490,6 +2512,92 @@ export async function registerRoutes(
       res.json(payload);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch institutions" });
+    }
+  });
+
+  // ── /api/institutions/:slug/profile ──────────────────────────────────────
+  // Returns portfolio intelligence for a single institution: biology drivers,
+  // stage mix, top indications, and standout assets (highest completeness).
+  app.get("/api/institutions/:slug/profile", async (req, res) => {
+    try {
+      const slug = req.params.slug;
+      const [meta, counts] = await Promise.all([
+        db
+          .select({ name: institutionMetadata.name })
+          .from(institutionMetadata)
+          .where(eq(institutionMetadata.slug, slug))
+          .limit(1),
+        storage.getInstitutionAssetCounts(),
+      ]);
+
+      const aliasNames = new Set<string>();
+      if (meta[0]?.name) aliasNames.add(meta[0].name);
+      for (const s of ALL_SCRAPERS) {
+        if (slugifyInstitutionName(s.institution) === slug) aliasNames.add(s.institution);
+      }
+      for (const rawName of Object.keys(counts)) {
+        if (slugifyInstitutionName(rawName) === slug) aliasNames.add(rawName);
+      }
+
+      if (!aliasNames.size) {
+        return res.json({ biologyBreakdown: [], stageBreakdown: [], topIndications: [], standoutAssets: [], totalAssets: 0 });
+      }
+
+      const names = Array.from(aliasNames);
+      const [biologyRows, stageRows, indicationRows, standoutRows, totalRow] = await Promise.all([
+        db
+          .select({ label: ingestedAssets.biology, cnt: sql<number>`count(*)::int` })
+          .from(ingestedAssets)
+          .where(and(inArray(ingestedAssets.institution, names), sql`biology IS NOT NULL AND biology NOT IN ('unknown', '')`))
+          .groupBy(ingestedAssets.biology)
+          .orderBy(desc(sql`count(*)`))
+          .limit(8),
+        db
+          .select({ stage: ingestedAssets.developmentStage, cnt: sql<number>`count(*)::int` })
+          .from(ingestedAssets)
+          .where(and(inArray(ingestedAssets.institution, names), sql`development_stage IS NOT NULL AND development_stage NOT IN ('unknown', '')`))
+          .groupBy(ingestedAssets.developmentStage)
+          .orderBy(desc(sql`count(*)`)),
+        db
+          .select({ indication: ingestedAssets.indication, cnt: sql<number>`count(*)::int` })
+          .from(ingestedAssets)
+          .where(and(inArray(ingestedAssets.institution, names), sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`))
+          .groupBy(ingestedAssets.indication)
+          .orderBy(desc(sql`count(*)`))
+          .limit(5),
+        db
+          .select({
+            id: ingestedAssets.id,
+            assetName: ingestedAssets.assetName,
+            completenessScore: ingestedAssets.completenessScore,
+            developmentStage: ingestedAssets.developmentStage,
+            indication: ingestedAssets.indication,
+          })
+          .from(ingestedAssets)
+          .where(and(inArray(ingestedAssets.institution, names), sql`completeness_score IS NOT NULL`))
+          .orderBy(desc(ingestedAssets.completenessScore))
+          .limit(3),
+        db
+          .select({ cnt: sql<number>`count(*)::int` })
+          .from(ingestedAssets)
+          .where(inArray(ingestedAssets.institution, names)),
+      ]);
+
+      res.json({
+        biologyBreakdown: biologyRows.map((r) => ({ label: r.label, count: r.cnt })),
+        stageBreakdown: stageRows.map((r) => ({ stage: r.stage, count: r.cnt })),
+        topIndications: indicationRows.map((r) => r.indication).filter(Boolean),
+        standoutAssets: standoutRows.map((r) => ({
+          id: r.id,
+          assetName: r.assetName,
+          completenessScore: r.completenessScore ?? 0,
+          developmentStage: r.developmentStage,
+          indication: r.indication,
+        })),
+        totalAssets: totalRow[0]?.cnt ?? 0,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch institution profile" });
     }
   });
 

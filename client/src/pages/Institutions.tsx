@@ -205,6 +205,20 @@ function InstitutionCard({
             </div>
           )}
 
+          {inst.topBiology && inst.topBiology.length > 0 && (
+            <div className="flex flex-wrap gap-1">
+              {inst.topBiology.map((b) => (
+                <span
+                  key={b}
+                  className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-primary/8 text-primary/70 border border-primary/15 leading-tight"
+                  data-testid={`biology-pill-${inst.slug}`}
+                >
+                  {b}
+                </span>
+              ))}
+            </div>
+          )}
+
           <div className="flex items-center justify-between pt-1 border-t border-white/20 dark:border-white/10">
             <span className="text-xs text-muted-foreground" data-testid={`text-listings-${inst.slug}`}>
               {loading ? (
