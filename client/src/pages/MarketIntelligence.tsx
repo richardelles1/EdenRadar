@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -147,9 +148,8 @@ function WhitespacePanel({ matrix }: { matrix: WhitespaceMatrix }) {
           ))}
 
           {biologies.map((bio) => (
-            <>
+            <Fragment key={bio}>
               <div
-                key={`label-${bio}`}
                 className="text-[10px] text-foreground font-medium truncate pr-2 flex items-center"
                 title={capitalize(bio)}
               >
@@ -177,7 +177,7 @@ function WhitespacePanel({ matrix }: { matrix: WhitespaceMatrix }) {
                   </div>
                 );
               })}
-            </>
+            </Fragment>
           ))}
         </div>
         <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
@@ -303,7 +303,7 @@ function InstitutionVelocityPanel({ data }: { data: VelocityEntry[] }) {
             <div className="flex items-center justify-between mb-0.5 gap-1">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[10px] text-muted-foreground tabular-nums w-4 shrink-0 text-right">{i + 1}</span>
-                <Link href={`/institutions/${encodeURIComponent(entry.institution.toLowerCase().replace(/\s+/g, "-"))}`}>
+                <Link href={`/institutions/${entry.institution.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`}>
                   <span className="text-xs text-foreground font-medium truncate hover:text-primary transition-colors cursor-pointer">
                     {entry.institution}
                   </span>
