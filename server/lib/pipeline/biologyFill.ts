@@ -285,15 +285,21 @@ function deriveFromTarget(target: string | null): string | null {
 
 // ── Accuracy guards ────────────────────────────────────────────────────────────
 
-/** Returns true if the asset is a medical device/equipment with no molecular target. */
-function isDeviceWithNoMolecularTarget(asset: BiologyAsset): boolean {
+/** Returns true if the modality is a medical device / equipment (independent of target). */
+function isDeviceModality(asset: BiologyAsset): boolean {
   const modLower = (asset.modality ?? "").toLowerCase();
-  const isDevice = /\b(?:medical\s+device|device|surgical|implant|equipment|instrument|diagnostic\s+tool|imaging|wearable)\b/.test(modLower);
-  if (!isDevice) return false;
-  // Allow through if an explicit molecular target is set
+  return /\b(?:medical\s+device|device|surgical|implant|equipment|instrument|diagnostic\s+tool|imaging|wearable)\b/.test(modLower);
+}
+
+/**
+ * @deprecated Use isDeviceModality instead — kept for reference only.
+ * The old function allowed devices with a non-empty target to fall through
+ * into TIER1/TIER2 text matching, reintroducing biology bleed.
+ */
+function isDeviceWithNoMolecularTarget(asset: BiologyAsset): boolean {
+  if (!isDeviceModality(asset)) return false;
   const tgt = (asset.target ?? "").toLowerCase().trim();
-  if (tgt && tgt !== "unknown" && tgt.length > 2) return false;
-  return true;
+  return !tgt || tgt === "unknown" || tgt.length <= 2;
 }
 
 /** Autoimmune overrides immune evasion when the context is clearly autoimmune. */
@@ -322,8 +328,20 @@ function isVectorDeliveryModality(asset: BiologyAsset): boolean {
  * Returns biology string or null if nothing matched.
  */
 export function applyBiologyRules(asset: BiologyAsset): string | null {
-  // Guard 1: medical devices with no molecular target → skip all rules
-  if (isDeviceWithNoMolecularTarget(asset)) return null;
+  // Guard 1: medical device modality — NEVER run TIER1/TIER2 text matching.
+  // Devices have no molecular biology in the pharma sense; the only valid
+  // biology is one that maps from an explicit molecular target (e.g. a device
+  // that delivers a VEGF inhibitor still has target="VEGF"). If target
+  // derivation fails, return null — do NOT fall through into text rules.
+  if (isDeviceModality(asset)) {
+    const targetDerived = deriveFromTarget(asset.target);
+    if (!targetDerived) return null;
+    // Apply viral-vector guard even for device+target path (rare but possible).
+    if (targetDerived === "pathogen replication" && isVectorDeliveryModality(asset)) {
+      if (!hasInfectiousContext(asset.indication ?? "")) return null;
+    }
+    return targetDerived;
+  }
 
   const targetDerived = deriveFromTarget(asset.target);
   if (targetDerived) {
