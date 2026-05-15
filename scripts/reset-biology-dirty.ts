@@ -137,13 +137,42 @@ async function run() {
       );
     }
 
+    // ── Category 4: Software / algorithm / research tool assets with biology ──
+    // These describe computational methods or assays — not therapeutic interventions.
+    // The new isToolModality() guard in biologyFill.ts ensures they return null
+    // on re-enrichment, so we only need to clear their current biology value.
+    const toolQuery = `
+      SELECT id, asset_name, biology, modality
+      FROM ingested_assets
+      WHERE relevant = true
+        AND biology IS NOT NULL
+        AND (
+          LOWER(modality) ~ '\\m(software|algorithm|research tool|assay|software/algorithm|computational|in silico)\\M'
+        )
+    `;
+    const toolResult = await client.query(toolQuery);
+    console.log(`\nCategory 4 — Software/algorithm/research tool assets with biology set: ${toolResult.rows.length}`);
+    if (!DRY_RUN && toolResult.rows.length > 0) {
+      const ids = toolResult.rows.map((r: { id: number }) => r.id);
+      await client.query(
+        `UPDATE ingested_assets SET biology = NULL, enriched_at = NULL WHERE id = ANY($1)`,
+        [ids]
+      );
+      console.log(`  → Nulled biology + reset enriched_at for ${ids.length} tool assets`);
+    } else if (DRY_RUN) {
+      toolResult.rows.slice(0, 5).forEach((r: { id: number; asset_name: string; biology: string; modality: string }) =>
+        console.log(`  [DRY] id=${r.id} biology="${r.biology}" modality="${r.modality}" — ${r.asset_name?.slice(0, 60)}`)
+      );
+    }
+
     // ── Summary ───────────────────────────────────────────────────────────────
-    const totalReset = deviceResult.rows.length + vectorResult.rows.length + autoimmuneResult.rows.length;
+    const totalReset = deviceResult.rows.length + vectorResult.rows.length + autoimmuneResult.rows.length + toolResult.rows.length;
     console.log(`\n${"─".repeat(60)}`);
     console.log(`Total assets ${DRY_RUN ? "would be" : ""} reset: ${totalReset}`);
     console.log(`  Category 1 (device):             ${deviceResult.rows.length}`);
     console.log(`  Category 2 (viral-vector guard): ${vectorResult.rows.length}`);
     console.log(`  Category 3 (autoimmune guard):   ${autoimmuneResult.rows.length}`);
+    console.log(`  Category 4 (software/tool):      ${toolResult.rows.length}`);
     if (!DRY_RUN && totalReset > 0) {
       console.log(`\nAll reset assets have enriched_at = NULL and will be picked up`);
       console.log(`by the next background biology fill run.`);

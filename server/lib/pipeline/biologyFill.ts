@@ -269,6 +269,20 @@ const TIER2: Array<{ pattern: RegExp; biology: string }> = [
   { pattern: /\b(?:acute\s+kidney\s+injury|AKI\b|renal\s+(?:ischemia|reperfusion\s+injury|ischemia.reperfusion)|ischemic\s+nephropathy|contrast.induced\s+(?:nephropathy|AKI)|hepatorenal\s+syndrome|acute\s+tubular\s+necrosis)\b/i, biology: "ischemia and oxidative stress" },
   // Expanded TIER2: chronic kidney disease / renal → fibrosis
   { pattern: /\b(?:chronic\s+kidney\s+disease|CKD\b|diabetic\s+nephropathy|glomerulosclerosis|renal\s+(?:insufficiency|failure|chronic\s+disease)|end.stage\s+renal|nephritis\s+fibrosis|kidney\s+fibrosis)\b/i, biology: "fibrosis" },
+  // Small molecule gap — glaucoma / elevated intraocular pressure → ion channel dysfunction
+  // (aqueous humor drainage is governed by trabecular meshwork channel physiology)
+  { pattern: /\b(?:glaucoma|intraocular\s+pressure|IOP\b|aqueous\s+humor\s+drainage|open.angle\s+glaucoma|angle.closure\s+glaucoma|trabecular\s+meshwork)\b/i, biology: "ion channel dysfunction" },
+  // Small molecule gap — age-related macular degeneration / retinal vascular → angiogenesis
+  { pattern: /\b(?:age.related\s+macular\s+degeneration|AMD\b|macular\s+degeneration|retinal\s+(?:degeneration|neovascularization|vascular\s+disease)|choroidal\s+neovascularization|diabetic\s+(?:macular\s+edema|retinopathy)|wet\s+AMD)\b/i, biology: "angiogenesis" },
+  // Small molecule gap — opioid / substance use disorder → synaptic dysfunction
+  { pattern: /\b(?:opioid\s+use\s+disorder|opioid\s+(?:addiction|dependence|withdrawal)|substance\s+use\s+disorder|naloxone|buprenorphine|methadone.*(?:addiction|dependence)|opioid\s+overdose|fentanyl\s+overdose|xylazine|drug\s+overdose|opioid\s+receptor\s+(?:agonist|antagonist))\b/i, biology: "synaptic dysfunction" },
+  // Small molecule gap — alcohol use disorder → synaptic dysfunction
+  { pattern: /\b(?:alcohol\s+use\s+disorder|AUD\b|alcohol\s+(?:withdrawal|dependence|addiction|toxicity)|ethanol\s+(?:toxicity|withdrawal|abuse)|alcohol(?:ism)?)\b/i, biology: "synaptic dysfunction" },
+  // Small molecule gap — cyanide / smoke inhalation / carbon monoxide → mitochondrial dysfunction
+  // (all three impair the mitochondrial electron transport chain)
+  { pattern: /\b(?:cyanide\s+poison(?:ing)?|smoke\s+inhalation|carbon\s+monoxide\s+poison(?:ing)?|CO\s+poison(?:ing)?|hydrogen\s+cyanide|respiratory\s+toxin)\b/i, biology: "mitochondrial dysfunction" },
+  // Small molecule gap — ectopic pregnancy / endometriosis / uterine pathology → hormonal dysregulation
+  { pattern: /\b(?:ectopic\s+pregnancy|endometriosis|uterine\s+(?:fibroid|leiomyoma|myoma)|adenomyosis|premature\s+ovarian\s+insufficiency|ovarian\s+(?:reserve|failure))\b/i, biology: "hormonal dysregulation" },
 ];
 
 /**
@@ -289,6 +303,22 @@ function deriveFromTarget(target: string | null): string | null {
 function isDeviceModality(asset: BiologyAsset): boolean {
   const modLower = (asset.modality ?? "").toLowerCase();
   return /\b(?:medical\s+device|device|surgical|implant|equipment|instrument|diagnostic\s+tool|imaging|wearable)\b/.test(modLower);
+}
+
+/**
+ * Returns true if the modality is a software tool, algorithm, research reagent,
+ * or assay — assets that describe workflows or measurement tools rather than a
+ * therapeutic intervention. These have no molecular biology mechanism in the
+ * pharma sense and should not receive a biology label.
+ *
+ * Deliberately excludes "platform technology" and "platform" (delivery platforms
+ * whose biology IS derivable from their indication/payload).
+ * Deliberately excludes "diagnostic" (diagnostic assays can have biology, e.g.
+ * a COVID PCR test correctly maps to "pathogen replication").
+ */
+function isToolModality(asset: BiologyAsset): boolean {
+  const modLower = (asset.modality ?? "").toLowerCase();
+  return /\b(?:software|algorithm|research\s+tool|assay|software\/algorithm|computational|in\s+silico)\b/.test(modLower);
 }
 
 /**
@@ -340,7 +370,12 @@ function isVectorDeliveryModality(asset: BiologyAsset): boolean {
  * Returns biology string or null if nothing matched.
  */
 export function applyBiologyRules(asset: BiologyAsset): string | null {
-  // Guard 1: medical device modality — NEVER run TIER1/TIER2 text matching.
+  // Guard 1a: software / algorithm / research tool — no molecular biology mechanism.
+  // These describe computational methods or measurement reagents, not therapeutics.
+  // Return null immediately; do not fall through into any tier.
+  if (isToolModality(asset)) return null;
+
+  // Guard 1b: medical device modality — NEVER run TIER1/TIER2 text matching.
   // Devices have no molecular biology in the pharma sense; the only valid
   // biology is one that maps from an explicit molecular target (e.g. a device
   // that delivers a VEGF inhibitor still has target="VEGF"). If target
