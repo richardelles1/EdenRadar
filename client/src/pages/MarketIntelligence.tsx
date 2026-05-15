@@ -189,7 +189,7 @@ function WhitespacePanel({ matrix }: { matrix: WhitespaceMatrix }) {
             <div className="w-3 h-3 rounded" style={{ background: "hsl(142 71% 45% / 0.7)" }} />
             <span className="text-[9px] text-muted-foreground">High density</span>
           </div>
-          <span className="text-[9px] text-muted-foreground ml-auto italic">Click cell for count</span>
+          <span className="text-[9px] text-muted-foreground ml-auto italic">Hover cell for exact count</span>
         </div>
       </div>
     </div>
@@ -425,9 +425,12 @@ export default function MarketIntelligence() {
         )}
 
         {isLoading ? (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-            {[1, 2, 3, 4].map((i) => <SkeletonPanel key={i} />)}
-          </div>
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {[1, 2, 3, 4].map((i) => <SkeletonPanel key={i} />)}
+            </div>
+            <SkeletonPanel />
+          </>
         ) : data && (
           <>
             {/* Row 1: Biology Landscape + Whitespace Matrix */}

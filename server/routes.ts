@@ -1382,10 +1382,22 @@ export async function registerRoutes(
           GROUP BY modality ORDER BY total DESC LIMIT 12
         `),
         db.execute(sql`
-          SELECT date_trunc('week', first_seen_at)::date AS week, COUNT(*)::int AS count
-          FROM ingested_assets
-          WHERE first_seen_at >= NOW() - INTERVAL '12 weeks' AND first_seen_at IS NOT NULL
-          GROUP BY week ORDER BY week
+          WITH weeks AS (
+            SELECT generate_series(
+              date_trunc('week', NOW() - INTERVAL '11 weeks'),
+              date_trunc('week', NOW()),
+              INTERVAL '1 week'
+            )::date AS week
+          ),
+          counts AS (
+            SELECT date_trunc('week', first_seen_at)::date AS week, COUNT(*)::int AS count
+            FROM ingested_assets
+            WHERE first_seen_at >= NOW() - INTERVAL '12 weeks' AND first_seen_at IS NOT NULL
+            GROUP BY 1
+          )
+          SELECT w.week, COALESCE(c.count, 0)::int AS count
+          FROM weeks w LEFT JOIN counts c ON c.week = w.week
+          ORDER BY w.week
         `),
         db.execute(sql`
           SELECT institution, COUNT(*)::int AS count
