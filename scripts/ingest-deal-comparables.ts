@@ -19,7 +19,7 @@ import OpenAI from "openai";
 const START_DATE = "2021-01-01";
 const END_DATE = new Date().toISOString().slice(0, 10);
 const GPT_BATCH_SIZE = 50;
-const REQUEST_DELAY_MS = 200; // 5 req/sec — well within EDGAR's 10 req/sec limit
+const REQUEST_DELAY_MS = 1000; // 1 req/sec — matches task spec and gives comfortable margin under EDGAR's 10 req/sec cap
 const SIC_DELAY_MS = 50; // lighter rate for metadata lookups
 const SIC_CONCURRENCY = 8; // parallel SIC lookups
 
