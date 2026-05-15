@@ -3877,7 +3877,7 @@ export async function registerRoutes(
 
   let biologyFillRunning = false;
   let biologyFillResult: import("./lib/pipeline/biologyFill").BiologyFillSummary | null = null;
-  let biologyFillProgress: { processed: number; total: number; phase: string } | null = null;
+  let biologyFillProgress: import("./lib/pipeline/biologyFill").BiologyFillProgress | null = null;
   let biologyFillAbortController: AbortController | null = null;
 
   app.get("/api/admin/enrich/biology-fill/status", requireAdmin, (_req, res) => {
@@ -3935,8 +3935,8 @@ export async function registerRoutes(
           const summary = await runBiologyFill(client, {
             cap,
             signal: biologyFillAbortController!.signal,
-            onProgress: (processed, total, phase) => {
-              biologyFillProgress = { processed, total, phase };
+            onProgress: (p) => {
+              biologyFillProgress = p;
             },
           });
           biologyFillResult = summary;

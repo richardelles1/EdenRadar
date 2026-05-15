@@ -100,13 +100,24 @@ export type BiologyFillSummary = {
   unresolved: number;
 };
 
+export type BiologyFillProgress = {
+  processed: number;
+  total: number;
+  phase: string;
+  targetDerived: number;
+  ruleMatched: number;
+  gptSent: number;
+  gptResolved: number;
+  written: number;
+};
+
 export type BiologyFillOptions = {
   dryRun?: boolean;
   skipGpt?: boolean;
   gptBatchSize?: number;
   cap?: number;
   signal?: AbortSignal;
-  onProgress?: (processed: number, total: number, phase: string) => void;
+  onProgress?: (p: BiologyFillProgress) => void;
 };
 
 // ── Tier 0: Derive from known target (zero cost, highest confidence) ──────────
@@ -352,14 +363,36 @@ ${items.join("\n")}`;
   return result;
 }
 
+/** Write a batch of tagged updates to DB immediately. */
+async function flushToDB(
+  dbClient: import("pg").PoolClient,
+  updates: Array<{ id: number; biology: string; source: string }>,
+): Promise<void> {
+  if (updates.length === 0) return;
+  const values: unknown[] = [];
+  const rows = updates.map((u, j) => {
+    const base = j * 3;
+    values.push(u.id, u.biology, JSON.stringify({ biology: u.source }));
+    return `($${base + 1}::int, $${base + 2}::text, $${base + 3}::text)`;
+  });
+  await dbClient.query(
+    `UPDATE ingested_assets AS t
+     SET biology = v.biology,
+         enrichment_sources = COALESCE(t.enrichment_sources, '{}'::jsonb) || v.src::jsonb
+     FROM (VALUES ${rows.join(", ")}) AS v(id, biology, src)
+     WHERE t.id = v.id`,
+    values,
+  );
+}
+
 /**
- * Full biology fill pipeline.
+ * Full biology fill pipeline — writes progressively so partial progress
+ * is preserved even if the server restarts mid-run.
  *
- * 1. Fetch relevant assets where biology IS NULL
- * 2. Derive from known target (zero cost, highest confidence)
- * 3. Apply Tier 1 + Tier 2 text rules
- * 4. GPT-4o-mini fallback for residual (closed-set, cheap)
- * 5. UPDATE biology for every resolved asset
+ * 1. Fetch relevant assets where biology IS NULL / empty / unknown
+ * 2. Derive from known target (zero cost) → write immediately
+ * 3. Apply Tier 1 + Tier 2 text rules → write immediately
+ * 4. GPT-4o-mini fallback for residual → write after each batch of 50
  */
 export async function runBiologyFill(
   dbClient: import("pg").PoolClient,
@@ -378,94 +411,93 @@ export async function runBiologyFill(
   );
 
   const total = assets.length;
-  onProgress?.(0, total, "classifying");
+  let targetDerivedCount = 0;
+  let ruleMatchedCount = 0;
+  let gptResolvedCount = 0;
+  let written = 0;
 
-  const targetDerived: Array<{ id: number; biology: string; asset: BiologyAsset }> = [];
-  const ruleMatches: Array<{ id: number; biology: string; asset: BiologyAsset }> = [];
+  const emit = (phase: string, gptSent = 0) =>
+    onProgress?.({
+      processed: targetDerivedCount + ruleMatchedCount + Math.min(gptSent, total - targetDerivedCount - ruleMatchedCount),
+      total,
+      phase,
+      targetDerived: targetDerivedCount,
+      ruleMatched: ruleMatchedCount,
+      gptSent,
+      gptResolved: gptResolvedCount,
+      written,
+    });
+
+  emit("classifying (target + rules)");
+
+  // ── Phase 1: fast classification ─────────────────────────────────────────
+  const fastTarget: Array<{ id: number; biology: string; source: string }> = [];
+  const fastRule: Array<{ id: number; biology: string; source: string }> = [];
   const unmatched: BiologyAsset[] = [];
 
   for (const asset of assets) {
     if (signal?.aborted) break;
     const fromTarget = deriveFromTarget(asset.target);
     if (fromTarget) {
-      targetDerived.push({ id: asset.id, biology: fromTarget, asset });
+      fastTarget.push({ id: asset.id, biology: fromTarget, source: "target_derived" });
+      targetDerivedCount++;
       continue;
     }
     const fromRules = applyBiologyRules(asset);
     if (fromRules) {
-      ruleMatches.push({ id: asset.id, biology: fromRules, asset });
+      fastRule.push({ id: asset.id, biology: fromRules, source: "rule" });
+      ruleMatchedCount++;
     } else {
       unmatched.push(asset);
     }
   }
 
-  const fastResolved = targetDerived.length + ruleMatches.length;
-  onProgress?.(fastResolved, total, `GPT fallback (0 / ${unmatched.length})`);
+  // Write target-derived + rule matches immediately
+  if (!dryRun) {
+    await flushToDB(dbClient, [...fastTarget, ...fastRule]);
+    written += fastTarget.length + fastRule.length;
+  }
+  emit(`classifying done — ${unmatched.length} need GPT`);
 
-  const gptMatches: Array<{ id: number; biology: string; asset: BiologyAsset }> = [];
-
+  // ── Phase 2: GPT fallback, one batch at a time ───────────────────────────
   if (!skipGpt && unmatched.length > 0 && !signal?.aborted) {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     for (let i = 0; i < unmatched.length; i += gptBatchSize) {
       if (signal?.aborted) break;
       const batch = unmatched.slice(i, i + gptBatchSize);
       const gptResult = await gptFallback(batch, openai);
+
+      const batchWrites: Array<{ id: number; biology: string; source: string }> = [];
       for (const asset of batch) {
         const b = gptResult.get(asset.id);
-        if (b) gptMatches.push({ id: asset.id, biology: b, asset });
+        if (b) {
+          batchWrites.push({ id: asset.id, biology: b, source: "gpt4o-mini" });
+          gptResolvedCount++;
+        }
       }
-      const gptDone = Math.min(i + gptBatchSize, unmatched.length);
-      onProgress?.(fastResolved + gptDone, total, `GPT fallback (${gptDone} / ${unmatched.length})`);
+
+      if (!dryRun && batchWrites.length > 0) {
+        await flushToDB(dbClient, batchWrites);
+        written += batchWrites.length;
+      }
+
+      const gptSent = Math.min(i + gptBatchSize, unmatched.length);
+      emit(`GPT fallback (${gptSent} / ${unmatched.length} sent)`, gptSent);
+
       if (i + gptBatchSize < unmatched.length) {
         await new Promise(r => setTimeout(r, 200));
       }
     }
   }
 
-  // Tag each update with its provenance source
-  const taggedUpdates = [
-    ...targetDerived.map(u => ({ ...u, source: "target_derived" as const })),
-    ...ruleMatches.map(u => ({ ...u, source: "rule" as const })),
-    ...gptMatches.map(u => ({ ...u, source: "gpt4o-mini" as const })),
-  ];
-  let totalUpdated = 0;
-
-  if (!dryRun && taggedUpdates.length > 0) {
-    const WRITE_BATCH = 500;
-    for (let i = 0; i < taggedUpdates.length; i += WRITE_BATCH) {
-      if (signal?.aborted) break;
-      const batch = taggedUpdates.slice(i, i + WRITE_BATCH);
-
-      // Build a single UPDATE … FROM (VALUES …) query for the whole batch
-      const values: unknown[] = [];
-      const rows = batch.map((u, j) => {
-        const base = j * 3;
-        values.push(u.id, u.biology, JSON.stringify({ biology: u.source }));
-        return `($${base + 1}::int, $${base + 2}::text, $${base + 3}::text)`;
-      });
-
-      await dbClient.query(
-        `UPDATE ingested_assets AS t
-         SET biology = v.biology,
-             enrichment_sources = COALESCE(t.enrichment_sources, '{}'::jsonb) || v.src::jsonb
-         FROM (VALUES ${rows.join(", ")}) AS v(id, biology, src)
-         WHERE t.id = v.id`,
-        values,
-      );
-
-      totalUpdated += batch.length;
-      onProgress?.(totalUpdated, taggedUpdates.length, `writing (${totalUpdated} / ${taggedUpdates.length})`);
-    }
-  }
-
   return {
-    total: assets.length,
-    targetDerived: targetDerived.length,
+    total,
+    targetDerived: targetDerivedCount,
     indicationDerived: 0,
-    ruleMatched: ruleMatches.length,
+    ruleMatched: ruleMatchedCount,
     gptSent: unmatched.length,
-    gptResolved: gptMatches.length,
-    totalUpdated,
-    unresolved: unmatched.length - gptMatches.length,
+    gptResolved: gptResolvedCount,
+    totalUpdated: written,
+    unresolved: unmatched.length - gptResolvedCount,
   };
 }

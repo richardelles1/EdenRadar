@@ -3172,7 +3172,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [classifyConfirm, setClassifyConfirm] = React.useState(false);
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [ttoLicensingFillDone, setTtoLicensingFillDone] = React.useState<{ filled: number; beforeCount: number } | null>(null);
-  const [biologyFillDone, setBiologyFillDone] = React.useState<{ totalUpdated: number; targetDerived: number; ruleMatched: number; gptResolved: number; unresolved: number } | null>(null);
+  const [biologyFillDone, setBiologyFillDone] = React.useState<{ totalUpdated: number; targetDerived: number; ruleMatched: number; gptResolved: number; unresolved: number; gptSent: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [usptoPolling, setUsptoPolling] = React.useState(false);
 
@@ -3327,7 +3327,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     staleTime: 30_000,
   });
 
-  const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null; progress: { processed: number; total: number; phase: string } | null }>({
+  const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null; progress: { processed: number; total: number; phase: string; targetDerived: number; ruleMatched: number; gptSent: number; gptResolved: number; written: number } | null }>({
     queryKey: ["/api/admin/enrich/biology-fill/status", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/enrich/biology-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
@@ -4527,7 +4527,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                       </div>
                       {prog && prog.total > 0 && (
                         <span className="text-xs tabular-nums text-purple-600 dark:text-purple-400 font-mono">
-                          {prog.processed.toLocaleString()} / {prog.total.toLocaleString()}
+                          {prog.processed.toLocaleString()} / {prog.total.toLocaleString()} ({pct}%)
                         </span>
                       )}
                     </div>
@@ -4539,17 +4539,41 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                         />
                       </div>
                     )}
+                    {prog && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Target-derived</span>
+                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.targetDerived ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Rule-matched</span>
+                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.ruleMatched ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">GPT sent / resolved</span>
+                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.gptSent ?? 0).toLocaleString()} / {(prog.gptResolved ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Written to DB</span>
+                          <span className="tabular-nums font-mono font-semibold text-green-600 dark:text-green-400">{(prog.written ?? 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })()}
               {biologyFillDone && !biologyFillStatus?.running && (
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30" data-testid="biology-fill-result">
                   <CheckCircle2 className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
-                  <div className="text-xs font-medium text-purple-700 dark:text-purple-400 space-y-0.5">
-                    <p>Done — <strong>{biologyFillDone.totalUpdated.toLocaleString()}</strong> biology fields written</p>
-                    <p className="text-purple-600/80 dark:text-purple-500/80">
-                      Target-derived: {biologyFillDone.targetDerived.toLocaleString()} · Rule: {biologyFillDone.ruleMatched.toLocaleString()} · GPT-mini: {biologyFillDone.gptResolved.toLocaleString()} · Unresolved: {biologyFillDone.unresolved.toLocaleString()}
-                    </p>
+                  <div className="text-xs font-medium text-purple-700 dark:text-purple-400 space-y-1">
+                    <p>Done — <strong className="text-green-600 dark:text-green-400">{biologyFillDone.totalUpdated.toLocaleString()}</strong> biology fields written</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      <span className="text-purple-600/80 dark:text-purple-500/80">Target-derived: <strong>{biologyFillDone.targetDerived.toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80">Rule-matched: <strong>{biologyFillDone.ruleMatched.toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80">GPT sent: <strong>{(biologyFillDone.gptSent ?? 0).toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80">GPT resolved: <strong>{biologyFillDone.gptResolved.toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80 col-span-2">Unresolved: <strong>{biologyFillDone.unresolved.toLocaleString()}</strong></span>
+                    </div>
                   </div>
                 </div>
               )}
