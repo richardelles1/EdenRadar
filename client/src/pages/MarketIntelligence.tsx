@@ -34,6 +34,7 @@ type MarketIntelligenceData = {
   weeklyTrend: WeekEntry[];
   institutionVelocity: VelocityEntry[];
   totalAssetsIndexed: number;
+  recentDeltaWindow: string | null;
 };
 
 type DrawerAsset = {
@@ -183,7 +184,13 @@ function BiologyLandscapePanel({ data }: { data: BiologyEntry[] }) {
 
 // ── ModalityMomentumPanel ─────────────────────────────────────────────────────
 
-function ModalityMomentumPanel({ data, range }: { data: ModalityEntry[]; range: RangeOption }) {
+function ModalityMomentumPanel({
+  data,
+  recentDeltaWindow,
+}: {
+  data: ModalityEntry[];
+  recentDeltaWindow: string | null;
+}) {
   if (!data.length) {
     return <EmptyState message="No modality data available." />;
   }
@@ -197,12 +204,12 @@ function ModalityMomentumPanel({ data, range }: { data: ModalityEntry[]; range: 
             <div className="flex items-center justify-between mb-1 gap-1">
               <span className="text-xs text-foreground font-medium">{capitalize(entry.modality)}</span>
               <div className="flex items-center gap-1.5 shrink-0">
-                {entry.recentDelta > 0 && (
+                {recentDeltaWindow && entry.recentDelta > 0 && (
                   <span
                     className="text-[9px] font-bold px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-400"
                     style={{ background: "hsl(142 71% 45% / 0.10)" }}
                   >
-                    +{entry.recentDelta.toLocaleString()} ({range === "all" ? "90d" : range})
+                    +{entry.recentDelta.toLocaleString()} ({recentDeltaWindow})
                   </span>
                 )}
                 <span className="text-[11px] text-foreground tabular-nums font-semibold">{entry.total.toLocaleString()}</span>
@@ -852,7 +859,10 @@ export default function MarketIntelligence() {
                   delay={90}
                   className="min-h-[380px]"
                 >
-                  <ModalityMomentumPanel data={data.modalityMomentum} range={range} />
+                  <ModalityMomentumPanel
+                    data={data.modalityMomentum}
+                    recentDeltaWindow={data.recentDeltaWindow}
+                  />
                 </SectionPanel>
 
                 <SectionPanel
