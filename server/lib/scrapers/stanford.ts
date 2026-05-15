@@ -62,19 +62,14 @@ export const stanfordScraper: InstitutionScraper = {
 
         console.log(
           `[scraper] ${INST}: ${allUrls.length} sitemap URLs — ` +
-            `${knownUrls?.size ?? 0} already indexed, ${newUrls.length} new`,
+            `${knownUrls?.size ?? 0} already known, ${newUrls.length} new`,
         );
 
-        if (newUrls.length === 0) {
-          // Nothing new — return empty so the sync session records 0 raw (healthy).
-          console.log(`[scraper] ${INST}: no new listings this cycle`);
-          return [];
-        }
-
-        // Build stub listings so enrichWithDetailPages can fill title + description.
-        // Title stub is derived from the URL slug; the detail-page fetch overwrites
-        // it with the real Drupal page <h1> title via the description selectors.
-        const stubs: ScrapedListing[] = newUrls.map((url) => {
+        // Build stubs for ALL sitemap URLs. Already-known listings get a title
+        // stub only (no detail fetch); new ones are enriched via detail pages.
+        // Returning all listings lets the pipeline record real rawCollected /
+        // relevant counts, matching the behaviour of every other scraper.
+        const stubs: ScrapedListing[] = allUrls.map((url) => {
           const slug = url.split("/technology/")[1] ?? url;
           const titleStub = slug
             .replace(/-/g, " ")
@@ -88,27 +83,30 @@ export const stanfordScraper: InstitutionScraper = {
           };
         });
 
-        await enrichWithDetailPages(
-          stubs,
-          {
-            description: [".docket__text", "article p"],
-            abstract: [".docket__text"],
-            inventors: [
-              ".docket__related-people a",
-              ".docket__related-people li",
-            ],
-            patentStatus: [],
-          },
-          9999,
-          signal,
-        );
+        if (newUrls.length > 0) {
+          const newSet = new Set(newUrls);
+          const toEnrich = stubs.filter((s) => newSet.has(s.url));
+          console.log(`[scraper] ${INST}: fetching detail pages for ${toEnrich.length} new listings…`);
+          await enrichWithDetailPages(
+            toEnrich,
+            {
+              description: [".docket__text", "article p"],
+              abstract: [".docket__text"],
+              inventors: [
+                ".docket__related-people a",
+                ".docket__related-people li",
+              ],
+              patentStatus: [],
+            },
+            9999,
+            signal,
+          );
+        } else {
+          console.log(`[scraper] ${INST}: no new listings this cycle — returning ${stubs.length} stubs for pipeline count`);
+        }
 
-        const valid = stubs.filter(
-          (s) => s.title && s.title.length >= 5,
-        );
-        console.log(
-          `[scraper] ${INST}: ${valid.length} listings (detail-enriched for ${newUrls.length} new)`,
-        );
+        const valid = stubs.filter((s) => s.title && s.title.length >= 5);
+        console.log(`[scraper] ${INST}: ${valid.length} listings (${newUrls.length} detail-enriched)`);
         return valid;
       }
 

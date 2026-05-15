@@ -490,7 +490,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
       let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
       try {
         listings = await Promise.race([
-          scraper.scrape(scrapeController.signal, indexedUrls),
+          scraper.scrape(scrapeController.signal, existingUrls),
           new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
               scrapeController.abort();

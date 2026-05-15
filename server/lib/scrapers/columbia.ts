@@ -228,44 +228,60 @@ export const columbiaScraper: InstitutionScraper = {
         ? allUrls.filter((u) => !knownUrls.has(u))
         : allUrls;
 
-      if (newUrls.length === 0) {
-        console.log(`[scraper] ${INST}: no new listings this cycle (${allUrls.length} sitemap URLs all already indexed)`);
-        return [];
-      }
-
-      const fetchUrls = newUrls;
-
       console.log(
-        `[scraper] ${INST}: ${allUrls.length} sitemap URLs — ${newUrls.length} new — fetching ${fetchUrls.length} JSON endpoints…`,
+        `[scraper] ${INST}: ${allUrls.length} sitemap URLs — ${knownUrls?.size ?? 0} already known, ${newUrls.length} new`,
       );
 
-      const results: ScrapedListing[] = [];
-      const CONCURRENCY = 1;
-      const DELAY_MS = 1500;
+      // Build stubs for ALL sitemap URLs. Only fetch .json detail for new URLs.
+      // Returning all listings lets the pipeline record real rawCollected / relevant
+      // counts, matching the behaviour of every other scraper.
+      const stubResults: ScrapedListing[] = allUrls.map((url) => {
+        const slug = url.split("/technologies/")[1] ?? url;
+        const titleStub = slug
+          .replace(/-/g, " ")
+          .replace(/\b\w/g, (c) => c.toUpperCase())
+          .slice(0, 200);
+        return { title: titleStub, description: "", url, institution: INST };
+      });
 
-      for (let i = 0; i < fetchUrls.length; i += CONCURRENCY) {
-        if (signal?.aborted) break;
-        const batch = fetchUrls.slice(i, i + CONCURRENCY);
-        const batchResults = await Promise.all(
-          batch.map(async (url) => {
-            const data = await fetchColumbiaJson(url, 12_000, signal);
-            if (!data) return null;
-            return columbiaJsonToListing(url, data);
-          }),
-        );
-        for (const r of batchResults) {
-          if (r) results.push(r);
+      const results: ScrapedListing[] = [...stubResults];
+
+      if (newUrls.length > 0) {
+        const CONCURRENCY = 1;
+        const DELAY_MS = 1500;
+        const enriched = new Map<string, ScrapedListing>();
+
+        console.log(`[scraper] ${INST}: fetching .json for ${newUrls.length} new listings…`);
+        for (let i = 0; i < newUrls.length; i += CONCURRENCY) {
+          if (signal?.aborted) break;
+          const batch = newUrls.slice(i, i + CONCURRENCY);
+          const batchResults = await Promise.all(
+            batch.map(async (url) => {
+              const data = await fetchColumbiaJson(url, 12_000, signal);
+              if (!data) return null;
+              return columbiaJsonToListing(url, data);
+            }),
+          );
+          for (const r of batchResults) {
+            if (r) enriched.set(r.url, r);
+          }
+          if (i + CONCURRENCY < newUrls.length) {
+            await new Promise((r) => setTimeout(r, DELAY_MS));
+          }
         }
-        if (i + CONCURRENCY < fetchUrls.length) {
-          await new Promise((r) => setTimeout(r, DELAY_MS));
+
+        // Replace stubs with fully-enriched listings for new URLs
+        for (let i = 0; i < results.length; i++) {
+          const full = enriched.get(results[i].url);
+          if (full) results[i] = full;
         }
+      } else {
+        console.log(`[scraper] ${INST}: no new listings this cycle — returning ${results.length} stubs for pipeline count`);
       }
 
-      const thinCount = results.filter(
-        (r) => !r.description || r.description.length < 50,
-      ).length;
+      const thinCount = results.filter((r) => !r.description || r.description.length < 50).length;
       console.log(
-        `[scraper] ${INST}: ${results.length} listings collected (${results.length - thinCount} with description, ${thinCount} thin)`,
+        `[scraper] ${INST}: ${results.length} listings (${newUrls.length} detail-enriched, ${thinCount} thin stubs)`,
       );
       return results;
     } catch (err: any) {
