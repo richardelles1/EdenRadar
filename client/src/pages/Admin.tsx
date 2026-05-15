@@ -3337,6 +3337,34 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     staleTime: 60_000,
   });
 
+  const { data: dealCompsStatus, refetch: refetchDealCompsStatus } = useQuery<{ running: boolean; lastLine: string }>({
+    queryKey: ["/api/admin/deal-comparables/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/deal-comparables/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: (query) => query.state.data?.running ? 2000 : 10_000,
+  });
+
+  const runDealCompsIngest = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/deal-comparables/ingest", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error ?? "Failed to start"); }
+      return res.json() as Promise<{ started: boolean }>;
+    },
+    onSuccess: () => { refetchDealCompsStatus(); refetchDealCompsStats(); },
+  });
+
+  const stopDealCompsIngest = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/deal-comparables/ingest/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
+    onSuccess: () => { refetchDealCompsStatus(); refetchDealCompsStats(); },
+  });
+
   const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null; progress: { processed: number; total: number; phase: string; targetDerived: number; ruleMatched: number; gptSent: number; gptResolved: number; written: number } | null }>({
     queryKey: ["/api/admin/enrich/biology-fill/status", pw],
     queryFn: async () => {
@@ -4640,12 +4668,41 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   </div>
                 </div>
               )}
+              {dealCompsStatus?.running && (
+                <div className="space-y-2 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                    <span className="text-xs text-indigo-700 dark:text-indigo-400 font-medium truncate max-w-xs">
+                      {dealCompsStatus.lastLine || "Running…"}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!dealCompsStatus?.running && dealCompsStatus?.lastLine && dealCompsStatus.lastLine !== "" && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-900 bg-background" data-testid="deal-comps-last-line">
+                  <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0" />
+                  <p className="text-xs text-indigo-700 dark:text-indigo-400 truncate">{dealCompsStatus.lastLine}</p>
+                </div>
+              )}
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => refetchDealCompsStats()}
+                <Button size="sm" variant="outline" onClick={() => { refetchDealCompsStats(); refetchDealCompsStatus(); }}
                   className="gap-1.5 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30" data-testid="button-deal-comps-refresh">
-                  <RefreshCw className="h-3.5 w-3.5" />Refresh stats
+                  <RefreshCw className="h-3.5 w-3.5" />Refresh
                 </Button>
-                <span className="text-xs text-muted-foreground">Run via <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">ingest-deal-comparables</span> workflow to populate</span>
+                {dealCompsStatus?.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stopDealCompsIngest.mutate()}
+                    disabled={stopDealCompsIngest.isPending}
+                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-deal-comps-stop">
+                    <Square className="h-3.5 w-3.5 fill-current" />Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => runDealCompsIngest.mutate()}
+                    disabled={runDealCompsIngest.isPending || dealCompsStatus?.running}
+                    className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="button-deal-comps-ingest">
+                    {runDealCompsIngest.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Run Ingest
+                  </Button>
+                )}
               </div>
             </div>
           </div>

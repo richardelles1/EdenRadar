@@ -18,9 +18,10 @@ import OpenAI from "openai";
 
 const START_DATE = "2021-01-01";
 const END_DATE = new Date().toISOString().slice(0, 10);
-const PAGE_SIZE = 100;
 const GPT_BATCH_SIZE = 50;
 const REQUEST_DELAY_MS = 200; // 5 req/sec — well within EDGAR's 10 req/sec limit
+const SIC_DELAY_MS = 50; // lighter rate for metadata lookups
+const SIC_CONCURRENCY = 8; // parallel SIC lookups
 
 // Search queries targeting pharma/biotech licensing deals specifically
 const SEARCH_QUERIES = [
@@ -29,6 +30,15 @@ const SEARCH_QUERIES = [
   '"collaboration agreement" "license" "FDA" "IND" "milestone"',
   '"co-development" "license" "milestone payments" "pharma"',
 ];
+
+// EDGAR SIC codes for pharma/biotech companies
+// 2836 = pharmaceutical preparations / biologics
+// 2835 = in-vitro/in-vivo diagnostic substances
+// 2830 = drugs
+// 2833 = medicinal chemicals & botanicals
+// 2834 = pharmaceutical preparations (alt)
+// 8731 = commercial physical & biological research
+const PHARMA_BIOTECH_SIC = new Set([2836, 2835, 2830, 2833, 2834, 8731]);
 
 // Canonical modality values matching our ingested_assets taxonomy
 const CANONICAL_MODALITIES = [
@@ -133,6 +143,62 @@ async function searchEdgar(query: string, from: number): Promise<{ hits: EdgarHi
     hits: data.hits?.hits ?? [],
     total: data.hits?.total?.value ?? 0,
   };
+}
+
+// ── SIC Filter ────────────────────────────────────────────────────────────────
+
+const sicCache = new Map<string, number | null>(); // CIK → SIC code
+
+async function getCompanySic(entityId: string): Promise<number | null> {
+  if (sicCache.has(entityId)) return sicCache.get(entityId)!;
+  const padded = entityId.padStart(10, "0");
+  await sleep(SIC_DELAY_MS);
+  try {
+    const res = await fetchWithRetry(`https://data.sec.gov/submissions/CIK${padded}.json`);
+    if (!res.ok) { sicCache.set(entityId, null); return null; }
+    const data = await res.json();
+    const sic = typeof data.sic === "string" ? parseInt(data.sic, 10) : typeof data.sic === "number" ? data.sic : null;
+    sicCache.set(entityId, Number.isFinite(sic as number) ? (sic as number) : null);
+    return sicCache.get(entityId)!;
+  } catch {
+    sicCache.set(entityId, null);
+    return null;
+  }
+}
+
+/** Filter a map of entity→hit-meta to only pharma/biotech SIC codes. */
+async function filterToPharma(
+  hits: Map<string, { entityId: string; filingDate: string; entityName: string; filingUrl: string }>,
+): Promise<Map<string, { entityId: string; filingDate: string; entityName: string; filingUrl: string }>> {
+  const entries = Array.from(hits.entries());
+  const result = new Map<string, { entityId: string; filingDate: string; entityName: string; filingUrl: string }>();
+
+  // Unique company IDs to look up
+  const uniqueEntityIds = [...new Set(entries.map(([, v]) => v.entityId))];
+  console.log(`[sic] Looking up SIC codes for ${uniqueEntityIds.length} unique companies…`);
+
+  // Batch concurrent SIC lookups
+  for (let i = 0; i < uniqueEntityIds.length; i += SIC_CONCURRENCY) {
+    const batch = uniqueEntityIds.slice(i, i + SIC_CONCURRENCY);
+    await Promise.all(batch.map(eid => getCompanySic(eid)));
+    if ((i + SIC_CONCURRENCY) % 200 === 0) {
+      process.stdout.write(`  [${Math.min(i + SIC_CONCURRENCY, uniqueEntityIds.length)}/${uniqueEntityIds.length}]\r`);
+    }
+  }
+
+  // Apply SIC filter
+  let kept = 0, dropped = 0;
+  for (const [accNo, meta] of entries) {
+    const sic = sicCache.get(meta.entityId) ?? null;
+    if (sic !== null && PHARMA_BIOTECH_SIC.has(sic)) {
+      result.set(accNo, meta);
+      kept++;
+    } else {
+      dropped++;
+    }
+  }
+  console.log(`[sic] Filter result: ${kept} pharma/biotech filings kept, ${dropped} dropped (non-pharma SIC or unknown)`);
+  return result;
 }
 
 // ── Filing Document Fetcher ───────────────────────────────────────────────────
@@ -370,6 +436,7 @@ async function main() {
           total = Math.min(t, 5000);
           console.log(`  → ${t.toLocaleString()} total hits (capping at 5,000)`);
         }
+        if (hits.length === 0) break; // no more results
         for (const hit of hits) {
           const accNo = hit._source.accession_no;
           if (!allHits.has(accNo)) {
@@ -383,8 +450,7 @@ async function main() {
             });
           }
         }
-        from += hits.length;
-        if (hits.length < PAGE_SIZE) break;
+        from += hits.length; // advance by actual returned count, not assumed page size
         process.stdout.write(`  [${from}/${total}]\r`);
       } catch (err) {
         console.error(`[edgar] Search error at from=${from}:`, err instanceof Error ? err.message : err);
@@ -394,7 +460,9 @@ async function main() {
     console.log(`  → Collected ${allHits.size} unique filings so far`);
   }
 
-  const allAccNos = Array.from(allHits.keys());
+  // Apply SIC filter — keep only pharma/biotech companies
+  const pharmaHits = await filterToPharma(allHits);
+  const allAccNos = Array.from(pharmaHits.keys());
   totalFetched = allAccNos.length;
   console.log(`\n[ingest] ${totalFetched.toLocaleString()} unique filings to process`);
 
@@ -409,7 +477,7 @@ async function main() {
   totalSkipped = existingSet.size;
 
   const newAccNos = allAccNos.filter(a => !existingSet.has(a));
-  console.log(`[ingest] ${totalSkipped} already in DB → ${newAccNos.length} new filings to fetch`);
+  console.log(`[ingest] ${totalSkipped} already in DB → ${newAccNos.length} new pharma filings to fetch`);
 
   if (newAccNos.length === 0) {
     console.log("[ingest] Nothing new to ingest. Done.");
@@ -419,7 +487,6 @@ async function main() {
 
   // Process in batches: fetch excerpts, then GPT extraction
   const processBatch: FilingInput[] = [];
-  const pendingUpserts: Array<{ accNo: string; filingDate: string; filingUrl: string; excerpt: string; deal: ExtractedDeal }> = [];
 
   async function flushGptBatch() {
     if (processBatch.length === 0) return;
@@ -453,7 +520,7 @@ async function main() {
 
   let processed = 0;
   for (const accNo of newAccNos) {
-    const meta = allHits.get(accNo)!;
+    const meta = pharmaHits.get(accNo)!;
     processed++;
 
     if (processed % 100 === 0) {

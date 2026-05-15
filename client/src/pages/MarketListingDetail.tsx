@@ -483,7 +483,9 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
                           )}
                         </div>
                         {d.milestoneDetails && (
-                          <p className="text-[10px] text-muted-foreground italic leading-snug">{d.milestoneDetails}</p>
+                          <p className="text-[10px] text-muted-foreground italic leading-snug">
+                            {d.milestoneDetails.length > 80 ? d.milestoneDetails.slice(0, 77) + "…" : d.milestoneDetails}
+                          </p>
                         )}
                         {d.filingUrl && (
                           <a href={d.filingUrl} target="_blank" rel="noopener noreferrer"

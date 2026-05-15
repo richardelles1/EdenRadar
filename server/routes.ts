@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
+import { spawn } from "child_process";
 import { captureException as sentryCaptureException } from "./lib/sentry";
 import rateLimit from "express-rate-limit";
 import { cacheGet, cacheSet } from "./lib/responseCache";
@@ -3871,6 +3872,55 @@ export async function registerRoutes(
       modalityFillRunning = false;
       res.status(500).json({ error: err.message ?? "Failed to start modality fill" });
     }
+  });
+
+  // ── Deal Comparables Ingest (SEC EDGAR) ──────────────────────────────────────
+
+  let dealCompsIngestRunning = false;
+  let dealCompsIngestLastLine = "";
+  let dealCompsIngestChild: ReturnType<typeof spawn> | null = null;
+
+  app.get("/api/admin/deal-comparables/status", requireAdmin, (_req, res) => {
+    res.json({ running: dealCompsIngestRunning, lastLine: dealCompsIngestLastLine });
+  });
+
+  app.post("/api/admin/deal-comparables/ingest", requireAdmin, (_req, res) => {
+    if (dealCompsIngestRunning) {
+      return res.status(409).json({ error: "Deal comparables ingest already running" });
+    }
+    dealCompsIngestRunning = true;
+    dealCompsIngestLastLine = "Starting…";
+
+    const child = spawn("tsx", ["scripts/ingest-deal-comparables.ts"], {
+      env: { ...process.env },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    dealCompsIngestChild = child;
+
+    const handleLine = (chunk: Buffer, prefix = "") => {
+      const lines = chunk.toString().split("\n").map(l => l.trim()).filter(Boolean);
+      if (lines.length) dealCompsIngestLastLine = prefix + lines[lines.length - 1];
+    };
+    child.stdout?.on("data", (c: Buffer) => handleLine(c));
+    child.stderr?.on("data", (c: Buffer) => handleLine(c, "[err] "));
+    child.on("close", (code: number | null) => {
+      dealCompsIngestRunning = false;
+      dealCompsIngestLastLine = code === 0 ? "Completed successfully" : `Exited with code ${code ?? "?"}`;
+      dealCompsIngestChild = null;
+    });
+
+    res.json({ started: true });
+  });
+
+  app.post("/api/admin/deal-comparables/ingest/stop", requireAdmin, (_req, res) => {
+    if (!dealCompsIngestRunning || !dealCompsIngestChild) {
+      return res.status(409).json({ error: "No ingest is currently running" });
+    }
+    dealCompsIngestChild.kill("SIGTERM");
+    dealCompsIngestRunning = false;
+    dealCompsIngestLastLine = "Stopped by admin";
+    dealCompsIngestChild = null;
+    res.json({ stopped: true });
   });
 
   // ── Biology Fill ───────────────────────────────────────────────────────────
@@ -12808,15 +12858,24 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const withTimeout = <T>(p: Promise<T>, ms: number, fallback: T): Promise<T> =>
         Promise.race([p, new Promise<T>(resolve => setTimeout(() => resolve(fallback), ms))]);
 
-      const [relatedRaw, linkedRaw, trialsRaw, patentsRaw, compsRaw] = await Promise.allSettled([
+      // Phase 1: fast DB queries (parallel) — resolve linked asset first so biology
+      // is available for the scored comparables query in Phase 2.
+      const [relatedRaw, linkedRaw] = await Promise.allSettled([
         storage.keywordSearchIngestedAssets(searchQuery, 10),
         listing.ingestedAssetId
           ? db.select().from(ingestedAssets).where(eq(ingestedAssets.id, listing.ingestedAssetId)).limit(1)
           : Promise.resolve([] as typeof ingestedAssets.$inferSelect[]),
+      ]);
+
+      const linkedEarly = linkedRaw.status === "fulfilled" ? (linkedRaw.value[0] ?? null) : null;
+
+      // Phase 2: external API calls + DB comparables query (parallel, uses biology from linked)
+      const [trialsRaw, patentsRaw, compsRaw] = await Promise.allSettled([
         withTimeout(searchClinicalTrials(listing.therapeuticArea, 5).catch(() => []), 900, []),
         withTimeout(searchPatents(patentQuery, 5).catch(() => []), 900, []),
         storage.queryDealComparables({
           modality: listing.modality ?? null,
+          biology: linkedEarly?.biology ?? null,
           therapeuticArea: listing.therapeuticArea ?? null,
           stage: listing.stage ?? null,
           limit: 5,
@@ -12830,7 +12889,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             .map(a => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, completenessScore: a.completenessScore }))
         : [];
 
-      const linked = linkedRaw.status === "fulfilled" ? (linkedRaw.value[0] ?? null) : null;
+      const linked = linkedEarly;
 
       const activeTrials = trialsRaw.status === "fulfilled"
         ? trialsRaw.value.slice(0, 5).map(s => ({ title: s.title, url: s.url, date: s.date, stage: s.stage_hint, sponsor: s.institution_or_sponsor }))
