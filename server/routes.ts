@@ -1353,6 +1353,98 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/intelligence/market", async (req, res) => {
+    const CACHE_KEY = "intelligence:market:v1";
+    const TTL_MS = 15 * 60 * 1000;
+    const cached = cacheGet<object>(CACHE_KEY);
+    if (cached) return res.json(cached);
+    try {
+      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows] = await Promise.all([
+        db.execute(sql`
+          SELECT biology, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+          GROUP BY biology ORDER BY count DESC LIMIT 20
+        `),
+        db.execute(sql`
+          SELECT biology, modality, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+            AND modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+          GROUP BY biology, modality
+        `),
+        db.execute(sql`
+          SELECT modality,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '90 days')::int AS recent90d
+          FROM ingested_assets
+          WHERE modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+          GROUP BY modality ORDER BY total DESC LIMIT 12
+        `),
+        db.execute(sql`
+          SELECT date_trunc('week', first_seen_at)::date AS week, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE first_seen_at >= NOW() - INTERVAL '12 weeks' AND first_seen_at IS NOT NULL
+          GROUP BY week ORDER BY week
+        `),
+        db.execute(sql`
+          SELECT institution, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE first_seen_at >= NOW() - INTERVAL '90 days'
+            AND institution IS NOT NULL AND institution != ''
+          GROUP BY institution ORDER BY count DESC LIMIT 10
+        `),
+      ]);
+
+      const biologyLandscape = (biologyRows.rows as Record<string, unknown>[]).map((r) => ({
+        biology: String(r.biology ?? ""),
+        count: Number(r.count ?? 0),
+      }));
+
+      const allWhitespace = whitespaceRows.rows as Record<string, unknown>[];
+      const bioSet = new Map<string, number>();
+      const modalitySet = new Map<string, number>();
+      for (const r of allWhitespace) {
+        const b = String(r.biology ?? ""), m = String(r.modality ?? ""), c = Number(r.count ?? 0);
+        bioSet.set(b, (bioSet.get(b) ?? 0) + c);
+        modalitySet.set(m, (modalitySet.get(m) ?? 0) + c);
+      }
+      const topBio = [...bioSet.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map((e) => e[0]);
+      const topModality = [...modalitySet.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6).map((e) => e[0]);
+      const cellMap: Record<string, number> = {};
+      for (const r of allWhitespace) {
+        const b = String(r.biology ?? ""), m = String(r.modality ?? "");
+        if (topBio.includes(b) && topModality.includes(m)) {
+          cellMap[`${b}|${m}`] = Number(r.count ?? 0);
+        }
+      }
+      const whitespaceMatrix = { biologies: topBio, modalities: topModality, cells: cellMap };
+
+      const modalityMomentum = (modalityRows.rows as Record<string, unknown>[]).map((r) => ({
+        modality: String(r.modality ?? ""),
+        total: Number(r.total ?? 0),
+        recent90d: Number(r.recent90d ?? 0),
+      }));
+
+      const weeklyTrend = (weeklyRows.rows as Record<string, unknown>[]).map((r) => ({
+        week: String(r.week ?? ""),
+        count: Number(r.count ?? 0),
+      }));
+
+      const institutionVelocity = (velocityRows.rows as Record<string, unknown>[]).map((r) => ({
+        institution: String(r.institution ?? ""),
+        count: Number(r.count ?? 0),
+      }));
+
+      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity };
+      cacheSet(CACHE_KEY, result, TTL_MS);
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[intelligence/market] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load market intelligence" });
+    }
+  });
+
   app.get("/api/pipeline-lists/summary", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);

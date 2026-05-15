@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Lightbulb, FlaskConical, Building2, Bell,
   Layers, User, Moon, Sun, LogOut, Menu, X, Radar,
-  LayoutDashboard, Settings, Newspaper, ShoppingBag,
+  LayoutDashboard, Settings, Newspaper, ShoppingBag, BarChart2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
@@ -53,6 +53,7 @@ const NAV_GROUPS: NavGroup[] = [
     groupLabel: "Intelligence",
     items: [
       { href: "/scout", label: "Scout", icon: Search, exact: true },
+      { href: "/intelligence", label: "Landscape", icon: BarChart2, exact: true },
       { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },
       { href: "/institutions", label: "Institutions", icon: Building2 },
     ],

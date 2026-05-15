@@ -67,6 +67,7 @@ import IndustryEden from "@/pages/IndustryEden";
 import Dashboard from "@/pages/Dashboard";
 import IndustryDashboard from "@/pages/IndustryDashboard";
 import NewArrivals from "@/pages/NewArrivals";
+import MarketIntelligence from "@/pages/MarketIntelligence";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -158,6 +159,13 @@ function Router() {
         <DashboardLayout>
           <ScoutGate>
             <NewArrivals />
+          </ScoutGate>
+        </DashboardLayout>
+      </Route>
+      <Route path="/intelligence">
+        <DashboardLayout>
+          <ScoutGate>
+            <MarketIntelligence />
           </ScoutGate>
         </DashboardLayout>
       </Route>
