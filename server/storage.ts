@@ -546,6 +546,32 @@ export interface IStorage {
   // Enrichment run log — persists post-run summaries across server restarts
   saveEnrichmentRun(runType: string, data: Record<string, unknown>): Promise<void>;
   getLastEnrichmentRun(runType: string): Promise<Record<string, unknown> | null>;
+
+  // Deal Comparables — archived SEC 8-K deal records for EdenMarket dossier
+  queryDealComparables(params: {
+    modality?: string | null;
+    biology?: string | null;
+    therapeuticArea?: string | null;
+    stage?: string | null;
+    limit?: number;
+  }): Promise<Array<{
+    id: number;
+    licensor: string | null;
+    licensee: string | null;
+    assetName: string | null;
+    indication: string | null;
+    modality: string | null;
+    dealType: string | null;
+    developmentStage: string | null;
+    upfrontUsd: number | null;
+    totalValueUsd: number | null;
+    milestoneDetails: string | null;
+    filingDate: string | null;
+    filingUrl: string | null;
+    biology: string | null;
+    therapeuticArea: string | null;
+  }>>;
+  getDealComparablesStats(): Promise<{ count: number; lastIngestedAt: Date | null }>;
 }
 
 export type SubscriberMatchEntry = {
@@ -5078,6 +5104,81 @@ export class DatabaseStorage implements IStorage {
   async getLastEnrichmentRun(runType: string): Promise<Record<string, unknown> | null> {
     const [row] = await db.select().from(enrichmentRunLog).where(eq(enrichmentRunLog.runType, runType));
     return (row?.data as Record<string, unknown>) ?? null;
+  }
+
+  async queryDealComparables(params: {
+    modality?: string | null;
+    biology?: string | null;
+    therapeuticArea?: string | null;
+    stage?: string | null;
+    limit?: number;
+  }): Promise<Array<{
+    id: number; licensor: string | null; licensee: string | null; assetName: string | null;
+    indication: string | null; modality: string | null; dealType: string | null;
+    developmentStage: string | null; upfrontUsd: number | null; totalValueUsd: number | null;
+    milestoneDetails: string | null; filingDate: string | null; filingUrl: string | null;
+    biology: string | null; therapeuticArea: string | null;
+  }>> {
+    const { modality, biology, therapeuticArea, stage, limit = 5 } = params;
+
+    // Require at least one matching dimension; score to rank
+    if (!modality && !biology && !therapeuticArea) return [];
+
+    const stageBucket = stage
+      ? (/phase|approved/i.test(stage) ? "clinical" : "preclinical")
+      : null;
+
+    const rows = await db.execute(sql`
+      SELECT
+        id,
+        licensor,
+        licensee,
+        asset_name        AS "assetName",
+        indication,
+        modality,
+        deal_type         AS "dealType",
+        development_stage AS "developmentStage",
+        upfront_usd       AS "upfrontUsd",
+        total_value_usd   AS "totalValueUsd",
+        milestone_details AS "milestoneDetails",
+        filing_date::text AS "filingDate",
+        filing_url        AS "filingUrl",
+        biology,
+        therapeutic_area  AS "therapeuticArea",
+        (
+          CASE WHEN ${modality ?? null} IS NOT NULL AND LOWER(modality) = LOWER(${modality ?? ""}) THEN 3 ELSE 0 END +
+          CASE WHEN ${biology ?? null} IS NOT NULL AND LOWER(biology) = LOWER(${biology ?? ""}) THEN 2 ELSE 0 END +
+          CASE WHEN ${therapeuticArea ?? null} IS NOT NULL AND LOWER(COALESCE(therapeutic_area,'')) ILIKE '%' || LOWER(${therapeuticArea ?? ""}) || '%' THEN 2 ELSE 0 END +
+          CASE WHEN ${stageBucket ?? null} IS NOT NULL AND
+            CASE WHEN LOWER(COALESCE(development_stage,'')) ~ 'phase|approved' THEN 'clinical' ELSE 'preclinical' END = ${stageBucket ?? ""}
+            THEN 1 ELSE 0 END
+        ) AS score
+      FROM deal_comparables
+      WHERE (
+        (${modality ?? null} IS NOT NULL AND LOWER(modality) = LOWER(${modality ?? ""}))
+        OR (${biology ?? null} IS NOT NULL AND LOWER(biology) = LOWER(${biology ?? ""}))
+        OR (${therapeuticArea ?? null} IS NOT NULL AND LOWER(COALESCE(therapeutic_area,'')) ILIKE '%' || LOWER(${therapeuticArea ?? ""}) || '%')
+      )
+      ORDER BY score DESC, filing_date DESC NULLS LAST
+      LIMIT ${limit}
+    `);
+
+    return (rows.rows ?? []) as Array<{
+      id: number; licensor: string | null; licensee: string | null; assetName: string | null;
+      indication: string | null; modality: string | null; dealType: string | null;
+      developmentStage: string | null; upfrontUsd: number | null; totalValueUsd: number | null;
+      milestoneDetails: string | null; filingDate: string | null; filingUrl: string | null;
+      biology: string | null; therapeuticArea: string | null;
+    }>;
+  }
+
+  async getDealComparablesStats(): Promise<{ count: number; lastIngestedAt: Date | null }> {
+    const res = await db.execute(sql`
+      SELECT COUNT(*)::int AS count, MAX(created_at) AS last_ingested_at
+      FROM deal_comparables
+    `);
+    const row = res.rows?.[0] as { count: number; last_ingested_at: Date | null } | undefined;
+    return { count: row?.count ?? 0, lastIngestedAt: row?.last_ingested_at ?? null };
   }
 }
 

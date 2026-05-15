@@ -3327,6 +3327,16 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     staleTime: 30_000,
   });
 
+  const { data: dealCompsStats, refetch: refetchDealCompsStats } = useQuery<{ count: number; lastIngestedAt: string | null }>({
+    queryKey: ["/api/admin/deal-comparables/stats", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/deal-comparables/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
   const { data: biologyFillStatus } = useQuery<{ running: boolean; result: typeof biologyFillDone | null; progress: { processed: number; total: number; phase: string; targetDerived: number; ruleMatched: number; gptSent: number; gptResolved: number; written: number } | null }>({
     queryKey: ["/api/admin/enrich/biology-fill/status", pw],
     queryFn: async () => {
@@ -4600,6 +4610,45 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
+
+          {/* Deal Comparables — SEC EDGAR 8-K archive */}
+          <div className="border border-indigo-200 dark:border-indigo-900 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 overflow-hidden" data-testid="card-deal-comparables">
+            <div className="px-4 py-2.5 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/60 dark:bg-indigo-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500 text-white text-xs font-bold shrink-0">$</span>
+              <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">Deal Comparables (SEC EDGAR)</span>
+              <span className="ml-auto text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">Offline ingest script</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Archived biotech/pharma licensing deal records scraped from <span className="font-medium text-foreground">SEC 8-K Item 1.01 filings</span> (5-year window).
+                Deals are extracted via GPT-4o-mini and stored in <span className="font-mono text-[10px] bg-muted px-1 rounded">deal_comparables</span> for EdenMarket dossier panels.
+                Run the <span className="font-mono text-[10px] bg-muted px-1 rounded">ingest-deal-comparables</span> workflow to populate or refresh the archive.
+              </p>
+              {dealCompsStats != null && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-background">
+                    <span className="text-lg font-bold tabular-nums text-indigo-700 dark:text-indigo-400">{dealCompsStats.count.toLocaleString()}</span>
+                    <span className="text-xs text-muted-foreground">deals in archive</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-background">
+                    <span className="text-xs text-muted-foreground">
+                      {dealCompsStats.lastIngestedAt
+                        ? <>Last run: <span className="font-medium text-foreground">{new Date(dealCompsStats.lastIngestedAt).toLocaleDateString()}</span></>
+                        : <span className="text-amber-600 dark:text-amber-400 font-medium">Never run</span>
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchDealCompsStats()}
+                  className="gap-1.5 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30" data-testid="button-deal-comps-refresh">
+                  <RefreshCw className="h-3.5 w-3.5" />Refresh stats
+                </Button>
+                <span className="text-xs text-muted-foreground">Run via <span className="font-mono text-[10px] bg-muted px-1.5 py-0.5 rounded">ingest-deal-comparables</span> workflow to populate</span>
+              </div>
+            </div>
+          </div>
 
           {/* Rescore All */}
           <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden" data-testid="card-rescore">

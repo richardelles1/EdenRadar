@@ -1294,3 +1294,33 @@ export const institutionQualitySnapshots = pgTable("institution_quality_snapshot
   enrichedLast24h: integer("enriched_last_24h").notNull().default(0),
 });
 export type InstitutionQualitySnapshot = typeof institutionQualitySnapshots.$inferSelect;
+
+// ── Deal Comparables ─────────────────────────────────────────────────────────
+// Archived biotech/pharma licensing deal records sourced from SEC 8-K filings.
+// Populated by scripts/ingest-deal-comparables.ts (one-time + quarterly refresh).
+// Used by EdenMarket dossier to show comparable deal precedent for any listing.
+export const dealComparables = pgTable("deal_comparables", {
+  id: serial("id").primaryKey(),
+  accessionNumber: text("accession_number").notNull().unique(),
+  filingDate: date("filing_date"),
+  licensor: text("licensor"),
+  licensee: text("licensee"),
+  assetName: text("asset_name"),
+  indication: text("indication"),
+  modality: text("modality"),
+  biology: text("biology"),
+  therapeuticArea: text("therapeutic_area"),
+  dealType: text("deal_type"),
+  developmentStage: text("development_stage"),
+  upfrontUsd: integer("upfront_usd"),
+  totalValueUsd: integer("total_value_usd"),
+  milestoneDetails: text("milestone_details"),
+  geography: text("geography"),
+  filingUrl: text("filing_url"),
+  rawExcerpt: text("raw_excerpt"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type DealComparable = typeof dealComparables.$inferSelect;
+export const insertDealComparableSchema = createInsertSchema(dealComparables).omit({ id: true, createdAt: true });
+export type InsertDealComparable = z.infer<typeof insertDealComparableSchema>;

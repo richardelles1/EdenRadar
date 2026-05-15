@@ -3912,6 +3912,15 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/deal-comparables/stats", requireAdmin, async (_req, res) => {
+    try {
+      const stats = await storage.getDealComparablesStats();
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch stats" });
+    }
+  });
+
   app.post("/api/admin/enrich/biology-fill", requireAdmin, async (req, res) => {
     try {
       if (biologyFillRunning) {
@@ -12806,7 +12815,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           : Promise.resolve([] as typeof ingestedAssets.$inferSelect[]),
         withTimeout(searchClinicalTrials(listing.therapeuticArea, 5).catch(() => []), 900, []),
         withTimeout(searchPatents(patentQuery, 5).catch(() => []), 900, []),
-        storage.keywordSearchIngestedAssets(listing.therapeuticArea, 15),
+        storage.queryDealComparables({
+          modality: listing.modality ?? null,
+          therapeuticArea: listing.therapeuticArea ?? null,
+          stage: listing.stage ?? null,
+          limit: 5,
+        }),
       ]);
 
       const relatedTtoAssets = relatedRaw.status === "fulfilled"
@@ -12826,30 +12840,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         ? patentsRaw.value.slice(0, 5).map(s => ({ title: s.title, url: s.url, date: s.date, owner: s.institution_or_sponsor || s.authors_or_owner }))
         : [];
 
-      // Comparable deals: filter by TA + modality + stage to surface truly comparable transactions
-      const LICENSED_STATUSES = ["exclusively licensed", "non-exclusively licensed", "startup formed", "optioned"];
-      const normStage = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/\s+/g, "");
-      const normModality = (m: string | null | undefined) => (m ?? "").toLowerCase();
-      const listingStage = normStage(listing.stage);
-      const listingModality = normModality(listing.modality);
-      const comparableDeals = compsRaw.status === "fulfilled"
-        ? compsRaw.value
-            .filter(a => {
-              if (a.id === listing.ingestedAssetId) return false;
-              if (!a.licensingReadiness || !LICENSED_STATUSES.includes(a.licensingReadiness)) return false;
-              // Require modality match if listing specifies one
-              if (listingModality && normModality(a.modality) !== listingModality) return false;
-              // Stage match: same bucket (preclinical vs clinical) if listing has a stage
-              if (listingStage) {
-                const aStage = normStage(a.developmentStage);
-                const isClinical = (s: string) => ["phase1","phase2","phase3","phasei","phaseii","phaseiii","approved"].includes(s);
-                if (isClinical(listingStage) !== isClinical(aStage)) return false;
-              }
-              return true;
-            })
-            .slice(0, 5)
-            .map(a => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, licensingReadiness: a.licensingReadiness }))
-        : [];
+      // Comparable deals: from deal_comparables table (SEC 8-K archived deals), scored by modality + TA + stage
+      const comparableDeals = compsRaw.status === "fulfilled" ? compsRaw.value : [];
 
       const rawEnrichment = linked ? {
         assetName: linked.assetName,

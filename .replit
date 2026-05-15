@@ -43,6 +43,10 @@ args = "market-smoke"
 task = "workflow.run"
 args = "retroactive-reenrich"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "ingest-deal-comparables"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -81,6 +85,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "tsx scripts/retroactive-reenrich.ts"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "ingest-deal-comparables"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "tsx scripts/ingest-deal-comparables.ts"
 
 [workflows.workflow.metadata]
 outputType = "console"

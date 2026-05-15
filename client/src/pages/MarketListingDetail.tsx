@@ -47,8 +47,20 @@ type IntelligenceData = {
     title: string; url: string; date: string; owner: string | null;
   }>;
   comparableDeals: Array<{
-    id: number; assetName: string; institution: string | null;
-    modality: string; developmentStage: string; licensingReadiness: string | null;
+    id: number;
+    licensor: string | null;
+    licensee: string | null;
+    assetName: string | null;
+    indication: string | null;
+    modality: string | null;
+    dealType: string | null;
+    developmentStage: string | null;
+    upfrontUsd: number | null;
+    totalValueUsd: number | null;
+    milestoneDetails: string | null;
+    filingDate: string | null;
+    filingUrl: string | null;
+    therapeuticArea: string | null;
   }>;
   edenEnrichment: {
     assetName: string; institution: string | null; target: string | null;
@@ -428,14 +440,60 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
               {/* Comparable Deals */}
               {intel.comparableDeals.length > 0 && (
                 <IntelSection icon={TrendingUp} title="Comparable Deals" count={intel.comparableDeals.length}>
-                  {intel.comparableDeals.map(d => (
-                    <IntelligenceItem
-                      key={d.id}
-                      title={d.assetName}
-                      subtitle={d.institution ? `${d.institution} · ${d.developmentStage}` : d.developmentStage}
-                      meta={d.licensingReadiness ?? undefined}
-                    />
-                  ))}
+                  {intel.comparableDeals.map((d, i) => {
+                    const formatUsd = (v: number | null) => {
+                      if (!v) return null;
+                      if (v >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)}B`;
+                      if (v >= 1_000_000) return `$${Math.round(v / 1_000_000)}M`;
+                      return `$${(v / 1000).toFixed(0)}K`;
+                    };
+                    const dealLabel = d.dealType?.replace(/_/g, " ") ?? "License deal";
+                    const partiesLine = [d.licensor, d.licensee].filter(Boolean).join(" → ");
+                    const assetLine = [d.assetName, d.indication].filter(Boolean).join(" · ");
+                    const stageMeta = [d.modality, d.developmentStage].filter(Boolean).join(" · ");
+                    const upfront = formatUsd(d.upfrontUsd);
+                    const total = formatUsd(d.totalValueUsd);
+                    const financialLine = upfront || total
+                      ? [upfront ? `${upfront} upfront` : null, total ? `${total} total` : null].filter(Boolean).join(" · ")
+                      : "Financial terms not disclosed";
+                    return (
+                      <div key={d.id} data-testid={`deal-comparable-${d.id}`}
+                        className="p-2.5 rounded-lg border border-border/50 bg-background/60 space-y-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <Badge variant="outline" className="text-[9px] px-1.5 py-0 font-medium capitalize border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400">
+                            {dealLabel}
+                          </Badge>
+                          {d.filingDate && (
+                            <span className="text-[9px] text-muted-foreground tabular-nums">{d.filingDate.slice(0, 7)}</span>
+                          )}
+                        </div>
+                        {partiesLine && (
+                          <p className="text-xs font-medium text-foreground leading-snug">{partiesLine}</p>
+                        )}
+                        {assetLine && (
+                          <p className="text-[11px] text-muted-foreground leading-snug">{assetLine}</p>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                          <span className={cn(
+                            "text-[10px] font-semibold",
+                            (d.upfrontUsd || d.totalValueUsd) ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"
+                          )}>{financialLine}</span>
+                          {stageMeta && (
+                            <span className="text-[9px] text-muted-foreground border-l border-border/40 pl-2">{stageMeta}</span>
+                          )}
+                        </div>
+                        {d.milestoneDetails && (
+                          <p className="text-[10px] text-muted-foreground italic leading-snug">{d.milestoneDetails}</p>
+                        )}
+                        {d.filingUrl && (
+                          <a href={d.filingUrl} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 text-[10px] text-primary/70 hover:text-primary transition-colors">
+                            <ExternalLink className="w-2.5 h-2.5" />View SEC Filing
+                          </a>
+                        )}
+                      </div>
+                    );
+                  })}
                 </IntelSection>
               )}
 
