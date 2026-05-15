@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -15,7 +15,7 @@ const RANGE_OPTIONS: { value: RangeOption; short: string; label: string }[] = [
   { value: "30d", short: "30d", label: "last 30 days" },
   { value: "60d", short: "60d", label: "last 60 days" },
   { value: "90d", short: "90d", label: "last 90 days" },
-  { value: "all", short: "all time", label: "all time" },
+  { value: "all", short: "All time", label: "all time" },
 ];
 
 type BiologyEntry = { biology: string; count: number };
@@ -49,6 +49,9 @@ type DrawerAsset = {
 type DrawerContext =
   | { type: "whitespace"; biology: string; modality: string; count: number; framing: string }
   | { type: "weekly"; after: string; before: string; weekLabel: string; count: number }
+  | { type: "biology"; biology: string; count: number }
+  | { type: "modality"; modality: string; count: number }
+  | { type: "institution"; institution: string; count: number }
   | null;
 
 type CellTooltip = { title: string; sub: string; x: number; y: number } | null;
@@ -59,6 +62,7 @@ const ACCENT = "hsl(142 71% 45%)";
 const ACCENT_FAINT = "hsl(142 71% 45% / 0.08)";
 const WHITESPACE_MAX_BIO = 8;
 const WHITESPACE_MAX_MOD = 6;
+const DRAWER_PAGE = 20;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -83,6 +87,29 @@ function opportunityLabel(count: number, maxCount: number): string {
   if (ratio < 0.15) return `${count.toLocaleString()} assets. Emerging space with limited competition.`;
   if (ratio < 0.40) return `${count.toLocaleString()} assets. Growing field with moderate coverage.`;
   return `${count.toLocaleString()} assets. Crowded field with high scientific activity.`;
+}
+
+function forLabel(opt: { value: RangeOption; label: string }): string {
+  return opt.value === "all" ? "for all time" : `for the ${opt.label}`;
+}
+
+function buildDrawerParams(ctx: DrawerContext, pageOffset: number): string {
+  const p = new URLSearchParams({ limit: String(DRAWER_PAGE), offset: String(pageOffset) });
+  if (!ctx) return p.toString();
+  if (ctx.type === "whitespace") {
+    p.set("biology", ctx.biology);
+    p.set("modality", ctx.modality);
+  } else if (ctx.type === "weekly") {
+    p.set("after", ctx.after);
+    p.set("before", ctx.before);
+  } else if (ctx.type === "biology") {
+    p.set("biology", ctx.biology);
+  } else if (ctx.type === "modality") {
+    p.set("modality", ctx.modality);
+  } else if (ctx.type === "institution") {
+    p.set("institution", ctx.institution);
+  }
+  return p.toString();
 }
 
 // ── EmptyState ────────────────────────────────────────────────────────────────
@@ -140,44 +167,36 @@ function SectionPanel({
 
 // ── BiologyLandscapePanel ─────────────────────────────────────────────────────
 
-function BiologyLandscapePanel({ data }: { data: BiologyEntry[] }) {
+function BiologyLandscapePanel({
+  data,
+  onRowClick,
+}: {
+  data: BiologyEntry[];
+  onRowClick: (entry: BiologyEntry) => void;
+}) {
   if (!data.length) {
     return (
       <EmptyState message="Biology data is being populated by the AI enrichment pipeline." />
     );
   }
-  const max = data[0].count;
   return (
-    <div className="overflow-y-auto h-full space-y-2 pr-1">
-      {data.map((entry, i) => {
-        const pct = max > 0 ? Math.round((entry.count / max) * 100) : 0;
-        return (
-          <div
-            key={entry.biology}
-            className="flex items-center gap-2.5"
-            style={{ minHeight: "36px" }}
-            data-testid={`bio-row-${i}`}
-          >
-            <span className="text-[10px] text-muted-foreground tabular-nums w-4 shrink-0 text-right">{i + 1}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-foreground font-medium leading-tight">{capitalize(entry.biology)}</span>
-                <span className="text-[11px] text-foreground tabular-nums ml-2 shrink-0 font-semibold">{entry.count.toLocaleString()}</span>
-              </div>
-              <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full transition-all duration-500"
-                  style={{
-                    width: `${pct}%`,
-                    background: `linear-gradient(90deg, hsl(142 71% 40%), hsl(142 71% 52%))`,
-                    opacity: 0.60 + 0.40 * (pct / 100),
-                  }}
-                />
-              </div>
-            </div>
-          </div>
-        );
-      })}
+    <div className="overflow-y-auto h-full space-y-1 pr-1">
+      {data.map((entry, i) => (
+        <button
+          key={entry.biology}
+          className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
+          onClick={() => onRowClick(entry)}
+          data-testid={`bio-row-${i}`}
+        >
+          <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right">{i + 1}</span>
+          <span className="flex-1 min-w-0 text-xs text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate">
+            {capitalize(entry.biology)}
+          </span>
+          <span className="text-xs text-foreground tabular-nums shrink-0 font-semibold">
+            {entry.count.toLocaleString()}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }
@@ -187,103 +206,84 @@ function BiologyLandscapePanel({ data }: { data: BiologyEntry[] }) {
 function ModalityMomentumPanel({
   data,
   recentDeltaWindow,
+  onRowClick,
 }: {
   data: ModalityEntry[];
   recentDeltaWindow: string;
+  onRowClick: (entry: ModalityEntry) => void;
 }) {
   if (!data.length) {
     return <EmptyState message="No modality data available." />;
   }
-  const maxTotal = data[0].total;
   return (
-    <div className="overflow-y-auto h-full space-y-2.5 pr-0.5">
-      {data.map((entry) => {
-        const pct = maxTotal > 0 ? Math.round((entry.total / maxTotal) * 100) : 0;
-        return (
-          <div key={entry.modality} style={{ minHeight: "36px" }} data-testid={`modality-row-${entry.modality}`}>
-            <div className="flex items-center justify-between mb-1 gap-1">
-              <span className="text-xs text-foreground font-medium">{capitalize(entry.modality)}</span>
-              <div className="flex items-center gap-1.5 shrink-0">
-                {recentDeltaWindow && entry.recentDelta > 0 && (
-                  <span
-                    className="text-[9px] font-bold px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-400"
-                    style={{ background: "hsl(142 71% 45% / 0.10)" }}
-                  >
-                    +{entry.recentDelta.toLocaleString()} ({recentDeltaWindow})
-                  </span>
-                )}
-                <span className="text-[11px] text-foreground tabular-nums font-semibold">{entry.total.toLocaleString()}</span>
-              </div>
-            </div>
-            <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-              <div
-                className="h-full rounded-full"
-                style={{
-                  width: `${pct}%`,
-                  background: `linear-gradient(90deg, hsl(142 71% 40%), hsl(142 71% 52%))`,
-                  opacity: 0.60,
-                }}
-              />
-            </div>
+    <div className="overflow-y-auto h-full space-y-1 pr-0.5">
+      {data.map((entry, i) => (
+        <button
+          key={entry.modality}
+          className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
+          onClick={() => onRowClick(entry)}
+          data-testid={`modality-row-${entry.modality}`}
+        >
+          <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right">{i + 1}</span>
+          <span className="flex-1 min-w-0 text-xs text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate">
+            {capitalize(entry.modality)}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {recentDeltaWindow && entry.recentDelta > 0 && (
+              <span
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-400"
+                style={{ background: "hsl(142 71% 45% / 0.10)" }}
+              >
+                +{entry.recentDelta.toLocaleString()}
+              </span>
+            )}
+            <span className="text-xs text-foreground tabular-nums font-semibold">
+              {entry.total.toLocaleString()}
+            </span>
           </div>
-        );
-      })}
+        </button>
+      ))}
     </div>
   );
 }
 
 // ── InstitutionVelocityPanel ──────────────────────────────────────────────────
 
-function InstitutionVelocityPanel({ data, range }: { data: VelocityEntry[]; range: RangeOption }) {
+function InstitutionVelocityPanel({
+  data,
+  range,
+  onRowClick,
+}: {
+  data: VelocityEntry[];
+  range: RangeOption;
+  onRowClick: (entry: VelocityEntry) => void;
+}) {
   if (!data.length) {
     return <EmptyState message="No institution activity in the selected period." />;
   }
-  const max = data[0].count;
   const rangeLabel = range === "all" ? "all time" : `last ${range.replace("d", "")} days`;
   return (
     <div className="overflow-y-auto h-full flex flex-col">
-      <div className="space-y-2 pr-0.5 flex-1">
-        {data.map((entry, i) => {
-          const pct = max > 0 ? Math.round((entry.count / max) * 100) : 0;
-          return (
-            <div
-              key={entry.institution}
-              className="flex items-center gap-2"
-              style={{ minHeight: "36px" }}
-              data-testid={`institution-velocity-${i}`}
+      <div className="space-y-1 pr-0.5 flex-1">
+        {data.map((entry, i) => (
+          <button
+            key={entry.institution}
+            className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
+            onClick={() => onRowClick(entry)}
+            data-testid={`institution-velocity-${i}`}
+          >
+            <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right">{i + 1}</span>
+            <span className="flex-1 min-w-0 text-xs text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate">
+              {entry.institution}
+            </span>
+            <span
+              className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums"
+              style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
             >
-              <span className="text-[10px] text-muted-foreground tabular-nums w-4 shrink-0 text-right">{i + 1}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <Link
-                    href={`/institutions/${entry.institution.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`}
-                    className="min-w-0 overflow-hidden"
-                  >
-                    <span className="text-xs text-foreground font-medium block truncate hover:text-primary transition-colors cursor-pointer">
-                      {entry.institution}
-                    </span>
-                  </Link>
-                  <span
-                    className="text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums"
-                    style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-                  >
-                    +{entry.count.toLocaleString()}
-                  </span>
-                </div>
-                <div className="h-2.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className="h-full rounded-full"
-                    style={{
-                      width: `${pct}%`,
-                      background: `linear-gradient(90deg, hsl(142 71% 40%), hsl(142 71% 52%))`,
-                      opacity: 0.55,
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          );
-        })}
+              +{entry.count.toLocaleString()}
+            </span>
+          </button>
+        ))}
       </div>
       <p className="text-[9px] text-muted-foreground mt-3 pt-2 border-t border-border/50 shrink-0">
         Assets added in the {rangeLabel} per institution
@@ -328,7 +328,7 @@ function WhitespacePanel({
           style={{
             left: tooltip.x,
             top: tooltip.y,
-            transform: "translate(-50%, -115%)",
+            transform: "translate(-50%, calc(-100% - 10px))",
             maxWidth: "260px",
           }}
         >
@@ -340,7 +340,7 @@ function WhitespacePanel({
       <div
         className="grid gap-2 flex-1"
         style={{
-          gridTemplateColumns: `minmax(170px, 200px) repeat(${rawModalities.length}, minmax(0, 1fr))`,
+          gridTemplateColumns: `minmax(160px, 190px) repeat(${rawModalities.length}, minmax(0, 1fr))`,
         }}
       >
         <div />
@@ -366,8 +366,9 @@ function WhitespacePanel({
               return (
                 <div
                   key={`${bio}|${mod}`}
-                  className="h-12 rounded-[10px] flex items-center justify-center text-[11px] font-bold transition-all duration-150 select-none"
+                  className="h-12 rounded-[10px] flex items-center justify-center font-bold transition-all duration-150 select-none"
                   style={{
+                    fontSize: "0.85rem",
                     background: isEmpty
                       ? "hsl(var(--muted) / 0.28)"
                       : `linear-gradient(155deg, hsl(142 71% 54% / ${op}), hsl(142 71% 36% / ${Math.min(op + 0.12, 1)}))`,
@@ -383,12 +384,11 @@ function WhitespacePanel({
                     cursor: "pointer",
                   }}
                   onMouseEnter={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
                     setTooltip({
-                      title: `${capitalize(bio)} x ${capitalize(mod)}`,
+                      title: `${capitalize(bio)} × ${capitalize(mod)}`,
                       sub: framing,
-                      x: rect.left + rect.width / 2,
-                      y: rect.top,
+                      x: e.clientX,
+                      y: e.clientY,
                     });
                   }}
                   onMouseLeave={() => setTooltip(null)}
@@ -427,7 +427,7 @@ function WhitespacePanel({
           <span className="text-[10px] text-muted-foreground">High density</span>
         </div>
         <span className="text-[10px] text-muted-foreground ml-auto italic">
-          Click a cell to explore those assets
+          Click any cell to explore those assets
         </span>
       </div>
     </div>
@@ -454,6 +454,7 @@ function WeeklyVelocityPanel({
   const maxCount = Math.max(...data.map((d) => d.count), 1);
   const avgPerWeek = Math.round(data.reduce((s, d) => s + d.count, 0) / Math.max(data.length, 1));
   const BAR_H = 64;
+  const MIN_BAR_H = 10;
 
   return (
     <div className="flex items-center gap-6 h-full">
@@ -480,7 +481,7 @@ function WeeklyVelocityPanel({
           style={{
             left: tooltip.x,
             top: tooltip.y,
-            transform: "translate(-50%, -115%)",
+            transform: "translate(-50%, calc(-100% - 10px))",
             minWidth: "140px",
           }}
         >
@@ -492,7 +493,8 @@ function WeeklyVelocityPanel({
       <div className="flex-1 min-w-0" data-testid="weekly-velocity-chart">
         <div className="flex items-end gap-1.5" style={{ height: `${BAR_H}px` }}>
           {data.map((entry, i) => {
-            const h = Math.max(4, Math.round((entry.count / maxCount) * BAR_H));
+            const scaledH = Math.round(Math.sqrt(entry.count / maxCount) * BAR_H);
+            const h = entry.count > 0 ? Math.max(MIN_BAR_H, scaledH) : 0;
             const after = entry.week;
             const before = weekBefore(entry.week);
             const weekLabel = `Week of ${formatWeek(entry.week)}`;
@@ -506,14 +508,14 @@ function WeeklyVelocityPanel({
                   background: `linear-gradient(to bottom, hsl(142 71% 52%), hsl(142 71% 36%))`,
                   opacity,
                   cursor: entry.count > 0 ? "pointer" : "default",
+                  minHeight: entry.count > 0 ? `${MIN_BAR_H}px` : "0px",
                 }}
                 onMouseEnter={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
                   setTooltip({
                     title: weekLabel,
                     sub: `${entry.count.toLocaleString()} assets added`,
-                    x: rect.left + rect.width / 2,
-                    y: rect.top,
+                    x: e.clientX,
+                    y: e.clientY,
                   });
                 }}
                 onMouseLeave={() => setTooltip(null)}
@@ -544,46 +546,99 @@ function WeeklyVelocityPanel({
 // ── AssetDrawer ───────────────────────────────────────────────────────────────
 
 function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void }) {
-  const queryParams =
-    ctx?.type === "whitespace"
-      ? `biology=${encodeURIComponent(ctx.biology)}&modality=${encodeURIComponent(ctx.modality)}`
-      : ctx?.type === "weekly"
-      ? `after=${ctx.after}&before=${ctx.before}`
-      : "";
+  const [assets, setAssets] = useState<DrawerAsset[]>([]);
+  const [total, setTotal] = useState(0);
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const { data, isLoading } = useQuery<{ assets: DrawerAsset[] }>({
-    queryKey: ["/api/intelligence/assets", queryParams],
-    queryFn: async () => {
+  useEffect(() => {
+    if (!ctx) {
+      setAssets([]);
+      setTotal(0);
+      setOffset(0);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setAssets([]);
+    setTotal(0);
+    setOffset(0);
+    (async () => {
+      try {
+        const authHeaders = await getAuthHeaders();
+        const res = await fetch(`/api/intelligence/assets?${buildDrawerParams(ctx, 0)}`, {
+          credentials: "include",
+          headers: authHeaders,
+        });
+        if (cancelled || !res.ok) return;
+        const data = await res.json();
+        if (cancelled) return;
+        setAssets(data.assets ?? []);
+        setTotal(data.total ?? 0);
+        setOffset(data.assets?.length ?? 0);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [ctx]);
+
+  async function loadMore() {
+    if (!ctx || loadingMore) return;
+    setLoadingMore(true);
+    try {
       const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/intelligence/assets?${queryParams}`, {
+      const res = await fetch(`/api/intelligence/assets?${buildDrawerParams(ctx, offset)}`, {
         credentials: "include",
         headers: authHeaders,
       });
-      if (!res.ok) throw new Error("Failed to fetch assets");
-      return res.json();
-    },
-    enabled: !!ctx && !!queryParams,
-    staleTime: 5 * 60 * 1000,
-  });
+      if (!res.ok) return;
+      const data = await res.json();
+      setAssets((prev) => [...prev, ...(data.assets ?? [])]);
+      setTotal(data.total ?? total);
+      setOffset((prev) => prev + (data.assets?.length ?? 0));
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   if (!ctx) return null;
 
-  const assets = data?.assets ?? [];
-
   const drawerTitle =
     ctx.type === "whitespace"
-      ? `${capitalize(ctx.biology)} x ${capitalize(ctx.modality)}`
-      : ctx.weekLabel;
+      ? `${capitalize(ctx.biology)} × ${capitalize(ctx.modality)}`
+      : ctx.type === "weekly"
+      ? ctx.weekLabel
+      : ctx.type === "biology"
+      ? capitalize(ctx.biology)
+      : ctx.type === "modality"
+      ? capitalize(ctx.modality)
+      : ctx.institution;
 
   const drawerSub =
     ctx.type === "whitespace"
       ? ctx.framing
-      : `${ctx.count.toLocaleString()} assets added during this period`;
+      : ctx.type === "weekly"
+      ? `${ctx.count.toLocaleString()} assets added during this period`
+      : ctx.type === "biology"
+      ? `All assets in ${capitalize(ctx.biology)}`
+      : ctx.type === "modality"
+      ? `All ${capitalize(ctx.modality)} assets`
+      : `All assets from ${ctx.institution}`;
 
   const scoutHref =
     ctx.type === "whitespace"
       ? `/scout?biology=${encodeURIComponent(ctx.biology)}&modality=${encodeURIComponent(ctx.modality)}`
-      : `/scout?after=${ctx.after}&before=${ctx.before}`;
+      : ctx.type === "weekly"
+      ? `/scout?after=${ctx.after}&before=${ctx.before}`
+      : ctx.type === "biology"
+      ? `/scout?biology=${encodeURIComponent(ctx.biology)}`
+      : ctx.type === "modality"
+      ? `/scout?modality=${encodeURIComponent(ctx.modality)}`
+      : `/institutions/${ctx.institution.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
+
+  const hasMore = assets.length > 0 && assets.length < total;
 
   return (
     <>
@@ -601,6 +656,11 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
           <div className="flex-1 min-w-0 pr-3">
             <h3 className="text-sm font-bold text-foreground leading-tight">{drawerTitle}</h3>
             <p className="text-xs text-muted-foreground mt-1 leading-snug">{drawerSub}</p>
+            {total > 0 && !loading && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Showing {assets.length.toLocaleString()} of {total.toLocaleString()}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -612,7 +672,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {isLoading ? (
+          {loading ? (
             Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="p-3 rounded-lg border border-border space-y-1.5">
                 <Skeleton className="h-3.5 w-3/4" />
@@ -622,28 +682,42 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
           ) : !assets.length ? (
             <EmptyState message="No assets found for this filter. Try exploring in Scout." />
           ) : (
-            assets.map((asset) => (
-              <div
-                key={asset.id}
-                className="p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all"
-                data-testid={`drawer-asset-${asset.id}`}
-              >
-                <p className="text-xs font-medium text-foreground leading-snug line-clamp-2">
-                  {asset.title}
-                </p>
-                <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                  <span className="text-[10px] text-muted-foreground">{asset.institution}</span>
-                  {asset.modality && asset.modality !== "unknown" && (
-                    <span
-                      className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-                      style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-                    >
-                      {capitalize(asset.modality)}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
+            <>
+              {assets.map((asset) => (
+                <Link key={asset.id} href={`/asset/${asset.id}`}>
+                  <div
+                    className="p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all cursor-pointer"
+                    data-testid={`drawer-asset-${asset.id}`}
+                  >
+                    <p className="text-xs font-medium text-foreground leading-snug line-clamp-2">
+                      {asset.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[10px] text-muted-foreground">{asset.institution}</span>
+                      {asset.modality && asset.modality !== "unknown" && (
+                        <span
+                          className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+                          style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
+                        >
+                          {capitalize(asset.modality)}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+
+              {hasMore && (
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="w-full py-2.5 rounded-lg border border-border text-xs font-semibold text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all disabled:opacity-50"
+                  data-testid="button-drawer-load-more"
+                >
+                  {loadingMore ? "Loading…" : `Load ${Math.min(DRAWER_PAGE, total - assets.length)} more`}
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -676,14 +750,12 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
           <Skeleton className="h-2.5 w-48" />
         </div>
       </div>
-      <div className="space-y-2.5 pt-2">
-        {[1, 2, 3, 4, 5, 6].map((i) => (
-          <div key={i} className="space-y-1">
-            <div className="flex justify-between">
-              <Skeleton className="h-3 w-36" />
-              <Skeleton className="h-3 w-10" />
-            </div>
-            <Skeleton className="h-2.5 w-full rounded-full" />
+      <div className="space-y-2 pt-2">
+        {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Skeleton className="h-3 w-4 shrink-0" />
+            <Skeleton className="h-3 flex-1" />
+            <Skeleton className="h-3 w-10 shrink-0" />
           </div>
         ))}
       </div>
@@ -743,73 +815,68 @@ export default function MarketIntelligence() {
           }}
           data-testid="intelligence-header"
         >
-          <div className="flex items-start justify-between gap-4 flex-wrap sm:flex-nowrap">
-            <div className="space-y-2 flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2.5">
                 <div
-                  className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+                  className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
                   style={{ background: "hsl(142 71% 45% / 0.12)" }}
                 >
                   <BarChart2 className="w-4 h-4" style={{ color: ACCENT }} />
                 </div>
-                <h1 className="text-2xl font-bold text-foreground tracking-tight">Market Landscape</h1>
-                <span
-                  className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                  style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
-                >
-                  Live
-                </span>
-
-                {/* Global range toggle */}
-                <div
-                  className="flex items-center gap-0.5 rounded-lg p-0.5"
-                  style={{
-                    background: "hsl(var(--muted) / 0.7)",
-                    border: "1px solid hsl(var(--border) / 0.6)",
-                  }}
-                  data-testid="range-toggle-group"
-                >
-                  {RANGE_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      onClick={() => setRange(opt.value)}
-                      className="text-[10px] font-semibold px-2.5 py-1 rounded-md transition-all whitespace-nowrap"
-                      style={
-                        range === opt.value
-                          ? {
-                              background: "hsl(var(--card))",
-                              color: ACCENT,
-                              boxShadow: "0 1px 3px hsl(0 0% 0% / 0.10)",
-                            }
-                          : { color: "hsl(var(--muted-foreground))" }
-                      }
-                      data-testid={`range-toggle-${opt.value}`}
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h1 className="text-2xl font-bold text-foreground tracking-tight">Landscape Intelligence</h1>
+                    <span
+                      className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                      style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
                     >
-                      {opt.short}
-                    </button>
-                  ))}
+                      Live
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Signal-level view of the TTO asset index.
+                  </p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Cross-portfolio signals across the TTO index for the {rangeOpt.label}: biology
-                drivers, therapeutic whitespace, modality momentum, and institution velocity.
-              </p>
             </div>
-            <Link href="/scout">
-              <button
-                className="shrink-0 flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors mt-1"
-                data-testid="button-intelligence-scout"
-              >
-                Scout <ArrowRight className="w-3 h-3" />
-              </button>
-            </Link>
+
+            {/* Range toggle — prominent segment control */}
+            <div
+              className="flex items-center gap-1 p-1 rounded-xl w-fit"
+              style={{
+                background: "hsl(var(--muted) / 0.8)",
+                border: "1px solid hsl(var(--border))",
+              }}
+              data-testid="range-toggle-group"
+            >
+              {RANGE_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  onClick={() => setRange(opt.value)}
+                  className="text-sm font-semibold px-4 py-1.5 rounded-lg transition-all whitespace-nowrap"
+                  style={
+                    range === opt.value
+                      ? {
+                          background: "hsl(var(--card))",
+                          color: ACCENT,
+                          boxShadow: "0 1px 4px hsl(0 0% 0% / 0.12)",
+                        }
+                      : { color: "hsl(var(--muted-foreground))" }
+                  }
+                  data-testid={`range-toggle-${opt.value}`}
+                >
+                  {opt.short}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {isError && (
           <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-5 text-center">
             <p className="text-sm text-destructive">
-              Failed to load market intelligence. Please refresh the page.
+              Failed to load landscape intelligence. Please refresh the page.
             </p>
           </div>
         )}
@@ -826,63 +893,25 @@ export default function MarketIntelligence() {
         >
           {isLoading ? (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SkeletonBlock className="min-h-[380px]" />
-                <SkeletonBlock className="min-h-[380px]" />
-                <SkeletonBlock className="min-h-[380px]" />
-              </div>
               <SkeletonBlock className="min-h-[460px]" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <SkeletonBlock className="min-h-[560px]" />
+                <div className="space-y-4">
+                  <SkeletonBlock className="min-h-[260px]" />
+                  <SkeletonBlock className="min-h-[290px]" />
+                </div>
+              </div>
               <SkeletonBlock className="min-h-[130px]" />
             </>
           ) : data ? (
             <>
-              {/* Row 1: Biology, Modality, Institution — three equal columns */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <SectionPanel
-                  icon={Dna}
-                  title="Biology Landscape"
-                  subtitle={`Top biology drivers across the TTO index for the ${rangeOpt.label}`}
-                  delay={60}
-                  className="min-h-[380px]"
-                >
-                  <BiologyLandscapePanel data={data.biologyLandscape} />
-                </SectionPanel>
-
-                <SectionPanel
-                  icon={TrendingUp}
-                  title="Modality Momentum"
-                  subtitle={
-                    range !== "all"
-                      ? `Assets by modality added in the ${rangeOpt.label}`
-                      : "All assets by modality, all time"
-                  }
-                  delay={90}
-                  className="min-h-[380px]"
-                >
-                  <ModalityMomentumPanel
-                    data={data.modalityMomentum}
-                    recentDeltaWindow={data.recentDeltaWindow}
-                  />
-                </SectionPanel>
-
-                <SectionPanel
-                  icon={Building2}
-                  title="Institution Momentum"
-                  subtitle={`Most active institutions in the ${rangeOpt.label}`}
-                  delay={120}
-                  className="min-h-[380px]"
-                >
-                  <InstitutionVelocityPanel data={data.institutionVelocity} range={range} />
-                </SectionPanel>
-              </div>
-
-              {/* Row 2: Therapeutic Whitespace — full width */}
+              {/* Row 1: Therapeutic Whitespace — full width, most differentiated view */}
               <SectionPanel
                 icon={Layers}
                 title="Therapeutic Whitespace"
-                subtitle={`Biology x modality density for the ${rangeOpt.label}. Darker = more assets, dashed = gap. Click any cell to explore those assets.`}
-                delay={150}
-                className="min-h-[500px]"
+                subtitle={`Biology × modality density ${forLabel(rangeOpt)}. Darker = more assets, dashed = gap. Click any cell to explore assets.`}
+                delay={60}
+                className="min-h-[460px]"
               >
                 <WhitespacePanel
                   matrix={data.whitespaceMatrix}
@@ -892,11 +921,67 @@ export default function MarketIntelligence() {
                 />
               </SectionPanel>
 
+              {/* Row 2: Biology (left) | Modality + Institution stacked (right) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                <SectionPanel
+                  icon={Dna}
+                  title="Biology Landscape"
+                  subtitle={`Top biology drivers ${forLabel(rangeOpt)} — click a row to explore assets`}
+                  delay={90}
+                  className="min-h-[560px]"
+                >
+                  <BiologyLandscapePanel
+                    data={data.biologyLandscape}
+                    onRowClick={(entry) =>
+                      setDrawerCtx({ type: "biology", biology: entry.biology, count: entry.count })
+                    }
+                  />
+                </SectionPanel>
+
+                <div className="flex flex-col gap-4">
+                  <SectionPanel
+                    icon={TrendingUp}
+                    title="Modality Momentum"
+                    subtitle={
+                      range !== "all"
+                        ? `Assets by modality ${forLabel(rangeOpt)} — click a row to explore assets`
+                        : "All assets by modality — click a row to explore assets"
+                    }
+                    delay={120}
+                    className="min-h-[260px]"
+                  >
+                    <ModalityMomentumPanel
+                      data={data.modalityMomentum}
+                      recentDeltaWindow={data.recentDeltaWindow}
+                      onRowClick={(entry) =>
+                        setDrawerCtx({ type: "modality", modality: entry.modality, count: entry.total })
+                      }
+                    />
+                  </SectionPanel>
+
+                  <SectionPanel
+                    icon={Building2}
+                    title="Institution Momentum"
+                    subtitle={`Most active institutions ${forLabel(rangeOpt)} — click a row to explore assets`}
+                    delay={150}
+                    className="min-h-[290px]"
+                  >
+                    <InstitutionVelocityPanel
+                      data={data.institutionVelocity}
+                      range={range}
+                      onRowClick={(entry) =>
+                        setDrawerCtx({ type: "institution", institution: entry.institution, count: entry.count })
+                      }
+                    />
+                  </SectionPanel>
+                </div>
+              </div>
+
               {/* Row 3: Weekly Asset Velocity — full width */}
               <SectionPanel
                 icon={BarChart2}
                 title="Weekly Velocity"
-                subtitle="New assets indexed per week across the TTO index. Click any bar to explore that week's additions."
+                subtitle="New assets indexed per week. Click any bar to explore that week's additions."
                 delay={180}
                 className="min-h-[130px]"
               >

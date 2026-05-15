@@ -1358,7 +1358,7 @@ export async function registerRoutes(
     type RangeOpt = typeof validRanges[number];
     const rangeParam = (req.query.range as string) || "all";
     const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
-    const CACHE_KEY = `intelligence:market:v2:${range}`;
+    const CACHE_KEY = `intelligence:market:v3:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
@@ -1413,7 +1413,7 @@ export async function registerRoutes(
           SELECT institution, COUNT(*)::int AS count
           FROM ingested_assets
           ${dfWhere} institution IS NOT NULL AND institution != ''
-          GROUP BY institution ORDER BY count DESC LIMIT 10
+          GROUP BY institution ORDER BY count DESC LIMIT 20
         `),
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
       ]);
@@ -1478,37 +1478,95 @@ export async function registerRoutes(
     try {
       const biology = req.query.biology as string | undefined;
       const modality = req.query.modality as string | undefined;
+      const institution = req.query.institution as string | undefined;
       const after = req.query.after as string | undefined;
       const before = req.query.before as string | undefined;
+      const rawLimit = parseInt(String(req.query.limit ?? "20"), 10);
+      const rawOffset = parseInt(String(req.query.offset ?? "0"), 10);
+      const limit = Math.min(Math.max(isNaN(rawLimit) ? 20 : rawLimit, 1), 100);
+      const offset = Math.max(isNaN(rawOffset) ? 0 : rawOffset, 0);
 
-      if (!biology && !modality && !after && !before) {
+      if (!biology && !modality && !institution && !after && !before) {
         return res.status(400).json({ error: "At least one filter is required" });
       }
 
       let rows;
+      let countRows;
+
       if (biology && modality) {
-        rows = await db.execute(sql`
-          SELECT id, asset_name, institution, modality, biology, completeness_score, source_url
-          FROM ingested_assets
-          WHERE biology = ${biology} AND modality = ${modality}
-          ORDER BY completeness_score DESC NULLS LAST
-          LIMIT 25
-        `);
+        [rows, countRows] = await Promise.all([
+          db.execute(sql`
+            SELECT id, asset_name, institution, modality, biology, completeness_score
+            FROM ingested_assets
+            WHERE biology = ${biology} AND modality = ${modality}
+            ORDER BY completeness_score DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}
+          `),
+          db.execute(sql`
+            SELECT COUNT(*)::int AS total FROM ingested_assets
+            WHERE biology = ${biology} AND modality = ${modality}
+          `),
+        ]);
+      } else if (biology) {
+        [rows, countRows] = await Promise.all([
+          db.execute(sql`
+            SELECT id, asset_name, institution, modality, biology, completeness_score
+            FROM ingested_assets
+            WHERE biology = ${biology}
+            ORDER BY completeness_score DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}
+          `),
+          db.execute(sql`
+            SELECT COUNT(*)::int AS total FROM ingested_assets WHERE biology = ${biology}
+          `),
+        ]);
+      } else if (modality) {
+        [rows, countRows] = await Promise.all([
+          db.execute(sql`
+            SELECT id, asset_name, institution, modality, biology, completeness_score
+            FROM ingested_assets
+            WHERE modality = ${modality}
+            ORDER BY completeness_score DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}
+          `),
+          db.execute(sql`
+            SELECT COUNT(*)::int AS total FROM ingested_assets WHERE modality = ${modality}
+          `),
+        ]);
+      } else if (institution) {
+        [rows, countRows] = await Promise.all([
+          db.execute(sql`
+            SELECT id, asset_name, institution, modality, biology, completeness_score
+            FROM ingested_assets
+            WHERE institution = ${institution}
+            ORDER BY completeness_score DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}
+          `),
+          db.execute(sql`
+            SELECT COUNT(*)::int AS total FROM ingested_assets WHERE institution = ${institution}
+          `),
+        ]);
       } else if (after && before) {
         const afterDate = new Date(after);
         const beforeDate = new Date(before);
         if (isNaN(afterDate.getTime()) || isNaN(beforeDate.getTime())) {
           return res.status(400).json({ error: "Invalid date format" });
         }
-        rows = await db.execute(sql`
-          SELECT id, asset_name, institution, modality, biology, completeness_score, source_url
-          FROM ingested_assets
-          WHERE first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
-          ORDER BY completeness_score DESC NULLS LAST
-          LIMIT 25
-        `);
+        [rows, countRows] = await Promise.all([
+          db.execute(sql`
+            SELECT id, asset_name, institution, modality, biology, completeness_score
+            FROM ingested_assets
+            WHERE first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
+            ORDER BY completeness_score DESC NULLS LAST
+            LIMIT ${limit} OFFSET ${offset}
+          `),
+          db.execute(sql`
+            SELECT COUNT(*)::int AS total FROM ingested_assets
+            WHERE first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
+          `),
+        ]);
       } else {
-        return res.status(400).json({ error: "Provide either biology+modality or after+before" });
+        return res.status(400).json({ error: "Provide a valid filter combination" });
       }
 
       const assets = (rows.rows as Record<string, unknown>[]).map((r) => ({
@@ -1520,7 +1578,9 @@ export async function registerRoutes(
         score: r.completeness_score != null ? Number(r.completeness_score) : null,
       }));
 
-      return res.json({ assets });
+      const total = Number((countRows.rows[0] as Record<string, unknown>)?.total ?? 0);
+
+      return res.json({ assets, total });
     } catch (err: any) {
       console.error("[intelligence/assets] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load assets" });
