@@ -1354,16 +1354,25 @@ export async function registerRoutes(
   });
 
   app.get("/api/intelligence/market", async (req, res) => {
-    const CACHE_KEY = "intelligence:market:v1";
+    const validRanges = ["30d", "60d", "90d", "all"] as const;
+    type RangeOpt = typeof validRanges[number];
+    const rangeParam = (req.query.range as string) || "all";
+    const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
+    const CACHE_KEY = `intelligence:market:v2:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
     try {
-      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows] = await Promise.all([
+      const days = range === "30d" ? 30 : range === "60d" ? 60 : range === "90d" ? 90 : null;
+      const df = days !== null ? sql.raw(`AND first_seen_at >= NOW() - INTERVAL '${days} days'`) : sql.raw("");
+      const dfWhere = days !== null ? sql.raw(`WHERE first_seen_at >= NOW() - INTERVAL '${days} days' AND`) : sql.raw("WHERE");
+
+      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow] = await Promise.all([
         db.execute(sql`
           SELECT biology, COUNT(*)::int AS count
           FROM ingested_assets
           WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+          ${df}
           GROUP BY biology ORDER BY count DESC LIMIT 20
         `),
         db.execute(sql`
@@ -1371,20 +1380,21 @@ export async function registerRoutes(
           FROM ingested_assets
           WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
             AND modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+          ${df}
           GROUP BY biology, modality
         `),
         db.execute(sql`
           SELECT modality,
             COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '90 days')::int AS recent90d
+            COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '90 days')::int AS recent_delta
           FROM ingested_assets
-          WHERE modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+          ${dfWhere} modality IS NOT NULL AND modality != '' AND modality != 'unknown'
           GROUP BY modality ORDER BY total DESC LIMIT 12
         `),
         db.execute(sql`
           WITH weeks AS (
             SELECT generate_series(
-              date_trunc('week', NOW() - INTERVAL '11 weeks'),
+              date_trunc('week', NOW() - INTERVAL '7 weeks'),
               date_trunc('week', NOW()),
               INTERVAL '1 week'
             )::date AS week
@@ -1392,7 +1402,7 @@ export async function registerRoutes(
           counts AS (
             SELECT date_trunc('week', first_seen_at)::date AS week, COUNT(*)::int AS count
             FROM ingested_assets
-            WHERE first_seen_at >= NOW() - INTERVAL '12 weeks' AND first_seen_at IS NOT NULL
+            WHERE first_seen_at >= NOW() - INTERVAL '8 weeks' AND first_seen_at IS NOT NULL
             GROUP BY 1
           )
           SELECT w.week, COALESCE(c.count, 0)::int AS count
@@ -1402,10 +1412,10 @@ export async function registerRoutes(
         db.execute(sql`
           SELECT institution, COUNT(*)::int AS count
           FROM ingested_assets
-          WHERE first_seen_at >= NOW() - INTERVAL '90 days'
-            AND institution IS NOT NULL AND institution != ''
+          ${dfWhere} institution IS NOT NULL AND institution != ''
           GROUP BY institution ORDER BY count DESC LIMIT 10
         `),
+        db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
       ]);
 
       const biologyLandscape = (biologyRows.rows as Record<string, unknown>[]).map((r) => ({
@@ -1435,7 +1445,7 @@ export async function registerRoutes(
       const modalityMomentum = (modalityRows.rows as Record<string, unknown>[]).map((r) => ({
         modality: String(r.modality ?? ""),
         total: Number(r.total ?? 0),
-        recent90d: Number(r.recent90d ?? 0),
+        recentDelta: Number(r.recent_delta ?? 0),
       }));
 
       const weeklyTrend = (weeklyRows.rows as Record<string, unknown>[]).map((r) => ({
@@ -1448,12 +1458,68 @@ export async function registerRoutes(
         count: Number(r.count ?? 0),
       }));
 
-      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity };
+      const totalAssetsIndexed = Number((totalRow.rows[0] as Record<string, unknown>)?.total ?? 0);
+
+      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed };
       cacheSet(CACHE_KEY, result, TTL_MS);
       return res.json(result);
     } catch (err: any) {
       console.error("[intelligence/market] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load market intelligence" });
+    }
+  });
+
+  app.get("/api/intelligence/assets", async (req, res) => {
+    try {
+      const biology = req.query.biology as string | undefined;
+      const modality = req.query.modality as string | undefined;
+      const after = req.query.after as string | undefined;
+      const before = req.query.before as string | undefined;
+
+      if (!biology && !modality && !after && !before) {
+        return res.status(400).json({ error: "At least one filter is required" });
+      }
+
+      let rows;
+      if (biology && modality) {
+        rows = await db.execute(sql`
+          SELECT id, asset_name, institution, modality, biology, completeness_score, source_url
+          FROM ingested_assets
+          WHERE biology = ${biology} AND modality = ${modality}
+          ORDER BY completeness_score DESC NULLS LAST
+          LIMIT 25
+        `);
+      } else if (after && before) {
+        const afterDate = new Date(after);
+        const beforeDate = new Date(before);
+        if (isNaN(afterDate.getTime()) || isNaN(beforeDate.getTime())) {
+          return res.status(400).json({ error: "Invalid date format" });
+        }
+        rows = await db.execute(sql`
+          SELECT id, asset_name, institution, modality, biology, completeness_score, source_url
+          FROM ingested_assets
+          WHERE first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
+          ORDER BY completeness_score DESC NULLS LAST
+          LIMIT 25
+        `);
+      } else {
+        return res.status(400).json({ error: "Provide either biology+modality or after+before" });
+      }
+
+      const assets = (rows.rows as Record<string, unknown>[]).map((r) => ({
+        id: Number(r.id),
+        assetName: String(r.asset_name ?? ""),
+        institution: String(r.institution ?? ""),
+        modality: String(r.modality ?? ""),
+        biology: String(r.biology ?? ""),
+        completenessScore: r.completeness_score != null ? Number(r.completeness_score) : null,
+        sourceUrl: r.source_url ? String(r.source_url) : null,
+      }));
+
+      return res.json({ assets });
+    } catch (err: any) {
+      console.error("[intelligence/assets] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load assets" });
     }
   });
 
