@@ -38,12 +38,11 @@ type MarketIntelligenceData = {
 
 type DrawerAsset = {
   id: number;
-  assetName: string;
+  title: string;
   institution: string;
   modality: string;
   biology: string;
-  completenessScore: number | null;
-  sourceUrl: string | null;
+  score: number | null;
 };
 
 type DrawerContext =
@@ -198,12 +197,12 @@ function ModalityMomentumPanel({ data, range }: { data: ModalityEntry[]; range: 
             <div className="flex items-center justify-between mb-1 gap-1">
               <span className="text-xs text-foreground font-medium">{capitalize(entry.modality)}</span>
               <div className="flex items-center gap-1.5 shrink-0">
-                {entry.recentDelta > 0 && range === "all" && (
+                {entry.recentDelta > 0 && (
                   <span
                     className="text-[9px] font-bold px-1.5 py-0.5 rounded text-emerald-600 dark:text-emerald-400"
                     style={{ background: "hsl(142 71% 45% / 0.10)" }}
                   >
-                    +{entry.recentDelta.toLocaleString()} (90d)
+                    +{entry.recentDelta.toLocaleString()} ({range === "all" ? "90d" : range})
                   </span>
                 )}
                 <span className="text-[11px] text-foreground tabular-nums font-semibold">{entry.total.toLocaleString()}</span>
@@ -374,7 +373,7 @@ function WhitespacePanel({
                       ? "1px dashed hsl(var(--border) / 0.5)"
                       : "1px solid hsl(142 71% 45% / 0.18)",
                     boxShadow: isEmpty ? "none" : `0 1px 4px hsl(142 71% 45% / ${op * 0.25})`,
-                    cursor: isEmpty ? "default" : "pointer",
+                    cursor: "pointer",
                   }}
                   onMouseEnter={(e) => {
                     const rect = e.currentTarget.getBoundingClientRect();
@@ -387,10 +386,8 @@ function WhitespacePanel({
                   }}
                   onMouseLeave={() => setTooltip(null)}
                   onClick={() => {
-                    if (!isEmpty) {
-                      setTooltip(null);
-                      onCellClick(bio, mod, count, framing);
-                    }
+                    setTooltip(null);
+                    onCellClick(bio, mod, count, framing);
                   }}
                   data-testid={`whitespace-cell-${bio.replace(/\s/g, "-")}-${mod.replace(/\s/g, "-")}`}
                 >
@@ -579,7 +576,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
   const scoutHref =
     ctx.type === "whitespace"
       ? `/scout?biology=${encodeURIComponent(ctx.biology)}&modality=${encodeURIComponent(ctx.modality)}`
-      : `/scout`;
+      : `/scout?after=${ctx.after}&before=${ctx.before}`;
 
   return (
     <>
@@ -625,7 +622,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
                 data-testid={`drawer-asset-${asset.id}`}
               >
                 <p className="text-xs font-medium text-foreground leading-snug line-clamp-2">
-                  {asset.assetName}
+                  {asset.title}
                 </p>
                 <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                   <span className="text-[10px] text-muted-foreground">{asset.institution}</span>
@@ -888,7 +885,7 @@ export default function MarketIntelligence() {
               {/* Row 3: Weekly Asset Velocity — full width */}
               <SectionPanel
                 icon={BarChart2}
-                title="Weekly Asset Velocity"
+                title="Weekly Velocity"
                 subtitle="New assets indexed per week across the TTO index. Click any bar to explore that week's additions."
                 delay={180}
                 className="min-h-[130px]"

@@ -1508,12 +1508,11 @@ export async function registerRoutes(
 
       const assets = (rows.rows as Record<string, unknown>[]).map((r) => ({
         id: Number(r.id),
-        assetName: String(r.asset_name ?? ""),
+        title: String(r.asset_name ?? ""),
         institution: String(r.institution ?? ""),
         modality: String(r.modality ?? ""),
         biology: String(r.biology ?? ""),
-        completenessScore: r.completeness_score != null ? Number(r.completeness_score) : null,
-        sourceUrl: r.source_url ? String(r.source_url) : null,
+        score: r.completeness_score != null ? Number(r.completeness_score) : null,
       }));
 
       return res.json({ assets });
