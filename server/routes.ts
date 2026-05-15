@@ -658,6 +658,7 @@ export async function registerRoutes(
         stage: z.string().optional(),
         indication: z.string().optional(),
         institution: z.string().optional(),
+        biology: z.string().optional(),
         // Multi-value lists (used by Alerts "Explore matches" links).
         // Each list is OR'd within itself; lists are AND'd across each other.
         modalities: z.array(z.string()).optional(),
@@ -667,8 +668,8 @@ export async function registerRoutes(
         since: z.string().optional(),
         before: z.string().optional(),
       });
-      const { query, minSimilarity, modality, stage, indication, institution, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
-      const hasAnyFilter = !!(modality || stage || indication || institution || since || before
+      const { query, minSimilarity, modality, stage, indication, institution, biology, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
+      const hasAnyFilter = !!(modality || stage || indication || institution || biology || since || before
         || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
       if (!query.trim() && !hasAnyFilter) {
         return res.json({ assets: [], query, assetsFound: 0, sources: ["tech_transfer"], fallback: false });
@@ -679,7 +680,7 @@ export async function registerRoutes(
       let results: import("./storage").RetrievedAsset[] = [];
 
       const searchOpts = {
-        modality, stage, indication, institution,
+        modality, stage, indication, institution, biology,
         modalities: modalities && modalities.length ? modalities : undefined,
         stages: stages && stages.length ? stages : undefined,
         institutions: institutions && institutions.length ? institutions : undefined,

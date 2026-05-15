@@ -380,8 +380,8 @@ export interface IStorage {
 
   semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
   filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number): Promise<RetrievedAsset[]>;
-  scoutVectorSearch(queryEmbedding: number[], opts?: { modality?: string; stage?: string; indication?: string; institution?: string; limit?: number; minSimilarity?: number; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
-  keywordSearchIngestedAssets(query: string, limit?: number, opts?: { modality?: string; stage?: string; indication?: string; institution?: string; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
+  scoutVectorSearch(queryEmbedding: number[], opts?: { modality?: string; stage?: string; indication?: string; institution?: string; biology?: string; limit?: number; minSimilarity?: number; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
+  keywordSearchIngestedAssets(query: string, limit?: number, opts?: { modality?: string; stage?: string; indication?: string; institution?: string; biology?: string; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
   filteredCount(geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string): Promise<number>;
   searchIngestedAssetsByInstitution(name: string, limit?: number): Promise<RetrievedAsset[]>;
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
@@ -3197,6 +3197,7 @@ export class DatabaseStorage implements IStorage {
       stage?: string;
       indication?: string;
       institution?: string;
+      biology?: string;
       // Multi-value lists — OR within each list, AND across lists. Mirror
       // keywordSearchIngestedAssets so hybrid retrieval (#762) can apply the
       // same structured filters to both retrieval paths.
@@ -3210,7 +3211,7 @@ export class DatabaseStorage implements IStorage {
     } = {}
   ): Promise<RetrievedAsset[]> {
     const {
-      modality, stage, indication, institution,
+      modality, stage, indication, institution, biology,
       modalities, stages, institutions,
       limit = 40, minSimilarity = 0.35, since, before,
     } = opts;
@@ -3223,6 +3224,7 @@ export class DatabaseStorage implements IStorage {
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institution) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
+    if (biology) filterConditions.push(sql`LOWER(biology) = ${biology.toLowerCase()}`);
     const orEqLower = (col: ReturnType<typeof sql>, values: string[]) => {
       const parts = values.map((v) => sql`${col} = ${v.toLowerCase()}`);
       return parts.reduce((acc, c, i) => i === 0 ? c : sql`${acc} OR ${c}`);
@@ -3285,6 +3287,7 @@ export class DatabaseStorage implements IStorage {
       stage?: string;
       indication?: string;
       institution?: string;
+      biology?: string;
       // Multi-value lists — OR within each list, AND across lists.
       modalities?: string[];
       stages?: string[];
@@ -3293,7 +3296,7 @@ export class DatabaseStorage implements IStorage {
       before?: Date;
     } = {}
   ): Promise<RetrievedAsset[]> {
-    const { modality, stage, indication, institution, modalities, stages, institutions, since, before } = opts;
+    const { modality, stage, indication, institution, biology, modalities, stages, institutions, since, before } = opts;
 
     // Scout keyword search — Tier 1 (#760) FTS + Tier 2 (#761) synonym expansion.
     //
@@ -3368,7 +3371,7 @@ export class DatabaseStorage implements IStorage {
     // Default is {0.1, 0.2, 0.4, 1.0}.
     const RANK_WEIGHTS = sql`'{0.05,0.15,0.30,1.0}'::float4[]`;
 
-    const hasFilters = !!(modality || stage || indication || institution || since || before
+    const hasFilters = !!(modality || stage || indication || institution || biology || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
     // Filter-only browsing path (Alerts "Explore matches" link, etc.) is
     // preserved — at least one of {query, structured filter} must be present.
@@ -3404,6 +3407,7 @@ export class DatabaseStorage implements IStorage {
     if (stage) baseFilters.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) baseFilters.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institution) baseFilters.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
+    if (biology) baseFilters.push(sql`LOWER(biology) = ${biology.toLowerCase()}`);
     // Multi-value lists use case-insensitive EXACT equality so the result
     // sets reconcile with /api/alerts/* which uses Drizzle inArray() against
     // the same canonical slug values stored on user_alerts.

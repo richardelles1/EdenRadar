@@ -50,6 +50,19 @@ const MODALITIES = [
   "small molecule", "antibody", "car-t", "gene therapy",
   "mrna therapy", "peptide", "bispecific antibody", "adc", "cell therapy", "protac",
 ];
+const CANONICAL_BIOLOGY = [
+  "aberrant kinase signaling", "cell cycle dysregulation", "epigenetic dysregulation",
+  "dna damage response deficiency", "immune evasion", "apoptosis resistance",
+  "oncogenic transcription", "angiogenesis", "tumor microenvironment",
+  "protein aggregation", "neuroinflammation", "synaptic dysfunction",
+  "mitochondrial dysfunction", "myelin disruption", "neuronal excitotoxicity",
+  "autoimmune dysregulation", "cytokine dysregulation", "complement dysregulation",
+  "allergic dysregulation", "immune deficiency",
+  "insulin resistance", "lipid metabolism dysfunction", "enzyme deficiency", "hormonal dysregulation",
+  "gene expression deficiency", "ion channel dysfunction", "structural protein defect", "rna splicing defect",
+  "pathogen replication", "antimicrobial resistance",
+  "fibrosis", "ischemia and oxidative stress",
+];
 
 function getCutoffDate(filter: string): Date {
   const now = Date.now();
@@ -779,13 +792,15 @@ export default function Scout() {
       .sort();
   }, [searchResults]);
 
+  // Use canonical taxonomy order, filtered to values present in current results.
+  // This ensures consistent naming and order vs deriving ad-hoc from result text.
   const availableBiologies = useMemo(() => {
-    const seen = new Set<string>();
-    return searchResults
-      .map((a) => a.biology)
-      .filter((b): b is string => !!b && b !== "unknown" && b.length > 2)
-      .filter((b) => { if (seen.has(b)) return false; seen.add(b); return true; })
-      .sort();
+    const presentBiologies = new Set(
+      searchResults
+        .map((a) => a.biology)
+        .filter((b): b is string => !!b && b !== "unknown" && b.length > 2)
+    );
+    return CANONICAL_BIOLOGY.filter((b) => presentBiologies.has(b));
   }, [searchResults]);
 
   const filteredResults = useMemo(() => {

@@ -264,8 +264,10 @@ const TIER2: Array<{ pattern: RegExp; biology: string }> = [
   { pattern: /\b(?:wound\s+healing|tissue\s+repair|skin\s+regeneration|chronic\s+wound|diabetic\s+(?:wound|ulcer)|pressure\s+ulcer|dermal\s+repair|regenerative\s+wound|burn\s+wound|wound\s+closure)\b/i, biology: "fibrosis" },
   // Expanded TIER2: cardiovascular / heart failure → ischemia and oxidative stress
   { pattern: /\b(?:heart\s+failure|cardiac\s+arrest|cardiomyopathy|coronary\s+artery\s+disease|angina|atherosclerosis|hypertension.*cardiac|arrhythmia\s+(?:ischemia|oxidative)|acute\s+coronary\s+syndrome|cardioprotection)\b/i, biology: "ischemia and oxidative stress" },
+  // Expanded TIER2: acute kidney injury → ischemia (distinct from CKD → fibrosis)
+  { pattern: /\b(?:acute\s+kidney\s+injury|AKI\b|renal\s+(?:ischemia|reperfusion\s+injury|ischemia.reperfusion)|ischemic\s+nephropathy|contrast.induced\s+(?:nephropathy|AKI)|hepatorenal\s+syndrome|acute\s+tubular\s+necrosis)\b/i, biology: "ischemia and oxidative stress" },
   // Expanded TIER2: chronic kidney disease / renal → fibrosis
-  { pattern: /\b(?:chronic\s+kidney\s+disease|CKD|diabetic\s+nephropathy|glomerulosclerosis|renal\s+(?:insufficiency|failure|disease)|end.stage\s+renal|nephritis\s+fibrosis|kidney\s+fibrosis)\b/i, biology: "fibrosis" },
+  { pattern: /\b(?:chronic\s+kidney\s+disease|CKD\b|diabetic\s+nephropathy|glomerulosclerosis|renal\s+(?:insufficiency|failure|chronic\s+disease)|end.stage\s+renal|nephritis\s+fibrosis|kidney\s+fibrosis)\b/i, biology: "fibrosis" },
 ];
 
 /**
@@ -298,9 +300,14 @@ function isAutoimmune(text: string): boolean {
   return /\b(?:autoimmune|autoantibody|self.antigen|autoreactive|rheumatoid|lupus|Sjogren|multiple\s+sclerosis|inflammatory\s+bowel|Crohn|celiac|psoriatic|ankylosing|myasthenia|vasculitis)\b/i.test(text);
 }
 
-/** Returns true if text has infectious disease context (for viral-vector guard). */
-function hasInfectiousContext(text: string): boolean {
-  return /\b(?:virus|viral|bacterial|infection|infect|pathogen|SARS|HIV|HCV|HBV|RSV|CMV|EBV|HSV|influenza|malaria|tuberculosis|TB|antimicrobial|antibiotic)\b/i.test(text);
+/**
+ * Returns true if the indication string has genuine infectious disease context.
+ * Intentionally only checks the indication field — NOT summary/abstract — so
+ * delivery-vector language ("AAV", "viral vector", "lentiviral") in the body
+ * of a gene therapy abstract cannot trigger a false positive.
+ */
+function hasInfectiousContext(indication: string): boolean {
+  return /\b(?:infect(?:ion|ious)|viral\s+(?:disease|infection|illness)|bacterial\s+(?:disease|infection|illness)|pathogen|SARS|COVID|HIV|HCV|HBV|RSV|CMV|EBV|HSV|influenza|malaria|tuberculosis|TB|antimicrobial|antiviral\s+(?:therapy|treatment)|antibiotic|sepsis|bacteremia|fungal\s+infection|mycobact)\b/i.test(indication);
 }
 
 /** Returns true if modality is gene therapy / gene editing / nanoparticle (delivery vector). */
@@ -320,10 +327,11 @@ export function applyBiologyRules(asset: BiologyAsset): string | null {
   const targetDerived = deriveFromTarget(asset.target);
   if (targetDerived) {
     // Guard 2: viral-vector guard — gene therapy/nanoparticle assets only map to
-    // "pathogen replication" when the context is genuinely infectious.
+    // "pathogen replication" when the indication is genuinely infectious.
+    // Checking indication only (not summary/abstract) avoids false positives from
+    // delivery-vector language ("AAV", "viral vector") in the method section.
     if (targetDerived === "pathogen replication" && isVectorDeliveryModality(asset)) {
-      const fullText = [asset.indication ?? "", asset.summary ?? "", asset.abstract ?? ""].join(" ");
-      if (!hasInfectiousContext(fullText)) return null;
+      if (!hasInfectiousContext(asset.indication ?? "")) return null;
     }
     return targetDerived;
   }
@@ -345,9 +353,9 @@ export function applyBiologyRules(asset: BiologyAsset): string | null {
         return "autoimmune dysregulation";
       }
       // Guard 4: viral-vector assets matched to "pathogen replication" via TIER1 text
-      // need infectious context confirmation.
+      // need infectious indication confirmation (not just text which has delivery language).
       if (rule.biology === "pathogen replication" && isVectorDeliveryModality(asset)) {
-        if (!hasInfectiousContext(text)) continue;
+        if (!hasInfectiousContext(asset.indication ?? "")) continue;
       }
       return rule.biology;
     }
@@ -359,7 +367,7 @@ export function applyBiologyRules(asset: BiologyAsset): string | null {
         return "autoimmune dysregulation";
       }
       if (rule.biology === "pathogen replication" && isVectorDeliveryModality(asset)) {
-        if (!hasInfectiousContext(text)) continue;
+        if (!hasInfectiousContext(asset.indication ?? "")) continue;
       }
       return rule.biology;
     }

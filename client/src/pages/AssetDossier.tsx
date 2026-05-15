@@ -500,6 +500,9 @@ export default function AssetDossier() {
             <InfoRow label="Target"    value={asset.target} />
             <InfoRow label="Modality"  value={asset.modality} />
             <InfoRow label="Stage"     value={asset.development_stage} />
+            {asset.biology && asset.biology !== "unknown" && (
+              <InfoRow label="Biology"  value={asset.biology} />
+            )}
             <InfoRow label="Owner"     value={asset.owner_name} />
             <InfoRow label="Institution" value={asset.institution !== asset.owner_name ? asset.institution : ""} />
             <InfoRow label="Licensing" value={enriched?.licensingStatus ?? asset.licensing_status} accent={licensingAvailable} />
