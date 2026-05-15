@@ -322,7 +322,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
   });
 
   type RefreshResult = { checked: number; fieldsUpdated: number; queuedTotal: number; queuedRelevant: number; message: string };
-  type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueCount: number; enrichedLast24h: number };
+  type InstitutionQuality = { relevantCount: number; avgCompletenessScore: number | null; enrichQueueCount: number; enrichedLast24h: number; biologyFillPct: number | null };
   type EnrichStatus = { status: string; processed?: number; total?: number; improved?: number };
   type EnrichJobRow = { id: number; status: string; total: number; processed: number; improved: number; startedAt: string; completedAt: string | null; filters: Record<string, string> | null; completenessBeforeRun: number | null; completenessAfterRun: number | null };
   type QualitySnapshot = { id: number; institution: string; capturedAt: string; relevantCount: number; avgCompleteness: number | null; enrichQueueCount: number; enrichedLast24h: number };
@@ -938,8 +938,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
             <div className="px-5 pb-4 pt-3 border-t border-border/40" data-testid="enrichment-quality-panel">
               <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">Enrichment Quality</h4>
               {qualityLoading && !qualityData ? (
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" data-testid="quality-skeleton">
-                  {[0,1,2,3].map((i) => (
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2" data-testid="quality-skeleton">
+                  {[0,1,2,3,4].map((i) => (
                     <div key={i} className="rounded-lg border border-border bg-muted/40 p-2.5 text-center animate-pulse">
                       <div className="h-6 w-12 bg-muted rounded mx-auto mb-1" />
                       <div className="h-2.5 w-16 bg-muted rounded mx-auto" />
@@ -948,7 +948,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                 </div>
               ) : qualityData ? (
                 <>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                     <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-relevant-count">
                       <div className="text-lg font-bold tabular-nums text-foreground">{qualityData.relevantCount}</div>
                       <div className="text-[10px] text-muted-foreground">Relevant Assets</div>
@@ -986,6 +986,12 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                           <div className="text-[10px] text-muted-foreground">Ready to Enrich</div>
                         </>
                       )}
+                    </div>
+                    <div className="rounded-lg border border-border bg-background p-2.5 text-center" data-testid="quality-biology-fill">
+                      <div className={`text-lg font-bold tabular-nums ${qualityData.biologyFillPct == null ? "text-muted-foreground" : qualityData.biologyFillPct >= 80 ? "text-teal-600 dark:text-teal-400" : qualityData.biologyFillPct >= 30 ? "text-amber-600 dark:text-amber-400" : "text-red-500"}`}>
+                        {qualityData.biologyFillPct != null ? `${qualityData.biologyFillPct}%` : "—"}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground">Biology Fill</div>
                     </div>
                   </div>
                   {(qualityData.enrichQueueCount > 0 || enrichStatus?.status === "running") && (
@@ -2410,6 +2416,7 @@ interface DimRow {
   avg_completeness: number | null;
   fill_target: number | null;
   fill_indication: number | null;
+  fill_biology: number | null;
 }
 
 interface BrowsedAsset {
@@ -2439,7 +2446,7 @@ interface BrowsedAsset {
   enrichment_sources: Record<string, string> | null;
 }
 
-type AssetBrowserInit = { dim: "modality" | "stage" | "indication" | "missing"; value: string } | null;
+type AssetBrowserInit = { dim: "modality" | "stage" | "indication" | "biology" | "missing"; value: string } | null;
 
 function computeLocalScore(
   fields: { target?: string; modality?: string; indication?: string; development_stage?: string; summary?: string; abstract?: string; innovation_claim?: string; mechanism_of_action?: string },
@@ -2460,9 +2467,9 @@ function getNonEditablePts(asset: BrowsedAsset): number {
   return pts;
 }
 
-function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect: (dim: "modality" | "stage" | "indication", value: string) => void }) {
-  const [activeTab, setActiveTab] = useState<"modality" | "stage" | "indication">("modality");
-  const [sortKey, setSortKey] = useState<"count" | "avg_completeness" | "fill_target" | "fill_indication">("count");
+function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect: (dim: "modality" | "stage" | "indication" | "biology", value: string) => void }) {
+  const [activeTab, setActiveTab] = useState<"modality" | "stage" | "indication" | "biology">("modality");
+  const [sortKey, setSortKey] = useState<"count" | "avg_completeness" | "fill_target" | "fill_indication" | "fill_biology">("count");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const { data, isLoading } = useQuery<{ dim: string; rows: DimRow[] }>({
@@ -2508,6 +2515,7 @@ function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect
     { key: "modality" as const, label: "Modality" },
     { key: "stage" as const, label: "Dev Stage" },
     { key: "indication" as const, label: "Indication" },
+    { key: "biology" as const, label: "Biology" },
   ];
 
   return (
@@ -2552,6 +2560,7 @@ function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect
                   { key: "avg_completeness" as const, label: "Avg Score" },
                   { key: "fill_target" as const, label: "Target %" },
                   { key: "fill_indication" as const, label: "Indication %" },
+                  { key: "fill_biology" as const, label: "Biology %" },
                 ]).map(col => (
                   <th
                     key={col.key}
@@ -2577,10 +2586,11 @@ function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.avg_completeness ?? "—"}</td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.fill_target != null ? `${row.fill_target}%` : "—"}</td>
                   <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.fill_indication != null ? `${row.fill_indication}%` : "—"}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.fill_biology != null ? `${row.fill_biology}%` : "—"}</td>
                 </tr>
               ))}
               {sorted.length === 0 && (
-                <tr><td colSpan={5} className="px-4 py-6 text-center text-xs text-muted-foreground">No data</td></tr>
+                <tr><td colSpan={6} className="px-4 py-6 text-center text-xs text-muted-foreground">No data</td></tr>
               )}
             </tbody>
           </table>
@@ -2727,6 +2737,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
   const [modality, setModality] = useState("");
   const [stage, setStage] = useState("");
   const [indication, setIndication] = useState("");
+  const [biology, setBiology] = useState("");
   const [tier, setTier] = useState("");
   const [missing, setMissing] = useState("");
   const [q, setQ] = useState("");
@@ -2741,10 +2752,11 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
 
   useEffect(() => {
     if (!initialFilter) return;
-    if (initialFilter.dim === "modality") { setModality(initialFilter.value); setStage(""); setIndication(""); setMissing(""); }
-    else if (initialFilter.dim === "stage") { setStage(initialFilter.value); setModality(""); setIndication(""); setMissing(""); }
-    else if (initialFilter.dim === "indication") { setIndication(initialFilter.value); setModality(""); setStage(""); setMissing(""); }
-    else if (initialFilter.dim === "missing") { setMissing(initialFilter.value); setModality(""); setStage(""); setIndication(""); }
+    if (initialFilter.dim === "modality") { setModality(initialFilter.value); setStage(""); setIndication(""); setBiology(""); setMissing(""); }
+    else if (initialFilter.dim === "stage") { setStage(initialFilter.value); setModality(""); setIndication(""); setBiology(""); setMissing(""); }
+    else if (initialFilter.dim === "indication") { setIndication(initialFilter.value); setModality(""); setStage(""); setBiology(""); setMissing(""); }
+    else if (initialFilter.dim === "biology") { setBiology(initialFilter.value); setModality(""); setStage(""); setIndication(""); setMissing(""); }
+    else if (initialFilter.dim === "missing") { setMissing(initialFilter.value); setModality(""); setStage(""); setIndication(""); setBiology(""); }
     setPage(1);
     setExpandedId(null);
   }, [initialFilter]);
@@ -2764,6 +2776,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
     if (modality) p.modality = modality;
     if (stage) p.stage = stage;
     if (indication) p.indication = indication;
+    if (biology) p.biology = biology;
     if (tier) p.tier = tier;
     if (missing) p.missing = missing;
     if (q) p.q = q;
@@ -2771,7 +2784,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
   };
 
   const { data, isLoading } = useQuery<{ total: number; globalTotal: number; page: number; limit: number; assets: BrowsedAsset[] }>({
-    queryKey: ["/api/admin/assets", pw, institution, modality, stage, indication, tier, missing, q, page, sort, dir],
+    queryKey: ["/api/admin/assets", pw, institution, modality, stage, indication, biology, tier, missing, q, page, sort, dir],
     queryFn: async () => {
       const params = buildParams({ page: String(page), limit: "50", sort, dir });
       const res = await fetch(`/api/admin/assets?${params}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
@@ -5042,7 +5055,7 @@ function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilt
     }
   }, [initialGaveUpFilter]);
 
-  const handleFilterSelect = (dim: "modality" | "stage" | "indication", value: string) => {
+  const handleFilterSelect = (dim: "modality" | "stage" | "indication" | "biology", value: string) => {
     setBrowserPreFilter({ dim, value });
     setTimeout(() => browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };

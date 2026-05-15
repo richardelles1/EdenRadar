@@ -4254,6 +4254,7 @@ export async function registerRoutes(
     modality: "modality",
     stage: "development_stage",
     indication: "indication",
+    biology: "biology",
   };
 
   app.get("/api/admin/dataset-quality/dimensions", async (req, res) => {
@@ -4261,7 +4262,7 @@ export async function registerRoutes(
 
       const dim = String(req.query.dim ?? "modality");
       const col = DIM_COL[dim];
-      if (!col) return res.status(400).json({ error: "Invalid dim — use modality, stage, or indication" });
+      if (!col) return res.status(400).json({ error: "Invalid dim — use modality, stage, indication, or biology" });
 
       const rows = await db.execute(sql`
         SELECT
@@ -4269,12 +4270,13 @@ export async function registerRoutes(
           COUNT(*)::int AS count,
           ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
           ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
-          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication,
+          ROUND(100.0 * COUNT(CASE WHEN biology IS NOT NULL AND biology NOT IN ('unknown','','other') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_biology
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY ${sql.raw(col)}
         ORDER BY COUNT(*) DESC
-        LIMIT 15
+        LIMIT 20
       `);
 
       res.json({ dim, rows: rows.rows });
@@ -4296,7 +4298,8 @@ export async function registerRoutes(
           COUNT(*)::int AS count,
           ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
           ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
-          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication,
+          ROUND(100.0 * COUNT(CASE WHEN biology IS NOT NULL AND biology NOT IN ('unknown','','other') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_biology
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY ${sql.raw(col)}
@@ -4311,9 +4314,9 @@ export async function registerRoutes(
 
       res.setHeader("Content-Type", "text/csv; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="dimension-${dim}.csv"`);
-      res.write("value,count,avg_completeness,fill_target,fill_indication\n");
+      res.write("value,count,avg_completeness,fill_target,fill_indication,fill_biology\n");
       for (const row of rows.rows as Record<string, unknown>[]) {
-        res.write([escape(row.value), escape(row.count), escape(row.avg_completeness), escape(row.fill_target), escape(row.fill_indication)].join(",") + "\n");
+        res.write([escape(row.value), escape(row.count), escape(row.avg_completeness), escape(row.fill_target), escape(row.fill_indication), escape(row.fill_biology)].join(",") + "\n");
       }
       res.end();
     } catch (err: any) {
@@ -4516,6 +4519,7 @@ export async function registerRoutes(
     if (q.modality) parts.push(sql`modality = ${q.modality}`);
     if (q.stage) parts.push(sql`development_stage = ${q.stage}`);
     if (q.indication) parts.push(sql`indication ILIKE ${'%' + q.indication + '%'}`);
+    if (q.biology) parts.push(sql`biology = ${q.biology}`);
     if (q.q) parts.push(sql`asset_name ILIKE ${'%' + q.q + '%'}`);
     if (q.tier) {
       const t = q.tier;

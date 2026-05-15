@@ -276,6 +276,7 @@ export interface IStorage {
     avgCompletenessScore: number | null;
     enrichQueueCount: number;
     enrichedLast24h: number;
+    biologyFillPct: number | null;
   }>;
 
   getEnrichmentInstitutionQueues(): Promise<{ name: string; queueCount: number }[]>;
@@ -2000,17 +2001,24 @@ export class DatabaseStorage implements IStorage {
     avgCompletenessScore: number | null;
     enrichQueueCount: number;
     enrichedLast24h: number;
+    biologyFillPct: number | null;
   }> {
-    // Stats query for relevantCount, avgCompletenessScore, enrichedLast24h.
+    // Stats query for relevantCount, avgCompletenessScore, enrichedLast24h, biologyFillPct.
     const result = await db.execute<{
       relevant_count: string;
       avg_completeness: string | null;
       enriched_last_24h: string;
+      biology_fill_pct: string | null;
     }>(sql`
       SELECT
         COUNT(*) FILTER (WHERE relevant = true)::int AS relevant_count,
         AVG(completeness_score) FILTER (WHERE relevant = true AND completeness_score IS NOT NULL) AS avg_completeness,
-        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND enriched_at > NOW() - INTERVAL '24 hours')::int AS enriched_last_24h
+        COUNT(*) FILTER (WHERE relevant = true AND enriched_at IS NOT NULL AND enriched_at > NOW() - INTERVAL '24 hours')::int AS enriched_last_24h,
+        ROUND(
+          100.0 * COUNT(*) FILTER (WHERE relevant = true AND biology IS NOT NULL AND biology NOT IN ('', 'unknown', 'other'))
+          / NULLIF(COUNT(*) FILTER (WHERE relevant = true), 0),
+          1
+        ) AS biology_fill_pct
       FROM ingested_assets
       WHERE institution = ${institution}
     `);
@@ -2020,11 +2028,13 @@ export class DatabaseStorage implements IStorage {
     const { count: enrichQueueCount } = await this.getFilteredEnrichCount({ institution });
     const row = result.rows[0];
     const avg = row?.avg_completeness != null ? Math.round(Number(row.avg_completeness)) : null;
+    const bioPct = row?.biology_fill_pct != null ? Number(row.biology_fill_pct) : null;
     return {
       relevantCount: Number(row?.relevant_count ?? 0),
       avgCompletenessScore: avg,
       enrichQueueCount,
       enrichedLast24h: Number(row?.enriched_last_24h ?? 0),
+      biologyFillPct: bioPct,
     };
   }
 
