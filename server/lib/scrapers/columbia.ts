@@ -194,8 +194,9 @@ export const columbiaScraper: InstitutionScraper = {
       const allUrls = await fetchColumbiaSitemapUrls();
 
       // --- Sitemap unavailable (rate-limited or failed) ---
-      // Fall back to knownUrls for a health sample so the scraper returns
-      // a non-zero result and keeps the admin health indicator green.
+      // Return stubs for all known DB URLs so rawCount reflects the real
+      // catalog size without making additional HTTP calls that may also
+      // be rate-limited.
       if (!allUrls || allUrls.length === 0) {
         if (!knownUrls || knownUrls.size === 0) {
           console.warn(
@@ -203,24 +204,18 @@ export const columbiaScraper: InstitutionScraper = {
           );
           return [];
         }
-        const FALLBACK_SAMPLE = 15;
-        const sampleUrls = Array.from(knownUrls).slice(0, FALLBACK_SAMPLE);
+        const knownArray = Array.from(knownUrls);
         console.log(
-          `[scraper] ${INST}: sitemap unavailable — using ${sampleUrls.length} known URLs as health sample`,
+          `[scraper] ${INST}: sitemap unavailable — returning ${knownArray.length} stubs from known URLs`,
         );
-        const results: ScrapedListing[] = [];
-        for (const url of sampleUrls) {
-          if (signal?.aborted) break;
-          const data = await fetchColumbiaJson(url, 12_000, signal);
-          if (!data) continue;
-          const listing = columbiaJsonToListing(url, data);
-          if (listing) results.push(listing);
-          await new Promise((r) => setTimeout(r, 1_500));
-        }
-        console.log(
-          `[scraper] ${INST}: fallback health sample — ${results.length} listings collected`,
-        );
-        return results;
+        return knownArray.map((url) => {
+          const slug = url.split("/technologies/")[1] ?? url;
+          const titleStub = slug
+            .replace(/-/g, " ")
+            .replace(/\b\w/g, (c) => c.toUpperCase())
+            .slice(0, 200);
+          return { title: titleStub, description: "", url, institution: INST };
+        });
       }
 
       // --- Normal path: sitemap available ---
