@@ -23,6 +23,7 @@ import {
   Trash2,
   ShoppingBag,
   Lock,
+  BarChart2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -180,6 +181,132 @@ function getDominantLabel(assets: BrowseAsset[]): string | null {
   if (!entries.length) return null;
   entries.sort((a, b) => b[1] - a[1]);
   return entries[0][0];
+}
+
+type MarketIntelligenceData = {
+  biologyLandscape: { biology: string; count: number }[];
+  weeklyTrend: { week: string; count: number }[];
+};
+
+function MiniSparkline({ data }: { data: number[] }) {
+  if (!data.length) return null;
+  const max = Math.max(...data, 1);
+  const W = 72;
+  const H = 28;
+  const barW = Math.floor((W - (data.length - 1) * 2) / data.length);
+  return (
+    <svg width={W} height={H} aria-hidden="true" className="shrink-0">
+      {data.map((v, i) => {
+        const h = Math.max(3, Math.round((v / max) * H));
+        const x = i * (barW + 2);
+        const y = H - h;
+        return (
+          <rect
+            key={i}
+            x={x}
+            y={y}
+            width={barW}
+            height={h}
+            rx={2}
+            fill="hsl(142 71% 45%)"
+            opacity={i === data.length - 1 ? 1 : 0.35 + (i / data.length) * 0.5}
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+function MarketSignalsTeaser() {
+  const { data, isLoading } = useQuery<MarketIntelligenceData>({
+    queryKey: ["/api/intelligence/market"],
+    staleTime: 15 * 60 * 1000,
+  });
+
+  const top3 = (data?.biologyLandscape ?? []).slice(0, 3);
+  const rawSpark = (data?.weeklyTrend ?? []).slice(-4).map((w) => w.count);
+  const sparkValues = rawSpark.length < 4
+    ? [...Array(4 - rawSpark.length).fill(0), ...rawSpark]
+    : rawSpark;
+  const hasData = top3.length > 0;
+
+  return (
+    <div
+      className="rounded-xl p-4 transition-all duration-200 hover:-translate-y-0.5"
+      style={{
+        background: "linear-gradient(135deg, hsl(142 71% 45% / 0.05), hsl(142 71% 45% / 0.01))",
+        border: "1px solid hsl(142 71% 45% / 0.18)",
+        animation: "dash-fade-up 400ms ease 65ms both",
+      }}
+      data-testid="dashboard-market-signals-teaser"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div
+            className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
+            style={{ background: "hsl(142 71% 45% / 0.14)" }}
+          >
+            <BarChart2 className="w-3.5 h-3.5" style={{ color: "hsl(142 71% 45%)" }} />
+          </div>
+          <p className="text-sm font-bold text-foreground">Market Signals</p>
+          <span
+            className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+            style={{ background: "hsl(142 71% 45% / 0.12)", color: "hsl(142 71% 45%)" }}
+          >
+            Landscape
+          </span>
+        </div>
+        <Link href="/intelligence">
+          <span
+            className="text-[11px] flex items-center gap-1 transition-colors cursor-pointer font-medium"
+            style={{ color: "hsl(142 71% 45%)" }}
+            data-testid="link-market-signals-view-landscape"
+          >
+            View full Landscape <ArrowRight className="w-3 h-3" />
+          </span>
+        </Link>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-3">
+          <div className="flex gap-2 flex-1">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-6 w-24 rounded-full" />)}
+          </div>
+          <Skeleton className="h-7 w-[72px] rounded" />
+        </div>
+      ) : !hasData ? (
+        <p className="text-xs text-muted-foreground py-1">
+          No biology landscape data yet — check back after ingestion runs.
+        </p>
+      ) : (
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-2 flex-wrap flex-1 min-w-0">
+            {top3.map((entry) => (
+              <span
+                key={entry.biology}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border whitespace-nowrap"
+                style={{
+                  background: "hsl(142 71% 45% / 0.08)",
+                  borderColor: "hsl(142 71% 45% / 0.22)",
+                  color: "hsl(142 71% 45%)",
+                }}
+                data-testid={`market-signal-pill-${entry.biology.replace(/\s+/g, "-").toLowerCase()}`}
+              >
+                <span className="font-bold tabular-nums text-[10px]">{entry.count.toLocaleString()}</span>
+                {entry.biology}
+              </span>
+            ))}
+          </div>
+          {sparkValues.length > 0 && (
+            <div className="shrink-0 flex flex-col items-center gap-0.5" data-testid="market-signals-sparkline">
+              <MiniSparkline data={sparkValues} />
+              <span className="text-[9px] text-muted-foreground/60 uppercase tracking-wide">4-wk velocity</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function EdenMarketTeaser() {
@@ -781,6 +908,9 @@ export default function IndustryDashboard() {
             </div>
           )}
         </div>
+
+        {/* ── SECTION 1.6: MARKET SIGNALS TEASER ── */}
+        <MarketSignalsTeaser />
 
         {/* ── SECTION 2: SIGNAL ROW ── */}
         <div
