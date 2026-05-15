@@ -1801,6 +1801,15 @@ async function migrateAssetStatusValues() {
           log(`[startup] batchCleanStagingThenIndex failed: ${err?.message}`, "startup");
         });
       }, 5_000);
+      // ── Warm market intelligence cache for the most common range (90d) ──
+      // Fire-and-forget: runs 1 second after startup so the first real user
+      // request hits the in-process cache instead of a cold SQL trip.
+      // Uses 127.0.0.1 (not localhost) to avoid IPv6-first resolution issues.
+      setTimeout(() => {
+        fetch(`http://127.0.0.1:${port}/api/intelligence/market?range=90d`)
+          .then((r) => log(`[startup] Market cache warmed (90d) — status ${r.status}`, "startup"))
+          .catch((err: any) => log(`[startup] Market cache warm-up failed: ${err?.message}`, "startup"));
+      }, 1_000);
     },
   );
 })();
