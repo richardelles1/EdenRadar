@@ -6,6 +6,8 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAuthHeaders } from "@/lib/queryClient";
+import { PipelinePicker } from "@/components/PipelinePicker";
+import type { PipelinePickerPayload } from "@/components/PipelinePicker";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -255,7 +257,7 @@ function ModalityMomentumPanel({
     return <EmptyState message="No modality data available." />;
   }
   return (
-    <div className="overflow-y-auto h-full space-y-1 pr-0.5">
+    <div className="max-h-[220px] overflow-y-auto space-y-1 pr-0.5">
       {data.map((entry, i) => (
         <button
           key={entry.modality}
@@ -302,8 +304,8 @@ function InstitutionVelocityPanel({
   }
   const rangeLabel = range === "all" ? "all time" : `last ${range.replace("d", "")} days`;
   return (
-    <div className="overflow-y-auto h-full flex flex-col">
-      <div className="space-y-1 pr-0.5 flex-1">
+    <div className="flex flex-col">
+      <div className="max-h-[380px] overflow-y-auto space-y-1 pr-0.5">
         {data.map((entry, i) => (
           <button
             key={entry.institution}
@@ -708,29 +710,42 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
             <EmptyState message="No assets found for this filter. Try exploring in Scout." />
           ) : (
             <>
-              {assets.map((asset) => (
-                <Link key={asset.id} href={`/asset/${asset.id}`}>
+              {assets.map((asset) => {
+                const pickerPayload: PipelinePickerPayload = {
+                  asset_name: asset.title,
+                  modality: asset.modality !== "unknown" ? asset.modality : undefined,
+                  ingested_asset_id: asset.id,
+                };
+                return (
                   <div
-                    className="p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all cursor-pointer"
+                    key={asset.id}
+                    className="group relative p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all"
                     data-testid={`drawer-asset-${asset.id}`}
                   >
-                    <p className="text-xs font-medium text-foreground leading-snug line-clamp-2">
-                      {asset.title}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[10px] text-muted-foreground">{asset.institution}</span>
-                      {asset.modality && asset.modality !== "unknown" && (
-                        <span
-                          className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
-                          style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-                        >
-                          {capitalize(asset.modality)}
-                        </span>
-                      )}
+                    <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <PipelinePicker payload={pickerPayload} bare />
                     </div>
+                    <Link href={`/asset/${asset.id}`}>
+                      <div className="cursor-pointer pr-6">
+                        <p className="text-xs font-medium text-foreground leading-snug line-clamp-2">
+                          {asset.title}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className="text-[10px] text-muted-foreground">{asset.institution}</span>
+                          {asset.modality && asset.modality !== "unknown" && (
+                            <span
+                              className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0"
+                              style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
+                            >
+                              {capitalize(asset.modality)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
                   </div>
-                </Link>
-              ))}
+                );
+              })}
 
               {hasMore && (
                 <button
@@ -963,14 +978,14 @@ export default function MarketIntelligence() {
                 />
               </SectionPanel>
 
-              {/* Row 2: Biology (left) | Modality + Institution stacked (right) — always a rectangle at md+ */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:h-[680px]">
+              {/* Row 2: Biology (left) | Modality + Institution stacked (right) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <SectionPanel
                   icon={Dna}
                   title="Biology Landscape"
                   subtitle={`Top biology drivers ${forLabel(rangeOpt)}`}
                   delay={90}
-                  className="h-full"
+                  className="min-h-[560px]"
                 >
                   <BiologyLandscapePanel
                     data={data.biologyLandscape}
@@ -980,7 +995,7 @@ export default function MarketIntelligence() {
                   />
                 </SectionPanel>
 
-                <div className="flex flex-col gap-4 h-full">
+                <div className="flex flex-col gap-4">
                   <SectionPanel
                     icon={TrendingUp}
                     title="Modality Momentum"
@@ -990,7 +1005,6 @@ export default function MarketIntelligence() {
                         : "All assets by modality"
                     }
                     delay={120}
-                    className="flex-1 min-h-0"
                   >
                     <ModalityMomentumPanel
                       data={data.modalityMomentum}
@@ -1006,7 +1020,6 @@ export default function MarketIntelligence() {
                     title="Institution Momentum"
                     subtitle={`Most active institutions ${forLabel(rangeOpt)}`}
                     delay={150}
-                    className="flex-1 min-h-0"
                   >
                     <InstitutionVelocityPanel
                       data={data.institutionVelocity}
