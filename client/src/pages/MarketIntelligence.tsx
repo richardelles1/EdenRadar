@@ -963,8 +963,8 @@ export default function MarketIntelligence() {
                 />
               </SectionPanel>
 
-              {/* Row 2: Biology (left) | Modality + Institution stacked (right) — always a rectangle */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ height: "680px" }}>
+              {/* Row 2: Biology (left) | Modality + Institution stacked (right) — always a rectangle at md+ */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:h-[680px]">
                 <SectionPanel
                   icon={Dna}
                   title="Biology Landscape"
