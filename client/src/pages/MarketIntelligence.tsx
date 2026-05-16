@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   BarChart2, Dna, Layers, TrendingUp, Building2, ArrowRight, Info, X,
-  GitBranch, Network, ChevronsUpDown,
+  GitBranch, ChevronsUpDown,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAuthHeaders } from "@/lib/queryClient";
@@ -121,7 +121,7 @@ function calcTooltipPos(e: React.MouseEvent): { x: number; y: number } {
   return { x, y };
 }
 
-function buildDrawerParams(ctx: DrawerContext, pageOffset: number): string {
+function buildDrawerParams(ctx: DrawerContext, pageOffset: number, range?: RangeOption): string {
   const p = new URLSearchParams({ limit: String(DRAWER_PAGE), offset: String(pageOffset) });
   if (!ctx) return p.toString();
   if (ctx.type === "whitespace") {
@@ -136,6 +136,9 @@ function buildDrawerParams(ctx: DrawerContext, pageOffset: number): string {
     p.set("modality", ctx.modality);
   } else if (ctx.type === "institution") {
     p.set("institution", ctx.institution);
+  }
+  if (range && range !== "all" && ctx.type !== "weekly") {
+    p.set("range", range);
   }
   return p.toString();
 }
@@ -476,65 +479,7 @@ function WhitespacePanel({
   );
 }
 
-// ── TopIntersectionPanel (Panel C) ────────────────────────────────────────────
 
-type IntersectionCombo = { biology: string; modality: string; count: number };
-
-function TopIntersectionPanel({
-  matrix,
-  onRowClick,
-}: {
-  matrix: WhitespaceMatrix;
-  onRowClick: (bio: string, mod: string, count: number, framing: string) => void;
-}) {
-  const maxCount = Object.values(matrix.cells).length
-    ? Math.max(...Object.values(matrix.cells))
-    : 1;
-
-  const top: IntersectionCombo[] = Object.entries(matrix.cells)
-    .map(([key, count]) => {
-      const [biology, modality] = key.split("|");
-      return { biology, modality, count };
-    })
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 8);
-
-  if (!top.length) {
-    return <EmptyState message="No intersection data available yet." />;
-  }
-
-  return (
-    <div className="space-y-1">
-      {top.map((item, i) => {
-        const framing = opportunityLabel(item.count, maxCount);
-        const barPct = Math.round((item.count / maxCount) * 100);
-        return (
-          <button
-            key={`${item.biology}|${item.modality}`}
-            className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group relative overflow-hidden"
-            onClick={() => onRowClick(item.biology, item.modality, item.count, framing)}
-            data-testid={`intersection-row-${i}`}
-          >
-            <div
-              className="absolute inset-0 rounded-lg"
-              style={{ background: `hsl(142 71% 45% / 0.06)`, width: `${barPct}%` }}
-            />
-            <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right relative">{i + 1}</span>
-            <span className="flex-1 min-w-0 text-[11px] text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate relative">
-              {capitalize(item.biology)} <span className="text-muted-foreground font-normal">×</span> {capitalize(item.modality)}
-            </span>
-            <span
-              className="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 tabular-nums relative"
-              style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-            >
-              {item.count.toLocaleString()}
-            </span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 // ── BiologyGrowthPanel (Panel A) ───────────────────────────────────────────────
 
@@ -549,9 +494,10 @@ function BiologyGrowthPanel({
   range: RangeOption;
   onRowClick: (entry: BiologyEntry) => void;
 }) {
+  const top8ByTotal = [...data].sort((a, b) => b.count - a.count).slice(0, 8);
+  const top8ByDelta = [...data].sort((a, b) => (b.recentDelta ?? 0) - (a.recentDelta ?? 0)).slice(0, 8);
   const withDelta = data.filter((e) => (e.recentDelta ?? 0) > 0);
-  const top8 = [...data].sort((a, b) => (b.recentDelta ?? 0) - (a.recentDelta ?? 0)).slice(0, 8);
-  const maxDelta = top8.length ? Math.max(...top8.map((e) => e.recentDelta ?? 0), 1) : 1;
+  const maxDelta = top8ByDelta.length ? Math.max(...top8ByDelta.map((e) => e.recentDelta ?? 0), 1) : 1;
 
   if (!data.length) {
     return <EmptyState message="Biology growth data is being populated." />;
@@ -559,13 +505,13 @@ function BiologyGrowthPanel({
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Left: ranked list */}
+      {/* Left: top 8 by total */}
       <div className="space-y-1">
         <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 px-1">
-          All biology areas — ranked by total
+          Top 8 by total
         </p>
-        <div className="max-h-[280px] overflow-y-auto space-y-0.5 pr-0.5">
-          {data.map((entry, i) => (
+        <div className="space-y-0.5">
+          {top8ByTotal.map((entry, i) => (
             <button
               key={entry.biology}
               className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
@@ -612,7 +558,7 @@ function BiologyGrowthPanel({
           <EmptyState message="No new additions recorded in this window." />
         ) : (
           <div className="space-y-2">
-            {top8.map((entry, i) => {
+            {top8ByDelta.map((entry, i) => {
               const delta = entry.recentDelta ?? 0;
               const pct = Math.round((delta / maxDelta) * 100);
               const intensity = 0.25 + 0.75 * (delta / maxDelta);
@@ -671,9 +617,6 @@ function InstitutionBreadthPanel({
   }
 
   const sorted = [...data].sort((a, b) => b[sort] - a[sort]);
-  const maxTotal = Math.max(...data.map((d) => d.total), 1);
-  const maxBio = Math.max(...data.map((d) => d.bioBreadth), 1);
-  const maxMod = Math.max(...data.map((d) => d.modBreadth), 1);
 
   function ColHeader({ label, col }: { label: string; col: BreadthSortKey }) {
     const active = sort === col;
@@ -698,16 +641,16 @@ function InstitutionBreadthPanel({
             <tr className="border-b border-border/50 text-[9px] uppercase tracking-wide text-muted-foreground">
               <th className="text-left pb-2 pr-3 font-semibold w-8">#</th>
               <th className="text-left pb-2 pr-3 font-semibold">Institution</th>
-              <th className="text-right pb-2 px-3 font-semibold">
+              <th className="text-center pb-2 px-3 font-semibold">
                 <ColHeader label="Total" col="total" />
               </th>
-              <th className="text-right pb-2 px-3 font-semibold">
+              <th className="text-center pb-2 px-3 font-semibold">
                 <ColHeader label="Biology areas" col="bioBreadth" />
               </th>
-              <th className="text-right pb-2 px-3 font-semibold">
+              <th className="text-center pb-2 px-3 font-semibold">
                 <ColHeader label="Modalities" col="modBreadth" />
               </th>
-              <th className="text-right pb-2 pl-3 font-semibold">
+              <th className="text-center pb-2 pl-3 font-semibold">
                 <ColHeader label="Breadth" col="breadthScore" />
               </th>
             </tr>
@@ -724,49 +667,16 @@ function InstitutionBreadthPanel({
                 <td className="py-1.5 pr-3 font-medium text-foreground group-hover:text-primary transition-colors max-w-[200px] truncate">
                   {entry.institution}
                 </td>
-                <td className="py-1.5 px-3 text-right tabular-nums text-muted-foreground">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <div className="w-16 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.round((entry.total / maxTotal) * 100)}%`,
-                          background: "hsl(142 71% 45% / 0.5)",
-                        }}
-                      />
-                    </div>
-                    {entry.total.toLocaleString()}
-                  </div>
+                <td className="py-1.5 px-3 text-center tabular-nums text-muted-foreground">
+                  {entry.total.toLocaleString()}
                 </td>
-                <td className="py-1.5 px-3 text-right tabular-nums">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <div className="w-10 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.round((entry.bioBreadth / maxBio) * 100)}%`,
-                          background: "hsl(200 71% 45% / 0.6)",
-                        }}
-                      />
-                    </div>
-                    <span className="font-semibold text-foreground">{entry.bioBreadth}</span>
-                  </div>
+                <td className="py-1.5 px-3 text-center tabular-nums font-semibold text-foreground">
+                  {entry.bioBreadth}
                 </td>
-                <td className="py-1.5 px-3 text-right tabular-nums">
-                  <div className="flex items-center justify-end gap-1.5">
-                    <div className="w-10 h-1.5 rounded-full bg-muted/40 overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.round((entry.modBreadth / maxMod) * 100)}%`,
-                          background: "hsl(270 71% 45% / 0.6)",
-                        }}
-                      />
-                    </div>
-                    <span className="font-semibold text-foreground">{entry.modBreadth}</span>
-                  </div>
+                <td className="py-1.5 px-3 text-center tabular-nums font-semibold text-foreground">
+                  {entry.modBreadth}
                 </td>
-                <td className="py-1.5 pl-3 text-right tabular-nums">
+                <td className="py-1.5 pl-3 text-center tabular-nums">
                   <span
                     className="font-bold px-1.5 py-0.5 rounded text-xs"
                     style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
@@ -892,7 +802,7 @@ function WeeklyVelocityPanel({
 
 // ── AssetDrawer ───────────────────────────────────────────────────────────────
 
-function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void }) {
+function AssetDrawer({ ctx, range, onClose }: { ctx: DrawerContext; range: RangeOption; onClose: () => void }) {
   const [assets, setAssets] = useState<DrawerAsset[]>([]);
   const [total, setTotal] = useState(0);
   const [offset, setOffset] = useState(0);
@@ -918,7 +828,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
     (async () => {
       try {
         const authHeaders = await getAuthHeaders();
-        const res = await fetch(`/api/intelligence/assets?${buildDrawerParams(ctx, 0)}`, {
+        const res = await fetch(`/api/intelligence/assets?${buildDrawerParams(ctx, 0, range)}`, {
           credentials: "include",
           headers: authHeaders,
         });
@@ -944,7 +854,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
     setLoadingMore(true);
     try {
       const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/intelligence/assets?${buildDrawerParams(ctx, offset)}`, {
+      const res = await fetch(`/api/intelligence/assets?${buildDrawerParams(ctx, offset, range)}`, {
         credentials: "include",
         headers: authHeaders,
       });
@@ -1194,7 +1104,7 @@ export default function MarketIntelligence() {
         </div>
       )}
 
-      <AssetDrawer ctx={drawerCtx} onClose={() => setDrawerCtx(null)} />
+      <AssetDrawer ctx={drawerCtx} range={range} onClose={() => setDrawerCtx(null)} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-5">
 
@@ -1368,20 +1278,6 @@ export default function MarketIntelligence() {
                     />
                   </SectionPanel>
 
-                  {/* Panel C — Top Intersection Combos */}
-                  <SectionPanel
-                    icon={Network}
-                    title="Top Intersection Combos"
-                    subtitle="Highest-density biology × modality overlaps. Click to explore assets."
-                    delay={170}
-                  >
-                    <TopIntersectionPanel
-                      matrix={data.whitespaceMatrix}
-                      onRowClick={(bio, mod, count, framing) =>
-                        setDrawerCtx({ type: "whitespace", biology: bio, modality: mod, count, framing })
-                      }
-                    />
-                  </SectionPanel>
                 </div>
               </div>
 

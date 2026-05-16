@@ -1418,7 +1418,7 @@ export async function registerRoutes(
           ${dfWhere} institution IS NOT NULL AND institution != ''
           GROUP BY institution ORDER BY count DESC LIMIT 20
         `),
-        db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
+        db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
         db.execute(sql`
           WITH top_insts AS (
             SELECT institution
@@ -1517,6 +1517,15 @@ export async function registerRoutes(
       const limit = Math.min(Math.max(isNaN(rawLimit) ? 20 : rawLimit, 1), 100);
       const offset = Math.max(isNaN(rawOffset) ? 0 : rawOffset, 0);
 
+      const rangeParam = req.query.range as string | undefined;
+      const daysNum = rangeParam && /^\d+d$/.test(rangeParam)
+        ? parseInt(rangeParam.replace("d", ""), 10)
+        : null;
+      const cutoff = daysNum
+        ? new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+      const mkDateFilter = () => cutoff ? sql`AND first_seen_at >= ${cutoff}::timestamptz` : sql``;
+
       if (!biology && !modality && !institution && !after && !before) {
         return res.status(400).json({ error: "At least one filter is required" });
       }
@@ -1530,12 +1539,14 @@ export async function registerRoutes(
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
             WHERE biology = ${biology} AND modality = ${modality}
+            ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
             SELECT COUNT(*)::int AS total FROM ingested_assets
             WHERE biology = ${biology} AND modality = ${modality}
+            ${mkDateFilter()}
           `),
         ]);
       } else if (biology) {
@@ -1544,11 +1555,14 @@ export async function registerRoutes(
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
             WHERE biology = ${biology}
+            ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
-            SELECT COUNT(*)::int AS total FROM ingested_assets WHERE biology = ${biology}
+            SELECT COUNT(*)::int AS total FROM ingested_assets
+            WHERE biology = ${biology}
+            ${mkDateFilter()}
           `),
         ]);
       } else if (modality) {
@@ -1557,11 +1571,14 @@ export async function registerRoutes(
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
             WHERE modality = ${modality}
+            ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
-            SELECT COUNT(*)::int AS total FROM ingested_assets WHERE modality = ${modality}
+            SELECT COUNT(*)::int AS total FROM ingested_assets
+            WHERE modality = ${modality}
+            ${mkDateFilter()}
           `),
         ]);
       } else if (institution) {
@@ -1570,11 +1587,14 @@ export async function registerRoutes(
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
             WHERE institution = ${institution}
+            ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
-            SELECT COUNT(*)::int AS total FROM ingested_assets WHERE institution = ${institution}
+            SELECT COUNT(*)::int AS total FROM ingested_assets
+            WHERE institution = ${institution}
+            ${mkDateFilter()}
           `),
         ]);
       } else if (after && before) {
