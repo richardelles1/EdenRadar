@@ -1358,7 +1358,7 @@ export async function registerRoutes(
     type RangeOpt = typeof validRanges[number];
     const rangeParam = (req.query.range as string) || "all";
     const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
-    const CACHE_KEY = `intelligence:market:v3:${range}`;
+    const CACHE_KEY = `intelligence:market:v4:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
@@ -1367,9 +1367,12 @@ export async function registerRoutes(
       const df = days !== null ? sql.raw(`AND first_seen_at >= NOW() - INTERVAL '${days} days'`) : sql.raw("");
       const dfWhere = days !== null ? sql.raw(`WHERE first_seen_at >= NOW() - INTERVAL '${days} days' AND`) : sql.raw("WHERE");
 
-      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow] = await Promise.all([
+      const deltaDays = days ?? 90;
+      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow, breadthRows] = await Promise.all([
         db.execute(sql`
-          SELECT biology, COUNT(*)::int AS count
+          SELECT biology,
+            COUNT(*)::int AS count,
+            COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '1 day' * ${deltaDays})::int AS recent_delta
           FROM ingested_assets
           WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
           ${df}
@@ -1416,11 +1419,23 @@ export async function registerRoutes(
           GROUP BY institution ORDER BY count DESC LIMIT 20
         `),
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
+        db.execute(sql`
+          SELECT institution,
+            COUNT(*)::int AS total,
+            COUNT(DISTINCT biology)::int AS bio_breadth,
+            COUNT(DISTINCT modality)::int AS mod_breadth
+          FROM ingested_assets
+          ${dfWhere} institution IS NOT NULL AND institution != ''
+          GROUP BY institution
+          ORDER BY bio_breadth + mod_breadth DESC
+          LIMIT 20
+        `),
       ]);
 
       const biologyLandscape = (biologyRows.rows as Record<string, unknown>[]).map((r) => ({
         biology: String(r.biology ?? ""),
         count: Number(r.count ?? 0),
+        recentDelta: Number(r.recent_delta ?? 0),
       }));
 
       const allWhitespace = whitespaceRows.rows as Record<string, unknown>[];
@@ -1465,7 +1480,15 @@ export async function registerRoutes(
       // For specific ranges: the range itself (e.g. "30d") — delta = total for that window.
       const recentDeltaWindow: string = range === "all" ? "90d" : range;
 
-      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow };
+      const institutionBreadth = (breadthRows.rows as Record<string, unknown>[]).map((r) => ({
+        institution: String(r.institution ?? ""),
+        total: Number(r.total ?? 0),
+        bioBreadth: Number(r.bio_breadth ?? 0),
+        modBreadth: Number(r.mod_breadth ?? 0),
+        breadthScore: Number(r.bio_breadth ?? 0) + Number(r.mod_breadth ?? 0),
+      }));
+
+      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow, institutionBreadth };
       cacheSet(CACHE_KEY, result, TTL_MS);
       return res.json(result);
     } catch (err: any) {
