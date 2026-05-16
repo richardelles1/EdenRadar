@@ -1358,7 +1358,7 @@ export async function registerRoutes(
     type RangeOpt = typeof validRanges[number];
     const rangeParam = (req.query.range as string) || "all";
     const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
-    const CACHE_KEY = `intelligence:market:v4:${range}`;
+    const CACHE_KEY = `intelligence:market:v5:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
@@ -1436,7 +1436,7 @@ export async function registerRoutes(
           INNER JOIN top_insts ON ia.institution = top_insts.institution
           ${dfWhere} ia.institution IS NOT NULL AND ia.institution != ''
           GROUP BY ia.institution
-          ORDER BY bio_breadth + mod_breadth DESC
+          ORDER BY COUNT(DISTINCT ia.biology) + COUNT(DISTINCT ia.modality) DESC
         `),
       ]);
 
