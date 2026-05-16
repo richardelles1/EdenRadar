@@ -211,12 +211,6 @@ function BiologyLandscapePanel({
     );
   }
 
-  const totalCount = data.reduce((s, e) => s + e.count, 0);
-  const topEntry = data[0];
-  const topShare = topEntry && totalCount > 0
-    ? Math.round((topEntry.count / totalCount) * 100)
-    : 0;
-
   return (
     <div className="flex flex-col h-full">
       <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
