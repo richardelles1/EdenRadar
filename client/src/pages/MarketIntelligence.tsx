@@ -714,7 +714,9 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
                 const pickerPayload: PipelinePickerPayload = {
                   asset_name: asset.title,
                   modality: asset.modality !== "unknown" ? asset.modality : undefined,
+                  source_journal: asset.institution || undefined,
                   ingested_asset_id: asset.id,
+                  pmid: String(asset.id),
                 };
                 return (
                   <div
@@ -722,7 +724,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
                     className="group relative p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all"
                     data-testid={`drawer-asset-${asset.id}`}
                   >
-                    <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-2.5 right-2.5 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                       <PipelinePicker payload={pickerPayload} bare />
                     </div>
                     <Link href={`/asset/${asset.id}`}>
