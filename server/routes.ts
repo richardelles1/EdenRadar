@@ -1518,9 +1518,8 @@ export async function registerRoutes(
       const offset = Math.max(isNaN(rawOffset) ? 0 : rawOffset, 0);
 
       const rangeParam = req.query.range as string | undefined;
-      const daysNum = rangeParam && /^\d+d$/.test(rangeParam)
-        ? parseInt(rangeParam.replace("d", ""), 10)
-        : null;
+      const validAssetRanges: Record<string, number> = { "30d": 30, "60d": 60, "90d": 90 };
+      const daysNum = rangeParam && validAssetRanges[rangeParam] ? validAssetRanges[rangeParam] : null;
       const cutoff = daysNum
         ? new Date(Date.now() - daysNum * 24 * 60 * 60 * 1000).toISOString()
         : null;

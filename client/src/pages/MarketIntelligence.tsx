@@ -1303,7 +1303,7 @@ export default function MarketIntelligence() {
               <SectionPanel
                 icon={GitBranch}
                 title="Biology Growth Signals"
-                subtitle={`New asset additions per biology area. Left: all areas ranked by total. Right: top 8 fastest-growing in the ${windowLabel(data.recentDeltaWindow)}${range === "all" ? " (delta vs. all-time total)" : ""}.`}
+                subtitle={`New asset additions per biology area. Left: top 8 by total. Right: top 8 fastest-growing in the ${windowLabel(data.recentDeltaWindow)}${range === "all" ? " (delta vs. all-time total)" : ""}.`}
                 delay={210}
               >
                 <BiologyGrowthPanel
