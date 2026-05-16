@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   BarChart2, Dna, Layers, TrendingUp, Building2, ArrowRight, Info, X,
-  GitBranch, ChevronsUpDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getAuthHeaders } from "@/lib/queryClient";
@@ -238,23 +238,6 @@ function BiologyLandscapePanel({
         ))}
       </div>
 
-      {/* Pinned Landscape Summary strip */}
-      <div className="shrink-0 border-t border-border/50 mt-3 pt-3 grid grid-cols-3 gap-3">
-        <div className="text-center">
-          <p className="text-sm font-bold text-foreground tabular-nums">{data.length}</p>
-          <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Biologies</p>
-        </div>
-        <div className="text-center overflow-hidden">
-          <p className="text-xs font-bold text-foreground truncate leading-tight" title={topEntry ? capitalize(topEntry.biology) : "—"}>
-            {topEntry ? capitalize(topEntry.biology) : "—"}
-          </p>
-          <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Top area</p>
-        </div>
-        <div className="text-center">
-          <p className="text-sm font-bold text-foreground tabular-nums">{topShare}%</p>
-          <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Top share</p>
-        </div>
-      </div>
     </div>
   );
 }
@@ -322,7 +305,7 @@ function InstitutionVelocityPanel({
   const rangeLabel = range === "all" ? "all time" : `last ${range.replace("d", "")} days`;
   return (
     <div className="flex flex-col">
-      <div className="max-h-[380px] overflow-y-auto space-y-1 pr-0.5">
+      <div className="max-h-[260px] overflow-y-auto space-y-1 pr-0.5">
         {data.map((entry, i) => (
           <button
             key={entry.institution}
@@ -481,122 +464,6 @@ function WhitespacePanel({
 
 
 
-// ── BiologyGrowthPanel (Panel A) ───────────────────────────────────────────────
-
-function BiologyGrowthPanel({
-  data,
-  recentDeltaWindow,
-  range,
-  onRowClick,
-}: {
-  data: BiologyEntry[];
-  recentDeltaWindow: string;
-  range: RangeOption;
-  onRowClick: (entry: BiologyEntry) => void;
-}) {
-  const top8ByTotal = [...data].sort((a, b) => b.count - a.count).slice(0, 8);
-  const top8ByDelta = [...data].sort((a, b) => (b.recentDelta ?? 0) - (a.recentDelta ?? 0)).slice(0, 8);
-  const withDelta = data.filter((e) => (e.recentDelta ?? 0) > 0);
-  const maxDelta = top8ByDelta.length ? Math.max(...top8ByDelta.map((e) => e.recentDelta ?? 0), 1) : 1;
-
-  if (!data.length) {
-    return <EmptyState message="Biology growth data is being populated." />;
-  }
-
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {/* Left: top 8 by total */}
-      <div className="space-y-1">
-        <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 px-1">
-          Top 8 by total
-        </p>
-        <div className="space-y-0.5">
-          {top8ByTotal.map((entry, i) => (
-            <button
-              key={entry.biology}
-              className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
-              onClick={() => onRowClick(entry)}
-              data-testid={`bio-growth-row-${i}`}
-            >
-              <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right">{i + 1}</span>
-              <span className="flex-1 min-w-0 text-xs text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate">
-                {capitalize(entry.biology)}
-              </span>
-              {(entry.recentDelta ?? 0) > 0 && (
-                <span
-                  className="text-[9px] font-bold px-1 py-0.5 rounded shrink-0 tabular-nums"
-                  style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-                >
-                  +{(entry.recentDelta ?? 0).toLocaleString()}
-                </span>
-              )}
-              <span className="text-xs text-foreground tabular-nums shrink-0 font-semibold">
-                {entry.count.toLocaleString()}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Right: horizontal bar chart of top 8 by recentDelta */}
-      <div>
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">
-            Top 8 by new additions — {windowLabel(recentDeltaWindow)}
-          </p>
-          {range === "all" && (
-            <span
-              className="text-[8px] font-medium px-1.5 py-0.5 rounded-full shrink-0"
-              style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-              title="Showing new assets added in the last 90 days against the all-time total"
-            >
-              delta vs. all-time
-            </span>
-          )}
-        </div>
-        {withDelta.length === 0 ? (
-          <EmptyState message="No new additions recorded in this window." />
-        ) : (
-          <div className="space-y-2">
-            {top8ByDelta.map((entry, i) => {
-              const delta = entry.recentDelta ?? 0;
-              const pct = Math.round((delta / maxDelta) * 100);
-              const intensity = 0.25 + 0.75 * (delta / maxDelta);
-              return (
-                <button
-                  key={entry.biology}
-                  className="w-full flex items-center gap-2.5 group text-left"
-                  onClick={() => onRowClick(entry)}
-                  data-testid={`bio-growth-bar-${i}`}
-                >
-                  <span className="text-[10px] text-muted-foreground w-28 truncate text-right shrink-0 group-hover:text-primary transition-colors">
-                    {capitalize(entry.biology)}
-                  </span>
-                  <div className="flex-1 min-w-0 h-5 rounded-md overflow-hidden bg-muted/30">
-                    <div
-                      className="h-full rounded-md transition-all duration-300"
-                      style={{
-                        width: `${pct}%`,
-                        background: `hsl(142 71% ${58 - Math.round(intensity * 18)}% / ${0.6 + intensity * 0.4})`,
-                      }}
-                    />
-                  </div>
-                  <span
-                    className="text-[9px] font-bold tabular-nums shrink-0 w-10 text-right"
-                    style={{ color: "hsl(142 71% 32%)" }}
-                  >
-                    +{delta.toLocaleString()}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── InstitutionBreadthPanel (Panel B) ─────────────────────────────────────────
 
 type BreadthSortKey = "breadthScore" | "total" | "bioBreadth" | "modBreadth";
@@ -622,7 +489,7 @@ function InstitutionBreadthPanel({
     const active = sort === col;
     return (
       <button
-        className="flex items-center gap-0.5 hover:text-foreground transition-colors"
+        className="flex w-full justify-center items-center gap-0.5 hover:text-foreground transition-colors"
         style={{ color: active ? ACCENT : undefined }}
         onClick={() => setSort(col)}
         data-testid={`breadth-sort-${col}`}
@@ -724,7 +591,7 @@ function WeeklyVelocityPanel({
 
   const maxCount = Math.max(...data.map((d) => d.count), 1);
   const avgPerWeek = Math.round(data.reduce((s, d) => s + d.count, 0) / Math.max(data.length, 1));
-  const BAR_H = 64;
+  const BAR_H = 100;
   const MIN_BAR_H = 10;
 
   return (
@@ -1287,7 +1154,7 @@ export default function MarketIntelligence() {
                 title="Weekly Velocity"
                 subtitle="New assets indexed per week. Click any bar to explore that week's additions."
                 delay={190}
-                className="min-h-[130px]"
+                className="min-h-[200px]"
               >
                 <WeeklyVelocityPanel
                   data={data.weeklyTrend}
@@ -1299,22 +1166,6 @@ export default function MarketIntelligence() {
                 />
               </SectionPanel>
 
-              {/* Row 4: Biology Growth Signals — full width */}
-              <SectionPanel
-                icon={GitBranch}
-                title="Biology Growth Signals"
-                subtitle={`New asset additions per biology area. Left: top 8 by total. Right: top 8 fastest-growing in the ${windowLabel(data.recentDeltaWindow)}${range === "all" ? " (delta vs. all-time total)" : ""}.`}
-                delay={210}
-              >
-                <BiologyGrowthPanel
-                  data={data.biologyLandscape}
-                  recentDeltaWindow={data.recentDeltaWindow}
-                  range={range}
-                  onRowClick={(entry) =>
-                    setDrawerCtx({ type: "biology", biology: entry.biology, count: entry.count })
-                  }
-                />
-              </SectionPanel>
 
               {/* Row 5: Institutional Research Breadth — full width */}
               {data.institutionBreadth && data.institutionBreadth.length > 0 && (
