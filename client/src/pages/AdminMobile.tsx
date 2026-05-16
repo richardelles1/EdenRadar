@@ -571,11 +571,14 @@ function SyncTab({ pw }: { pw: string }) {
   const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingSyncInst, setPendingSyncInst] = useState<string | null>(null);
   const pendingSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [startConfirm, setStartConfirm] = useState(false);
+  const startConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       if (pendingSyncTimer.current) clearTimeout(pendingSyncTimer.current);
       if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      if (startConfirmTimer.current) clearTimeout(startConfirmTimer.current);
     };
   }, []);
 
@@ -659,18 +662,32 @@ function SyncTab({ pw }: { pw: string }) {
   };
 
   const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
-    const sched = data?.scheduler;
-    if (sched?.state === "paused" && sched.tierOnly === tier) {
-      startMutation.mutate();
-      return;
-    }
     if (pendingTier !== tier) {
       setPendingTier(tier);
       if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
       tierConfirmTimer.current = setTimeout(() => setPendingTier(null), 4000);
     } else {
       if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
-      tierMutation.mutate(tier);
+      const sched = data?.scheduler;
+      // If cleanly paused mid-way through this exact tier, resume; otherwise start fresh.
+      if (sched?.state === "paused" && sched.tierOnly === tier) {
+        startMutation.mutate();
+      } else {
+        tierMutation.mutate(tier);
+      }
+      setPendingTier(null);
+    }
+  };
+
+  const handleStartClick = () => {
+    if (!startConfirm) {
+      setStartConfirm(true);
+      if (startConfirmTimer.current) clearTimeout(startConfirmTimer.current);
+      startConfirmTimer.current = setTimeout(() => setStartConfirm(false), 3000);
+    } else {
+      if (startConfirmTimer.current) clearTimeout(startConfirmTimer.current);
+      setStartConfirm(false);
+      startMutation.mutate();
     }
   };
 
@@ -740,11 +757,15 @@ function SyncTab({ pw }: { pw: string }) {
                 {isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Pause className="h-4 w-4" />} Pause
               </button>
             ) : (
-              <button onClick={() => startMutation.mutate()} disabled={isActing}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 font-semibold text-sm active:opacity-70"
+              <button onClick={handleStartClick} disabled={isActing}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-xl font-semibold text-sm active:opacity-70 transition-colors ${
+                  startConfirm
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                }`}
                 data-testid="button-start-scheduler">
                 {isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                {schedPaused ? (scheduler?.tierOnly != null ? `Resume T${scheduler.tierOnly}` : "Resume") : "Start"}
+                {isActing ? "Starting…" : startConfirm ? "Confirm?" : schedPaused ? (scheduler?.tierOnly != null ? `Resume T${scheduler.tierOnly}` : "Resume") : "Start"}
               </button>
             )}
           </div>

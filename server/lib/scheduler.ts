@@ -298,22 +298,28 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
     completedThisCycle = saved.completedThisCycle;
     failedThisCycle = saved.failedThisCycle;
     lastCycleCompletedAt = saved.lastCycleCompletedAt;
-    tierOnlyActive = saved.tierOnly ?? null;
-
     const wasRunning = saved.schedulerRunning;
     if (!wasRunning) {
+      // Clean pause — preserve tier context so the admin can resume exactly where we left off.
       schedulerState = "paused";
+      tierOnlyActive = saved.tierOnly ?? null;
+    } else {
+      // Unclean shutdown (SIGTERM didn't complete its DB write). Drop any stale tier-only
+      // context so that clicking "Start" begins a fresh full cycle rather than silently
+      // resuming an abandoned tier scan the admin doesn't know about.
+      tierOnlyActive = null;
+      queueIndex = 0;
     }
-    // If we were in a tier-only scan, rebuild that tier's queue; otherwise build the full queue.
+    // If we were cleanly paused mid-tier scan, rebuild that tier's queue; otherwise full queue.
     if (tierOnlyActive !== null) {
       const tier = tierOnlyActive as 1 | 2 | 3 | 4;
       const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
       for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); buckets[t].push(s.institution); }
       tieredQueue = buckets[tier];
-      console.log(`[scheduler] Restored Tier-${tier} scan state: position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running" : "paused"}`);
+      console.log(`[scheduler] Restored Tier-${tier} scan (clean pause): position ${queueIndex}/${tieredQueue.length}`);
     } else {
       tieredQueue = buildTieredQueue();
-      console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running" : "paused"}`);
+      console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running (unclean shutdown — tier context cleared)" : "paused"}`);
     }
     return wasRunning;
   } catch (err: any) {

@@ -1378,18 +1378,19 @@ function DataHealth({ pw }: { pw: string }) {
   });
 
   const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
-    // If we're paused mid-way through this exact tier scan, resume instead of restarting.
-    if (schedPaused && sched.tierOnly === tier) {
-      schedulerStartMutation.mutate();
-      return;
-    }
     if (pendingTier !== tier) {
       setPendingTier(tier);
       if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
       tierConfirmTimer.current = setTimeout(() => setPendingTier(null), 4000);
     } else {
       if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
-      schedulerTierMutation.mutate(tier);
+      // If paused mid-way through this exact tier scan, resume; otherwise start fresh.
+      if (schedPaused && sched.tierOnly === tier) {
+        schedulerStartMutation.mutate();
+      } else {
+        schedulerTierMutation.mutate(tier);
+      }
+      setPendingTier(null);
     }
   };
 
