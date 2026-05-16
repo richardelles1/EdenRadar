@@ -1420,15 +1420,23 @@ export async function registerRoutes(
         `),
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
         db.execute(sql`
-          SELECT institution,
+          WITH top_insts AS (
+            SELECT institution
+            FROM ingested_assets
+            ${dfWhere} institution IS NOT NULL AND institution != ''
+            GROUP BY institution
+            ORDER BY COUNT(*) DESC
+            LIMIT 20
+          )
+          SELECT ia.institution,
             COUNT(*)::int AS total,
-            COUNT(DISTINCT biology)::int AS bio_breadth,
-            COUNT(DISTINCT modality)::int AS mod_breadth
-          FROM ingested_assets
-          ${dfWhere} institution IS NOT NULL AND institution != ''
-          GROUP BY institution
+            COUNT(DISTINCT ia.biology)::int AS bio_breadth,
+            COUNT(DISTINCT ia.modality)::int AS mod_breadth
+          FROM ingested_assets ia
+          INNER JOIN top_insts ON ia.institution = top_insts.institution
+          ${dfWhere} ia.institution IS NOT NULL AND ia.institution != ''
+          GROUP BY ia.institution
           ORDER BY bio_breadth + mod_breadth DESC
-          LIMIT 20
         `),
       ]);
 
