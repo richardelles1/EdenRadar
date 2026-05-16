@@ -565,12 +565,15 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
   const [offset, setOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [fetchError, setFetchError] = useState(false);
+  const currentCtxRef = { current: ctx };
 
   useEffect(() => {
     if (!ctx) {
       setAssets([]);
       setTotal(0);
       setOffset(0);
+      setFetchError(false);
       return;
     }
     let cancelled = false;
@@ -578,6 +581,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
     setAssets([]);
     setTotal(0);
     setOffset(0);
+    setFetchError(false);
     (async () => {
       try {
         const authHeaders = await getAuthHeaders();
@@ -585,12 +589,15 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
           credentials: "include",
           headers: authHeaders,
         });
-        if (cancelled || !res.ok) return;
+        if (cancelled) return;
+        if (!res.ok) { setFetchError(true); return; }
         const data = await res.json();
         if (cancelled) return;
         setAssets(data.assets ?? []);
         setTotal(data.total ?? 0);
         setOffset(data.assets?.length ?? 0);
+      } catch {
+        if (!cancelled) setFetchError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -600,6 +607,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
 
   async function loadMore() {
     if (!ctx || loadingMore) return;
+    const ctxAtCall = currentCtxRef.current;
     setLoadingMore(true);
     try {
       const authHeaders = await getAuthHeaders();
@@ -607,8 +615,9 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
         credentials: "include",
         headers: authHeaders,
       });
-      if (!res.ok) return;
+      if (!res.ok || currentCtxRef.current !== ctxAtCall) return;
       const data = await res.json();
+      if (currentCtxRef.current !== ctxAtCall) return;
       setAssets((prev) => [...prev, ...(data.assets ?? [])]);
       setTotal(data.total ?? total);
       setOffset((prev) => prev + (data.assets?.length ?? 0));
@@ -652,6 +661,8 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
       ? `/scout?modality=${encodeURIComponent(ctx.modality)}`
       : `/institutions/${ctx.institution.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}`;
 
+  const scoutCtaLabel = ctx.type === "institution" ? "View Institution Profile" : "Explore all in Scout";
+
   const hasMore = assets.length > 0 && assets.length < total;
 
   return (
@@ -693,6 +704,8 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
                 <Skeleton className="h-2.5 w-1/2" />
               </div>
             ))
+          ) : fetchError ? (
+            <EmptyState message="Failed to load assets. Please close and try again." />
           ) : !assets.length ? (
             <EmptyState message="No assets found for this filter. Try exploring in Scout." />
           ) : (
@@ -742,7 +755,7 @@ function AssetDrawer({ ctx, onClose }: { ctx: DrawerContext; onClose: () => void
               style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
               data-testid="button-drawer-scout"
             >
-              Explore all in Scout
+              {scoutCtaLabel}
               <ArrowRight className="w-4 h-4" />
             </button>
           </Link>
