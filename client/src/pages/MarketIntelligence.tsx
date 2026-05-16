@@ -159,18 +159,18 @@ function SectionPanel({
       className={`rounded-xl border border-border bg-card p-5 flex flex-col ${className}`}
       style={{ animation: `dash-fade-up 400ms ease ${delay}ms both` }}
     >
-      <div className="flex items-start gap-2 mb-4 shrink-0">
+      <div className="flex items-stretch gap-2.5 mb-4 shrink-0">
         <div
-          className="w-7 h-7 rounded-md flex items-center justify-center shrink-0 mt-0.5"
+          className="w-9 rounded-md flex items-center justify-center shrink-0"
           style={{ background: "hsl(142 71% 45% / 0.12)" }}
         >
           <Icon className="w-4 h-4" style={{ color: ACCENT }} />
         </div>
         <div className="flex-1 min-w-0">
-          <h2 className="text-sm font-bold text-foreground leading-tight">{title}</h2>
+          <h2 className="text-base font-bold text-foreground leading-tight">{title}</h2>
           {subtitle && <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{subtitle}</p>}
         </div>
-        {headerRight && <div className="shrink-0 ml-2">{headerRight}</div>}
+        {headerRight && <div className="shrink-0 ml-2 flex items-center">{headerRight}</div>}
       </div>
       <div className="flex-1 min-h-0">{children}</div>
     </div>
@@ -191,24 +191,51 @@ function BiologyLandscapePanel({
       <EmptyState message="Biology data is being populated by the AI enrichment pipeline." />
     );
   }
+
+  const totalCount = data.reduce((s, e) => s + e.count, 0);
+  const topEntry = data[0];
+  const topShare = topEntry && totalCount > 0
+    ? Math.round((topEntry.count / totalCount) * 100)
+    : 0;
+
   return (
-    <div className="overflow-y-auto h-full space-y-1 pr-1">
-      {data.map((entry, i) => (
-        <button
-          key={entry.biology}
-          className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
-          onClick={() => onRowClick(entry)}
-          data-testid={`bio-row-${i}`}
-        >
-          <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right">{i + 1}</span>
-          <span className="flex-1 min-w-0 text-xs text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate">
-            {capitalize(entry.biology)}
-          </span>
-          <span className="text-xs text-foreground tabular-nums shrink-0 font-semibold">
-            {entry.count.toLocaleString()}
-          </span>
-        </button>
-      ))}
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto space-y-1 pr-1 min-h-0">
+        {data.map((entry, i) => (
+          <button
+            key={entry.biology}
+            className="w-full flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-left hover:bg-accent/30 transition-colors group"
+            onClick={() => onRowClick(entry)}
+            data-testid={`bio-row-${i}`}
+          >
+            <span className="text-[10px] text-muted-foreground tabular-nums w-5 shrink-0 text-right">{i + 1}</span>
+            <span className="flex-1 min-w-0 text-xs text-foreground font-medium leading-tight group-hover:text-primary transition-colors truncate">
+              {capitalize(entry.biology)}
+            </span>
+            <span className="text-xs text-foreground tabular-nums shrink-0 font-semibold">
+              {entry.count.toLocaleString()}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      {/* Pinned Landscape Summary strip */}
+      <div className="shrink-0 border-t border-border/50 mt-3 pt-3 grid grid-cols-3 gap-3">
+        <div className="text-center">
+          <p className="text-sm font-bold text-foreground tabular-nums">{data.length}</p>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Biologies</p>
+        </div>
+        <div className="text-center overflow-hidden">
+          <p className="text-xs font-bold text-foreground truncate leading-tight" title={topEntry ? capitalize(topEntry.biology) : "—"}>
+            {topEntry ? capitalize(topEntry.biology) : "—"}
+          </p>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Top area</p>
+        </div>
+        <div className="text-center">
+          <p className="text-sm font-bold text-foreground tabular-nums">{topShare}%</p>
+          <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Top share</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -309,14 +336,15 @@ function InstitutionVelocityPanel({
 function WhitespacePanel({
   matrix,
   onCellClick,
+  setTooltip,
 }: {
   matrix: WhitespaceMatrix;
   onCellClick: (bio: string, mod: string, count: number, framing: string) => void;
+  setTooltip: (t: CellTooltip) => void;
 }) {
   const rawBiologies = matrix.biologies.slice(0, WHITESPACE_MAX_BIO);
   const rawModalities = matrix.modalities.slice(0, WHITESPACE_MAX_MOD);
   const cells = matrix.cells;
-  const [tooltip, setTooltip] = useState<CellTooltip>(null);
 
   if (!rawBiologies.length || !rawModalities.length) {
     return (
@@ -334,21 +362,6 @@ function WhitespacePanel({
 
   return (
     <div className="flex flex-col h-full">
-      {tooltip && (
-        <div
-          className="fixed z-[9999] bg-popover border border-border rounded-lg px-3 py-2 shadow-xl pointer-events-none text-center"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y,
-            transform: "translate(-50%, calc(-100% - 10px))",
-            maxWidth: "260px",
-          }}
-        >
-          <p className="text-[11px] font-semibold text-foreground leading-snug">{tooltip.title}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{tooltip.sub}</p>
-        </div>
-      )}
-
       <div
         className="grid gap-2 flex-1"
         style={{
@@ -359,7 +372,7 @@ function WhitespacePanel({
         {rawModalities.map((m) => (
           <div
             key={m}
-            className="text-[10px] text-muted-foreground font-semibold text-center pb-2 leading-tight"
+            className="text-xs text-muted-foreground font-semibold text-center pb-2 leading-tight"
           >
             {capitalize(m)}
           </div>
@@ -367,7 +380,7 @@ function WhitespacePanel({
 
         {rawBiologies.map((bio) => (
           <Fragment key={bio}>
-            <div className="text-[11px] text-foreground font-medium pr-3 flex items-center">
+            <div className="text-[12px] text-foreground font-medium pr-3 flex items-center">
               {capitalize(bio)}
             </div>
             {rawModalities.map((mod) => {
@@ -380,7 +393,7 @@ function WhitespacePanel({
                   key={`${bio}|${mod}`}
                   className="h-12 rounded-[10px] flex items-center justify-center font-bold transition-all duration-150 select-none"
                   style={{
-                    fontSize: "0.85rem",
+                    fontSize: "1rem",
                     background: isEmpty
                       ? "hsl(var(--muted) / 0.28)"
                       : `linear-gradient(155deg, hsl(142 71% 54% / ${op}), hsl(142 71% 36% / ${Math.min(op + 0.12, 1)}))`,
@@ -428,7 +441,7 @@ function WhitespacePanel({
               background: "hsl(var(--muted) / 0.28)",
             }}
           />
-          <span className="text-[10px] text-muted-foreground">Whitespace</span>
+          <span className="text-xs text-muted-foreground">Whitespace</span>
         </div>
         <div className="flex items-center gap-1.5">
           <div
@@ -437,7 +450,7 @@ function WhitespacePanel({
               background: "linear-gradient(155deg, hsl(142 71% 54% / 0.85), hsl(142 71% 36% / 0.97))",
             }}
           />
-          <span className="text-[10px] text-muted-foreground">High density</span>
+          <span className="text-xs text-muted-foreground">High density</span>
         </div>
         <span className="text-[10px] text-muted-foreground ml-auto italic">
           Click any cell to explore those assets
@@ -453,13 +466,13 @@ function WeeklyVelocityPanel({
   data,
   totalIndexed,
   onBarClick,
+  setTooltip,
 }: {
   data: WeekEntry[];
   totalIndexed: number;
   onBarClick: (after: string, before: string, weekLabel: string, count: number) => void;
+  setTooltip: (t: CellTooltip) => void;
 }) {
-  const [tooltip, setTooltip] = useState<CellTooltip>(null);
-
   if (!data.length) {
     return <EmptyState message="No weekly data available." />;
   }
@@ -487,21 +500,6 @@ function WeeklyVelocityPanel({
           <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Avg / week</p>
         </div>
       </div>
-
-      {tooltip && (
-        <div
-          className="fixed z-[9999] bg-popover border border-border rounded-lg px-3 py-2 shadow-xl pointer-events-none text-center"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y,
-            transform: "translate(-50%, calc(-100% - 10px))",
-            minWidth: "140px",
-          }}
-        >
-          <p className="text-[11px] font-semibold text-foreground">{tooltip.title}</p>
-          <p className="text-[10px] text-muted-foreground mt-0.5">{tooltip.sub}</p>
-        </div>
-      )}
 
       <div className="flex-1 min-w-0" data-testid="weekly-velocity-chart">
         <div className="flex items-end gap-1.5" style={{ height: `${BAR_H}px` }}>
@@ -771,9 +769,9 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
   return (
     <div className={`rounded-xl border border-border bg-card p-5 space-y-3 ${className}`}>
       <div className="flex items-center gap-2">
-        <Skeleton className="w-7 h-7 rounded-md shrink-0" />
+        <Skeleton className="w-9 h-9 rounded-md shrink-0" />
         <div className="space-y-1 flex-1">
-          <Skeleton className="h-3.5 w-32" />
+          <Skeleton className="h-4 w-32" />
           <Skeleton className="h-2.5 w-48" />
         </div>
       </div>
@@ -795,6 +793,7 @@ function SkeletonBlock({ className = "" }: { className?: string }) {
 export default function MarketIntelligence() {
   const [range, setRange] = useState<RangeOption>("all");
   const [drawerCtx, setDrawerCtx] = useState<DrawerContext>(null);
+  const [tooltip, setTooltip] = useState<CellTooltip>(null);
 
   const { data, isLoading, isError } = useQuery<MarketIntelligenceData>({
     queryKey: ["/api/intelligence/market", range],
@@ -829,6 +828,22 @@ export default function MarketIntelligence() {
         }
       `}</style>
 
+      {/* Global tooltip — rendered here, outside all CSS-transform ancestors */}
+      {tooltip && (
+        <div
+          className="fixed z-[9999] bg-popover border border-border rounded-lg px-3 py-2 shadow-xl pointer-events-none text-center"
+          style={{
+            left: tooltip.x,
+            top: tooltip.y,
+            transform: "translate(-50%, calc(-100% - 10px))",
+            maxWidth: "260px",
+          }}
+        >
+          <p className="text-[11px] font-semibold text-foreground leading-snug">{tooltip.title}</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">{tooltip.sub}</p>
+        </div>
+      )}
+
       <AssetDrawer ctx={drawerCtx} onClose={() => setDrawerCtx(null)} />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-5">
@@ -842,35 +857,34 @@ export default function MarketIntelligence() {
           }}
           data-testid="intelligence-header"
         >
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-2.5">
-                <div
-                  className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                  style={{ background: "hsl(142 71% 45% / 0.12)" }}
-                >
-                  <BarChart2 className="w-4 h-4" style={{ color: ACCENT }} />
+          <div className="flex items-center justify-between gap-4">
+            {/* Left: icon + title + tagline */}
+            <div className="flex items-center gap-2.5">
+              <div
+                className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+                style={{ background: "hsl(142 71% 45% / 0.12)" }}
+              >
+                <BarChart2 className="w-4 h-4" style={{ color: ACCENT }} />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h1 className="text-2xl font-bold text-foreground tracking-tight">Landscape Intelligence</h1>
+                  <span
+                    className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                    style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
+                  >
+                    Live
+                  </span>
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold text-foreground tracking-tight">Landscape Intelligence</h1>
-                    <span
-                      className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                      style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
-                    >
-                      Live
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Signal-level view of the TTO asset index.
-                  </p>
-                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Signal-level view of the TTO asset index.
+                </p>
               </div>
             </div>
 
-            {/* Range toggle — prominent segment control */}
+            {/* Right: range toggle */}
             <div
-              className="flex items-center gap-1 p-1 rounded-xl w-fit"
+              className="flex items-center gap-1 p-1 rounded-xl shrink-0"
               style={{
                 background: "hsl(var(--muted) / 0.8)",
                 border: "1px solid hsl(var(--border))",
@@ -908,12 +922,12 @@ export default function MarketIntelligence() {
           </div>
         )}
 
-        {/* Outer bento ring */}
+        {/* Outer bento ring — faint green tint */}
         <div
           className="rounded-2xl p-4 space-y-4"
           style={{
-            border: "1px solid hsl(var(--border) / 0.7)",
-            background: "hsl(var(--muted) / 0.18)",
+            border: "1px solid hsl(142 71% 45% / 0.15)",
+            background: "hsl(142 71% 45% / 0.04)",
             animation: "dash-fade-up 400ms ease 50ms both",
           }}
           data-testid="bento-outer-ring"
@@ -922,21 +936,21 @@ export default function MarketIntelligence() {
             <>
               <SkeletonBlock className="min-h-[460px]" />
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <SkeletonBlock className="min-h-[560px]" />
-                <div className="space-y-4">
-                  <SkeletonBlock className="min-h-[260px]" />
-                  <SkeletonBlock className="min-h-[290px]" />
+                <SkeletonBlock className="h-[680px]" />
+                <div className="flex flex-col gap-4 h-[680px]">
+                  <SkeletonBlock className="flex-1" />
+                  <SkeletonBlock className="flex-1" />
                 </div>
               </div>
               <SkeletonBlock className="min-h-[130px]" />
             </>
           ) : data ? (
             <>
-              {/* Row 1: Therapeutic Whitespace — full width, most differentiated view */}
+              {/* Row 1: Therapeutic Whitespace — full width */}
               <SectionPanel
                 icon={Layers}
                 title="Therapeutic Whitespace"
-                subtitle={`Biology × modality density ${forLabel(rangeOpt)}. Darker = more assets, dashed = gap. Click any cell to explore assets.`}
+                subtitle={`Biology × modality density ${forLabel(rangeOpt)}. Darker = more assets, dashed = gap.`}
                 delay={60}
                 className="min-h-[460px]"
               >
@@ -945,17 +959,18 @@ export default function MarketIntelligence() {
                   onCellClick={(bio, mod, count, framing) =>
                     setDrawerCtx({ type: "whitespace", biology: bio, modality: mod, count, framing })
                   }
+                  setTooltip={setTooltip}
                 />
               </SectionPanel>
 
-              {/* Row 2: Biology (left) | Modality + Institution stacked (right) */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+              {/* Row 2: Biology (left) | Modality + Institution stacked (right) — always a rectangle */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ height: "680px" }}>
                 <SectionPanel
                   icon={Dna}
                   title="Biology Landscape"
-                  subtitle={`Top biology drivers ${forLabel(rangeOpt)} — click a row to explore assets`}
+                  subtitle={`Top biology drivers ${forLabel(rangeOpt)}`}
                   delay={90}
-                  className="min-h-[560px]"
+                  className="h-full"
                 >
                   <BiologyLandscapePanel
                     data={data.biologyLandscape}
@@ -965,17 +980,17 @@ export default function MarketIntelligence() {
                   />
                 </SectionPanel>
 
-                <div className="flex flex-col gap-4">
+                <div className="flex flex-col gap-4 h-full">
                   <SectionPanel
                     icon={TrendingUp}
                     title="Modality Momentum"
                     subtitle={
                       range !== "all"
-                        ? `Assets by modality ${forLabel(rangeOpt)} — click a row to explore assets`
-                        : "All assets by modality — click a row to explore assets"
+                        ? `Assets by modality ${forLabel(rangeOpt)}`
+                        : "All assets by modality"
                     }
                     delay={120}
-                    className="min-h-[260px]"
+                    className="flex-1 min-h-0"
                   >
                     <ModalityMomentumPanel
                       data={data.modalityMomentum}
@@ -989,9 +1004,9 @@ export default function MarketIntelligence() {
                   <SectionPanel
                     icon={Building2}
                     title="Institution Momentum"
-                    subtitle={`Most active institutions ${forLabel(rangeOpt)} — click a row to explore assets`}
+                    subtitle={`Most active institutions ${forLabel(rangeOpt)}`}
                     delay={150}
-                    className="min-h-[290px]"
+                    className="flex-1 min-h-0"
                   >
                     <InstitutionVelocityPanel
                       data={data.institutionVelocity}
@@ -1018,6 +1033,7 @@ export default function MarketIntelligence() {
                   onBarClick={(after, before, weekLabel, count) =>
                     setDrawerCtx({ type: "weekly", after, before, weekLabel, count })
                   }
+                  setTooltip={setTooltip}
                 />
               </SectionPanel>
             </>
