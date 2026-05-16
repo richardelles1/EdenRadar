@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
-import { loadAndRestoreScheduler, startScheduler, flushSchedulerState } from "./lib/scheduler";
+import { loadAndRestoreScheduler, startScheduler, pauseScheduler, flushSchedulerState } from "./lib/scheduler";
 import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAccess";
 import { startWeeklyRecapScheduler, backfillLatestRecaps } from "./lib/weeklyRecap";
 import { sendTrialEndingEmail } from "./email";
@@ -33,21 +33,22 @@ process.on("unhandledRejection", (reason: unknown) => {
   console.error(`[fatal] Unhandled rejection (process kept alive):`, reason);
 });
 
-// Flush scheduler queue-position to DB before the process exits so a restart
-// resumes from the correct institution rather than repeating the full cycle.
+// On shutdown (deploy or SIGINT), always write schedulerRunning=false to DB so
+// the next process instance doesn't auto-resume. Queue position is preserved for
+// display continuity, but the scheduler must be manually started again.
 async function onShutdownSignal(signal: string) {
-  console.log(`[scheduler] ${signal} received — flushing state before exit`);
+  console.log(`[scheduler] ${signal} received — marking scheduler stopped and flushing state before exit`);
   try {
-    // Race the DB write against a 2500ms safety-net (Supabase/PgBouncer headroom).
-    // If flushSchedulerState rejects, the catch branch logs the failure.
-    // process.exit(0) always fires via finally regardless of outcome.
+    // Pause in-memory first (noop if already paused/idle) so flushSchedulerState
+    // sees schedulerRunning=false and writes that to DB.
+    await pauseScheduler().catch(() => {});
     let timedOut = false;
     const timeout = new Promise<void>((resolve) => setTimeout(() => { timedOut = true; resolve(); }, 2500));
     await Promise.race([flushSchedulerState(), timeout]);
     if (timedOut) {
       console.warn(`[scheduler] State flush did not complete within 2500ms on ${signal} — exiting anyway`);
     } else {
-      console.log(`[scheduler] State flushed successfully on ${signal}`);
+      console.log(`[scheduler] State flushed (schedulerRunning=false) on ${signal}`);
     }
   } catch (err: any) {
     console.warn(`[scheduler] State flush failed on ${signal}: ${err?.message}`);
@@ -846,18 +847,13 @@ async function runPostStartupTasks(): Promise<void> {
   } catch (_) { /* column may already exist — safe to ignore */ }
 
   // ── Scheduler restore ─────────────────────────────────────────────────────
+  // Queue position and cycle count are restored for UI continuity, but the
+  // scheduler is never auto-started after a restart/deployment. The user must
+  // explicitly click Start in the Admin panel. This prevents the scheduler from
+  // silently resuming after every deploy when the user intended it to be paused.
   try {
-    const wasRunning = await loadAndRestoreScheduler();
-    if (wasRunning) {
-      const started = startScheduler();
-      if (started.ok) {
-        log("[startup] Scheduler auto-resumed (was running before restart)", "startup");
-      } else {
-        log(`[startup] Scheduler resume skipped: ${started.message}`, "startup");
-      }
-    } else {
-      log("[startup] Scheduler paused — press Start in the Admin panel to begin syncing", "startup");
-    }
+    await loadAndRestoreScheduler();
+    log("[startup] Scheduler restored (paused) — press Start in the Admin panel to begin syncing", "startup");
   } catch (err: any) {
     log(`[startup] Scheduler restore failed: ${err?.message}`, "startup");
   }
