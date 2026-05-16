@@ -104,6 +104,11 @@ function forLabel(opt: { value: RangeOption; label: string }): string {
   return opt.value === "all" ? "for all time" : `for the ${opt.label}`;
 }
 
+function windowLabel(w: string): string {
+  const days = w.replace("d", "");
+  return `last ${days} days`;
+}
+
 function calcTooltipPos(e: React.MouseEvent): { x: number; y: number } {
   const PAD = 12;
   const TIP_HALF_W = 140;
@@ -536,10 +541,12 @@ function TopIntersectionPanel({
 function BiologyGrowthPanel({
   data,
   recentDeltaWindow,
+  range,
   onRowClick,
 }: {
   data: BiologyEntry[];
   recentDeltaWindow: string;
+  range: RangeOption;
   onRowClick: (entry: BiologyEntry) => void;
 }) {
   const withDelta = data.filter((e) => (e.recentDelta ?? 0) > 0);
@@ -587,9 +594,20 @@ function BiologyGrowthPanel({
 
       {/* Right: horizontal bar chart of top 8 by recentDelta */}
       <div>
-        <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold mb-2 px-1">
-          Top 8 by new additions ({recentDeltaWindow})
-        </p>
+        <div className="flex items-center gap-2 mb-2 px-1">
+          <p className="text-[9px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Top 8 by new additions — {windowLabel(recentDeltaWindow)}
+          </p>
+          {range === "all" && (
+            <span
+              className="text-[8px] font-medium px-1.5 py-0.5 rounded-full shrink-0"
+              style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
+              title="Showing new assets added in the last 90 days against the all-time total"
+            >
+              delta vs. all-time
+            </span>
+          )}
+        </div>
         {withDelta.length === 0 ? (
           <EmptyState message="No new additions recorded in this window." />
         ) : (
@@ -639,9 +657,11 @@ type BreadthSortKey = "breadthScore" | "total" | "bioBreadth" | "modBreadth";
 
 function InstitutionBreadthPanel({
   data,
+  rangeOpt,
   onRowClick,
 }: {
   data: InstitutionBreadthEntry[];
+  rangeOpt: { value: RangeOption; label: string };
   onRowClick: (institution: string, total: number) => void;
 }) {
   const [sort, setSort] = useState<BreadthSortKey>("breadthScore");
@@ -759,9 +779,18 @@ function InstitutionBreadthPanel({
           </tbody>
         </table>
       </div>
-      <p className="text-[9px] text-muted-foreground mt-3 pt-2 border-t border-border/50 italic">
-        Institutions with high breadth are generalists; specialists dominate fewer areas with greater depth. Click any row to explore assets.
-      </p>
+      <div className="flex items-center justify-between mt-3 pt-2 border-t border-border/50 gap-2 flex-wrap">
+        <p className="text-[9px] text-muted-foreground italic">
+          Institutions with high breadth are generalists; specialists dominate fewer areas with greater depth. Click any row to explore assets.
+        </p>
+        <span
+          className="text-[8px] font-medium px-1.5 py-0.5 rounded-full shrink-0 whitespace-nowrap"
+          style={{ background: "hsl(142 71% 45% / 0.08)", color: "hsl(142 71% 32%)" }}
+          data-testid="breadth-range-badge"
+        >
+          {rangeOpt.value === "all" ? "All time" : rangeOpt.label}
+        </span>
+      </div>
     </div>
   );
 }
@@ -1378,12 +1407,13 @@ export default function MarketIntelligence() {
               <SectionPanel
                 icon={GitBranch}
                 title="Biology Growth Signals"
-                subtitle={`New asset additions per biology area. Left: all areas ranked by total. Right: top 8 fastest-growing (${data.recentDeltaWindow}).`}
+                subtitle={`New asset additions per biology area. Left: all areas ranked by total. Right: top 8 fastest-growing in the ${windowLabel(data.recentDeltaWindow)}${range === "all" ? " (delta vs. all-time total)" : ""}.`}
                 delay={210}
               >
                 <BiologyGrowthPanel
                   data={data.biologyLandscape}
                   recentDeltaWindow={data.recentDeltaWindow}
+                  range={range}
                   onRowClick={(entry) =>
                     setDrawerCtx({ type: "biology", biology: entry.biology, count: entry.count })
                   }
@@ -1395,11 +1425,12 @@ export default function MarketIntelligence() {
                 <SectionPanel
                   icon={BarChart2}
                   title="Institutional Research Breadth"
-                  subtitle="Top 20 institutions by diversification score (biology areas + modalities covered). Click to explore."
+                  subtitle={`Top 20 institutions by diversification score ${forLabel(rangeOpt)} (biology areas + modalities covered). Click to explore.`}
                   delay={230}
                 >
                   <InstitutionBreadthPanel
                     data={data.institutionBreadth}
+                    rangeOpt={rangeOpt}
                     onRowClick={(institution, total) =>
                       setDrawerCtx({ type: "institution", institution, count: total })
                     }
