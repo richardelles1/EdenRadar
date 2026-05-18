@@ -2385,6 +2385,8 @@ interface InstitutionRow {
   avg_completeness: number | null;
   fill_target: number | null;
   fill_indication: number | null;
+  fill_biology: number | null;
+  fill_moa: number | null;
 }
 
 interface ClassRow {
@@ -5232,7 +5234,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
 
 function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilter?: number }) {
   const [institutionFilter, setInstitutionFilter] = useState("");
-  const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
+  const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication" | "fill_biology" | "fill_moa">("relevant_count");
   const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
   const [browserPreFilter, setBrowserPreFilter] = useState<AssetBrowserInit>(null);
@@ -5637,6 +5639,8 @@ function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilt
                     { key: "avg_completeness" as const, label: "Avg Score" },
                     { key: "fill_target" as const, label: "Target %" },
                     { key: "fill_indication" as const, label: "Indication %" },
+                    { key: "fill_biology" as const, label: "Biology %" },
+                    { key: "fill_moa" as const, label: "MOA %" },
                   ]).map(col => (
                     <th
                       key={col.key}
@@ -5666,13 +5670,15 @@ function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilt
                         <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.avg_completeness !== null ? row.avg_completeness : "—"}</td>
                         <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_target !== null ? `${row.fill_target}%` : "—"}</td>
                         <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_indication !== null ? `${row.fill_indication}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_biology !== null ? `${row.fill_biology}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_moa !== null ? `${row.fill_moa}%` : "—"}</td>
                         <td className="px-4 py-2.5 text-right">
                           <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
                         </td>
                       </tr>
                       {isExpanded && (
                         <tr className="border-b border-border bg-muted/5">
-                          <td colSpan={6} className="px-4 py-3">
+                          <td colSpan={8} className="px-4 py-3">
                             {drilldownLoading ? (
                               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                 <Loader2 className="h-3 w-3 animate-spin" /> Loading...

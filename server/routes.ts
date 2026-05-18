@@ -4724,7 +4724,9 @@ export async function registerRoutes(
           COUNT(*)::int AS relevant_count,
           ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
           ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
-          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication,
+          ROUND(100.0 * COUNT(CASE WHEN biology IS NOT NULL AND biology NOT IN ('unknown','','other') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_biology,
+          ROUND(100.0 * COUNT(CASE WHEN mechanism_of_action IS NOT NULL AND mechanism_of_action NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_moa
         FROM ingested_assets
         WHERE relevant = true
         GROUP BY institution
