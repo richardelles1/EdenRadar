@@ -2373,6 +2373,8 @@ interface DatasetQualityGlobal {
   fill_stage: number | null;
   fill_licensing: number | null;
   fill_patent: number | null;
+  fill_biology: number | null;
+  fill_moa: number | null;
   added_7d: number;
   added_30d: number;
 }
@@ -5318,6 +5320,8 @@ function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilt
     { label: "Dev Stage", key: "fill_stage" as const, color: "bg-teal-500", tooltip: "Development stage (e.g. preclinical, Phase I/II). Buyers use this to assess time-to-value." },
     { label: "Licensing", key: "fill_licensing" as const, color: "bg-amber-500", tooltip: "Licensing availability status (e.g. available, exclusively licensed). Indicates commercial accessibility." },
     { label: "Patent / IP", key: "fill_patent" as const, color: "bg-orange-500", tooltip: "Patent status (e.g. patent pending, patented) and IP type. Buyers need IP clarity before engagement." },
+    { label: "Biology", key: "fill_biology" as const, color: "bg-purple-500", tooltip: "Canonical biology bucket (e.g. aberrant kinase signaling, protein aggregation). Assigned by biology fill — drives MOA mapping and scoring." },
+    { label: "MOA", key: "fill_moa" as const, color: "bg-cyan-500", tooltip: "Mechanism of action (e.g. kinase inhibition, immune checkpoint blockade). Key dossier field buyers use to evaluate portfolio fit." },
   ];
 
   const filteredInstitutions = (quality?.institutions ?? [])
@@ -11724,8 +11728,8 @@ function DataQualityTab({ pw }: { pw: string }) {
   const [gaveUpTrigger, setGaveUpTrigger] = useState(0);
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
-      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpTrigger(v => v + 1)} />
       <Enrichment pw={pw} initialGaveUpFilter={gaveUpTrigger} />
+      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpTrigger(v => v + 1)} />
       <EdenReadinessPanel pw={pw} />
       <RelevancePanel pw={pw} />
       <PotentialDuplicates pw={pw} />
