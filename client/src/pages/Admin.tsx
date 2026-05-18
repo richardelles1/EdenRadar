@@ -1685,7 +1685,7 @@ function DataHealth({ pw }: { pw: string }) {
               {schedRunning ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-running">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  Running
+                  {sched.stalenessFirst ? "Staleness Scan" : sched.tierOnly != null ? `T${sched.tierOnly} Scan` : "Running"}
                 </span>
               ) : schedPaused ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-paused">

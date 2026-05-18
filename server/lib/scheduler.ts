@@ -475,6 +475,7 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   institutionDispatchedAt.clear();
   schedulerState = "running";
   tierOnlyActive = tier;
+  stalenessFirstActive = false;
   persistState().catch(() => {});
   console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
