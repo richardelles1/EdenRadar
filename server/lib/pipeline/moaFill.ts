@@ -244,20 +244,18 @@ function hasRichText(a: MoaAsset): boolean {
   return combined.trim().length > 200;
 }
 
-// ── Main pipeline ──────────────────────────────────────────────────────────────
+// ── Pass 1: deterministic biology → MOA lookup (synchronous, free) ────────────
 
-export async function runMoaFill(
+export async function runMoaFillPass1(
   dbClient: import("pg").PoolClient,
-  opts: MoaFillOptions = {},
-): Promise<MoaFillSummary> {
+  opts: Pick<MoaFillOptions, "cap" | "signal" | "onProgress"> = {},
+): Promise<{ pass1Total: number; pass1Filled: number }> {
   const { cap, signal, onProgress } = opts;
-
   const emit = (p: MoaFillProgress) => onProgress?.(p);
 
-  // ── Pass 1 (synchronous): biology → MOA lookup ─────────────────────────────
   emit({ phase: "pass1", processed: 0, total: 0, pass1Filled: 0, aiFilled: 0, failed: 0, done: false });
 
-  const { rows: pass1Assets } = await dbClient.query<MoaAsset>(
+  const { rows: assets } = await dbClient.query<MoaAsset>(
     `SELECT id, asset_name, summary, abstract, innovation_claim, indication, modality, target, biology,
             source_type, ip_type, patent_status, development_stage
      FROM ingested_assets
@@ -268,15 +266,15 @@ export async function runMoaFill(
      ${cap ? `LIMIT ${cap}` : ""}`,
   );
 
-  const pass1Total = pass1Assets.length;
+  const pass1Total = assets.length;
   let pass1Filled = 0;
-  const pass1Updates: Array<{ id: number; moa: string; completenessScore?: number | null }> = [];
+  const updates: Array<{ id: number; moa: string; completenessScore?: number | null }> = [];
 
-  for (const asset of pass1Assets) {
+  for (const asset of assets) {
     if (signal?.aborted) break;
     const moa = asset.biology ? BIOLOGY_TO_MOA[asset.biology.toLowerCase()] : undefined;
     if (moa) {
-      pass1Updates.push({
+      updates.push({
         id: asset.id,
         moa,
         completenessScore: computeCompletenessScore({
@@ -295,23 +293,24 @@ export async function runMoaFill(
     }
   }
 
-  if (pass1Updates.length > 0) {
-    await flushMoaToDB(dbClient, pass1Updates);
+  if (updates.length > 0) {
+    await flushMoaToDB(dbClient, updates);
   }
 
-  // Emit pass1 completion clearly before starting pass2
   emit({ phase: "pass1", processed: pass1Total, total: pass1Total, pass1Filled, aiFilled: 0, failed: 0, done: false });
+  return { pass1Total, pass1Filled };
+}
 
-  if (signal?.aborted) {
-    return { pass1Total, pass1Filled, pass2Total: 0, aiFilled: 0, failed: 0, totalWritten: pass1Filled };
-  }
+// ── Pass 2: GPT-4o-mini extraction for richly-described assets (async) ─────────
 
-  // ── Pass 2 (async GPT): AI extraction for richly-described assets ──────────
-  // Qualify assets where summary OR abstract OR innovation_claim provides
-  // enough combined text (>200 chars) for the model to extract a meaningful MOA.
-  const pass2Cap = cap ? Math.max(0, cap - pass1Assets.length) : undefined;
+export async function runMoaFillPass2(
+  dbClient: import("pg").PoolClient,
+  opts: MoaFillOptions & { pass1Filled?: number; pass2Cap?: number } = {},
+): Promise<{ pass2Total: number; aiFilled: number; failed: number }> {
+  const { cap: pass2Cap, signal, onProgress, pass1Filled = 0 } = opts;
+  const emit = (p: MoaFillProgress) => onProgress?.(p);
 
-  const { rows: pass2CandidateAssets } = await dbClient.query<MoaAsset>(
+  const { rows: candidateAssets } = await dbClient.query<MoaAsset>(
     `SELECT id, asset_name, summary, abstract, innovation_claim, indication, modality, target, biology,
             source_type, ip_type, patent_status, development_stage
      FROM ingested_assets
@@ -327,8 +326,7 @@ export async function runMoaFill(
      ${pass2Cap !== undefined ? `LIMIT ${pass2Cap}` : ""}`,
   );
 
-  // Further filter in-memory using the combined-length check (avoids SQL edge cases)
-  const pass2Assets = pass2CandidateAssets.filter(hasRichText);
+  const pass2Assets = candidateAssets.filter(hasRichText);
   const pass2Total = pass2Assets.length;
   let aiFilled = 0;
   let failed = 0;
@@ -389,8 +387,31 @@ export async function runMoaFill(
     }
   }
 
-  const totalWritten = pass1Filled + aiFilled;
   emit({ phase: "done", processed: pass2Total, total: pass2Total, pass1Filled, aiFilled, failed, done: true });
+  return { pass2Total, aiFilled, failed };
+}
 
-  return { pass1Total, pass1Filled, pass2Total, aiFilled, failed, totalWritten };
+// ── Convenience wrapper: runs Pass 1 then Pass 2 in sequence ──────────────────
+
+export async function runMoaFill(
+  dbClient: import("pg").PoolClient,
+  opts: MoaFillOptions = {},
+): Promise<MoaFillSummary> {
+  const { cap, signal, onProgress } = opts;
+
+  const { pass1Total, pass1Filled } = await runMoaFillPass1(dbClient, { cap, signal, onProgress });
+
+  if (signal?.aborted) {
+    return { pass1Total, pass1Filled, pass2Total: 0, aiFilled: 0, failed: 0, totalWritten: pass1Filled };
+  }
+
+  const pass2Cap = cap ? Math.max(0, cap - pass1Total) : undefined;
+  const { pass2Total, aiFilled, failed } = await runMoaFillPass2(dbClient, {
+    cap: pass2Cap,
+    signal,
+    onProgress,
+    pass1Filled,
+  });
+
+  return { pass1Total, pass1Filled, pass2Total, aiFilled, failed, totalWritten: pass1Filled + aiFilled };
 }

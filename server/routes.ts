@@ -4478,45 +4478,71 @@ export async function registerRoutes(
       moaFillResult = null;
       moaFillProgress = null;
       moaFillAbortController = new AbortController();
-      res.json({ started: true });
 
       const cap = typeof req.body?.cap === "number" && req.body.cap > 0 ? req.body.cap : undefined;
       console.log(`[moa-fill] Starting${cap ? ` (cap=${cap})` : " (full run)"}`);
 
+      // ── Pass 1: run synchronously before responding ──────────────────────────
+      // This is fast (deterministic lookup, no AI calls) so it completes before
+      // the HTTP response, letting the caller see pass1 results immediately.
+      const { Pool } = await import("pg");
+      const { runMoaFillPass1, runMoaFillPass2 } = await import("./lib/pipeline/moaFill");
+      const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+      const pass1Client = await dbPool.connect();
+      let pass1Filled = 0;
+      let pass1Total = 0;
+      try {
+        const p1 = await runMoaFillPass1(pass1Client, {
+          cap,
+          signal: moaFillAbortController.signal,
+          onProgress: (p) => { moaFillProgress = p; },
+        });
+        pass1Filled = p1.pass1Filled;
+        pass1Total = p1.pass1Total;
+        console.log(`[moa-fill] Pass 1 done — ${pass1Filled}/${pass1Total} biology→MOA`);
+      } finally {
+        pass1Client.release();
+      }
+
+      // Respond now so the client receives pass1 results without waiting for AI
+      res.json({ started: true, pass1Filled, pass1Total });
+
+      // ── Pass 2: run async in the background ────────────────────────────────
+      const pass2Cap = cap ? Math.max(0, cap - pass1Total) : undefined;
       (async () => {
-        const { Pool } = await import("pg");
-        const { runMoaFill } = await import("./lib/pipeline/moaFill");
-        const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
-        const client = await dbPool.connect();
+        const client2 = await dbPool.connect();
         try {
-          const summary = await runMoaFill(client, {
-            cap,
+          const { pass2Total, aiFilled, failed } = await runMoaFillPass2(client2, {
+            cap: pass2Cap,
             signal: moaFillAbortController!.signal,
-            onProgress: (p) => {
-              moaFillProgress = p;
-            },
+            onProgress: (p) => { moaFillProgress = p; },
+            pass1Filled,
           });
+          const summary = { pass1Total, pass1Filled, pass2Total, aiFilled, failed, totalWritten: pass1Filled + aiFilled };
           moaFillResult = summary;
           console.log(
-            `[moa-fill] Done — pass1:${summary.pass1Filled}/${summary.pass1Total} biology→MOA` +
-            ` pass2:${summary.aiFilled}/${summary.pass2Total} AI` +
-            ` total written:${summary.totalWritten} failed:${summary.failed}`,
+            `[moa-fill] Done — pass1:${pass1Filled}/${pass1Total} biology→MOA` +
+            ` pass2:${aiFilled}/${pass2Total} AI` +
+            ` total written:${summary.totalWritten} failed:${failed}`,
           );
         } finally {
-          client.release();
+          client2.release();
           await dbPool.end();
           moaFillRunning = false;
           moaFillAbortController = null;
         }
       })().catch(err => {
-        console.error("[moa-fill] Async error:", err);
+        console.error("[moa-fill] Pass 2 async error:", err);
         moaFillRunning = false;
         moaFillAbortController = null;
+        dbPool.end().catch(() => {});
       });
     } catch (err: any) {
       moaFillRunning = false;
       moaFillAbortController = null;
-      res.status(500).json({ error: err.message ?? "Failed to start MOA fill" });
+      if (!res.headersSent) {
+        res.status(500).json({ error: err.message ?? "Failed to start MOA fill" });
+      }
     }
   });
 
