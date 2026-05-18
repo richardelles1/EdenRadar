@@ -4419,6 +4419,102 @@ export async function registerRoutes(
     }
   });
 
+  // ── MOA Fill ───────────────────────────────────────────────────────────────
+
+  let moaFillRunning = false;
+  let moaFillResult: import("./lib/pipeline/moaFill").MoaFillSummary | null = null;
+  let moaFillProgress: import("./lib/pipeline/moaFill").MoaFillProgress | null = null;
+  let moaFillAbortController: AbortController | null = null;
+
+  app.get("/api/admin/enrich/moa-fill/status", requireAdmin, (_req, res) => {
+    res.json({ running: moaFillRunning, result: moaFillResult, progress: moaFillProgress });
+  });
+
+  app.post("/api/admin/enrich/moa-fill/stop", requireAdmin, (_req, res) => {
+    if (!moaFillRunning || !moaFillAbortController) {
+      return res.status(409).json({ error: "MOA fill is not running" });
+    }
+    moaFillAbortController.abort();
+    res.json({ stopped: true });
+  });
+
+  app.get("/api/admin/enrich/moa-fill/count", requireAdmin, async (_req, res) => {
+    try {
+      const { Pool } = await import("pg");
+      const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+      const client = await dbPool.connect();
+      try {
+        // Count assets that would be addressed by either pass
+        const { rows } = await client.query<{ total: string }>(
+          `SELECT COUNT(*)::text AS total FROM ingested_assets
+           WHERE relevant = true
+             AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR mechanism_of_action = 'unknown')
+             AND (
+               (biology IS NOT NULL AND biology != '' AND biology != 'unknown')
+               OR LENGTH(COALESCE(summary, '')) > 200
+             )`,
+        );
+        res.json({ total: parseInt(rows[0]?.total ?? "0", 10) });
+      } finally {
+        client.release();
+        await dbPool.end();
+      }
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to count MOA fill queue" });
+    }
+  });
+
+  app.post("/api/admin/enrich/moa-fill", requireAdmin, async (req, res) => {
+    try {
+      if (moaFillRunning) {
+        return res.status(409).json({ error: "MOA fill already running" });
+      }
+      moaFillRunning = true;
+      moaFillResult = null;
+      moaFillProgress = null;
+      moaFillAbortController = new AbortController();
+      res.json({ started: true });
+
+      const cap = typeof req.body?.cap === "number" && req.body.cap > 0 ? req.body.cap : undefined;
+      console.log(`[moa-fill] Starting${cap ? ` (cap=${cap})` : " (full run)"}`);
+
+      (async () => {
+        const { Pool } = await import("pg");
+        const { runMoaFill } = await import("./lib/pipeline/moaFill");
+        const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
+        const client = await dbPool.connect();
+        try {
+          const summary = await runMoaFill(client, {
+            cap,
+            signal: moaFillAbortController!.signal,
+            onProgress: (p) => {
+              moaFillProgress = p;
+            },
+          });
+          moaFillResult = summary;
+          console.log(
+            `[moa-fill] Done — pass1:${summary.pass1Filled}/${summary.pass1Total} biology→MOA` +
+            ` pass2:${summary.aiFilled}/${summary.pass2Total} AI` +
+            ` total written:${summary.totalWritten} failed:${summary.failed}`,
+          );
+        } finally {
+          client.release();
+          await dbPool.end();
+          moaFillRunning = false;
+          moaFillAbortController = null;
+        }
+      })().catch(err => {
+        console.error("[moa-fill] Async error:", err);
+        moaFillRunning = false;
+        moaFillAbortController = null;
+      });
+    } catch (err: any) {
+      moaFillRunning = false;
+      moaFillAbortController = null;
+      res.status(500).json({ error: err.message ?? "Failed to start MOA fill" });
+    }
+  });
+
   // ── Data-Sparse Flag Reset ─────────────────────────────────────────────────
 
   app.post("/api/admin/enrichment/clear-sparse", async (req, res) => {

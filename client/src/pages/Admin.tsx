@@ -3196,6 +3196,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [ttoLicensingFillDone, setTtoLicensingFillDone] = React.useState<{ filled: number; beforeCount: number } | null>(null);
   const [biologyFillDone, setBiologyFillDone] = React.useState<{ totalUpdated: number; targetDerived: number; ruleMatched: number; gptResolved: number; unresolved: number; gptSent: number } | null>(null);
+  const [moaFillDone, setMoaFillDone] = React.useState<{ pass1Total: number; pass1Filled: number; pass2Total: number; aiFilled: number; failed: number; totalWritten: number } | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [usptoPolling, setUsptoPolling] = React.useState(false);
 
@@ -3350,6 +3351,16 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     staleTime: 30_000,
   });
 
+  const { data: moaFillCount, refetch: refetchMoaFillCount } = useQuery<{ total: number }>({
+    queryKey: ["/api/admin/enrich/moa-fill/count", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrich/moa-fill/count", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+
   const { data: dealCompsStats, refetch: refetchDealCompsStats } = useQuery<{ count: number; lastIngestedAt: string | null }>({
     queryKey: ["/api/admin/deal-comparables/stats", pw],
     queryFn: async () => {
@@ -3424,6 +3435,44 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
       setBiologyFillDone(biologyFillStatus.result as any);
     }
   }, [biologyFillStatus?.result, biologyFillStatus?.running]);
+
+  type MoaFillProgressData = { phase: string; processed: number; total: number; pass1Filled: number; aiFilled: number; failed: number; done: boolean };
+  const { data: moaFillStatus } = useQuery<{ running: boolean; result: typeof moaFillDone | null; progress: MoaFillProgressData | null }>({
+    queryKey: ["/api/admin/enrich/moa-fill/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrich/moa-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: (query) => query.state.data?.running ? 1500 : 5000,
+  });
+
+  const runMoaFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrich/moa-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json() as Promise<{ started: boolean }>;
+    },
+    onSuccess: () => {
+      refetchMoaFillCount();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+    },
+  });
+
+  const stopMoaFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrich/moa-fill/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to stop");
+      return res.json();
+    },
+  });
+
+  React.useEffect(() => {
+    if (moaFillStatus?.result && !moaFillStatus.running) {
+      setMoaFillDone(moaFillStatus.result as any);
+    }
+  }, [moaFillStatus?.result, moaFillStatus?.running]);
 
   const runModalityFill = useMutation({
     mutationFn: async () => {
@@ -4661,6 +4710,107 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
+
+          {/* Step 2f: MOA Fill — biology→MOA lookup + AI extraction */}
+          <div className="border border-cyan-200 dark:border-cyan-900 rounded-xl bg-cyan-50/50 dark:bg-cyan-950/20 overflow-hidden" data-testid="card-moa-fill">
+            <div className="px-4 py-2.5 border-b border-cyan-200 dark:border-cyan-900 bg-cyan-100/60 dark:bg-cyan-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-cyan-500 text-white text-xs font-bold shrink-0">2f</span>
+              <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-300">MOA Fill</span>
+              <span className="ml-auto text-xs font-medium text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/50 px-2 py-0.5 rounded-full">Pass 1 free · Pass 2 GPT-mini</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fills the <span className="font-medium text-foreground">mechanism_of_action</span> field using two passes.
+                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 1</span> applies a deterministic biology→MOA lookup table (zero cost).
+                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 2</span> uses <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> to extract MOA from assets with a rich summary (&gt;200 chars) that Pass 1 couldn't fill.
+              </p>
+              {moaFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-cyan-700 dark:text-cyan-400">{moaFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">relevant assets without a MOA value</span>
+                </div>
+              )}
+              {(moaFillStatus?.running || runMoaFill.isPending) && (() => {
+                const prog = moaFillStatus?.progress;
+                const isPass1 = !prog || prog.phase === "pass1";
+                const pct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
+                return (
+                  <div className="space-y-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/60 dark:bg-cyan-950/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-600" />
+                        <span className="text-xs text-cyan-700 dark:text-cyan-400 font-medium">
+                          {prog ? (isPass1 ? "Pass 1 — biology → MOA lookup…" : `Pass 2 — AI extraction (${prog.processed.toLocaleString()} / ${prog.total.toLocaleString()})`) : "Starting…"}
+                        </span>
+                      </div>
+                      {prog && prog.total > 0 && !isPass1 && (
+                        <span className="text-xs tabular-nums text-cyan-600 dark:text-cyan-400 font-mono">
+                          {pct}%
+                        </span>
+                      )}
+                    </div>
+                    {prog && prog.total > 0 && !isPass1 && (
+                      <div className="w-full bg-cyan-100 dark:bg-cyan-900/40 rounded-full h-1.5">
+                        <div
+                          className="bg-cyan-500 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                    {prog && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Pass 1 filled</span>
+                          <span className="tabular-nums font-mono text-cyan-700 dark:text-cyan-400">{(prog.pass1Filled ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">AI filled</span>
+                          <span className="tabular-nums font-mono text-cyan-700 dark:text-cyan-400">{(prog.aiFilled ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Failed / unresolved</span>
+                          <span className="tabular-nums font-mono text-muted-foreground">{(prog.failed ?? 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {moaFillDone && !moaFillStatus?.running && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-900 bg-cyan-50 dark:bg-cyan-950/30" data-testid="moa-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-cyan-500 shrink-0 mt-0.5" />
+                  <div className="text-xs font-medium text-cyan-700 dark:text-cyan-400 space-y-1">
+                    <p>Done — <strong className="text-green-600 dark:text-green-400">{moaFillDone.totalWritten.toLocaleString()}</strong> MOA fields written</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 1 (biology lookup): <strong>{moaFillDone.pass1Filled.toLocaleString()}</strong> / {moaFillDone.pass1Total.toLocaleString()}</span>
+                      <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 2 (AI): <strong>{moaFillDone.aiFilled.toLocaleString()}</strong> / {moaFillDone.pass2Total.toLocaleString()}</span>
+                      <span className="text-cyan-600/80 dark:text-cyan-500/80 col-span-2">Failed / unresolved: <strong>{moaFillDone.failed.toLocaleString()}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchMoaFillCount()}
+                  className="gap-1.5 border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/30" data-testid="button-moa-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                {moaFillStatus?.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stopMoaFill.mutate()}
+                    disabled={stopMoaFill.isPending}
+                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-stop-moa-fill">
+                    <Square className="h-3.5 w-3.5 fill-current" />Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => runMoaFill.mutate()}
+                    disabled={runMoaFill.isPending || (moaFillCount?.total ?? 0) === 0}
+                    className="gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white" data-testid="button-run-moa-fill">
+                    {runMoaFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Fill {moaFillCount != null ? `(${moaFillCount.total.toLocaleString()})` : ""}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Deal Comparables — SEC EDGAR 8-K archive */}
           <div className="border border-indigo-200 dark:border-indigo-900 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 overflow-hidden" data-testid="card-deal-comparables">
