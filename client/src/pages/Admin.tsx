@@ -3196,7 +3196,8 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   const [modalityFillDone, setModalityFillDone] = React.useState<{ filled: number } | null>(null);
   const [ttoLicensingFillDone, setTtoLicensingFillDone] = React.useState<{ filled: number; beforeCount: number } | null>(null);
   const [biologyFillDone, setBiologyFillDone] = React.useState<{ totalUpdated: number; targetDerived: number; ruleMatched: number; gptResolved: number; unresolved: number; gptSent: number } | null>(null);
-  const [moaFillDone, setMoaFillDone] = React.useState<{ pass1Total: number; pass1Filled: number; pass2Total: number; aiFilled: number; failed: number; totalWritten: number } | null>(null);
+  type MoaFillSummary = { pass1Total: number; pass1Filled: number; pass2Total: number; aiFilled: number; failed: number; totalWritten: number };
+  const [moaFillDone, setMoaFillDone] = React.useState<MoaFillSummary | null>(null);
   const [rescorePolling, setRescorePolling] = React.useState(false);
   const [usptoPolling, setUsptoPolling] = React.useState(false);
 
@@ -3437,7 +3438,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   }, [biologyFillStatus?.result, biologyFillStatus?.running]);
 
   type MoaFillProgressData = { phase: string; processed: number; total: number; pass1Filled: number; aiFilled: number; failed: number; done: boolean };
-  const { data: moaFillStatus } = useQuery<{ running: boolean; result: typeof moaFillDone | null; progress: MoaFillProgressData | null }>({
+  const { data: moaFillStatus } = useQuery<{ running: boolean; result: MoaFillSummary | null; progress: MoaFillProgressData | null }>({
     queryKey: ["/api/admin/enrich/moa-fill/status", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/enrich/moa-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
@@ -3470,7 +3471,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
 
   React.useEffect(() => {
     if (moaFillStatus?.result && !moaFillStatus.running) {
-      setMoaFillDone(moaFillStatus.result as any);
+      setMoaFillDone(moaFillStatus.result);
     }
   }, [moaFillStatus?.result, moaFillStatus?.running]);
 
@@ -4722,7 +4723,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
               <p className="text-xs text-muted-foreground">
                 Fills the <span className="font-medium text-foreground">mechanism_of_action</span> field using two passes.
                 <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 1</span> applies a deterministic biology→MOA lookup table (zero cost).
-                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 2</span> uses <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> to extract MOA from assets with a rich summary (&gt;200 chars) that Pass 1 couldn't fill.
+                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 2</span> uses <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> to extract MOA from assets whose <span className="font-medium text-foreground">summary</span>, <span className="font-medium text-foreground">abstract</span>, or <span className="font-medium text-foreground">innovation_claim</span> provides &gt;200 chars of context.
               </p>
               {moaFillCount != null && (
                 <div className="flex items-center gap-3 p-2.5 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-background">
@@ -4733,7 +4734,10 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
               {(moaFillStatus?.running || runMoaFill.isPending) && (() => {
                 const prog = moaFillStatus?.progress;
                 const isPass1 = !prog || prog.phase === "pass1";
-                const pct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
+                const processPct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
+                const totalProcessed = (prog?.pass1Filled ?? 0) + (prog?.aiFilled ?? 0) + (prog?.failed ?? 0);
+                const totalFilled = (prog?.pass1Filled ?? 0) + (prog?.aiFilled ?? 0);
+                const fillRate = totalProcessed > 0 ? Math.round((totalFilled / totalProcessed) * 100) : null;
                 return (
                   <div className="space-y-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/60 dark:bg-cyan-950/30">
                     <div className="flex items-center justify-between">
@@ -4745,7 +4749,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                       </div>
                       {prog && prog.total > 0 && !isPass1 && (
                         <span className="text-xs tabular-nums text-cyan-600 dark:text-cyan-400 font-mono">
-                          {pct}%
+                          {processPct}%
                         </span>
                       )}
                     </div>
@@ -4753,7 +4757,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                       <div className="w-full bg-cyan-100 dark:bg-cyan-900/40 rounded-full h-1.5">
                         <div
                           className="bg-cyan-500 h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%` }}
+                          style={{ width: `${processPct}%` }}
                         />
                       </div>
                     )}
@@ -4771,24 +4775,46 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                           <span className="text-muted-foreground">Failed / unresolved</span>
                           <span className="tabular-nums font-mono text-muted-foreground">{(prog.failed ?? 0).toLocaleString()}</span>
                         </div>
+                        {fillRate !== null && (
+                          <div className="flex justify-between text-[10px]">
+                            <span className="text-muted-foreground">Fill rate so far</span>
+                            <span className="tabular-nums font-mono text-green-600 dark:text-green-400">{fillRate}%</span>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
                 );
               })()}
-              {moaFillDone && !moaFillStatus?.running && (
-                <div className="flex items-start gap-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-900 bg-cyan-50 dark:bg-cyan-950/30" data-testid="moa-fill-result">
-                  <CheckCircle2 className="h-4 w-4 text-cyan-500 shrink-0 mt-0.5" />
-                  <div className="text-xs font-medium text-cyan-700 dark:text-cyan-400 space-y-1">
-                    <p>Done — <strong className="text-green-600 dark:text-green-400">{moaFillDone.totalWritten.toLocaleString()}</strong> MOA fields written</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                      <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 1 (biology lookup): <strong>{moaFillDone.pass1Filled.toLocaleString()}</strong> / {moaFillDone.pass1Total.toLocaleString()}</span>
-                      <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 2 (AI): <strong>{moaFillDone.aiFilled.toLocaleString()}</strong> / {moaFillDone.pass2Total.toLocaleString()}</span>
-                      <span className="text-cyan-600/80 dark:text-cyan-500/80 col-span-2">Failed / unresolved: <strong>{moaFillDone.failed.toLocaleString()}</strong></span>
+              {moaFillDone && !moaFillStatus?.running && (() => {
+                const eligible = moaFillDone.pass1Total + moaFillDone.pass2Total;
+                const successRate = eligible > 0 ? Math.round((moaFillDone.totalWritten / eligible) * 100) : null;
+                return (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-900 bg-cyan-50 dark:bg-cyan-950/30" data-testid="moa-fill-result">
+                    <CheckCircle2 className="h-4 w-4 text-cyan-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-xs font-medium text-cyan-700 dark:text-cyan-400 space-y-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p>Done — <strong className="text-green-600 dark:text-green-400">{moaFillDone.totalWritten.toLocaleString()}</strong> MOA fields written
+                          {successRate !== null && <span className="ml-1 text-muted-foreground font-normal">({successRate}% fill rate)</span>}
+                        </p>
+                        <button
+                          onClick={() => setMoaFillDone(null)}
+                          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Dismiss"
+                          data-testid="button-dismiss-moa-fill"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                        <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 1 (biology lookup): <strong>{moaFillDone.pass1Filled.toLocaleString()}</strong> / {moaFillDone.pass1Total.toLocaleString()}</span>
+                        <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 2 (AI): <strong>{moaFillDone.aiFilled.toLocaleString()}</strong> / {moaFillDone.pass2Total.toLocaleString()}</span>
+                        <span className="text-cyan-600/80 dark:text-cyan-500/80 col-span-2">Failed / unresolved: <strong>{moaFillDone.failed.toLocaleString()}</strong></span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={() => refetchMoaFillCount()}
                   className="gap-1.5 border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/30" data-testid="button-moa-fill-count">

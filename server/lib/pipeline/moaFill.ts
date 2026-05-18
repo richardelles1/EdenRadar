@@ -2,9 +2,10 @@
  * MOA Fill — assigns a concise "mechanism_of_action" value to each asset.
  *
  * Two passes run in order:
- *   Pass 1 (free): biology → MOA lookup table
- *     Covers ~14 k assets that already have biology but lack MOA.
- *   Pass 2 (GPT-4o-mini): AI extraction for assets with a rich summary (>200 chars)
+ *   Pass 1 (free, synchronous): biology → MOA deterministic lookup table.
+ *     Covers assets that already have biology but lack MOA.
+ *   Pass 2 (GPT-4o-mini, async batched): AI extraction for assets with
+ *     a rich summary, abstract, or innovation_claim (>200 chars combined)
  *     but still no MOA after Pass 1.
  */
 
@@ -13,7 +14,6 @@ import { computeCompletenessScore } from "./contentHash";
 
 // ── Biology → MOA deterministic lookup ────────────────────────────────────────
 // One entry per canonical biology value (32 total).
-// Values should be concise enough to fit the `mechanism_of_action` column.
 export const BIOLOGY_TO_MOA: Record<string, string> = {
   // Oncology
   "aberrant kinase signaling":
@@ -120,6 +120,7 @@ type MoaAsset = {
   asset_name: string;
   summary: string | null;
   abstract: string | null;
+  innovation_claim: string | null;
   indication: string | null;
   modality: string | null;
   target: string | null;
@@ -153,6 +154,21 @@ async function flushMoaToDB(
   );
 }
 
+// ── Context builder for AI prompt ─────────────────────────────────────────────
+// Uses summary, abstract, AND innovation_claim, prioritising the richest available.
+
+function buildAssetContext(a: MoaAsset): string {
+  const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  const parts = [
+    a.abstract ? stripHtml(a.abstract) : "",
+    a.innovation_claim ? stripHtml(a.innovation_claim) : "",
+    a.summary ? stripHtml(a.summary) : "",
+    a.indication ?? "",
+    a.biology ?? "",
+  ].filter(Boolean);
+  return parts.join(" ").slice(0, 900);
+}
+
 // ── GPT-4o-mini MOA extraction ─────────────────────────────────────────────────
 
 async function gptMoaBatch(
@@ -163,14 +179,9 @@ async function gptMoaBatch(
   if (batch.length === 0) return result;
 
   const idxToId = new Map<number, number>();
-  const stripHtml = (s: string) => s.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-
   const items = batch.map((a, i) => {
     idxToId.set(i + 1, a.id);
-    const raw = a.abstract
-      ? [a.abstract, a.summary ?? "", a.indication ?? ""].join(" ")
-      : [a.summary ?? "", a.indication ?? "", a.biology ?? ""].join(" ");
-    const ctx = stripHtml(raw).slice(0, 800);
+    const ctx = buildAssetContext(a);
     return `${i + 1}. ${a.asset_name} | Modality: ${a.modality ?? "unknown"} | Biology: ${a.biology ?? "unknown"} | Target: ${a.target ?? "unknown"} | ${ctx}`;
   });
 
@@ -224,6 +235,15 @@ ${items.join("\n")}`;
   return result;
 }
 
+// ── Rich-text qualification helper ────────────────────────────────────────────
+// An asset qualifies for Pass 2 AI enrichment when its combined text content
+// (summary + abstract + innovation_claim) is at least 200 characters.
+
+function hasRichText(a: MoaAsset): boolean {
+  const combined = [a.summary ?? "", a.abstract ?? "", a.innovation_claim ?? ""].join(" ");
+  return combined.trim().length > 200;
+}
+
 // ── Main pipeline ──────────────────────────────────────────────────────────────
 
 export async function runMoaFill(
@@ -234,17 +254,15 @@ export async function runMoaFill(
 
   const emit = (p: MoaFillProgress) => onProgress?.(p);
 
-  // ── Pass 1: biology → MOA lookup ───────────────────────────────────────────
+  // ── Pass 1 (synchronous): biology → MOA lookup ─────────────────────────────
   emit({ phase: "pass1", processed: 0, total: 0, pass1Filled: 0, aiFilled: 0, failed: 0, done: false });
 
   const { rows: pass1Assets } = await dbClient.query<MoaAsset>(
-    `SELECT id, asset_name, summary, abstract, indication, modality, target, biology,
+    `SELECT id, asset_name, summary, abstract, innovation_claim, indication, modality, target, biology,
             source_type, ip_type, patent_status, development_stage
      FROM ingested_assets
      WHERE relevant = true
-       AND biology IS NOT NULL
-       AND biology != ''
-       AND biology != 'unknown'
+       AND biology IS NOT NULL AND biology != '' AND biology != 'unknown'
        AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR mechanism_of_action = 'unknown')
      ORDER BY completeness_score DESC NULLS LAST, id
      ${cap ? `LIMIT ${cap}` : ""}`,
@@ -281,28 +299,36 @@ export async function runMoaFill(
     await flushMoaToDB(dbClient, pass1Updates);
   }
 
+  // Emit pass1 completion clearly before starting pass2
   emit({ phase: "pass1", processed: pass1Total, total: pass1Total, pass1Filled, aiFilled: 0, failed: 0, done: false });
 
   if (signal?.aborted) {
     return { pass1Total, pass1Filled, pass2Total: 0, aiFilled: 0, failed: 0, totalWritten: pass1Filled };
   }
 
-  // ── Pass 2: AI extraction for assets with rich summaries but no MOA ────────
-  // Fetch assets with summary > 200 chars but still missing MOA (includes ones
-  // that Pass 1 couldn't fill because they have no biology, plus any stragglers)
+  // ── Pass 2 (async GPT): AI extraction for richly-described assets ──────────
+  // Qualify assets where summary OR abstract OR innovation_claim provides
+  // enough combined text (>200 chars) for the model to extract a meaningful MOA.
   const pass2Cap = cap ? Math.max(0, cap - pass1Assets.length) : undefined;
 
-  const { rows: pass2Assets } = await dbClient.query<MoaAsset>(
-    `SELECT id, asset_name, summary, abstract, indication, modality, target, biology,
+  const { rows: pass2CandidateAssets } = await dbClient.query<MoaAsset>(
+    `SELECT id, asset_name, summary, abstract, innovation_claim, indication, modality, target, biology,
             source_type, ip_type, patent_status, development_stage
      FROM ingested_assets
      WHERE relevant = true
        AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR mechanism_of_action = 'unknown')
-       AND LENGTH(COALESCE(summary, '')) > 200
+       AND (
+         LENGTH(COALESCE(summary, '')) > 200
+         OR LENGTH(COALESCE(abstract, '')) > 200
+         OR LENGTH(COALESCE(innovation_claim, '')) > 200
+         OR (LENGTH(COALESCE(summary, '')) + LENGTH(COALESCE(abstract, '')) + LENGTH(COALESCE(innovation_claim, ''))) > 200
+       )
      ORDER BY completeness_score DESC NULLS LAST, id
      ${pass2Cap !== undefined ? `LIMIT ${pass2Cap}` : ""}`,
   );
 
+  // Further filter in-memory using the combined-length check (avoids SQL edge cases)
+  const pass2Assets = pass2CandidateAssets.filter(hasRichText);
   const pass2Total = pass2Assets.length;
   let aiFilled = 0;
   let failed = 0;
