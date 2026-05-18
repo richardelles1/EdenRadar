@@ -135,6 +135,7 @@ interface SchedulerStatus {
   maxConcurrency: number;
   currentTier: 1 | 2 | 3 | 4 | null;
   tierOnly: number | null;
+  stalenessFirst: boolean;
 }
 
 interface ActiveSearchRow {
@@ -1377,6 +1378,52 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const [stalenessFirstConfirm, setStalenessFirstConfirm] = useState(false);
+  const stalenessFirstConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedulerStalenessFirstMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/stale-first", {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      setStalenessFirstConfirm(false);
+      if (d.ok) {
+        toast({ title: "Oldest-first scan started", description: d.message });
+      } else {
+        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      setStalenessFirstConfirm(false);
+      toast({ title: "Staleness scan failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleStalenessFirstClick = () => {
+    if (!stalenessFirstConfirm) {
+      setStalenessFirstConfirm(true);
+      if (stalenessFirstConfirmTimer.current) clearTimeout(stalenessFirstConfirmTimer.current);
+      stalenessFirstConfirmTimer.current = setTimeout(() => setStalenessFirstConfirm(false), 4000);
+    } else {
+      if (stalenessFirstConfirmTimer.current) clearTimeout(stalenessFirstConfirmTimer.current);
+      if (schedPaused && sched.stalenessFirst) {
+        schedulerStartMutation.mutate();
+      } else {
+        schedulerStalenessFirstMutation.mutate();
+      }
+      setStalenessFirstConfirm(false);
+    }
+  };
+
   const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
     if (pendingTier !== tier) {
       setPendingTier(tier);
@@ -1701,7 +1748,7 @@ function DataHealth({ pw }: { pw: string }) {
                   ) : (
                     <Zap className="w-3 h-3 mr-1" />
                   )}
-                  {schedPaused ? (sched.tierOnly != null ? `Resume T${sched.tierOnly}` : "Resume") : "Start"}
+                  {schedPaused ? (sched.tierOnly != null ? `Resume T${sched.tierOnly}` : sched.stalenessFirst ? "Resume Oldest" : "Resume") : "Start"}
                 </Button>
               )}
               <div className="flex items-center border border-border rounded-md overflow-hidden h-8 text-xs flex-shrink-0" data-testid="concurrency-selector">
@@ -1799,6 +1846,61 @@ function DataHealth({ pw }: { pw: string }) {
                 Pause T{sched.tierOnly}
               </Button>
             )}
+          </div>
+
+          {/* ── Staleness-first scan button ──────────────────── */}
+          <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-border/40 flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium flex-shrink-0 mr-0.5">Staleness:</span>
+            {(() => {
+              const isRunning = schedRunning && sched.stalenessFirst;
+              const isPaused = schedPaused && sched.stalenessFirst;
+              const anyRunning = schedRunning || schedulerStalenessFirstMutation.isPending;
+              return (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={`h-7 text-xs font-medium px-3 transition-colors ${
+                      isRunning
+                        ? "border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                        : isPaused
+                        ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                        : stalenessFirstConfirm
+                        ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                        : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    }`}
+                    onClick={handleStalenessFirstClick}
+                    disabled={anyRunning}
+                    data-testid="button-scan-staleness-first"
+                    title={isRunning ? "Staleness-first scan is running" : isPaused ? "Resume the paused staleness-first scan" : "Scan all institutions sorted oldest-synced first"}
+                  >
+                    {isRunning ? (
+                      <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Oldest First running</>
+                    ) : isPaused ? (
+                      "Resume Oldest First"
+                    ) : stalenessFirstConfirm ? (
+                      "Confirm Oldest First?"
+                    ) : (
+                      "Oldest First"
+                    )}
+                  </Button>
+                  {isRunning && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs font-medium px-3 border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors ml-auto"
+                      onClick={() => schedulerPauseMutation.mutate()}
+                      disabled={schedulerPauseMutation.isPending}
+                      data-testid="button-pause-staleness-scan"
+                      title="Pause the staleness-first scan"
+                    >
+                      {schedulerPauseMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <AlertCircle className="w-3 h-3 mr-1" />}
+                      Pause Oldest First
+                    </Button>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
 

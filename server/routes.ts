@@ -33,7 +33,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, startStalenessFirstScan, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
@@ -3664,6 +3664,15 @@ export async function registerRoutes(
     if (![1, 2, 3, 4].includes(tier)) return res.status(400).json({ error: "tier must be 1, 2, 3, or 4" });
     const result = startTierOnly(tier as 1 | 2 | 3 | 4);
     res.json({ ...result, status: getSchedulerStatus() });
+  });
+
+  app.post("/api/ingest/scheduler/stale-first", requireAdmin, async (req, res) => {
+    try {
+      const result = await startStalenessFirstScan();
+      res.json({ ...result, status: getSchedulerStatus() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to start staleness-first scan" });
+    }
   });
 
   app.post("/api/ingest/scheduler/bump", requireAdmin, async (req, res) => {

@@ -39,6 +39,8 @@ export interface SchedulerStatus {
   currentTier: 1 | 2 | 3 | 4 | null;
   /** Non-null when the scheduler is running a tier-only scan (not a full cycle). */
   tierOnly: number | null;
+  /** True when the scheduler is running a staleness-first (oldest-synced-first) scan. */
+  stalenessFirst: boolean;
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -64,6 +66,8 @@ let tieredQueue: string[] = [];
 let runGeneration = 0;
 /** Set when the scheduler is running a tier-only scan. Null during full-cycle runs. */
 let tierOnlyActive: number | null = null;
+/** True when the scheduler is running a staleness-first (oldest-synced-first) scan. */
+let stalenessFirstActive = false;
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
@@ -135,6 +139,19 @@ function buildTieredQueue(): string[] {
   return [...buckets[1], ...buckets[2], ...buckets[3], ...buckets[4]];
 }
 
+/** Build a queue sorted by lastSuccessAt ASC — never-synced institutions (epoch 0) first,
+ * then oldest-last-synced, up to the most recently synced.
+ * Must be called AFTER the scraperHealthCache is freshly loaded. */
+function buildStalenessFirstQueue(): string[] {
+  return [...ALL_SCRAPERS]
+    .sort((a, b) => {
+      const aAt = scraperHealthCache.get(a.institution)?.lastSuccessAt?.getTime() ?? 0;
+      const bAt = scraperHealthCache.get(b.institution)?.lastSuccessAt?.getTime() ?? 0;
+      return aAt - bAt;
+    })
+    .map((s) => s.institution);
+}
+
 function getInstitutionQueue(): string[] {
   return tieredQueue.length > 0 ? tieredQueue : ALL_SCRAPERS.map((s) => s.institution);
 }
@@ -191,6 +208,7 @@ function buildStateSnapshot() {
     lastCycleCompletedAt,
     schedulerRunning: schedulerState === "running",
     tierOnly: tierOnlyActive,
+    stalenessFirst: stalenessFirstActive,
   };
 }
 
@@ -262,6 +280,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     maxConcurrency: getMaxHttpConcurrent(),
     currentTier,
     tierOnly: tierOnlyActive,
+    stalenessFirst: stalenessFirstActive,
   };
 }
 
@@ -300,26 +319,31 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
     lastCycleCompletedAt = saved.lastCycleCompletedAt;
     const wasRunning = saved.schedulerRunning;
     if (!wasRunning) {
-      // Clean pause — preserve tier context so the admin can resume exactly where we left off.
+      // Clean pause — preserve tier/staleness context so the admin can resume exactly where we left off.
       schedulerState = "paused";
       tierOnlyActive = saved.tierOnly ?? null;
+      stalenessFirstActive = saved.stalenessFirst ?? false;
     } else {
       // Unclean shutdown (SIGTERM didn't complete its DB write). Drop any stale tier-only
-      // context so that clicking "Start" begins a fresh full cycle rather than silently
-      // resuming an abandoned tier scan the admin doesn't know about.
+      // or staleness-first context so that clicking "Start" begins a fresh full cycle rather
+      // than silently resuming an abandoned scan the admin doesn't know about.
       tierOnlyActive = null;
+      stalenessFirstActive = false;
       queueIndex = 0;
     }
-    // If we were cleanly paused mid-tier scan, rebuild that tier's queue; otherwise full queue.
+    // Rebuild the queue appropriate for the restored mode.
     if (tierOnlyActive !== null) {
       const tier = tierOnlyActive as 1 | 2 | 3 | 4;
       const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
       for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); buckets[t].push(s.institution); }
       tieredQueue = buckets[tier];
       console.log(`[scheduler] Restored Tier-${tier} scan (clean pause): position ${queueIndex}/${tieredQueue.length}`);
+    } else if (stalenessFirstActive) {
+      tieredQueue = buildStalenessFirstQueue();
+      console.log(`[scheduler] Restored staleness-first scan (clean pause): position ${queueIndex}/${tieredQueue.length}`);
     } else {
       tieredQueue = buildTieredQueue();
-      console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running (unclean shutdown — tier context cleared)" : "paused"}`);
+      console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running (unclean shutdown — mode context cleared)" : "paused"}`);
     }
     return wasRunning;
   } catch (err: any) {
@@ -339,20 +363,23 @@ export function startScheduler(): { ok: boolean; message: string } {
   persistState(true).catch(() => {});
 
   if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
-    // Resuming a paused run. If it was a tier-only scan, rebuild the tier queue so
-    // tieredQueue still matches what we paused mid-way through.
+    // Resuming a paused run. Rebuild the appropriate queue for the current mode.
     if (tierOnlyActive !== null) {
       const tier = tierOnlyActive as 1 | 2 | 3 | 4;
       const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
       for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); buckets[t].push(s.institution); }
       tieredQueue = buckets[tier];
       console.log(`[scheduler] Resumed Tier-${tier} scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
+    } else if (stalenessFirstActive) {
+      tieredQueue = buildStalenessFirstQueue();
+      console.log(`[scheduler] Resumed staleness-first scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
     } else {
       console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
     }
   } else {
     tieredQueue = buildTieredQueue();
     tierOnlyActive = null;
+    stalenessFirstActive = false;
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;
@@ -380,6 +407,7 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   }
   tieredQueue = buildTieredQueue();
   tierOnlyActive = null;
+  stalenessFirstActive = false;
   queueIndex = 0;
   completedThisCycle = 0;
   failedThisCycle = 0;
@@ -472,6 +500,59 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   }
 
   return { ok: true, message: `Tier ${tier} scan started — ${tieredQueue.length} institutions` };
+}
+
+/** Start a staleness-first scan: sorts all institutions by lastSuccessAt ASC (oldest/never-synced
+ * first) and runs through them in that order. One-shot — goes idle when complete. */
+export async function startStalenessFirstScan(): Promise<{ ok: boolean; message: string }> {
+  if (isIngestionRunning()) {
+    return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
+  }
+  // Reload health data synchronously so the sort reflects the latest DB state.
+  scraperHealthCache = await loadAllScraperHealth();
+
+  runGeneration++;
+  if (schedulerTimer) {
+    clearTimeout(schedulerTimer);
+    schedulerTimer = null;
+  }
+  tieredQueue = buildStalenessFirstQueue();
+  queueIndex = 0;
+  completedThisCycle = 0;
+  failedThisCycle = 0;
+  skippedThisCycle = 0;
+  freshSkippedThisCycle = 0;
+  currentInstitutions = [];
+  lastActivityAt = null;
+  cycleStartedAt = new Date();
+  cycleCount++;
+  priorityQueue = [];
+  institutionDispatchedAt.clear();
+  schedulerState = "running";
+  tierOnlyActive = null;
+  stalenessFirstActive = true;
+  persistState().catch(() => {});
+  console.log(`[scheduler] Staleness-first scan (gen=${runGeneration}) — ${tieredQueue.length} institutions, oldest-synced first`);
+  startWatchdog();
+  scheduleNext();
+
+  // Safety drain-poll: if syncs from the prior generation are still running,
+  // scheduleNext() above may immediately stall. Poll until they drain, then re-kick.
+  const capturedGen = runGeneration;
+  const priorActiveSyncs = getActiveSyncs().length;
+  if (priorActiveSyncs > 0) {
+    const pollForDrain = () => {
+      if (runGeneration !== capturedGen) return;
+      if (getActiveSyncs().length === 0) {
+        scheduleNext();
+      } else {
+        setTimeout(pollForDrain, 2_000);
+      }
+    };
+    setTimeout(pollForDrain, 2_000);
+  }
+
+  return { ok: true, message: `Staleness-first scan started — ${tieredQueue.length} institutions (oldest-synced first)` };
 }
 
 export function invalidateHealthCacheEntry(
@@ -669,10 +750,11 @@ function scheduleNext(): void {
       console.error(`[scheduler] Alert email error after cycle #${cycleCount}:`, err?.message);
     });
 
-    if (tierOnlyActive !== null) {
-      // Tier-only scan is a one-shot operation — stop and go idle.
+    if (tierOnlyActive !== null || stalenessFirstActive) {
+      // Tier-only and staleness-first scans are one-shot operations — stop and go idle.
       schedulerState = "idle";
       tierOnlyActive = null;
+      stalenessFirstActive = false;
       persistState(true).catch(() => {});
     } else {
       // Full cycle completed — begin the next cycle after a short cooldown so
