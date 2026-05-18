@@ -346,14 +346,27 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
       // Unclean shutdown (SIGTERM didn't complete its DB write). Drop any stale tier-only
       // or staleness-first context so that clicking "Start" begins a fresh full cycle rather
       // than silently resuming an abandoned scan the admin doesn't know about.
-      // Keep queueIndex from DB — cycle stamps in isFresh() will skip already-completed
-      // institutions so we don't re-scan the whole T1 queue from scratch.
+      //
+      // IMPORTANT: only preserve queueIndex when the previous run was a full T1-T3 cycle.
+      // If the crash happened during a tier-only or staleness-first scan, the saved queueIndex
+      // belongs to that scan's queue — reusing it against the full-cycle queue would skip
+      // the first N T1 institutions. Reset to 0 in that case.
+      const crashedDuringFullCycle = saved.tierOnly === null && !saved.stalenessFirst;
+      if (!crashedDuringFullCycle) {
+        queueIndex = 0;
+        console.log(
+          `[scheduler] Unclean shutdown during ${saved.tierOnly != null ? `T${saved.tierOnly} scan` : "staleness-first scan"} — resetting position to 0 for safety (tier queue index can't map to full-cycle queue)`,
+        );
+      } else {
+        // Full-cycle crash: keep queueIndex so cycle stamps can skip already-completed
+        // institutions when the scheduler resumes at the saved position.
+        console.log(
+          `[scheduler] Unclean shutdown during full cycle — will resume at position ${saved.queueIndex}/${buildTieredQueue().length} on next Start (cycle stamps skip completed institutions)`,
+        );
+      }
       tierOnlyActive = null;
       stalenessFirstActive = false;
       autoT4AfterCycle = false;
-      console.log(
-        `[scheduler] Unclean shutdown — will resume cycle #${saved.cycleCount} at position ${saved.queueIndex}/${buildTieredQueue().length} on next Start (cycle stamps skip completed institutions)`,
-      );
     }
     // Rebuild the queue appropriate for the restored mode.
     if (tierOnlyActive !== null) {
