@@ -4304,7 +4304,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                       <SelectItem value="biologic">Biologic</SelectItem>
                       <SelectItem value="cell therapy">Cell therapy</SelectItem>
                       <SelectItem value="gene therapy">Gene therapy</SelectItem>
-                      <SelectItem value="device">Device</SelectItem>
+                      <SelectItem value="medical device">Medical Device</SelectItem>
                       <SelectItem value="diagnostic">Diagnostic</SelectItem>
                       <SelectItem value="platform">Platform</SelectItem>
                     </SelectContent>

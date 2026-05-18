@@ -446,6 +446,18 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Modality normalizer: "device" → "medical device" ─────────────────────────
+  // Catch-all that converts the bare "device" string (often from LLM output or
+  // stale scraped data) to the canonical "medical device" label. Runs after all
+  // text and category rules so it applies to both newly-filled and pre-existing values.
+  if (!humanV.modality) {
+    const effectiveModality = (fields.modality ?? asset.modality ?? "").toLowerCase().trim();
+    if (effectiveModality === "device") {
+      fields.modality = "medical device";
+      provenance.modality = provenance.modality ?? "rule:normalize";
+    }
+  }
+
   // ── Early stage TTO default ──────────────────────────────────────────────────
   // Applies AFTER text-based stage rules so text clues always win.
   // "early stage" is an umbrella for TTO assets where we know the technology is

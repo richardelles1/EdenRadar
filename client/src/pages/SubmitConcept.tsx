@@ -18,7 +18,7 @@ const THERAPY_AREAS = [
 
 const MODALITIES = [
   "Small Molecule", "Biologic", "Gene Therapy", "Cell Therapy", "mRNA",
-  "Antibody", "ADC", "PROTAC", "Diagnostic", "Device", "Digital", "Other",
+  "Antibody", "ADC", "PROTAC", "Diagnostic", "Medical Device", "Digital", "Other",
 ];
 
 const STAGES = [1, 2, 3, 4];
