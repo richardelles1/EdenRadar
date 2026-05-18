@@ -7,6 +7,7 @@ import {
   loadAllScraperHealth,
   updateScraperHealth,
   ensureSchedulerStateSchema,
+  stampScraperCycleComplete,
   type ScraperHealthRow,
 } from "./scraperState";
 import { storage } from "../storage";
@@ -41,6 +42,9 @@ export interface SchedulerStatus {
   tierOnly: number | null;
   /** True when the scheduler is running a staleness-first (oldest-synced-first) scan. */
   stalenessFirst: boolean;
+  /** Queue position at which the scheduler resumed mid-cycle after a restart.
+   * Null when this is a fresh cycle start. */
+  resumedAtPosition: number | null;
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -68,12 +72,17 @@ let runGeneration = 0;
 let tierOnlyActive: number | null = null;
 /** True when the scheduler is running a staleness-first (oldest-synced-first) scan. */
 let stalenessFirstActive = false;
+/** True when a T4 auto-pass was triggered by cycle completion (not a manual admin action).
+ * Causes the cycle-complete handler to start the next T1-T3 cycle instead of going idle. */
+let autoT4AfterCycle = false;
+/** Queue position at which the scheduler resumed mid-cycle (set on resume, null on fresh start). */
+let resumedAtPosition: number | null = null;
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
 /** Timestamp of the last successful persistState DB write — used to throttle non-critical saves. */
 let _lastPersistAt = 0;
-const PERSIST_THROTTLE_MS = 15_000;
+const PERSIST_THROTTLE_MS = 5_000;
 
 /** Tracks when each currently-running institution was dispatched (ms since epoch). */
 const institutionDispatchedAt = new Map<string, number>();
@@ -136,7 +145,9 @@ function buildTieredQueue(): string[] {
     const tier = getScraperTier(s.institution);
     buckets[tier].push(s.institution);
   }
-  return [...buckets[1], ...buckets[2], ...buckets[3], ...buckets[4]];
+  // T4 (Playwright) runs as a separate auto-pass after each full T1-T3 cycle completes,
+  // eliminating the exclusive-drain stalls that T4 causes mid-cycle.
+  return [...buckets[1], ...buckets[2], ...buckets[3]];
 }
 
 /** Build a queue sorted by lastSuccessAt ASC — never-synced institutions (epoch 0) first,
@@ -169,13 +180,20 @@ function isInBackoff(institution: string): boolean {
 }
 
 /** Returns true if the institution should be skipped:
- * - Successfully synced within FRESH_THRESHOLD_MS, AND
- * - The last sync found 0 new assets, AND
- * - The last sync actually returned listings (rawCount > 0).
- * If rawCount was 0 the site may have been unreachable or rate-limiting — never skip. */
+ * 1. Already completed during the current full cycle (cycle-stamp gate) — always skip regardless
+ *    of how many new assets it found; survives server restarts.
+ * 2. Successfully synced within FRESH_THRESHOLD_MS with 0 new assets (freshness gate).
+ * If rawCount was 0 the site may have been unreachable — never skip (conservative). */
 function isFresh(institution: string): boolean {
   const health = scraperHealthCache.get(institution);
   if (!health?.lastSuccessAt) return false;
+  // ── Cycle-stamp gate (full-cycle runs only) ─────────────────────────────────
+  // Skip institutions already completed in the current cycle, regardless of new-asset count.
+  // Only checked during full T1-T3 cycles (not tier-only or staleness-first scans).
+  if (!tierOnlyActive && !stalenessFirstActive) {
+    if (health.lastCompletedCycle !== null && health.lastCompletedCycle >= cycleCount) return true;
+  }
+  // ── Freshness gate ──────────────────────────────────────────────────────────
   const withinWindow = (Date.now() - health.lastSuccessAt.getTime()) < FRESH_THRESHOLD_MS;
   if (!withinWindow) return false;
   // lastSuccessNewCount === null means we don't know — don't skip (conservative)
@@ -281,6 +299,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     currentTier,
     tierOnly: tierOnlyActive,
     stalenessFirst: stalenessFirstActive,
+    resumedAtPosition,
   };
 }
 
@@ -327,9 +346,14 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
       // Unclean shutdown (SIGTERM didn't complete its DB write). Drop any stale tier-only
       // or staleness-first context so that clicking "Start" begins a fresh full cycle rather
       // than silently resuming an abandoned scan the admin doesn't know about.
+      // Keep queueIndex from DB — cycle stamps in isFresh() will skip already-completed
+      // institutions so we don't re-scan the whole T1 queue from scratch.
       tierOnlyActive = null;
       stalenessFirstActive = false;
-      queueIndex = 0;
+      autoT4AfterCycle = false;
+      console.log(
+        `[scheduler] Unclean shutdown — will resume cycle #${saved.cycleCount} at position ${saved.queueIndex}/${buildTieredQueue().length} on next Start (cycle stamps skip completed institutions)`,
+      );
     }
     // Rebuild the queue appropriate for the restored mode.
     if (tierOnlyActive !== null) {
@@ -368,26 +392,31 @@ export function startScheduler(): { ok: boolean; message: string } {
   persistState(true).catch(() => {});
 
   if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
-    // Resuming a paused run. Rebuild the appropriate queue for the current mode.
+    // Resuming a paused or post-crash run. Rebuild the appropriate queue for the current mode.
     if (tierOnlyActive !== null) {
       const tier = tierOnlyActive as 1 | 2 | 3 | 4;
       const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
       for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); buckets[t].push(s.institution); }
       tieredQueue = buckets[tier];
+      resumedAtPosition = queueIndex;
       console.log(`[scheduler] Resumed Tier-${tier} scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
     } else if (stalenessFirstActive) {
       // Do NOT rebuild the queue here — the in-memory tieredQueue still holds the
       // original sort order from when the scan started. Re-sorting would change
       // order (some lastSuccessAt values have updated mid-scan) and cause the
       // existing queueIndex to land at the wrong position.
+      resumedAtPosition = queueIndex;
       console.log(`[scheduler] Resumed staleness-first scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
     } else {
-      console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
+      resumedAtPosition = queueIndex;
+      console.log(`[scheduler] Resumed cycle #${cycleCount} at position ${queueIndex}/${getInstitutionQueue().length} (cycle stamps will skip already-completed institutions)`);
     }
   } else {
     tieredQueue = buildTieredQueue();
     tierOnlyActive = null;
     stalenessFirstActive = false;
+    autoT4AfterCycle = false;
+    resumedAtPosition = null;
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;
@@ -395,7 +424,7 @@ export function startScheduler(): { ok: boolean; message: string } {
     freshSkippedThisCycle = 0;
     cycleStartedAt = new Date();
     cycleCount++;
-    console.log(`[scheduler] Started cycle #${cycleCount} — ${tieredQueue.length} institutions (T1→T2→T3→T4 order, up to ${getMaxHttpConcurrent()} concurrent per tier)`);
+    console.log(`[scheduler] Started cycle #${cycleCount} — ${tieredQueue.length} institutions (T1→T2→T3, up to ${getMaxHttpConcurrent()} concurrent per tier; T4 auto-pass after cycle)`);
   }
 
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
@@ -416,6 +445,8 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   tieredQueue = buildTieredQueue();
   tierOnlyActive = null;
   stalenessFirstActive = false;
+  autoT4AfterCycle = false;
+  resumedAtPosition = null;
   queueIndex = 0;
   completedThisCycle = 0;
   failedThisCycle = 0;
@@ -484,6 +515,8 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   schedulerState = "running";
   tierOnlyActive = tier;
   stalenessFirstActive = false;
+  autoT4AfterCycle = false; // manual tier scan — never auto-continue after
+  resumedAtPosition = null;
   persistState().catch(() => {});
   console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
@@ -540,6 +573,8 @@ export async function startStalenessFirstScan(): Promise<{ ok: boolean; message:
   schedulerState = "running";
   tierOnlyActive = null;
   stalenessFirstActive = true;
+  autoT4AfterCycle = false;
+  resumedAtPosition = null;
   persistState().catch(() => {});
   console.log(`[scheduler] Staleness-first scan (gen=${runGeneration}) — ${tieredQueue.length} institutions, oldest-synced first`);
   startWatchdog();
@@ -594,6 +629,7 @@ export function invalidateHealthCacheEntry(
       lastSuccessAt: new Date(),
       lastSuccessNewCount: successData.newCount ?? null,
       lastSuccessRawCount: successData.rawCount ?? null,
+      lastCompletedCycle: null,
     });
   }
 }
@@ -760,30 +796,87 @@ function scheduleNext(): void {
     });
 
     if (tierOnlyActive !== null || stalenessFirstActive) {
-      // Tier-only and staleness-first scans are one-shot operations — stop and go idle.
-      schedulerState = "idle";
+      // ── Tier-only / staleness-first: check if this is an auto T4 pass ─────
+      const wasAutoT4 = tierOnlyActive === 4 && autoT4AfterCycle;
+      autoT4AfterCycle = false;
       tierOnlyActive = null;
       stalenessFirstActive = false;
-      persistState(true).catch(() => {});
+
+      if (wasAutoT4) {
+        // Auto-T4 pass complete — start the next full T1-T3 cycle after a 2-min cooldown.
+        const capturedGenAfterT4 = runGeneration;
+        tieredQueue = buildTieredQueue();
+        queueIndex = 0;
+        completedThisCycle = 0;
+        failedThisCycle = 0;
+        skippedThisCycle = 0;
+        freshSkippedThisCycle = 0;
+        cycleStartedAt = new Date();
+        resumedAtPosition = null;
+        cycleCount++;
+        console.log(`[scheduler] T4 auto-pass complete — starting T1-T3 cycle #${cycleCount} in 2 min (${tieredQueue.length} institutions)`);
+        persistState(true).catch(() => {});
+        // Keep schedulerState = "running" (cooldown period)
+        schedulerTimer = setTimeout(() => {
+          if (runGeneration !== capturedGenAfterT4) return;
+          scheduleNext();
+        }, 2 * 60 * 1000);
+      } else {
+        // Manual tier-only or staleness-first scan — go idle.
+        schedulerState = "idle";
+        persistState(true).catch(() => {});
+      }
     } else {
-      // Full cycle completed — begin the next cycle after a short cooldown so
-      // health stays fresh without requiring manual admin intervention after each
-      // pass. The 2-minute delay prevents a tight spin when all institutions are
-      // within their freshness window and would be immediately skipped.
-      tierOnlyActive = null;
-      tieredQueue = buildTieredQueue();
-      queueIndex = 0;
-      completedThisCycle = 0;
-      failedThisCycle = 0;
-      skippedThisCycle = 0;
-      freshSkippedThisCycle = 0;
-      cycleStartedAt = new Date();
-      cycleCount++;
-      console.log(`[scheduler] Cycle complete — starting cycle #${cycleCount} in 2 min (${tieredQueue.length} institutions)`);
+      // ── Full T1-T3 cycle complete — trigger auto T4 pass, then next cycle ─
+      const completedCycleNum = cycleCount;
+      const capturedGenForT4 = runGeneration;
+      autoT4AfterCycle = true;
+      resumedAtPosition = null;
+      console.log(
+        `[scheduler] T1-T3 cycle #${completedCycleNum} complete — ${completedThisCycle} ok, ` +
+        `${failedThisCycle} failed, ${freshSkippedThisCycle} fresh/stamp-skipped, ` +
+        `${skippedThisCycle} backoff-skipped — T4 auto-pass in 2 min`,
+      );
       persistState(true).catch(() => {});
-      schedulerTimer = setTimeout(() => scheduleNext(), 2 * 60 * 1000);
+      schedulerTimer = setTimeout(() => {
+        if (runGeneration !== capturedGenForT4) return; // scheduler was reset
+        // ── Start T4 auto-pass (inline mirror of startTierOnly(4) with autoT4AfterCycle=true) ──
+        runGeneration++;
+        if (schedulerTimer) { clearTimeout(schedulerTimer); schedulerTimer = null; }
+        const t4Buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
+        for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); t4Buckets[t].push(s.institution); }
+        tieredQueue = t4Buckets[4];
+        queueIndex = 0;
+        completedThisCycle = 0;
+        failedThisCycle = 0;
+        skippedThisCycle = 0;
+        freshSkippedThisCycle = 0;
+        currentInstitutions = [];
+        lastActivityAt = null;
+        cycleStartedAt = new Date();
+        cycleCount++;
+        priorityQueue = [];
+        institutionDispatchedAt.clear();
+        schedulerState = "running";
+        tierOnlyActive = 4;
+        stalenessFirstActive = false;
+        autoT4AfterCycle = true; // set AFTER startTierOnly-equivalent so it isn't cleared
+        resumedAtPosition = null;
+        persistState().catch(() => {});
+        loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+        console.log(`[scheduler] Auto-T4 pass started (cycle #${cycleCount}) — ${tieredQueue.length} Playwright institutions`);
+        startWatchdog();
+        scheduleNext();
+      }, 2 * 60 * 1000);
     }
   }
+}
+
+/** Run a one-shot T4 (Playwright) pass independently of the main T1-T3 cycle.
+ * This is the same as `startTierOnly(4)` — exposed as a distinct export for clarity.
+ * Called automatically after each full T1-T3 cycle, or manually from the admin panel. */
+export function startT4Pass(): { ok: boolean; message: string } {
+  return startTierOnly(4);
 }
 
 /** Returns true when the error comes from the database connection pool being exhausted,
@@ -873,6 +966,9 @@ async function runOne(institution: string, gen: number): Promise<void> {
       }
     }
     await updateScraperHealth(institution, true, undefined, result.newCount, result.rawCount);
+    // Determine if this is a full T1-T3 cycle run (vs tier-only or staleness-first).
+    const isFullCycleRun = !tierOnlyActive && !stalenessFirstActive;
+    const newCompletedCycle = isFullCycleRun ? cycleCount : (scraperHealthCache.get(institution)?.lastCompletedCycle ?? null);
     scraperHealthCache.set(institution, {
       institution,
       consecutiveFailures: 0,
@@ -882,7 +978,13 @@ async function runOne(institution: string, gen: number): Promise<void> {
       backoffUntil: null,
       lastSuccessNewCount: result.newCount,
       lastSuccessRawCount: result.rawCount,
+      lastCompletedCycle: newCompletedCycle,
     });
+    // Persist the cycle stamp to DB so post-crash resumes skip this institution.
+    // Fire-and-forget — a write failure is non-fatal (the freshness gate is the backup).
+    if (isFullCycleRun) {
+      stampScraperCycleComplete(institution, cycleCount).catch(() => {});
+    }
   } else if (finalErr !== null) {
     // ── Failure path (both attempts failed) ─────────────────────────────────
     const msg = finalErr?.message ?? "";
@@ -915,6 +1017,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
                      (current?.backoffUntil ?? null),
         lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
         lastSuccessRawCount: current?.lastSuccessRawCount ?? null,
+        lastCompletedCycle: current?.lastCompletedCycle ?? null,
       });
     }
   }

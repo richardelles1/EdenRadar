@@ -28,6 +28,9 @@ export interface ScraperHealthRow {
   /** Raw listing count from the most recent successful sync (in-memory only, not persisted).
    * If 0, the site may have been unreachable — the staleness gate must NOT skip the institution. */
   lastSuccessRawCount: number | null;
+  /** The cycleCount value of the last full cycle in which this institution completed successfully.
+   * Null if never synced in a full T1-T3 cycle. Used to skip already-done institutions on restart. */
+  lastCompletedCycle: number | null;
 }
 
 // Graduated backoff: 3→6h, 5→24h, 8→3 days, 12→7 days
@@ -38,6 +41,7 @@ export async function ensureSchedulerStateSchema(): Promise<void> {
   try {
     await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS tier_only INTEGER NULL`);
     await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS staleness_first BOOLEAN NOT NULL DEFAULT FALSE`);
+    await db.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_completed_cycle INTEGER NULL`);
   } catch (err: any) {
     // Non-fatal — column may already exist or DB may lack ALTER privileges; proceed anyway.
     console.warn(`[scraperState] ensureSchedulerStateSchema: ${err?.message}`);
@@ -103,12 +107,28 @@ export async function loadAllScraperHealth(): Promise<Map<string, ScraperHealthR
         backoffUntil: row.backoff_until ? new Date(row.backoff_until) : null,
         lastSuccessNewCount: row.last_success_new_count != null ? Number(row.last_success_new_count) : null,
         lastSuccessRawCount: row.last_success_raw_count != null ? Number(row.last_success_raw_count) : null,
+        lastCompletedCycle: row.last_completed_cycle != null ? Number(row.last_completed_cycle) : null,
       });
     }
   } catch (err: any) {
     console.warn(`[scraperState] loadAllScraperHealth failed: ${err?.message}`);
   }
   return map;
+}
+
+/** Fire-and-forget: record that this institution completed successfully in the given full cycle.
+ * Written after every successful sync during a full T1-T3 cycle so that on server restart the
+ * isFresh() gate can skip already-finished institutions without re-running them. */
+export async function stampScraperCycleComplete(institution: string, cycleId: number): Promise<void> {
+  try {
+    await db.execute(sql`
+      UPDATE scraper_health
+      SET last_completed_cycle = ${cycleId}, updated_at = NOW()
+      WHERE institution = ${institution}
+    `);
+  } catch (err: any) {
+    console.warn(`[scraperState] stampScraperCycleComplete failed for ${institution}: ${err?.message}`);
+  }
 }
 
 /** Record a successful sync, persisting both the success timestamp and new-asset count. */
@@ -206,6 +226,7 @@ export async function getAllScraperHealth(): Promise<ScraperHealthRow[]> {
       backoffUntil: row.backoff_until ? new Date(row.backoff_until) : null,
       lastSuccessNewCount: row.last_success_new_count != null ? Number(row.last_success_new_count) : null,
       lastSuccessRawCount: row.last_success_raw_count != null ? Number(row.last_success_raw_count) : null,
+      lastCompletedCycle: row.last_completed_cycle != null ? Number(row.last_completed_cycle) : null,
     }));
   } catch (err: any) {
     console.warn(`[scraperState] getAllScraperHealth failed: ${err?.message}`);

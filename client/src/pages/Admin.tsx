@@ -136,6 +136,7 @@ interface SchedulerStatus {
   currentTier: 1 | 2 | 3 | 4 | null;
   tierOnly: number | null;
   stalenessFirst: boolean;
+  resumedAtPosition: number | null;
 }
 
 interface ActiveSearchRow {
@@ -1696,6 +1697,13 @@ function DataHealth({ pw }: { pw: string }) {
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-idle">
                   <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
                   Idle
+                </span>
+              )}
+
+              {schedRunning && sched.resumedAtPosition != null && !sched.tierOnly && !sched.stalenessFirst && (
+                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-violet-700 dark:text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-full px-2 py-0.5 flex-shrink-0" data-testid="badge-scheduler-resumed" title={`Scheduler resumed mid-cycle at position ${sched.resumedAtPosition} of ${sched.queueTotal}. Cycle stamps will skip already-completed institutions.`}>
+                  <ArrowUp className="w-2.5 h-2.5" />
+                  Resumed cycle #{sched.cycleCount} at pos {sched.resumedAtPosition}/{sched.queueTotal}
                 </span>
               )}
 
