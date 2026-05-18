@@ -240,11 +240,12 @@ export async function runModalityFill(
         WHEN LOWER(modality) IN ('mrna', 'mrna therapy', 'sirna') THEN 'rna therapy'
         WHEN LOWER(modality) = 'car-t'                             THEN 'cell therapy'
         WHEN LOWER(modality) = 'bispecific antibody'               THEN 'antibody'
+        WHEN LOWER(modality) = 'device'                            THEN 'medical device'
         ELSE modality
       END
       WHERE relevant = true
         AND modality IS NOT NULL
-        AND LOWER(modality) IN ('mrna', 'mrna therapy', 'sirna', 'car-t', 'bispecific antibody')
+        AND LOWER(modality) IN ('mrna', 'mrna therapy', 'sirna', 'car-t', 'bispecific antibody', 'device')
     `);
     normalized = r.rowCount ?? 0;
   } else {
@@ -252,7 +253,7 @@ export async function runModalityFill(
       SELECT COUNT(*) AS n FROM ingested_assets
       WHERE relevant = true
         AND modality IS NOT NULL
-        AND LOWER(modality) IN ('mrna', 'mrna therapy', 'sirna', 'car-t', 'bispecific antibody')
+        AND LOWER(modality) IN ('mrna', 'mrna therapy', 'sirna', 'car-t', 'bispecific antibody', 'device')
     `);
     normalized = Number(r.rows[0]?.n ?? 0);
   }

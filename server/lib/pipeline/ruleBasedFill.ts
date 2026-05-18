@@ -517,7 +517,7 @@ export async function runRuleBasedFill(
         OR ip_type IS NULL OR ip_type = 'unknown'
         OR licensing_readiness IS NULL OR licensing_readiness = 'unknown'
         OR indication IS NULL OR indication = 'unknown'
-        OR modality IS NULL OR modality = 'unknown'
+        OR modality IS NULL OR modality = 'unknown' OR modality = 'device'
         OR target IS NULL OR target = 'unknown'
         OR data_sparse IS NULL
       )
@@ -643,7 +643,7 @@ export async function estimateRuleBasedFill(): Promise<{
         OR ip_type IS NULL OR ip_type = 'unknown'
         OR licensing_readiness IS NULL OR licensing_readiness = 'unknown'
         OR indication IS NULL OR indication = 'unknown'
-        OR modality IS NULL OR modality = 'unknown'
+        OR modality IS NULL OR modality = 'unknown' OR modality = 'device'
         OR target IS NULL OR target = 'unknown'
         OR data_sparse IS NULL
       )
