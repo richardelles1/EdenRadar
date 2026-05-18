@@ -3472,6 +3472,9 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
   React.useEffect(() => {
     if (moaFillStatus?.result && !moaFillStatus.running) {
       setMoaFillDone(moaFillStatus.result);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/stats"] });
+      refetchMoaFillCount();
     }
   }, [moaFillStatus?.result, moaFillStatus?.running]);
 

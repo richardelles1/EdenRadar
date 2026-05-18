@@ -4444,7 +4444,9 @@ export async function registerRoutes(
       const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
       const client = await dbPool.connect();
       try {
-        // Count assets that would be addressed by either pass
+        // Count assets that would be addressed by either pass.
+        // Pass 1: has biology bucket but no MOA.
+        // Pass 2: has rich text (summary OR abstract OR innovation_claim > 200 chars combined) but no MOA.
         const { rows } = await client.query<{ total: string }>(
           `SELECT COUNT(*)::text AS total FROM ingested_assets
            WHERE relevant = true
@@ -4452,6 +4454,9 @@ export async function registerRoutes(
              AND (
                (biology IS NOT NULL AND biology != '' AND biology != 'unknown')
                OR LENGTH(COALESCE(summary, '')) > 200
+               OR LENGTH(COALESCE(abstract, '')) > 200
+               OR LENGTH(COALESCE(innovation_claim, '')) > 200
+               OR (LENGTH(COALESCE(summary, '')) + LENGTH(COALESCE(abstract, '')) + LENGTH(COALESCE(innovation_claim, ''))) > 200
              )`,
         );
         res.json({ total: parseInt(rows[0]?.total ?? "0", 10) });
