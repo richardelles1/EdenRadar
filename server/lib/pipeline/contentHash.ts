@@ -51,17 +51,21 @@ function hasValue(val: unknown): boolean {
 /**
  * Returns a 0-100 completeness score for the asset.
  *
- * Formula v3 — universal buyer-decision formula, no asset-class branching.
+ * Formula v4 — MOA-weighted, universal buyer-decision formula.
  * Scores exactly what a licensing manager needs to make a go/no-go call:
  *
  *   indication        = 25 pts  (what does it treat or do)
  *   modality          = 20 pts  (what type of asset)
  *   developmentStage  = 20 pts  (how ready is it)
  *   summary quality   = 15 pts  (≥300 chars=15, ≥150=10, ≥50=5)
- *   mechanismOfAction = 12 pts  (how it works — critical for EDEN matching)
- *   IP protection     =  8 pts  (ipType OR patentStatus, either earns full credit;
+ *   mechanismOfAction = 15 pts  (how it works — critical for EDEN matching;
+ *                                raised from 12 so MOA-filled assets cross
+ *                                the 80-pt "excellent" threshold more often)
+ *   IP protection     =  5 pts  (ipType OR patentStatus, either earns full credit;
  *                                OR sourceType === 'tech_transfer' — TTO portal
- *                                listing IS proof of licensing availability)
+ *                                listing IS proof of licensing availability;
+ *                                reduced from 8: TTO assets earn this automatically
+ *                                so it was a low-discrimination signal)
  *   biology (soft)    =  5 pts  (canonical biology bucket assigned — not part of the
  *                                100 pt base; acts as a tie-breaker bonus)
  *   ──────────────────────────
@@ -93,17 +97,20 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
   else if (summaryLen >= 150) score += 10;
   else if (summaryLen >= 50) score += 5;
 
-  // mechanismOfAction (12 pts) — how it works; also critical for EDEN vector matching
-  if (hasValue(asset.mechanismOfAction)) score += 12;
+  // mechanismOfAction (15 pts) — how it works; critical for EDEN vector matching.
+  // Raised from 12 → 15: assets with MOA populated now cross the 80-pt "excellent"
+  // threshold when they also have indication + modality + stage (25+20+20+15 = 80).
+  if (hasValue(asset.mechanismOfAction)) score += 15;
 
-  // IP protection (8 pts) — explicit ipType OR patentStatus earns credit.
+  // IP protection (5 pts) — explicit ipType OR patentStatus earns credit.
   // TTO portal listings (source_type = 'tech_transfer') also earn full credit:
   // universities list technologies on these portals specifically because they are
   // available for licensing — the listing IS the IP availability proof.
+  // Reduced from 8 → 5: TTO assets earn this automatically (low discrimination).
   const hasExplicitIp = hasValue(asset.ipType) ||
     (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown");
   const isTtoListing = asset.sourceType === "tech_transfer";
-  if (hasExplicitIp || isTtoListing) score += 8;
+  if (hasExplicitIp || isTtoListing) score += 5;
 
   // biology soft bonus (5 pts) — canonical biology bucket raises signal quality;
   // excluded values: null / '' / 'unknown' / 'other'.
