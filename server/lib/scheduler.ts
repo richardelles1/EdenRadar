@@ -339,8 +339,13 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
       tieredQueue = buckets[tier];
       console.log(`[scheduler] Restored Tier-${tier} scan (clean pause): position ${queueIndex}/${tieredQueue.length}`);
     } else if (stalenessFirstActive) {
+      // Server restart: the original in-memory queue order is gone and cannot be
+      // recovered from DB. Rebuild from scratch (queueIndex=0) — this retries any
+      // institutions that completed before the restart, but guarantees every
+      // institution is visited in the correct staleness order with no skips.
       tieredQueue = buildStalenessFirstQueue();
-      console.log(`[scheduler] Restored staleness-first scan (clean pause): position ${queueIndex}/${tieredQueue.length}`);
+      queueIndex = 0;
+      console.log(`[scheduler] Restored staleness-first scan after restart — rebuilding from scratch: ${tieredQueue.length} institutions (original position lost)`);
     } else {
       tieredQueue = buildTieredQueue();
       console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running (unclean shutdown — mode context cleared)" : "paused"}`);
@@ -371,7 +376,10 @@ export function startScheduler(): { ok: boolean; message: string } {
       tieredQueue = buckets[tier];
       console.log(`[scheduler] Resumed Tier-${tier} scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
     } else if (stalenessFirstActive) {
-      tieredQueue = buildStalenessFirstQueue();
+      // Do NOT rebuild the queue here — the in-memory tieredQueue still holds the
+      // original sort order from when the scan started. Re-sorting would change
+      // order (some lastSuccessAt values have updated mid-scan) and cause the
+      // existing queueIndex to land at the wrong position.
       console.log(`[scheduler] Resumed staleness-first scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
     } else {
       console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
