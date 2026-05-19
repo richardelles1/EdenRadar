@@ -34,6 +34,7 @@ import { lifeArcScraper } from "./lifearc";
 import { kyotoTloScraper } from "./kyototlo";
 import { yaleScraper } from "./yale";
 import { buScraper } from "./bu";
+import { flcScraper } from "./flc";
 import { georgetownScraper } from "./georgetown";
 import { gatechScraper } from "./gatech";
 import { cwruScraper } from "./cwru";
@@ -564,6 +565,8 @@ const TIER1_INSTITUTIONS = new Set<string>([
   // Task #364 — Recovered Flintbox scrapers (re-investigated 2026-04-20)
   "Texas Tech University",        // ttu.flintbox.com — orgId=23 — 246 techs confirmed
   "Brandeis University",          // brandeis.flintbox.com — orgId=43 — 95 techs confirmed
+  // Task #1051 — FLC (Federal Laboratory Consortium) — Flintbox API (orgId=139, 4915 listings confirmed 2026-05-19)
+  "FLC (Federal Laboratory Consortium)",
 ]);
 
 const TIER2_INSTITUTIONS = new Set<string>([
@@ -881,6 +884,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   researchLuxembourgScraper,    // Research Luxembourg — in-part "researchluxembourg" ~77
   auaScraper,                    // American University of Armenia — in-part "aua" ~4
   cuhkOrktsScraper,              // Chinese University of Hong Kong (ORKTS) — TechPublisher "cuhk-orkts"
+  // ── Task #1051 — FLC (Federal Laboratory Consortium) ─────────────────────
+  flcScraper,                    // flc.flintbox.com — US federal lab tech (NASA, USDA, DoE, etc.) — 4915 listings confirmed 2026-05-19
   // ── Task #717 — Restored scrapers for orphaned institutions ───────────────
   baylorScraper,                 // Baylor University (Waco) — Flintbox "baylor" — 42 techs confirmed 2026-05-03
   novaLisbonScraper,             // NOVA University Lisbon — in-part "unl" — 48 techs confirmed 2026-05-03
