@@ -97,6 +97,8 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const isUnscored = asset.score === 0 || (asset.score_breakdown?.signal_coverage ?? 0) === 0;
   const isResearcherPublished = asset.source_types?.includes("researcher");
   const tier = scoreTier(asset.score, isUnscored);
+  const isLimitedData = asset.dataSparse === true ||
+    (asset.completeness_score !== null && asset.completeness_score !== undefined && asset.completeness_score <= 40);
 
   const classUnknown =
     !asset.asset_class || asset.asset_class === "other" || asset.asset_class === "unknown";
@@ -335,6 +337,21 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 >
                   Class unknown
                 </span>
+              )}
+              {isLimitedData && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-amber-50 dark:bg-amber-900/20 border border-amber-200/70 dark:border-amber-700/40 text-amber-600 dark:text-amber-400"
+                      data-testid={`pill-limited-data-${asset.id}`}
+                    >
+                      Limited data
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[200px]">
+                    Partial enrichment — indication, modality, or mechanism may be incomplete.
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
           )}

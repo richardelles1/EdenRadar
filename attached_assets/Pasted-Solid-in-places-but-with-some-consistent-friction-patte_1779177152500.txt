@@ -1,0 +1,82 @@
+Solid in places, but with some consistent friction patterns. Here's what I'd actually change, in
+  priority order:
+
+  ---
+  The Big Ones
+
+  1. Role selection happens after login — it should happen before.
+  Right now a new user lands, clicks Sign Up, enters their email, authenticates, and then gets asked
+  "how will you use EdenRadar?" That's backwards. The portal choice should be the first decision, not
+  an afterthought. It also frames the product better — someone landing on the site needs to understand
+   "this is for me" before they enter their email. Move portal selection to the pre-auth step.
+
+  2. Scout filters have two competing paradigms.
+  There are single-select dropdowns and multi-select chip arrays for the same dimensions (stage,
+  modality) — stage and stagesMulti both exist. A user who picks a stage from the dropdown and then
+  tries the chip filter will get confused about which is active. Pick one model (multi-select chips
+  are better for this corpus) and remove the other entirely.
+
+  3. You can't cancel a search.
+  Once you hit Search, patents and research start compiling and there's no abort. If you realize your
+  query was wrong, you either wait or refresh. Given research searches can take 40s, that's a real
+  frustration. A "Cancel" button on the compiling banners is a one-liner fix that has outsized UX
+  impact.
+
+  4. Data quality is invisible to users.
+  A user looking at a sparse asset with a completeness score of 32 has no idea whether the thin
+  content is because it's early-stage (legitimately), or because the scraper only got a title and the
+  pipeline hasn't enriched it yet. The data_sparse flag exists in the DB but never surfaces in the UI.
+   A simple "Limited data available" tag on low-completeness dossiers would set expectations and
+  reduce confusion.
+
+  ---
+  Medium Priority
+
+  5. No portal switcher is visible.
+  The AppSwitcher component exists but appears buried in the sidebar footer. If a researcher wants to
+  check EdenMarket, there's no obvious path. A persistent, visible switcher (or at minimum a clear
+  link in the nav) would help, especially for multi-role users.
+
+  6. Researcher and Discovery portals have no onboarding.
+  IndustryOnboarding exists and fires on first login for industry users. The researcher and discovery
+  portals have nothing equivalent. First-time users on those portals land in an empty state with no
+  guidance.
+
+  7. The dossier doesn't show enrichment provenance.
+  Users can't tell whether the mechanism of action came from the original TTO page, a patent abstract,
+   or was AI-inferred. The enrichment_sources JSONB column tracks this per-field — surfacing it (even
+  as a small tooltip "AI inferred · Last updated 3 days ago") would meaningfully increase trust.
+
+  8. Error recovery is passive.
+  When patents or research fail to load, the banner says "unavailable" but offers no retry button. The
+   user's only option is a full page refresh. Retry buttons on failed subsystems are trivial to add
+  and save a lot of frustration.
+
+  9. Scout to EdenMarket has no bridge.
+  A user finds an interesting asset in Scout, wants to see if there's a deal listing for it in
+  EdenMarket — there's no path. A "Check EdenMarket" affordance on asset cards (or in the dossier)
+  would make the two products feel like one platform rather than two separate apps.
+
+  ---
+  Lower Priority but Worth Noting
+
+  - Mobile nav loses context when the sidebar collapses — no breadcrumb or "you are here" indicator
+  - Notes are under-discoverable — the collaboration feature has no visual count badge so users don't
+  know it exists
+  - Pipeline brief has no regenerate button — one-shot generation with no way to refine
+  - The EdenMarket and main product have separate login flows — a logged-in Scout user shouldn't have
+  to log in again for Market
+  - "Compiling..." banners have no estimated time — even a rough "this usually takes ~20s" would
+  reduce anxiety
+
+  ---
+  What's Already Good
+
+  The pipeline/saved assets UX is genuinely well-done — inline notes, status management, team scoping,
+   and export all feel polished. The alerts system is sophisticated (templates, live preview,
+  pause/resume). And the loading states are reassuring rather than blocking. Those are real strengths
+  worth preserving.
+
+  The core problem is the platform is built for power users and doesn't have enough scaffolding for
+  someone new. The value proposition is clear from the landing page, but the path from "I just signed
+  up" to "I just found something useful" has too many unguided steps.
