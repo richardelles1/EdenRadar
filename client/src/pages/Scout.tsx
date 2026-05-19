@@ -311,8 +311,8 @@ export default function Scout() {
   const [hasSearched, setHasSearched] = useState<boolean>(() => ssGet("scout-has-searched", false));
   const [currentQuery, setCurrentQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [inputQuery, setInputQuery] = useState<string>(() => ssGet("scout-query", ""));
-  const [stageFilter, setStageFilter] = useState<string>("all");
-  const [modalityFilter, setModalityFilter] = useState<string>("all");
+  const [stageFilters, setStageFilters] = useState<string[]>([]);
+  const [modalityFilters, setModalityFilters] = useState<string[]>([]);
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
   const [biologiesFilter, setBiologiesFilter] = useState<string[]>([]);
   // true once the user has manually toggled a biology chip, false while still
@@ -331,6 +331,9 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
   const didAutoInitBiology = useRef(false);
+  const patentAbortRef = useRef<AbortController | null>(null);
+  const trialAbortRef = useRef<AbortController | null>(null);
+  const researchAbortRef = useRef<AbortController | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [patentFiltersOpen, setPatentFiltersOpen] = useState(false);
   const [trialFiltersOpen, setTrialFiltersOpen] = useState(false);
@@ -551,8 +554,8 @@ export default function Scout() {
       // Reset single-select filters; multi-value filters from URL are preserved
       // (they were set in the URL-parsing useEffect above and apply in filteredResults).
       const camePrePopulated = (variables?.modalities?.length ?? 0) + (variables?.stages?.length ?? 0) + (variables?.institutions?.length ?? 0) > 0;
-      setStageFilter("all");
-      setModalityFilter("all");
+      setStageFilters([]);
+      setModalityFilters([]);
       setInstitutionFilter("all");
       setBiologiesFilter([]);
       setSortMode("score");
@@ -572,6 +575,7 @@ export default function Scout() {
     mutationFn: async ({ query, sources }: { query: string; sources: string[] }) => {
       const backendSources = sources.map((k) => k === "harvard" ? "harvard_librarycloud" : k);
       const controller = new AbortController();
+      researchAbortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 40_000);
       try {
         const res = await fetch("/api/search", {
@@ -605,6 +609,7 @@ export default function Scout() {
   const patentMutation = useMutation({
     mutationFn: async ({ query, patentSince }: { query: string; patentSince?: string }) => {
       const controller = new AbortController();
+      patentAbortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
         const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 100, buyerProfile };
@@ -642,6 +647,7 @@ export default function Scout() {
   const trialMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
       const controller = new AbortController();
+      trialAbortRef.current = controller;
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
         const res = await fetch("/api/search", {
@@ -799,8 +805,8 @@ export default function Scout() {
     setPatentResults([]);
     setTrialResults([]);
     setHasSearched(false);
-    setStageFilter("all");
-    setModalityFilter("all");
+    setStageFilters([]);
+    setModalityFilters([]);
     setInstitutionFilter("all");
     setBiologiesFilter([]);
     setSortMode("score");
@@ -811,6 +817,10 @@ export default function Scout() {
     setTrialSortMode("newest");
     try { sessionStorage.removeItem("scout-include-research"); } catch {}
   };
+
+  const handleCancelPatents = () => { patentAbortRef.current?.abort(); };
+  const handleCancelTrials = () => { trialAbortRef.current?.abort(); };
+  const handleCancelResearch = () => { researchAbortRef.current?.abort(); };
 
   const handleGenerateReport = () => {
     const query = currentQuery || inputQuery;
@@ -856,8 +866,8 @@ export default function Scout() {
 
   const filteredResults = useMemo(() => {
     let results = searchResults.filter((asset) => {
-      const stageOk = stageFilter === "all" || asset.development_stage?.toLowerCase() === stageFilter;
-      const modalityOk = modalityFilter === "all" || asset.modality?.toLowerCase() === modalityFilter;
+      const stageOk = stageFilters.length === 0 || stageFilters.includes(asset.development_stage?.toLowerCase() ?? "");
+      const modalityOk = modalityFilters.length === 0 || modalityFilters.includes(asset.modality?.toLowerCase() ?? "");
       const institutionOk = institutionFilter === "all" || asset.institution === institutionFilter;
       const biologyOk = biologiesFilter.length === 0 || (!!asset.biology && biologiesFilter.includes(asset.biology));
       // Multi-filters from URL (e.g. Alerts "Explore matches"): asset must match
@@ -883,7 +893,7 @@ export default function Scout() {
       });
     }
     return results;
-  }, [searchResults, stageFilter, modalityFilter, institutionFilter, biologiesFilter, stagesMulti, modalitiesMulti, institutionsMulti, sortMode, minScore]);
+  }, [searchResults, stageFilters, modalityFilters, institutionFilter, biologiesFilter, stagesMulti, modalitiesMulti, institutionsMulti, sortMode, minScore]);
 
   const filteredPatentResults = useMemo(() => {
     const now = Date.now();
@@ -1005,8 +1015,8 @@ export default function Scout() {
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
   const activeFilterCount = [
-    stageFilter !== "all",
-    modalityFilter !== "all",
+    stageFilters.length > 0,
+    modalityFilters.length > 0,
     institutionFilter !== "all",
     biologiesFilter.length > 0,
     stagesMulti.length > 0,
@@ -1141,6 +1151,9 @@ export default function Scout() {
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-muted-foreground" data-testid="patents-compiling-banner">
                 <Loader2 className="w-3 h-3 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
                 <span>Compiling patents...</span>
+                <button onClick={handleCancelPatents} className="ml-auto text-muted-foreground/60 hover:text-foreground transition-colors" title="Cancel patent search" data-testid="button-cancel-patents">
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             </div>
           )}
@@ -1163,6 +1176,9 @@ export default function Scout() {
                 <span>Compiling research signals from {researchSources.length === 1
                   ? (RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0])
                   : `${researchSources.length} sources`}...</span>
+                <button onClick={handleCancelResearch} className="ml-auto text-muted-foreground/60 hover:text-foreground transition-colors" title="Cancel research search" data-testid="button-cancel-research">
+                  <X className="w-3 h-3" />
+                </button>
               </div>
             </div>
           )}
@@ -1286,16 +1302,16 @@ export default function Scout() {
           {showControls && activeFilterCount > 0 && resultTab === "assets" && (
             <div className="px-4 sm:px-6 pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                {stageFilter !== "all" && (
-                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setStageFilter("all")} data-testid="active-filter-stage">
-                    Stage: {stageFilter} ×
+                {stageFilters.map((s) => (
+                  <Badge key={`sf-${s}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setStageFilters((prev) => prev.filter((v) => v !== s))} data-testid={`active-filter-stage-${s}`}>
+                    Stage: {s} ×
                   </Badge>
-                )}
-                {modalityFilter !== "all" && (
-                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setModalityFilter("all")} data-testid="active-filter-modality">
-                    {modalityFilter} ×
+                ))}
+                {modalityFilters.map((m) => (
+                  <Badge key={`mf-${m}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setModalityFilters((prev) => prev.filter((v) => v !== m))} data-testid={`active-filter-modality-${m}`}>
+                    {m} ×
                   </Badge>
-                )}
+                ))}
                 {institutionFilter !== "all" && (
                   <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution">
                     {institutionFilter} ×
@@ -1490,6 +1506,9 @@ export default function Scout() {
                   <p className="text-sm font-medium text-foreground mb-1">Searching patent databases...</p>
                   <p className="text-xs text-muted-foreground">Querying USPTO PatentsView for "{currentQuery}"</p>
                 </div>
+                <button onClick={handleCancelPatents} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors" data-testid="button-cancel-patents-full">
+                  Cancel
+                </button>
               </div>
             )}
 
@@ -1956,6 +1975,9 @@ export default function Scout() {
                   <p className="text-sm font-medium text-foreground mb-1">Compiling research signals...</p>
                   <p className="text-xs text-muted-foreground">Searching {researchSources.length} academic source{researchSources.length !== 1 ? "s" : ""}.</p>
                 </div>
+                <button onClick={handleCancelResearch} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors" data-testid="button-cancel-research-full">
+                  Cancel
+                </button>
               </div>
             )}
 
@@ -2161,34 +2183,50 @@ export default function Scout() {
             {availableStages.length > 0 && (
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Development Stage</p>
-                <Select value={stageFilter} onValueChange={setStageFilter} data-testid="filter-stage-select">
-                  <SelectTrigger className="h-8 text-xs w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Stages</SelectItem>
-                    {availableStages.map((s) => (
-                      <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-1.5" data-testid="filter-stage-chips">
+                  {availableStages.map((s) => {
+                    const active = stageFilters.includes(s);
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setStageFilters((prev) => active ? prev.filter((v) => v !== s) : [...prev, s])}
+                        className={`text-[10px] font-medium px-2 py-0.5 rounded-full border capitalize transition-colors ${
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                        }`}
+                        data-testid={`filter-stage-chip-${s}`}
+                      >
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
             {availableModalities.length > 0 && (
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Modality</p>
-                <Select value={modalityFilter} onValueChange={setModalityFilter} data-testid="filter-modality-select">
-                  <SelectTrigger className="h-8 text-xs w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Modalities</SelectItem>
-                    {availableModalities.map((m) => (
-                      <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex flex-wrap gap-1.5" data-testid="filter-modality-chips">
+                  {availableModalities.map((m) => {
+                    const active = modalityFilters.includes(m);
+                    return (
+                      <button
+                        key={m}
+                        onClick={() => setModalityFilters((prev) => active ? prev.filter((v) => v !== m) : [...prev, m])}
+                        className={`text-[10px] font-medium px-2 py-0.5 rounded-full border capitalize transition-colors ${
+                          active
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-background text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                        }`}
+                        data-testid={`filter-modality-chip-${m}`}
+                      >
+                        {m}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -2266,8 +2304,8 @@ export default function Scout() {
             {activeFilterCount > 0 && (
               <button
                 onClick={() => {
-                  setStageFilter("all");
-                  setModalityFilter("all");
+                  setStageFilters([]);
+                  setModalityFilters([]);
                   setInstitutionFilter("all");
                   // Restore profile-suggested biology chips when resetting all filters
                   if (profileBiologies.length > 0) {
