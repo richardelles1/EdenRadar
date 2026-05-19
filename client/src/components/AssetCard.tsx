@@ -380,9 +380,24 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
           {/* Institution — bottom-aligned, legible secondary */}
           {institutionDisplay && (
-            <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-200 font-medium leading-snug mb-2 line-clamp-1">
+            <p className="flex items-center gap-1.5 text-[11px] text-zinc-700 dark:text-zinc-200 font-medium leading-snug mb-2 line-clamp-1">
               <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
               <span data-testid={`text-institution-${asset.id}`}>{institutionDisplay}</span>
+              {(asset.institutions?.length ?? 0) > 1 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="ml-0.5 inline-flex items-center px-1.5 py-0 rounded-full text-[9px] font-semibold bg-zinc-100 dark:bg-zinc-700/60 text-zinc-500 dark:text-zinc-300 border border-zinc-200/70 dark:border-zinc-600/50 select-none cursor-default leading-4"
+                      data-testid={`badge-institutions-${asset.id}`}
+                    >
+                      +{asset.institutions!.length - 1}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[260px]">
+                    Also available from: {asset.institutions!.filter((inst) => inst !== institutionDisplay).join(", ")}
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </p>
           )}
 

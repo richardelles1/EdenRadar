@@ -1,11 +1,12 @@
 import { db } from "../../db";
 import { ingestedAssets } from "@shared/schema";
-import { eq, gt, and } from "drizzle-orm";
+import { eq, gt, and, isNull } from "drizzle-orm";
 import OpenAI from "openai";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SIMILARITY_THRESHOLD = 0.92;
+const CROSS_INST_THRESHOLD = 0.95;
 const EMBED_CONCURRENCY = 20;
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -35,10 +36,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
   onProgress?.("Loading assets for dedup embedding...");
 
   // Paginate through the full eligible corpus in stable ID order (no row cap).
-  // Using a cursor (gt(id, lastId)) ensures deterministic, complete traversal
-  // regardless of corpus size.
   const PAGE_SIZE = 1000;
-  // Let Drizzle infer the row type from the select shape to avoid manual type drift.
   type DedupeRow = {
     id: number;
     assetName: string;
@@ -49,6 +47,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
     duplicateFlag: boolean | null;
     completenessScore: number | null;
     duplicateOfId: number | null;
+    canonicalAssetId: number | null;
   };
   const rows: DedupeRow[] = [];
   let lastId = 0;
@@ -64,6 +63,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
         duplicateFlag: ingestedAssets.duplicateFlag,
         completenessScore: ingestedAssets.completenessScore,
         duplicateOfId: ingestedAssets.duplicateOfId,
+        canonicalAssetId: ingestedAssets.canonicalAssetId,
       })
       .from(ingestedAssets)
       .where(and(eq(ingestedAssets.duplicateFlag, false), gt(ingestedAssets.id, lastId)))
@@ -79,13 +79,9 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
   const toEmbed = rows.filter((r) => !r.dedupeEmbedding || r.dedupeEmbedding.length === 0);
   onProgress?.(`Loaded ${rows.length} assets. Embedding ${toEmbed.length} (${rows.length - toEmbed.length} already embedded)...`);
 
-  // Track embeddings in a dedicated map — never mutate Drizzle row objects
   const embeddingMap = new Map<number, number[]>();
-
-  // Seed embedding map, score map, and suppressed pairs from existing rows.
-  // Dismissed pairs have duplicateFlag=false but duplicateOfId still set — skip re-flagging them.
   const scoreMap = new Map<number, number>();
-  const suppressedPairs = new Set<string>(); // "dupeId:canonId" strings
+  const suppressedPairs = new Set<string>();
   for (const row of rows) {
     if (row.dedupeEmbedding && row.dedupeEmbedding.length > 0) {
       embeddingMap.set(row.id, row.dedupeEmbedding);
@@ -122,25 +118,24 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
     }
   }
 
-  onProgress?.(`Embedded ${embeddedCount} assets. Running similarity comparison...`);
+  onProgress?.(`Embedded ${embeddedCount} assets. Running same-institution similarity comparison...`);
 
-  // Group by institution + indication to ensure cross-institution comparisons are never made.
-  // Two assets from different institutions with similar names are legitimately distinct
-  // technologies, even if indication and target overlap.
-  const indicationGroups = new Map<string, number[]>();
+  // ── Pass 1: Same-institution dedup (original logic) ──────────────────────
+  // Group by institution + indication to restrict comparisons to within one school.
+  const sameInstGroups = new Map<string, number[]>();
   for (const row of rows) {
     if (!embeddingMap.has(row.id)) continue;
     const inst = row.institution.toLowerCase().trim();
     const ind = (row.indication ?? "unknown").toLowerCase().trim();
     const key = `${inst}||${ind}`;
-    if (!indicationGroups.has(key)) indicationGroups.set(key, []);
-    indicationGroups.get(key)!.push(row.id);
+    if (!sameInstGroups.has(key)) sameInstGroups.set(key, []);
+    sameInstGroups.get(key)!.push(row.id);
   }
 
   const flaggedPairs: Array<{ idA: number; idB: number; similarity: number }> = [];
   const flaggedIds = new Set<number>();
 
-  for (const [, groupIds] of indicationGroups) {
+  for (const [, groupIds] of sameInstGroups) {
     if (groupIds.length < 2) continue;
     for (let i = 0; i < groupIds.length; i++) {
       for (let j = i + 1; j < groupIds.length; j++) {
@@ -153,12 +148,10 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
         const sim = cosineSimilarity(embA, embB);
         if (sim >= SIMILARITY_THRESHOLD) {
           flaggedPairs.push({ idA, idB, similarity: sim });
-          // Canonical = higher completeness score; tie-break by lower ID (older = canonical)
           const scoreA = scoreMap.get(idA) ?? 0;
           const scoreB = scoreMap.get(idB) ?? 0;
           const canonId = scoreA >= scoreB ? idA : idB;
           const dupeId = scoreA >= scoreB ? idB : idA;
-          // Skip re-flagging if admin previously dismissed this pair (suppression marker retained)
           const pairKey = `${dupeId}:${canonId}`;
           if (!flaggedIds.has(dupeId) && !suppressedPairs.has(pairKey)) {
             flaggedIds.add(dupeId);
@@ -172,11 +165,74 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
     }
   }
 
-  onProgress?.(`Near-duplicate detection complete. ${flaggedPairs.length} pairs found, ${flaggedIds.size} assets flagged.`);
+  onProgress?.(`Same-institution pass: ${flaggedPairs.length} pairs. Running cross-institution embedding pass...`);
+
+  // ── Pass 2: Cross-institution canonical dedup ─────────────────────────────
+  // Only consider canonical assets (no same-inst duplicate flag, no existing
+  // cross-inst canonicalAssetId). Group by indication only — omit institution
+  // from the key so comparisons cross institutional boundaries.
+  // Use a higher threshold (0.95) to avoid false positives across schools.
+  const crossInstGroups = new Map<string, Array<{ id: number; institution: string }>>();
+  for (const row of rows) {
+    if (!embeddingMap.has(row.id)) continue;
+    if (row.canonicalAssetId != null) continue; // already linked
+    const ind = (row.indication ?? "unknown").toLowerCase().trim();
+    if (!crossInstGroups.has(ind)) crossInstGroups.set(ind, []);
+    crossInstGroups.get(ind)!.push({ id: row.id, institution: row.institution });
+  }
+
+  let crossInstLinked = 0;
+
+  for (const [, groupEntries] of crossInstGroups) {
+    if (groupEntries.length < 2) continue;
+
+    // Only compare pairs from different institutions
+    for (let i = 0; i < groupEntries.length; i++) {
+      for (let j = i + 1; j < groupEntries.length; j++) {
+        const entA = groupEntries[i];
+        const entB = groupEntries[j];
+        if (!entA || !entB) continue;
+        // Skip same-institution pairs — handled by Pass 1
+        if (entA.institution.toLowerCase().trim() === entB.institution.toLowerCase().trim()) continue;
+
+        const embA = embeddingMap.get(entA.id);
+        const embB = embeddingMap.get(entB.id);
+        if (!embA || !embB) continue;
+
+        const sim = cosineSimilarity(embA, embB);
+        if (sim >= CROSS_INST_THRESHOLD) {
+          // Canonical = higher completeness score; tie-break by lower ID (older = canonical)
+          const scoreA = scoreMap.get(entA.id) ?? 0;
+          const scoreB = scoreMap.get(entB.id) ?? 0;
+          const canonId = scoreA >= scoreB ? entA.id : entB.id;
+          const dupeId  = scoreA >= scoreB ? entB.id : entA.id;
+
+          // Only link the dupe if it isn't already canonical_asset_id-linked
+          const dupeRow = rows.find((r) => r.id === dupeId);
+          if (dupeRow?.canonicalAssetId == null) {
+            await db
+              .update(ingestedAssets)
+              .set({ canonicalAssetId: canonId })
+              .where(eq(ingestedAssets.id, dupeId));
+            // Update in-memory to prevent re-linking in subsequent iterations
+            const dupeEntry = groupEntries.find((e) => e?.id === dupeId);
+            if (dupeEntry) {
+              const r = rows.find((row) => row.id === dupeId);
+              if (r) r.canonicalAssetId = canonId;
+            }
+            crossInstLinked++;
+            flaggedPairs.push({ idA: canonId, idB: dupeId, similarity: sim });
+          }
+        }
+      }
+    }
+  }
+
+  onProgress?.(`Near-duplicate detection complete. ${flaggedIds.size} same-inst assets flagged, ${crossInstLinked} cross-inst assets linked to canonicals.`);
 
   return {
     embedded: embeddedCount,
-    flagged: flaggedIds.size,
+    flagged: flaggedIds.size + crossInstLinked,
     pairs: flaggedPairs,
   };
 }

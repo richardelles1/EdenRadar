@@ -247,6 +247,13 @@ export const ingestedAssets = pgTable("ingested_assets", {
   // Citation count from OpenAlex — persisted so momentum scoring has a stable value.
   // Managed via startup migration (ADD COLUMN IF NOT EXISTS).
   citedByCount: integer("cited_by_count"),
+  // Cross-institution canonical dedup (managed via startup migration).
+  // When set, this asset is a non-canonical copy; canonicalAssetId points to the
+  // best-quality record for the same technology from another institution.
+  canonicalAssetId: integer("canonical_asset_id"),
+  // Sorted-token fingerprint of the asset title used for fast O(1) exact-title
+  // cross-institution dedup (managed via startup migration).
+  titleKey: text("title_key"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {

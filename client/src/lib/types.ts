@@ -77,6 +77,7 @@ export interface ScoredAsset {
   last_seen_at?: string | null;
   biology?: string | null;
   momentum_score?: number | null;
+  institutions?: string[];
 }
 
 export interface BuyerProfile {

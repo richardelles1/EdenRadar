@@ -117,6 +117,8 @@ export type RetrievedAsset = {
   citedByCount?: number | null;
   /** Computed momentum score (0–100) — high values indicate a "Rising" asset. */
   momentumScore?: number | null;
+  /** Other institutions offering the same canonical technology (from canonical_asset_id linkage). */
+  altInstitutions?: string[];
 };
 
 export interface IStorage {
@@ -996,10 +998,44 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
+    // 1c. Title-key dedup: compute normalised title fingerprint for each truly-new
+    //     listing and check whether the same technology already exists from a
+    //     different institution.  If a match is found, mark the incoming record
+    //     as a non-canonical variant via canonicalAssetId.
+    const { computeTitleKey } = await import("./lib/pipeline/titleKey");
+    const titleKeysToCheck = newListings
+      .map((l) => computeTitleKey(l.assetName))
+      .filter(Boolean);
+    const titleKeyCanonMap = new Map<string, { id: number; institution: string }>();
+    if (titleKeysToCheck.length > 0) {
+      for (let i = 0; i < titleKeysToCheck.length; i += CHUNK) {
+        const keyChunk = titleKeysToCheck.slice(i, i + CHUNK);
+        const tkRows = await db
+          .select({ id: ingestedAssets.id, titleKey: ingestedAssets.titleKey, institution: ingestedAssets.institution })
+          .from(ingestedAssets)
+          .where(and(inArray(ingestedAssets.titleKey, keyChunk), isNull(ingestedAssets.canonicalAssetId)));
+        for (const row of tkRows) {
+          if (row.titleKey && !titleKeyCanonMap.has(row.titleKey)) {
+            titleKeyCanonMap.set(row.titleKey, { id: row.id, institution: row.institution ?? "" });
+          }
+        }
+      }
+    }
+    const annotatedNewListings = newListings.map((l) => {
+      const tk = computeTitleKey(l.assetName);
+      const match = tk ? titleKeyCanonMap.get(tk) : undefined;
+      const canonicalAssetId = match && match.institution !== (l.institution ?? "") ? match.id : undefined;
+      return { ...l, titleKey: tk || undefined, canonicalAssetId };
+    });
+    const xInstDedup = annotatedNewListings.filter((l) => l.canonicalAssetId).length;
+    if (xInstDedup > 0) {
+      console.log(`[storage] Title-key cross-institution dedup: ${xInstDedup} incoming assets linked to existing canonicals`);
+    }
+
     // 2. Bulk INSERT truly new listings (chunked)
     const newAssets: Array<{ id: number; assetName: string; fingerprint: string }> = [];
-    for (let i = 0; i < newListings.length; i += CHUNK) {
-      const chunk = newListings.slice(i, i + CHUNK);
+    for (let i = 0; i < annotatedNewListings.length; i += CHUNK) {
+      const chunk = annotatedNewListings.slice(i, i + CHUNK);
       const inserted = await db
         .insert(ingestedAssets)
         .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
@@ -3461,6 +3497,13 @@ export class DatabaseStorage implements IStorage {
 
     // Structured filters are identical across phases. Build them once.
     const baseFilters: ReturnType<typeof sql>[] = [sql`relevant = true`];
+    // Suppress non-canonical cross-institution duplicates in general search so
+    // each technology only appears once.  When the caller explicitly filters by
+    // institution, skip this suppression so institution-specific browsing still
+    // returns all assets from that school (canonical or not).
+    if (!institution && !(institutions && institutions.length)) {
+      baseFilters.push(sql`canonical_asset_id IS NULL`);
+    }
     if (modality) baseFilters.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
     if (stage) baseFilters.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) baseFilters.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
@@ -3532,6 +3575,9 @@ export class DatabaseStorage implements IStorage {
           summary, categories, technology_id, stage_changed_at, previous_stage,
           data_sparse, category_confidence, asset_class, last_seen_at, biology,
           cited_by_count, first_seen_at, last_content_change_at,
+          (SELECT COALESCE(array_agg(DISTINCT alt.institution ORDER BY alt.institution), ARRAY[]::text[])
+           FROM ingested_assets alt WHERE alt.canonical_asset_id = ingested_assets.id AND alt.relevant = true
+          ) AS alt_institutions,
           ${exactMatchExpr} AS exact_name_match,
           ${tsRankExpr}     AS ts_rank,
           ${trgmSimExpr}    AS trgm_sim,
@@ -3601,6 +3647,7 @@ export class DatabaseStorage implements IStorage {
         firstSeenAt: r.first_seen_at ? String(r.first_seen_at) : null,
         citedByCount: r.cited_by_count != null ? Number(r.cited_by_count) : null,
       }),
+      altInstitutions: Array.isArray(r.alt_institutions) ? (r.alt_institutions as string[]) : [],
     }));
   }
 

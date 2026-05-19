@@ -1063,6 +1063,12 @@ export async function registerRoutes(
           last_seen_at: r.lastSeenAt,
           biology: r.biology ?? null,
           momentum_score: r.momentumScore ?? null,
+          institutions: (() => {
+            const canon = r.institution ? [r.institution] : [];
+            const alts = r.altInstitutions ?? [];
+            const all = [...new Set([...canon, ...alts])].filter(Boolean);
+            return all.length > 0 ? all : undefined;
+          })(),
         };
       });
 
