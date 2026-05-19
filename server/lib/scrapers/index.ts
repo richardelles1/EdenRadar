@@ -1129,16 +1129,17 @@ export async function runAllScrapers(
 
   emitProgress();
 
-  const SCRAPER_TIMEOUT_MS = 5 * 60 * 1000;
+  const DEFAULT_SCRAPER_TIMEOUT_MS = 10 * 60 * 1000; // 10 min default; scrapers may override via scraperTimeoutMs
 
   const tasks = ALL_SCRAPERS.map((scraper) => async () => {
     activeInstitutions.add(scraper.institution);
     emitProgress();
+    const timeoutMs = scraper.scraperTimeoutMs ?? DEFAULT_SCRAPER_TIMEOUT_MS;
     try {
       const result = await Promise.race([
         scraper.scrape(),
         new Promise<ScrapedListing[]>((_, reject) =>
-          setTimeout(() => reject(new Error(`scraper timeout`)), SCRAPER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`scraper timeout`)), timeoutMs)
         ),
       ]);
       return result;

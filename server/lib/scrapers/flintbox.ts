@@ -164,11 +164,68 @@ async function enrichFlintboxThinListings(
   }
 }
 
-export function createFlintboxScraper(org: FlintboxOrg, institution: string): InstitutionScraper {
+/** Fetch all pages from the Flintbox JSON API for a given org. */
+async function fetchAllFlintboxPages(
+  base: string,
+  orgId: number,
+  accessKey: string,
+): Promise<JsonApiTech[]> {
+  const PER_PAGE = 500;
+  const MAX_PAGES = 50; // safety cap — 50 × 500 = 25,000 items
+  const all: JsonApiTech[] = [];
+  let page = 1;
+
+  while (page <= MAX_PAGES) {
+    const url =
+      `${base}/api/v1/technologies` +
+      `?organizationId=${orgId}` +
+      `&organizationAccessKey=${accessKey}` +
+      `&per_page=${PER_PAGE}` +
+      `&page=${page}`;
+
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        "X-Requested-With": "XMLHttpRequest",
+        "User-Agent": "Mozilla/5.0",
+      },
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!res.ok) break;
+
+    const json = await res.json() as any;
+    const items: JsonApiTech[] = Array.isArray(json)
+      ? json
+      : (json.data ?? json.technologies ?? json.results ?? []);
+
+    if (!Array.isArray(items) || items.length === 0) break;
+
+    all.push(...items);
+
+    // Stop if the API says there's no next page
+    const meta = json?.meta ?? json?.metadata;
+    const hasMore = meta?.nextPage != null || items.length >= PER_PAGE;
+    if (!hasMore) break;
+    // If nextPage is explicitly null/undefined, stop
+    if (meta && meta.nextPage == null) break;
+
+    page++;
+  }
+
+  return all;
+}
+
+export function createFlintboxScraper(
+  org: FlintboxOrg,
+  institution: string,
+  timeoutMs?: number,
+): InstitutionScraper {
   const base = `https://${org.slug}.flintbox.com`;
 
   return {
     institution,
+    ...(timeoutMs != null ? { scraperTimeoutMs: timeoutMs } : {}),
     async scrape(): Promise<ScrapedListing[]> {
       try {
         let { orgId, accessKey } = org;
@@ -182,78 +239,58 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
         }
 
         if (orgId > 0 && accessKey) {
-          const url =
-            `${base}/api/v1/technologies` +
-            `?organizationId=${orgId}` +
-            `&organizationAccessKey=${accessKey}` +
-            `&per_page=500`;
+          const items = await fetchAllFlintboxPages(base, orgId, accessKey);
 
-          const res = await fetch(url, {
-            headers: {
-              Accept: "application/json",
-              "X-Requested-With": "XMLHttpRequest",
-              "User-Agent": "Mozilla/5.0",
-            },
-            signal: AbortSignal.timeout(15_000),
-          });
+          if (items.length > 0) {
+            const results: ScrapedListing[] = [];
+            for (const item of items) {
+              const attrs = item.attributes ?? (item as any);
+              const name = cleanText(attrs.name ?? attrs.title ?? "");
+              if (!name || name.length < 5) continue;
+              const desc = cleanText(
+                attrs.briefDescription ?? attrs.brief_description ?? attrs.keyPoint1 ?? ""
+              );
+              const fullDesc = cleanText(
+                attrs.fullDescription ?? attrs.full_description ?? attrs.description ?? ""
+              );
+              const techId = attrs.uuid ?? attrs.slug ?? item.id ?? "";
+              const techUrl = techId
+                ? `${base}/technologies/${techId}`
+                : `${base}/technologies`;
 
-          if (res.ok) {
-            const json = await res.json() as any;
-            const items: JsonApiTech[] = Array.isArray(json)
-              ? json
-              : (json.data ?? json.technologies ?? json.results ?? []);
+              const inventorStr = attrs.inventors ?? attrs.inventor_names?.join(", ") ?? "";
+              const inventors = inventorStr
+                ? inventorStr.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
+                : undefined;
 
-            if (Array.isArray(items) && items.length > 0) {
-              const results: ScrapedListing[] = [];
-              for (const item of items) {
-                const attrs = item.attributes ?? (item as any);
-                const name = cleanText(attrs.name ?? attrs.title ?? "");
-                if (!name || name.length < 5) continue;
-                const desc = cleanText(
-                  attrs.briefDescription ?? attrs.brief_description ?? attrs.keyPoint1 ?? ""
-                );
-                const fullDesc = cleanText(
-                  attrs.fullDescription ?? attrs.full_description ?? attrs.description ?? ""
-                );
-                const techId = attrs.uuid ?? attrs.slug ?? item.id ?? "";
-                const techUrl = techId
-                  ? `${base}/technologies/${techId}`
-                  : `${base}/technologies`;
+              const cats = attrs.categories ?? (attrs.category ? [attrs.category] : undefined);
 
-                const inventorStr = attrs.inventors ?? attrs.inventor_names?.join(", ") ?? "";
-                const inventors = inventorStr
-                  ? inventorStr.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
-                  : undefined;
-
-                const cats = attrs.categories ?? (attrs.category ? [attrs.category] : undefined);
-
-                results.push({
-                  title: name,
-                  description: desc || fullDesc,
-                  url: techUrl,
-                  institution,
-                  abstract: fullDesc || undefined,
-                  inventors: inventors && inventors.length > 0 ? inventors : undefined,
-                  patentStatus: attrs.patentStatus ?? attrs.patent_status ?? undefined,
-                  licensingStatus: attrs.licensingStatus ?? attrs.licensing_status ?? attrs.status ?? undefined,
-                  categories: cats,
-                  contactEmail: attrs.contactEmail ?? attrs.contact_email ?? undefined,
-                  publishedDate: attrs.publishedDate ?? attrs.published_date ?? undefined,
-                  technologyId: attrs.technologyNumber ?? attrs.technology_number ?? (techId ? String(techId) : undefined),
-                });
-              }
-              const thinCount = results.filter(
-                (l) => !l.description || l.description === l.title || l.description.length < 50
-              ).length;
-              if (thinCount > 0) {
-                console.log(`[scraper] ${institution}: fetching single-tech API for ${thinCount} thin Flintbox listings...`);
-                await enrichFlintboxThinListings(results, orgId, accessKey, base);
-                const enrichedCount = results.filter((l) => (l.description?.length ?? 0) >= 50).length;
-                console.log(`[scraper] ${institution}: single-tech API enriched ${enrichedCount - (results.length - thinCount)} of ${thinCount} thin listings`);
-              }
-              console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox API`);
-              return results;
+              results.push({
+                title: name,
+                description: desc || fullDesc,
+                url: techUrl,
+                institution,
+                abstract: fullDesc || undefined,
+                inventors: inventors && inventors.length > 0 ? inventors : undefined,
+                patentStatus: attrs.patentStatus ?? attrs.patent_status ?? undefined,
+                licensingStatus: attrs.licensingStatus ?? attrs.licensing_status ?? attrs.status ?? undefined,
+                categories: cats,
+                contactEmail: attrs.contactEmail ?? attrs.contact_email ?? undefined,
+                publishedDate: attrs.publishedDate ?? attrs.published_date ?? undefined,
+                technologyId: attrs.technologyNumber ?? attrs.technology_number ?? (techId ? String(techId) : undefined),
+              });
             }
+            const thinCount = results.filter(
+              (l) => !l.description || l.description === l.title || l.description.length < 50
+            ).length;
+            if (thinCount > 0) {
+              console.log(`[scraper] ${institution}: fetching single-tech API for ${thinCount} thin Flintbox listings...`);
+              await enrichFlintboxThinListings(results, orgId, accessKey, base);
+              const enrichedCount = results.filter((l) => (l.description?.length ?? 0) >= 50).length;
+              console.log(`[scraper] ${institution}: single-tech API enriched ${enrichedCount - (results.length - thinCount)} of ${thinCount} thin listings`);
+            }
+            console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox API`);
+            return results;
           }
         }
 
