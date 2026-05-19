@@ -6,6 +6,13 @@ export type SourceType =
   | "tech_transfer"
   | "researcher";
 
+export interface SignalEvent {
+  id: number;
+  event_type: "stage_change" | "first_indexed" | "content_update" | "citation_update" | string;
+  payload?: Record<string, unknown> | null;
+  occurred_at: string;
+}
+
 export interface RawSignal {
   id: string;
   source_type: SourceType;
@@ -69,6 +76,7 @@ export interface ScoredAsset {
   completeness_score?: number | null;
   last_seen_at?: string | null;
   biology?: string | null;
+  momentum_score?: number | null;
 }
 
 export interface BuyerProfile {

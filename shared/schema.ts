@@ -244,6 +244,9 @@ export const ingestedAssets = pgTable("ingested_assets", {
   // Canonical 32-value taxonomy — sits between indication (what disease) and target (which molecule).
   // Managed via startup migration (ADD COLUMN IF NOT EXISTS).
   biology: text("biology"),
+  // Citation count from OpenAlex — persisted so momentum scoring has a stable value.
+  // Managed via startup migration (ADD COLUMN IF NOT EXISTS).
+  citedByCount: integer("cited_by_count"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {
@@ -1324,3 +1327,30 @@ export const dealComparables = pgTable("deal_comparables", {
 export type DealComparable = typeof dealComparables.$inferSelect;
 export const insertDealComparableSchema = createInsertSchema(dealComparables).omit({ id: true, createdAt: true });
 export type InsertDealComparable = z.infer<typeof insertDealComparableSchema>;
+
+// ── Asset Signal Events (momentum scoring) ────────────────────────────────────
+// Append-only log of notable events on an ingested_asset: stage changes,
+// citation spikes, grant awards, content updates. Used to power the Signal
+// Activity timeline in the asset dossier and to compute momentum_score.
+// Managed via startup migration (CREATE TABLE IF NOT EXISTS).
+export const SIGNAL_EVENT_TYPES = [
+  "stage_change",
+  "first_indexed",
+  "content_update",
+  "citation_update",
+] as const;
+export type SignalEventType = typeof SIGNAL_EVENT_TYPES[number];
+
+export const assetSignalEvents = pgTable("asset_signal_events", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  occurredAt: timestamp("occurred_at").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => [
+  index("asset_signal_events_asset_occurred_idx").on(t.assetId, t.occurredAt),
+]);
+
+export type AssetSignalEvent = typeof assetSignalEvents.$inferSelect;
+export type InsertAssetSignalEvent = typeof assetSignalEvents.$inferInsert;

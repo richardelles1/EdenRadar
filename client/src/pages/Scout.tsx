@@ -326,7 +326,7 @@ export default function Scout() {
   const [modalitiesMulti, setModalitiesMulti] = useState<string[]>([]);
   const [institutionsMulti, setInstitutionsMulti] = useState<string[]>([]);
   const [sinceFilter, setSinceFilter] = useState<string>("any");
-  const [sortMode, setSortMode] = useState<"score" | "recency">("score");
+  const [sortMode, setSortMode] = useState<"score" | "recency" | "momentum">("score");
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
@@ -878,7 +878,14 @@ export default function Scout() {
       const scoreOk = minScore === 0 || asset.score >= minScore;
       return stageOk && modalityOk && institutionOk && biologyOk && stageMultiOk && modalityMultiOk && instMultiOk && scoreOk;
     });
-    if (sortMode === "recency") {
+    if (sortMode === "momentum") {
+      results = [...results].sort((a, b) => {
+        const ma = a.momentum_score ?? 0;
+        const mb = b.momentum_score ?? 0;
+        if (mb !== ma) return mb - ma;
+        return (a.id ?? "").localeCompare(b.id ?? "");
+      });
+    } else if (sortMode === "recency") {
       results = [...results].sort((a, b) => {
         const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
         const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
@@ -2169,13 +2176,14 @@ export default function Scout() {
 
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
-              <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
+              <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency" | "momentum")} data-testid="select-sort">
                 <SelectTrigger className="h-8 text-xs w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="score">Best Match</SelectItem>
                   <SelectItem value="recency">Newest First</SelectItem>
+                  <SelectItem value="momentum">Momentum</SelectItem>
                 </SelectContent>
               </Select>
             </div>

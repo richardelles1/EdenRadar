@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BookmarkCheck, Building2, FlaskConical, ExternalLink } from "lucide-react";
+import { BookmarkCheck, Building2, FlaskConical, ExternalLink, TrendingUp } from "lucide-react";
 import { PipelinePicker } from "./PipelinePicker";
 import type { ScoredAsset, ScoreBreakdown } from "@/lib/types";
 import type { SavedAsset } from "@shared/schema";
@@ -350,6 +350,25 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="text-xs max-w-[200px]">
                     Partial enrichment — indication, modality, or mechanism may be incomplete.
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {(asset.momentum_score ?? 0) >= 40 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full select-none bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400"
+                      data-testid={`pill-rising-${asset.id}`}
+                    >
+                      <TrendingUp className="w-2.5 h-2.5" />
+                      Rising
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[220px]">
+                    {asset.stage_changed_at
+                      ? `Stage advanced${asset.previous_stage ? ` from ${asset.previous_stage}` : ""} · `
+                      : ""}
+                    Gaining traction — momentum score {asset.momentum_score}/100
                   </TooltipContent>
                 </Tooltip>
               )}
