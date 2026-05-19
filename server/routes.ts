@@ -1062,6 +1062,7 @@ export async function registerRoutes(
           completeness_score: r.completenessScore,
           last_seen_at: r.lastSeenAt,
           biology: r.biology ?? null,
+          momentum_score: r.momentumScore ?? null,
         };
       });
 
@@ -2017,6 +2018,57 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[intelligence] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
+    }
+  });
+
+  // GET /api/assets/:fingerprint/signal-events — Signal Activity timeline for the dossier
+  app.get("/api/assets/:fingerprint/signal-events", async (req, res) => {
+    try {
+      const { fingerprint } = req.params;
+      const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
+
+      // Resolve asset record (needed for synthetic event backfill)
+      const where = /^\d+$/.test(fingerprintStr)
+        ? eq(ingestedAssets.id, parseInt(fingerprintStr, 10))
+        : eq(ingestedAssets.fingerprint, fingerprintStr);
+
+      const [rec] = await db.select({
+        id: ingestedAssets.id,
+        firstSeenAt: ingestedAssets.firstSeenAt,
+        stageChangedAt: ingestedAssets.stageChangedAt,
+        previousStage: ingestedAssets.previousStage,
+      })
+        .from(ingestedAssets)
+        .where(where)
+        .limit(1);
+
+      if (!rec) return res.json({ events: [] });
+
+      const storedEvents = await storage.getSignalEvents(rec.id);
+      const syntheticEvents: typeof storedEvents = [];
+
+      // Back-fill first_indexed from first_seen_at so every asset has at least one event
+      if (!storedEvents.some((e) => e.eventType === "first_indexed") && rec.firstSeenAt) {
+        syntheticEvents.push({ id: -1, eventType: "first_indexed", payload: null, occurredAt: rec.firstSeenAt });
+      }
+      // Back-fill stage_change from stage_changed_at + previous_stage columns
+      if (!storedEvents.some((e) => e.eventType === "stage_change") && rec.stageChangedAt && rec.previousStage) {
+        syntheticEvents.push({ id: -2, eventType: "stage_change", payload: { from: rec.previousStage, to: null }, occurredAt: rec.stageChangedAt });
+      }
+
+      const merged = [...storedEvents, ...syntheticEvents]
+        .sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+
+      return res.json({
+        events: merged.map((e) => ({
+          id: e.id,
+          event_type: e.eventType,
+          payload: e.payload,
+          occurred_at: e.occurredAt.toISOString(),
+        })),
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message ?? "Failed to fetch signal events" });
     }
   });
 

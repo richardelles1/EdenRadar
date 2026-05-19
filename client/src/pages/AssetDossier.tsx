@@ -14,7 +14,7 @@ import {
   ArrowLeft, Building2, ExternalLink, FileText, Key,
   Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
   Beaker, Tag, FlaskConical, Lightbulb, Mail, Share2, Copy, Check, X,
-  Eye, EyeOff, Loader2, Lock, ShoppingBag,
+  Eye, EyeOff, Loader2, Lock, ShoppingBag, TrendingUp, Zap,
 } from "lucide-react";
 import {
   Dialog,
@@ -29,7 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { ScoredAsset, DossierPayload } from "@/lib/types";
+import type { ScoredAsset, DossierPayload, SignalEvent } from "@/lib/types";
 
 const STAGE_COLORS: Record<string, string> = {
   discovery:  "bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30",
@@ -227,6 +227,17 @@ export default function AssetDossier() {
   });
   const marketListing = marketListingData?.listing ?? null;
 
+  const { data: signalEventsData } = useQuery<{ events: SignalEvent[] }>({
+    queryKey: ["/api/assets", fingerprint, "signal-events"],
+    queryFn: () =>
+      fetch(`/api/assets/${encodeURIComponent(fingerprint)}/signal-events`).then((r) =>
+        r.ok ? r.json() : { events: [] }
+      ),
+    enabled: !!fingerprint,
+    staleTime: 5 * 60 * 1000,
+  });
+  const signalEvents = signalEventsData?.events ?? [];
+
   useEffect(() => {
     let base: ScoredAsset | null = null;
     const stored = sessionStorage.getItem(`asset-${id}`);
@@ -262,6 +273,7 @@ export default function AssetDossier() {
         category_confidence: enr?.categoryConfidence ?? base?.category_confidence,
         asset_class: enr?.assetClass ?? base?.asset_class ?? null,
         signals: base?.signals ?? [],
+        momentum_score: base?.momentum_score ?? null,
       };
       setAsset(dbAsset);
     } else if (base) {
@@ -597,6 +609,68 @@ export default function AssetDossier() {
         {intelError && (
           <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4" data-testid="intelligence-error">
             <p className="text-xs text-amber-700 dark:text-amber-400">Competitive landscape data is unavailable for this asset.</p>
+          </div>
+        )}
+
+        {/* ── Signal Activity timeline ── always visible when events exist ── */}
+        {signalEvents.length > 0 && (
+          <div
+            className="rounded-xl border border-border bg-card p-5"
+            style={{ animation: "dash-fade-up 400ms ease 60ms both" }}
+            data-testid="signal-activity-panel"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="text-sm font-semibold text-foreground">Signal Activity</h2>
+              {asset.momentum_score != null && asset.momentum_score >= 40 && (
+                <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400">
+                  <Zap className="w-2.5 h-2.5" />
+                  Rising · {asset.momentum_score}/100
+                </span>
+              )}
+            </div>
+            <div className="relative pl-4 space-y-3">
+              {/* vertical line */}
+              <div className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
+              {signalEvents.slice(0, 6).map((event, i) => {
+                const date = new Date(event.occurred_at);
+                const dateStr = date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+                let label = "";
+                let sublabel = "";
+                let dotColor = "bg-zinc-400";
+                if (event.event_type === "stage_change") {
+                  const from = event.payload?.from as string | undefined;
+                  const to = event.payload?.to as string | undefined;
+                  label = to ? `Stage advanced → ${to}` : "Stage advanced";
+                  if (from) sublabel = `from ${from}`;
+                  dotColor = "bg-emerald-500";
+                } else if (event.event_type === "first_indexed") {
+                  label = "Asset first indexed";
+                  sublabel = "Added to EdenScout";
+                  dotColor = "bg-sky-500";
+                } else if (event.event_type === "content_update") {
+                  label = "Content updated";
+                  sublabel = "Portal listing refreshed";
+                  dotColor = "bg-amber-500";
+                } else if (event.event_type === "citation_update") {
+                  const count = event.payload?.count as number | undefined;
+                  label = count ? `${count} citations recorded` : "Citation count updated";
+                  dotColor = "bg-violet-500";
+                } else {
+                  label = event.event_type.replace(/_/g, " ");
+                }
+                return (
+                  <div key={event.id ?? i} className="flex items-start gap-3">
+                    <div className={`relative z-10 w-2 h-2 rounded-full mt-1.5 shrink-0 -ml-[3px] ${dotColor}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground">{label}</p>
+                      {sublabel && <p className="text-[10px] text-muted-foreground">{sublabel}</p>}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{dateStr}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
 

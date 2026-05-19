@@ -42,7 +42,9 @@ import {
   inviteTokens, type InviteToken,
   enrichmentRunLog,
   institutionQualitySnapshots,
+  assetSignalEvents,
 } from "@shared/schema";
+import { computeMomentumScore } from "./lib/pipeline/computeMomentumScore";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -111,6 +113,10 @@ export type RetrievedAsset = {
   lastSeenAt?: string | null;
   /** Canonical biology value from the biologyFill pipeline. */
   biology?: string | null;
+  /** OpenAlex cited_by_count — persisted for momentum scoring. */
+  citedByCount?: number | null;
+  /** Computed momentum score (0–100) — high values indicate a "Rising" asset. */
+  momentumScore?: number | null;
 };
 
 export interface IStorage {
@@ -186,6 +192,7 @@ export interface IStorage {
   }): Promise<void>;
   wipeAllAssets(): Promise<void>;
   wipeInstitutionAssets(institution: string): Promise<number>;
+  getSignalEvents(assetId: number): Promise<Array<{ id: number; eventType: string; payload: Record<string, unknown> | null; occurredAt: Date }>>;
   getReviewQueue(): Promise<any[]>;
   resolveReviewItem(id: number, note: string): Promise<void>;
   addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void>;
@@ -1163,6 +1170,17 @@ export class DatabaseStorage implements IStorage {
       updateData.stageChangedAt = new Date();
     }
 
+    // Write a stage_change signal event (async, fire-and-forget — pipeline
+    // must not block on this insert or throw if it fails).
+    if (stageChanged) {
+      db.insert(assetSignalEvents).values({
+        assetId: id,
+        eventType: "stage_change",
+        payload: { from: oldStage, to: newStage },
+        occurredAt: new Date(),
+      }).catch(() => {/* best-effort */});
+    }
+
     // Primary fields: never downgrade a good existing value to "unknown".
     if (shouldWritePrimary("target", data.target, existing?.target)) { updateData.target = data.target; newSources.target = "mini"; }
     if (shouldWritePrimary("modality", data.modality, existing?.modality)) { updateData.modality = data.modality; newSources.modality = "mini"; }
@@ -1191,6 +1209,31 @@ export class DatabaseStorage implements IStorage {
     updateData.miniEnrichAttempts = sql`COALESCE(${ingestedAssets.miniEnrichAttempts}, 0) + 1` as unknown as number;
 
     await db.update(ingestedAssets).set(updateData).where(eq(ingestedAssets.id, id));
+  }
+
+  async getSignalEvents(assetId: number): Promise<Array<{
+    id: number;
+    eventType: string;
+    payload: Record<string, unknown> | null;
+    occurredAt: Date;
+  }>> {
+    const rows = await db
+      .select({
+        id: assetSignalEvents.id,
+        eventType: assetSignalEvents.eventType,
+        payload: assetSignalEvents.payload,
+        occurredAt: assetSignalEvents.occurredAt,
+      })
+      .from(assetSignalEvents)
+      .where(eq(assetSignalEvents.assetId, assetId))
+      .orderBy(desc(assetSignalEvents.occurredAt))
+      .limit(20);
+    return rows.map((r) => ({
+      id: r.id,
+      eventType: r.eventType,
+      payload: r.payload ?? null,
+      occurredAt: r.occurredAt,
+    }));
   }
 
   async wipeAllAssets(): Promise<void> {
@@ -3488,6 +3531,7 @@ export class DatabaseStorage implements IStorage {
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
           data_sparse, category_confidence, asset_class, last_seen_at, biology,
+          cited_by_count, first_seen_at, last_content_change_at,
           ${exactMatchExpr} AS exact_name_match,
           ${tsRankExpr}     AS ts_rank,
           ${trgmSimExpr}    AS trgm_sim,
@@ -3550,6 +3594,13 @@ export class DatabaseStorage implements IStorage {
       textRelevance: r.ts_rank != null ? parseFloat(String(r.ts_rank)) : 0,
       lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
       biology: typeof r.biology === "string" && r.biology ? r.biology : null,
+      citedByCount: r.cited_by_count != null ? Number(r.cited_by_count) : null,
+      momentumScore: computeMomentumScore({
+        stageChangedAt: r.stage_changed_at ? String(r.stage_changed_at) : null,
+        lastContentChangeAt: r.last_content_change_at ? String(r.last_content_change_at) : null,
+        firstSeenAt: r.first_seen_at ? String(r.first_seen_at) : null,
+        citedByCount: r.cited_by_count != null ? Number(r.cited_by_count) : null,
+      }),
     }));
   }
 

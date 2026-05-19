@@ -829,6 +829,28 @@ async function runStartupMigrations() {
     log(`[startup] industry_profiles last_viewed_alerts_at migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Momentum scoring: cited_by_count + asset_signal_events ───────────────
+  try {
+    await client.query(`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS cited_by_count INTEGER`);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS asset_signal_events (
+        id              SERIAL PRIMARY KEY,
+        asset_id        INTEGER NOT NULL,
+        event_type      TEXT NOT NULL,
+        payload         JSONB,
+        occurred_at     TIMESTAMP NOT NULL,
+        created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS asset_signal_events_asset_occurred_idx
+      ON asset_signal_events (asset_id, occurred_at DESC)
+    `);
+    log("[startup] momentum scoring columns and table ready", "startup");
+  } catch (err: any) {
+    log(`[startup] momentum scoring migration failed: ${err?.message}`, "startup");
+  }
+
   } finally {
     // Always close the dedicated migration client, even if a migration throws
     await client.end().catch(() => {});
