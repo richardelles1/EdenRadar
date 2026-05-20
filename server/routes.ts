@@ -924,41 +924,28 @@ export async function registerRoutes(
         }
       }
 
-      // Step 2: extract query-derived terms and merge with saved thesis.
+      // Step 2: build fit profile solely from the user's saved Deal Focus thesis.
+      // The search query already determines which assets surface via text ranking.
+      // Using it a second time for fit scoring penalises assets whose stored modality
+      // field doesn't literally match the query string — even when they are clearly
+      // relevant — because normalised DB values ("Cell Therapy") never substring-match
+      // the query term ("car-t"). Fit should only be a boost for matching the saved
+      // thesis, not a structural penalty on every general search.
       let scoutFitProfile: import("./lib/types").BuyerProfile | undefined;
-      {
-        try {
-          const { expandQuery: _expandQ, classifyQueryTerms } = await import("./lib/biotechSynonyms");
-          const qTAs: string[] = [];
-          const qMods: string[] = [];
-          const qKws: string[] = [];
-          if (trimmedQuery) {
-            const expansion = _expandQ(trimmedQuery);
-            const classified = classifyQueryTerms(expansion);
-            qTAs.push(...classified.therapeuticAreas);
-            qMods.push(...classified.modalities);
-            qKws.push(...classified.keywords);
-          }
-          // Merge: saved profile criteria + query-derived (union, deduped).
-          const mergedTAs  = [...new Set([...(savedFitBasis?.therapeutic_areas ?? []), ...qTAs])];
-          const mergedMods = [...new Set([...(savedFitBasis?.modalities ?? []), ...qMods])];
-          // Only build a profile if at least one dimension is non-empty.
-          if (mergedTAs.length > 0 || mergedMods.length > 0 || qKws.length > 0) {
-            scoutFitProfile = {
-              ...DEFAULT_BUYER_PROFILE,
-              therapeutic_areas: mergedTAs,
-              modalities:        mergedMods,
-              preferred_stages:  [],
-              excluded_stages:   [],
-              indication_keywords: qKws,
-              target_keywords:   [],
-              owner_type_preference: "any",
-            };
-          }
-        } catch (fitExtractErr) {
-          console.warn("[scout/search] fit-profile extraction failed:", fitExtractErr instanceof Error ? fitExtractErr.message : fitExtractErr);
-        }
+      if (savedFitBasis && (savedFitBasis.therapeutic_areas.length > 0 || savedFitBasis.modalities.length > 0)) {
+        scoutFitProfile = {
+          ...DEFAULT_BUYER_PROFILE,
+          therapeutic_areas:   savedFitBasis.therapeutic_areas,
+          modalities:          savedFitBasis.modalities,
+          preferred_stages:    [],
+          excluded_stages:     [],
+          indication_keywords: [],
+          target_keywords:     [],
+          owner_type_preference: "any",
+        };
       }
+      // No saved profile → scoutFitProfile remains undefined → scoreFit returns
+      // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
 
       // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
       // Uses: Fit (75%, query-bridged), Record Quality (15%), Availability (10%)
