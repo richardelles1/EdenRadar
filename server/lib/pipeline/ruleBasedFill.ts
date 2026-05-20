@@ -523,6 +523,332 @@ const TARGET_COMPARABLE_DRUGS: Record<string, string> = {
   "SRC": "dasatinib (Sprycel), bosutinib (Bosulif)",
 };
 
+// ── Indication → Biology lookup (85 entries) ─────────────────────────────────
+// Priority 1 (disease-specific). Maps canonical indication values to the
+// canonical biology taxonomy used across the platform. Won't overwrite
+// LLM-filled values (humanVerified guard applied at call site).
+const INDICATION_BIOLOGY: Record<string, string> = {
+  // Oncology — specific cancers
+  "non-small cell lung cancer": "oncogenic transcription",
+  "small cell lung cancer": "oncogenic transcription",
+  "lung cancer": "oncogenic transcription",
+  "breast cancer": "oncogenic transcription",
+  "triple-negative breast cancer": "tumor microenvironment",
+  "her2-positive breast cancer": "oncogenic transcription",
+  "colorectal cancer": "oncogenic transcription",
+  "pancreatic cancer": "tumor microenvironment",
+  "prostate cancer": "oncogenic transcription",
+  "ovarian cancer": "dna damage response deficiency",
+  "cervical cancer": "pathogen replication",
+  "bladder cancer": "oncogenic transcription",
+  "renal cell carcinoma": "oncogenic transcription",
+  "hepatocellular carcinoma": "oncogenic transcription",
+  "gastric cancer": "oncogenic transcription",
+  "esophageal cancer": "oncogenic transcription",
+  "head and neck cancer": "oncogenic transcription",
+  "thyroid cancer": "oncogenic transcription",
+  "glioblastoma": "tumor microenvironment",
+  "glioma": "tumor microenvironment",
+  "melanoma": "immune evasion",
+  "leukemia": "oncogenic transcription",
+  "aml": "oncogenic transcription",
+  "acute myeloid leukemia": "oncogenic transcription",
+  "cll": "apoptosis resistance",
+  "chronic lymphocytic leukemia": "apoptosis resistance",
+  "lymphoma": "oncogenic transcription",
+  "diffuse large b-cell lymphoma": "oncogenic transcription",
+  "multiple myeloma": "oncogenic transcription",
+  "sarcoma": "oncogenic transcription",
+  "mesothelioma": "tumor microenvironment",
+  "cancer": "oncogenic transcription",
+  // Neurology / neurodegeneration
+  "alzheimer's disease": "protein aggregation",
+  "parkinson's disease": "protein aggregation",
+  "als": "protein aggregation",
+  "amyotrophic lateral sclerosis": "protein aggregation",
+  "huntington's disease": "protein aggregation",
+  "multiple sclerosis": "myelin disruption",
+  "epilepsy": "ion channel dysfunction",
+  "migraine": "ion channel dysfunction",
+  "neuropathic pain": "ion channel dysfunction",
+  "traumatic brain injury": "neuroinflammation",
+  "spinal cord injury": "neuroinflammation",
+  "neurological disorder": "neuroinflammation",
+  "depression": "synaptic dysfunction",
+  "schizophrenia": "synaptic dysfunction",
+  "bipolar disorder": "synaptic dysfunction",
+  "autism spectrum disorder": "synaptic dysfunction",
+  // Cardiovascular / metabolic
+  "stroke": "ischemia and oxidative stress",
+  "heart failure": "ischemia and oxidative stress",
+  "myocardial infarction": "ischemia and oxidative stress",
+  "atherosclerosis": "lipid metabolism dysfunction",
+  "hypertension": "ischemia and oxidative stress",
+  "cardiovascular disease": "ischemia and oxidative stress",
+  "diabetes type 2": "insulin resistance",
+  "type 2 diabetes": "insulin resistance",
+  "obesity": "insulin resistance",
+  "metabolic syndrome": "insulin resistance",
+  "metabolic disease": "insulin resistance",
+  "non-alcoholic steatohepatitis": "lipid metabolism dysfunction",
+  "nash": "lipid metabolism dysfunction",
+  "non-alcoholic fatty liver disease": "lipid metabolism dysfunction",
+  "hypercholesterolemia": "lipid metabolism dysfunction",
+  // Immunology / inflammation
+  "rheumatoid arthritis": "autoimmune dysregulation",
+  "lupus": "autoimmune dysregulation",
+  "systemic lupus erythematosus": "autoimmune dysregulation",
+  "inflammatory bowel disease": "autoimmune dysregulation",
+  "crohn's disease": "autoimmune dysregulation",
+  "ulcerative colitis": "autoimmune dysregulation",
+  "psoriasis": "autoimmune dysregulation",
+  "ankylosing spondylitis": "autoimmune dysregulation",
+  "autoimmune disease": "autoimmune dysregulation",
+  "atopic dermatitis": "allergic dysregulation",
+  "asthma": "allergic dysregulation",
+  "allergic disease": "allergic dysregulation",
+  "diabetes type 1": "autoimmune dysregulation",
+  "type 1 diabetes": "autoimmune dysregulation",
+  // Fibrosis / pulmonary
+  "pulmonary fibrosis": "fibrosis",
+  "idiopathic pulmonary fibrosis": "fibrosis",
+  "liver fibrosis": "fibrosis",
+  "kidney fibrosis": "fibrosis",
+  "fibrosis": "fibrosis",
+  "copd": "ischemia and oxidative stress",
+  "respiratory disease": "ischemia and oxidative stress",
+  // Infectious disease
+  "hiv": "immune evasion",
+  "hiv/aids": "immune evasion",
+  "hepatitis b": "immune evasion",
+  "hepatitis c": "pathogen replication",
+  "influenza": "pathogen replication",
+  "covid-19": "pathogen replication",
+  "sars-cov-2": "pathogen replication",
+  "sepsis": "cytokine dysregulation",
+  "malaria": "pathogen replication",
+  "tuberculosis": "pathogen replication",
+  "infectious disease": "pathogen replication",
+  "antimicrobial resistance": "antimicrobial resistance",
+  // Rare / genetic disease
+  "cystic fibrosis": "gene expression deficiency",
+  "sickle cell disease": "structural protein defect",
+  "duchenne muscular dystrophy": "gene expression deficiency",
+  "spinal muscular atrophy": "gene expression deficiency",
+  "hemophilia": "gene expression deficiency",
+  "lysosomal storage disease": "enzyme deficiency",
+  "fabry disease": "enzyme deficiency",
+  "gaucher disease": "enzyme deficiency",
+  "hereditary angioedema": "enzyme deficiency",
+  "hematological disorder": "structural protein defect",
+  // Ophthalmology
+  "macular degeneration": "angiogenesis",
+  "diabetic retinopathy": "angiogenesis",
+  "ocular disease": "angiogenesis",
+  // Hormonal / reproductive
+  "osteoporosis": "hormonal dysregulation",
+  "endometriosis": "hormonal dysregulation",
+  "polycystic ovary syndrome": "hormonal dysregulation",
+  "hormonal dysregulation": "hormonal dysregulation",
+};
+
+// ── Target → Biology lookup (100+ entries) ────────────────────────────────────
+// Priority 2 (mechanism-specific). Maps canonical target values to the
+// canonical biology taxonomy. Used when indication is absent or too coarse.
+const TARGET_BIOLOGY: Record<string, string> = {
+  // Checkpoint / immune evasion
+  "PD-1": "immune evasion",
+  "PD-L1": "immune evasion",
+  "CTLA-4": "immune evasion",
+  "LAG-3": "immune evasion",
+  "TIM-3": "immune evasion",
+  "TIGIT": "immune evasion",
+  "CD47": "immune evasion",
+  "CD19": "immune evasion",
+  "CD20": "immune evasion",
+  "CD22": "immune evasion",
+  "CXCR4": "immune evasion",
+  "CCR5": "immune evasion",
+  // RTK / oncogenic kinase signaling
+  "EGFR": "aberrant kinase signaling",
+  "HER2": "aberrant kinase signaling",
+  "HER3": "aberrant kinase signaling",
+  "ALK": "aberrant kinase signaling",
+  "ROS1": "aberrant kinase signaling",
+  "MET": "aberrant kinase signaling",
+  "RET": "aberrant kinase signaling",
+  "FGFR": "aberrant kinase signaling",
+  "FGFR1": "aberrant kinase signaling",
+  "FGFR2": "aberrant kinase signaling",
+  "FGFR3": "aberrant kinase signaling",
+  "KIT": "aberrant kinase signaling",
+  "ABL": "aberrant kinase signaling",
+  "BCR-ABL": "aberrant kinase signaling",
+  "BRAF": "aberrant kinase signaling",
+  "MEK": "aberrant kinase signaling",
+  "ERK": "aberrant kinase signaling",
+  "PI3K": "aberrant kinase signaling",
+  "AKT": "aberrant kinase signaling",
+  "mTOR": "aberrant kinase signaling",
+  "SRC": "aberrant kinase signaling",
+  "FAK": "aberrant kinase signaling",
+  "AXL": "aberrant kinase signaling",
+  "NTRK": "aberrant kinase signaling",
+  "RAS": "aberrant kinase signaling",
+  "RAF": "aberrant kinase signaling",
+  "NRG1": "aberrant kinase signaling",
+  // JAK/STAT → immunology
+  "JAK1": "autoimmune dysregulation",
+  "JAK2": "autoimmune dysregulation",
+  "JAK3": "autoimmune dysregulation",
+  "TYK2": "autoimmune dysregulation",
+  "STAT3": "oncogenic transcription",
+  "STAT6": "allergic dysregulation",
+  // Oncogenic drivers
+  "KRAS": "oncogenic transcription",
+  "NRAS": "oncogenic transcription",
+  "HRAS": "oncogenic transcription",
+  "MYC": "oncogenic transcription",
+  "MYCN": "oncogenic transcription",
+  "Androgen Receptor": "hormonal dysregulation",
+  "AR": "hormonal dysregulation",
+  "Estrogen Receptor": "hormonal dysregulation",
+  "ER": "hormonal dysregulation",
+  "PSMA": "oncogenic transcription",
+  "CD38": "oncogenic transcription",
+  "BCMA": "oncogenic transcription",
+  "CD123": "oncogenic transcription",
+  "FLT3": "oncogenic transcription",
+  "TROP-2": "tumor microenvironment",
+  // Apoptosis
+  "BCL-2": "apoptosis resistance",
+  "BCL-XL": "apoptosis resistance",
+  "MCL-1": "apoptosis resistance",
+  "MDM2": "apoptosis resistance",
+  "p53": "apoptosis resistance",
+  "MDM2/p53": "apoptosis resistance",
+  // Cell cycle
+  "CDK4/6": "cell cycle dysregulation",
+  "CDK4": "cell cycle dysregulation",
+  "CDK6": "cell cycle dysregulation",
+  "CDK2": "cell cycle dysregulation",
+  "CDK9": "cell cycle dysregulation",
+  "WEE1": "dna damage response deficiency",
+  "CHK1": "dna damage response deficiency",
+  "CHK2": "dna damage response deficiency",
+  // DNA damage response
+  "PARP": "dna damage response deficiency",
+  "ATM": "dna damage response deficiency",
+  "ATR": "dna damage response deficiency",
+  "BRCA1": "dna damage response deficiency",
+  "BRCA2": "dna damage response deficiency",
+  // Epigenetics
+  "HDAC": "epigenetic dysregulation",
+  "EZH2": "epigenetic dysregulation",
+  "BRD4": "epigenetic dysregulation",
+  "DNMT": "epigenetic dysregulation",
+  "DOT1L": "epigenetic dysregulation",
+  "LSD1": "epigenetic dysregulation",
+  // Angiogenesis
+  "VEGF": "angiogenesis",
+  "VEGFR": "angiogenesis",
+  "VEGFR2": "angiogenesis",
+  "PDGFR": "angiogenesis",
+  "HIF-1α": "angiogenesis",
+  "HIF-1alpha": "angiogenesis",
+  "Angiopoietin": "angiogenesis",
+  // Fibrosis / TGF-β
+  "TGF-β": "fibrosis",
+  "TGF-beta": "fibrosis",
+  "TGFB1": "fibrosis",
+  "Connective tissue growth factor": "fibrosis",
+  // Neurodegeneration → protein aggregation
+  "Amyloid-β": "protein aggregation",
+  "Amyloid beta": "protein aggregation",
+  "Tau": "protein aggregation",
+  "α-Synuclein": "protein aggregation",
+  "Alpha-synuclein": "protein aggregation",
+  "TDP-43": "protein aggregation",
+  "SOD1": "protein aggregation",
+  "Huntingtin": "protein aggregation",
+  "APP": "protein aggregation",
+  // Neuroinflammation
+  "LRRK2": "neuroinflammation",
+  "TREM2": "neuroinflammation",
+  "MAPT": "protein aggregation",
+  // Ion channels
+  "Nav1.7": "ion channel dysfunction",
+  "Nav1.8": "ion channel dysfunction",
+  "TRPV1": "ion channel dysfunction",
+  "KCNQ2": "ion channel dysfunction",
+  "KCNQ3": "ion channel dysfunction",
+  "HCN": "ion channel dysfunction",
+  // Gene expression / rare disease
+  "CFTR": "gene expression deficiency",
+  "SMN1": "gene expression deficiency",
+  "SMN2": "gene expression deficiency",
+  "Dystrophin": "gene expression deficiency",
+  "DMD": "gene expression deficiency",
+  "Factor VIII": "gene expression deficiency",
+  "Factor IX": "gene expression deficiency",
+  // Cytokines → inflammation
+  "IL-6": "cytokine dysregulation",
+  "IL-6R": "cytokine dysregulation",
+  "TNF-α": "cytokine dysregulation",
+  "TNF": "cytokine dysregulation",
+  "IL-1β": "cytokine dysregulation",
+  "IL-1R": "cytokine dysregulation",
+  "IL-17A": "autoimmune dysregulation",
+  "IL-23": "autoimmune dysregulation",
+  "IL-12": "autoimmune dysregulation",
+  "IL-4R": "allergic dysregulation",
+  "IL-13": "allergic dysregulation",
+  "IL-33": "allergic dysregulation",
+  "IL-5": "allergic dysregulation",
+  "TSLP": "allergic dysregulation",
+  "IgE": "allergic dysregulation",
+  // Metabolism → insulin resistance / lipid
+  "GLP-1R": "insulin resistance",
+  "GCGR": "insulin resistance",
+  "GIP": "insulin resistance",
+  "PPAR": "insulin resistance",
+  "PPARγ": "insulin resistance",
+  "PCSK9": "lipid metabolism dysfunction",
+  "FXR": "lipid metabolism dysfunction",
+  "ANGPTL3": "lipid metabolism dysfunction",
+  // Cardiovascular
+  "ACE": "ischemia and oxidative stress",
+  "AT1R": "ischemia and oxidative stress",
+  "Renin": "ischemia and oxidative stress",
+  // Spike protein / viral
+  "Spike protein": "pathogen replication",
+  // Pathogen targets
+  "Viral polymerase": "pathogen replication",
+  "Protease": "pathogen replication",
+};
+
+// ── Modality → Biology lookup (safety net, 14 entries) ────────────────────────
+// Priority 3 (broadest). Only fires when indication AND target are both absent.
+// Modality is 99.9% filled, so this catches the ~27% of assets lacking both
+// indication and target. Mapping is broad by design — it sets a biology floor
+// rather than a precise classification.
+const MODALITY_BIOLOGY: Record<string, string> = {
+  "gene therapy": "gene expression deficiency",
+  "gene editing": "gene expression deficiency",
+  "mrna": "gene expression deficiency",
+  "rna therapy": "gene expression deficiency",
+  "antisense oligonucleotide": "gene expression deficiency",
+  "cell therapy": "immune evasion",
+  "vaccine": "pathogen replication",
+  "antibody": "immune evasion",
+  "small molecule": "aberrant kinase signaling",
+  "peptide": "aberrant kinase signaling",
+  "nanoparticle": "pathogen replication",
+  "diagnostic": "pathogen replication",
+  "medical device": "structural protein defect",
+  "platform technology": "gene expression deficiency",
+};
+
 // ── Category → Modality map ───────────────────────────────────────────────────
 // Uses stored categories[] to provide structured modality signal before text rules.
 const CATEGORY_MODALITY_MAP: Array<{ keywords: RegExp; value: string }> = [
@@ -706,6 +1032,7 @@ export function applyRulesToAsset(asset: {
   unmetNeed?: string | null;
   patentStatus?: string | null;
   mechanismOfAction?: string | null;
+  biology?: string | null;
 }): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
   // Include MOA in text so TARGET_RULES can match against it (e.g. "PARP inhibitor" → PARP)
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? ""), (asset.mechanismOfAction ?? "")].join(" ");
@@ -826,6 +1153,41 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Biology fill: indication → target → modality priority cascade ─────────────
+  // Won't overwrite LLM-filled values (humanVerified guard).
+  // Priority 1: indication (disease-specific, most precise)
+  // Priority 2: target (mechanism-specific)
+  // Priority 3: modality (broadest — safety net for assets lacking both)
+  if (!humanV.biology && (!asset.biology || asset.biology.trim() === "")) {
+    const effectiveIndication = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
+    const effectiveTarget = (fields.target ?? asset.target ?? "").trim();
+    const effectiveModality = (fields.modality ?? asset.modality ?? "").toLowerCase().trim();
+
+    let biologyVal: string | undefined;
+
+    if (effectiveIndication) {
+      biologyVal = INDICATION_BIOLOGY[effectiveIndication];
+    }
+
+    if (!biologyVal && effectiveTarget) {
+      biologyVal = TARGET_BIOLOGY[effectiveTarget];
+    }
+
+    if (!biologyVal && effectiveModality) {
+      biologyVal = MODALITY_BIOLOGY[effectiveModality];
+    }
+
+    if (biologyVal) {
+      fields.biology = biologyVal;
+      const src = biologyVal === INDICATION_BIOLOGY[effectiveIndication]
+        ? "rule:indication"
+        : biologyVal === TARGET_BIOLOGY[effectiveTarget]
+          ? "rule:target"
+          : "rule:modality";
+      provenance.biology = src;
+    }
+  }
+
   // ── Modality normalizer: "device" → "medical device" ─────────────────────────
   // Catch-all that converts the bare "device" string (often from LLM output or
   // stale scraped data) to the canonical "medical device" label. Runs after all
@@ -891,10 +1253,11 @@ export async function runRuleBasedFill(
     unmet_need: string | null;
     patent_status: string | null;
     mechanism_of_action: string | null;
+    biology: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
-           comparable_drugs, unmet_need, patent_status, mechanism_of_action
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -906,6 +1269,7 @@ export async function runRuleBasedFill(
         OR target IS NULL OR target = 'unknown'
         OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR unmet_need IS NULL OR unmet_need = ''
+        OR biology IS NULL OR biology = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -941,6 +1305,7 @@ export async function runRuleBasedFill(
       unmetNeed: row.unmet_need,
       patentStatus: row.patent_status,
       mechanismOfAction: row.mechanism_of_action,
+      biology: row.biology,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -973,6 +1338,7 @@ type RuleFillUpdateSet = {
   target?: string;
   comparableDrugs?: string;
   unmetNeed?: string;
+  biology?: string;
   enrichmentSources?: SQL;
 };
 
@@ -992,6 +1358,7 @@ async function flushWrites(
       if (item.fields.target) updates.target = item.fields.target;
       if (item.fields.comparableDrugs) updates.comparableDrugs = item.fields.comparableDrugs;
       if (item.fields.unmetNeed) updates.unmetNeed = item.fields.unmetNeed;
+      if (item.fields.biology) updates.biology = item.fields.biology;
 
       if (fieldKeys.length > 0) {
         // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
@@ -1032,10 +1399,11 @@ export async function estimateRuleBasedFill(): Promise<{
     unmet_need: string | null;
     patent_status: string | null;
     mechanism_of_action: string | null;
+    biology: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
-           comparable_drugs, unmet_need, patent_status, mechanism_of_action
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -1047,6 +1415,7 @@ export async function estimateRuleBasedFill(): Promise<{
         OR target IS NULL OR target = 'unknown'
         OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR unmet_need IS NULL OR unmet_need = ''
+        OR biology IS NULL OR biology = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -1076,6 +1445,7 @@ export async function estimateRuleBasedFill(): Promise<{
       mechanismOfAction: row.mechanism_of_action,
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
+      biology: row.biology,
     });
     if (Object.keys(fields).length > 0) fillable++;
     if (dataSparse) dataSparseCount++;
