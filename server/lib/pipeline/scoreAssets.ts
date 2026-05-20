@@ -222,7 +222,11 @@ export function scoreLicensability(asset: Partial<ScoredAsset>): DimensionResult
 // Scoring baseline 25 when criteria are set (vs 50 neutral for no profile).
 export function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): DimensionResult {
   if (!buyerProfile) {
-    return { score: 50, hasData: false, basis: "No buyer profile configured" };
+    // No profile = unknown fit, not bad fit.  Return neutral (50) with hasData:true
+    // so this dimension is counted in signal_coverage.  Without this, signal_coverage
+    // collapses from 100% to 25% (only record_quality+availability) and the
+    // CONFIDENCE_AWARE multiplier cascades all scores down to 4–7.
+    return { score: 50, hasData: true, basis: "No buyer profile — all assets treated equally" };
   }
 
   const hasCriteria =
@@ -233,7 +237,7 @@ export function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfil
     buyerProfile.target_keywords.length > 0;
 
   if (!hasCriteria) {
-    return { score: 50, hasData: false, basis: "Buyer profile has no criteria set" };
+    return { score: 50, hasData: true, basis: "Buyer profile has no criteria set — all assets treated equally" };
   }
 
   let score = 0;

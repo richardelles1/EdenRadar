@@ -1392,7 +1392,7 @@ export default function Scout() {
                         )}
                       </button>
                       <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden h-9" data-testid="score-threshold-toggle-mobile">
-                        {([0, 60, 70, 80] as const).map((threshold) => (
+                        {([0, 30, 50, 70] as const).map((threshold) => (
                           <button
                             key={threshold}
                             onClick={() => setMinScore(threshold)}
@@ -1429,7 +1429,7 @@ export default function Scout() {
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Score Filter</span>
                         <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
-                          {([0, 60, 70, 80] as const).map((threshold) => (
+                          {([0, 30, 50, 70] as const).map((threshold) => (
                             <button
                               key={threshold}
                               onClick={() => setMinScore(threshold)}

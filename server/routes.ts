@@ -902,11 +902,11 @@ export async function registerRoutes(
         tieBreakById.set(r.id, { completeness, recencyMs });
       }
 
-      // ── TTO fit-profile: merge saved buyer profile with query-derived terms ──
-      // (Task #980) Extract therapeutic area, modality, and keyword signals from
-      // the raw search query and fold them into the buyer profile so assets that
-      // match *both* the live query and the saved thesis rank highest on fit.
-      // Saved profile criteria are preserved; query terms are purely additive.
+      // ── TTO fit-profile: load from saved Deal Focus only ──────────────────────
+      // (Task #980 / #1060) Fit scoring reflects the user's saved thesis only.
+      // The search query already determines which assets surface via text ranking;
+      // using it a second time for fit would penalise assets whose stored modality
+      // doesn't literally match the query string — collapsing scores to 4–7.
 
       // Step 1: load the user's saved thesis (therapeuticAreas + modalities from industry profile).
       let savedFitBasis: { therapeutic_areas: string[]; modalities: string[] } | undefined;
@@ -924,44 +924,31 @@ export async function registerRoutes(
         }
       }
 
-      // Step 2: extract query-derived terms and merge with saved thesis.
+      // Step 2: build fit profile solely from the user's saved Deal Focus thesis.
+      // The search query already determines which assets surface via text ranking.
+      // Using it a second time for fit scoring penalises assets whose stored modality
+      // field doesn't literally match the query string — even when they are clearly
+      // relevant — because normalised DB values ("Cell Therapy") never substring-match
+      // the query term ("car-t"). Fit should only be a boost for matching the saved
+      // thesis, not a structural penalty on every general search.
       let scoutFitProfile: import("./lib/types").BuyerProfile | undefined;
-      {
-        try {
-          const { expandQuery: _expandQ, classifyQueryTerms } = await import("./lib/biotechSynonyms");
-          const qTAs: string[] = [];
-          const qMods: string[] = [];
-          const qKws: string[] = [];
-          if (trimmedQuery) {
-            const expansion = _expandQ(trimmedQuery);
-            const classified = classifyQueryTerms(expansion);
-            qTAs.push(...classified.therapeuticAreas);
-            qMods.push(...classified.modalities);
-            qKws.push(...classified.keywords);
-          }
-          // Merge: saved profile criteria + query-derived (union, deduped).
-          const mergedTAs  = [...new Set([...(savedFitBasis?.therapeutic_areas ?? []), ...qTAs])];
-          const mergedMods = [...new Set([...(savedFitBasis?.modalities ?? []), ...qMods])];
-          // Only build a profile if at least one dimension is non-empty.
-          if (mergedTAs.length > 0 || mergedMods.length > 0 || qKws.length > 0) {
-            scoutFitProfile = {
-              ...DEFAULT_BUYER_PROFILE,
-              therapeutic_areas: mergedTAs,
-              modalities:        mergedMods,
-              preferred_stages:  [],
-              excluded_stages:   [],
-              indication_keywords: qKws,
-              target_keywords:   [],
-              owner_type_preference: "any",
-            };
-          }
-        } catch (fitExtractErr) {
-          console.warn("[scout/search] fit-profile extraction failed:", fitExtractErr instanceof Error ? fitExtractErr.message : fitExtractErr);
-        }
+      if (savedFitBasis && (savedFitBasis.therapeutic_areas.length > 0 || savedFitBasis.modalities.length > 0)) {
+        scoutFitProfile = {
+          ...DEFAULT_BUYER_PROFILE,
+          therapeutic_areas:   savedFitBasis.therapeutic_areas,
+          modalities:          savedFitBasis.modalities,
+          preferred_stages:    [],
+          excluded_stages:     [],
+          indication_keywords: [],
+          target_keywords:     [],
+          owner_type_preference: "any",
+        };
       }
+      // No saved profile → scoutFitProfile remains undefined → scoreFit returns
+      // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
 
       // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
-      // Uses: Fit (75%, query-bridged), Record Quality (15%), Availability (10%)
+      // Uses: Fit (75%, saved Deal Focus only), Record Quality (15%), Availability (10%)
       // Replaces the 6-dimension legacy model which produced near-constant scores
       // for TTO corpus (Licensability/Novelty/Competition don't differentiate).
       const assets: ScoredAsset[] = results.map((r) => {
@@ -1063,6 +1050,12 @@ export async function registerRoutes(
           last_seen_at: r.lastSeenAt,
           biology: r.biology ?? null,
           momentum_score: r.momentumScore ?? null,
+          institutions: (() => {
+            const canon = r.institution ? [r.institution] : [];
+            const alts = r.altInstitutions ?? [];
+            const all = [...new Set([...canon, ...alts])].filter(Boolean);
+            return all.length > 0 ? all : undefined;
+          })(),
         };
       });
 

@@ -7505,6 +7505,10 @@ export const researchLuxembourgScraper = createInPartScraper("researchluxembourg
 // app.in-part.com portalSubdomain=aua confirmed 2026-05-01: 4 tech listings.
 export const auaScraper = createInPartScraper("aua", "American University of Armenia");
 
+// ── in-part: University of Burgos (Spain) ────────────────────────────────────
+// ubu.portals.in-part.com confirmed by user 2026-05-20.
+export const burgosScraper = createInPartScraper("ubu", "University of Burgos");
+
 // ── TechPublisher: Chinese University of Hong Kong (ORKTS) ───────────────────
 // cuhk-orkts.technologypublisher.com confirmed 2026-05-01: sitemap has 102 URLs.
 export const cuhkOrktsScraper = createTechPublisherScraper(

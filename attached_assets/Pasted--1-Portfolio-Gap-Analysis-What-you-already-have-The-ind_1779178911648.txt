@@ -1,0 +1,114 @@
+ 1. Portfolio Gap Analysis
+
+  What you already have:
+
+  The industry_profiles table stores therapeutic_areas, modalities, and deal_stages — but these are
+  coarse interest tags ("Oncology", "Antibody"), not a structured portfolio. More useful are the
+  saved_assets and pipeline tables, which represent revealed preferences — assets a buyer explicitly
+  saved and organized. Combined with user_feedback (saves, views, dismissals), you have an implicit
+  picture of what a buyer has evaluated.
+
+  On the supply side, ingested_assets has indication, modality, development_stage, target, biology (32
+   canonical buckets), and categories — which is a rich multi-dimensional taxonomy of what's
+  available.
+
+  What's missing:
+
+  The gap between "I'm interested in oncology" and "I have a Phase 2 KRAS inhibitor and a Phase 1 ADC
+  in HER2+ breast cancer" is the entire value of this feature. Currently there's no concept of a
+  current pipeline — a structured list of assets a buyer already owns or has licensed, with their
+  stage and target. Without that, you can't define the gaps.
+
+  You'd need to add:
+  1. A portfolio_assets table — self-reported by the buyer (asset name, target, modality, indication,
+  stage) or scraped from public company pipeline pages/press releases
+  2. A gap scoring model — compare portfolio coverage across indication × modality × stage space
+  against available ingested_assets. The biology taxonomy is the right backbone for this; it's already
+   a 32-value canonical hierarchy
+  3. A gap map UI — a heatmap or ranked list showing "most relevant uncovered spaces given your
+  current pipeline"
+
+  The self-reported entry path is fast to ship. The scraping path (pulling a buyer's pipeline from
+  their company website or SEC filings) is the high-value version — it means buyers don't have to
+  manually enter anything.
+
+  ---
+  2. Signal Velocity / Momentum Scoring
+
+  What you already have:
+
+  This is closer to ready than you might think. You have:
+
+  - first_seen_at, last_seen_at, last_content_change_at — temporal fingerprints of an asset's activity
+   on source portals
+  - stage_changed_at + previous_stage — stage progression is already tracked and displayed on cards
+  - OpenAlex source already ingests cited_by_count per signal — it's in the signal metadata but not
+  stored on the asset record
+  - NIH Reporter captures award_amount — grant size is ingested but not aggregated
+  - Each ScoredAsset carries a signals[] array with individual dates — multiple signals = multiple
+  source events
+
+  What's missing:
+
+  You have point-in-time snapshots but no velocity. Knowing a paper has 47 citations today tells you
+  nothing about whether it had 45 last month or 5. The gap is:
+
+  1. A asset_signal_events table — append-only log of: asset_id, event_type (new_citation_batch,
+  stage_change, new_patent, new_grant, new_publication, content_update), event_date, metadata. Written
+   to on each ingestion run when something changes.
+  2. A velocity computation job — runs weekly, queries OpenAlex citation counts for the top N relevant
+   assets, diffs against last stored count, writes the delta as events
+  3. A momentum_score column on ingested_assets — a computed float (0–100) combining: citation
+  velocity (citations in last 90d vs prior 90d), signal recency (days since last new signal), stage
+  progression (did stage advance?), grant activity (new NIH award in last 12 months?), content
+  freshness (last_content_change_at)
+  4. A "Rising" badge on asset cards and a "Sort by momentum" option in Scout
+
+  The signal events log is the foundational piece — everything else can be recomputed from it.
+
+  ---
+  5. Automated Patent Landscape
+
+  What you already have:
+
+  More than you'd expect. usptoPatentLookup.ts already queries PatentsView by institution assignee,
+  usptoAssigneeMap.ts has 380+ institution → USPTO string mappings. Each patent signal carries
+  filing_date, grant_date (fetched but not persisted), patent_status (pending/granted), assignee_name,
+   and an abstract (fetched separately via fetchPatentAbstract()). The patent source already infers
+  owner_type (university vs company).
+
+  What's missing:
+
+  Three things that would unlock the landscape:
+
+  1. grant_date not persisted — it's fetched in patents.ts line 156 (meta.grantDate) but never written
+   to the schema. Storing it would let you calculate expiration (grant date + 20 years), which is the
+  single most commercially useful data point for a licensing manager.
+  2. CPC classification codes not captured — these are available from the USPTO API and are the
+  standard way to cluster patents into technology areas. Without them, landscape generation requires
+  expensive LLM clustering; with them, it's a SQL group-by. The API already returns the full patent
+  record — you're just not extracting classification codes yet.
+  3. No "search by target/indication, not institution" — usptoPatentLookup is institution-driven (who
+  filed it). The landscape feature needs the inverse: "give me all patents mentioning KRAS G12C filed
+  in the last 5 years by anyone." PatentsView supports full-text search across abstracts — you'd need
+  a fetchPatentsByKeyword(target, indication) function that uses the existing API client.
+
+  With grant_date + CPC codes + keyword search, the landscape endpoint becomes: query USPTO for all
+  patents matching a target/indication → group by assignee → sort by filing recency → flag expiring (<
+   3 years left) vs. active → identify white space (target+indication combinations with no recent
+  filings). The output is a structured JSON that the frontend can render as a landscape table or
+  assignee map.
+
+  ---
+  The build order that makes sense
+
+  Momentum scoring is the fastest because the core ingredients already exist — stage_changed_at,
+  OpenAlex cited_by_count, last_content_change_at are all live. The main addition is the events log
+  and a weekly computation job. Could ship a v1 in a focused sprint.
+
+  Patent landscape is next because the API client and assignee map are already built — you're missing
+  three data fields (grant_date, CPC codes, keyword search) not three systems.
+
+  Portfolio gap analysis has the hardest cold-start problem (buyers need to enter or connect their
+  portfolio), but the gap detection logic itself is straightforward once you have indication ×
+  modality × stage coverage maps from the existing ingested_assets data.
