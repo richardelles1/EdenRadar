@@ -902,11 +902,11 @@ export async function registerRoutes(
         tieBreakById.set(r.id, { completeness, recencyMs });
       }
 
-      // ── TTO fit-profile: merge saved buyer profile with query-derived terms ──
-      // (Task #980) Extract therapeutic area, modality, and keyword signals from
-      // the raw search query and fold them into the buyer profile so assets that
-      // match *both* the live query and the saved thesis rank highest on fit.
-      // Saved profile criteria are preserved; query terms are purely additive.
+      // ── TTO fit-profile: load from saved Deal Focus only ──────────────────────
+      // (Task #980 / #1060) Fit scoring reflects the user's saved thesis only.
+      // The search query already determines which assets surface via text ranking;
+      // using it a second time for fit would penalise assets whose stored modality
+      // doesn't literally match the query string — collapsing scores to 4–7.
 
       // Step 1: load the user's saved thesis (therapeuticAreas + modalities from industry profile).
       let savedFitBasis: { therapeutic_areas: string[]; modalities: string[] } | undefined;
@@ -948,7 +948,7 @@ export async function registerRoutes(
       // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
 
       // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
-      // Uses: Fit (75%, query-bridged), Record Quality (15%), Availability (10%)
+      // Uses: Fit (75%, saved Deal Focus only), Record Quality (15%), Availability (10%)
       // Replaces the 6-dimension legacy model which produced near-constant scores
       // for TTO corpus (Licensability/Novelty/Competition don't differentiate).
       const assets: ScoredAsset[] = results.map((r) => {
