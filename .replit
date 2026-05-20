@@ -47,6 +47,10 @@ args = "retroactive-reenrich"
 task = "workflow.run"
 args = "ingest-deal-comparables"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "run-rule-fill"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -96,6 +100,17 @@ author = "agent"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "tsx scripts/ingest-deal-comparables.ts"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "run-rule-fill"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "tsx scripts/run-rule-fill.ts"
 
 [workflows.workflow.metadata]
 outputType = "console"

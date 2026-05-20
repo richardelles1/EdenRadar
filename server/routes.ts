@@ -4218,17 +4218,41 @@ export async function registerRoutes(
     }
   });
 
-  let ruleFillRunning = false;
-  let ruleFillProgress: { processed: number; total: number; filled: number } | null = null;
-  let ruleFillResult: { processed: number; filled: number; fieldsWritten: number; byField: Record<string, number>; dataSparseTagged: number } | null = null;
-  let ruleFillShouldStop = false;
+  // ── Rule-fill state: backed by /tmp/rule-fill-progress.json so it survives
+  // server restarts. The actual work runs as a detached child process
+  // (scripts/run-rule-fill.ts) so Replit checkpoint deploys / port conflicts
+  // can't kill it mid-run.
+  const RULE_FILL_PROGRESS_FILE = "/tmp/rule-fill-progress.json";
+
+  function readRuleFillState(): {
+    status: "idle" | "running" | "done" | "failed";
+    pid?: number;
+    processed?: number;
+    total?: number;
+    filled?: number;
+    result?: { processed: number; filled: number; fieldsWritten: number; byField: Record<string, number>; dataSparseTagged: number };
+    error?: string;
+  } {
+    try {
+      const raw = require("fs").readFileSync(RULE_FILL_PROGRESS_FILE, "utf8");
+      return JSON.parse(raw);
+    } catch {
+      return { status: "idle" };
+    }
+  }
+
+  function isProcessAlive(pid: number): boolean {
+    try { process.kill(pid, 0); return true; } catch { return false; }
+  }
 
   app.get("/api/admin/enrichment/rule-fill/status", async (req, res) => {
     try {
+      const state = readRuleFillState();
+      const running = state.status === "running" && !!state.pid && isProcessAlive(state.pid);
       res.json({
-        running: ruleFillRunning,
-        progress: ruleFillProgress,
-        result: ruleFillResult,
+        running,
+        progress: running ? { processed: state.processed ?? 0, total: state.total ?? 0, filled: state.filled ?? 0 } : null,
+        result: state.status === "done" ? state.result ?? null : null,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
@@ -4237,39 +4261,40 @@ export async function registerRoutes(
 
   app.post("/api/admin/enrichment/rule-fill", async (req, res) => {
     try {
-      if (ruleFillRunning) return res.status(409).json({ error: "Rule-based fill already running" });
+      const state = readRuleFillState();
+      if (state.status === "running" && state.pid && isProcessAlive(state.pid)) {
+        return res.status(409).json({ error: "Rule-based fill already running" });
+      }
 
-      ruleFillRunning = true;
-      ruleFillProgress = { processed: 0, total: 0, filled: 0 };
-      ruleFillResult = null;
-      ruleFillShouldStop = false;
+      // Spawn as detached child process — survives server restarts
+      const { spawn } = require("child_process");
+      const child = spawn(
+        "npx", ["tsx", "scripts/run-rule-fill.ts"],
+        {
+          detached: true,
+          stdio: "inherit",
+          env: { ...process.env },
+        }
+      );
+      child.unref();
+      console.log(`[rule-fill] Spawned detached process pid=${child.pid}`);
 
       res.json({ started: true });
-
-      // Run async
-      import("./lib/pipeline/ruleBasedFill").then(({ runRuleBasedFill }) => {
-        runRuleBasedFill(
-          (processed, total, filled) => { ruleFillProgress = { processed, total, filled }; },
-          () => ruleFillShouldStop,
-        ).then(summary => {
-          ruleFillResult = summary;
-          console.log(`[rule-fill] Done: ${summary.filled} assets filled, ${summary.fieldsWritten} field writes`);
-        }).catch(err => {
-          console.error("[rule-fill] Failed:", err);
-        }).finally(() => {
-          ruleFillRunning = false;
-        });
-      });
     } catch (err: any) {
-      ruleFillRunning = false;
       res.status(500).json({ error: err.message ?? "Failed to start rule-based fill" });
     }
   });
 
   app.post("/api/admin/enrichment/rule-fill/stop", async (req, res) => {
     try {
-      ruleFillShouldStop = true;
-      res.json({ stopped: true });
+      const state = readRuleFillState();
+      if (state.pid && isProcessAlive(state.pid)) {
+        process.kill(state.pid, "SIGTERM");
+        console.log(`[rule-fill] Sent SIGTERM to pid=${state.pid}`);
+        res.json({ stopped: true });
+      } else {
+        res.json({ stopped: false, reason: "No running process found" });
+      }
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
     }
