@@ -2020,6 +2020,7 @@ export async function registerRoutes(
       const { fingerprint } = req.params;
       const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
 
+      // Resolve asset record (needed for synthetic event backfill)
       const where = /^\d+$/.test(fingerprintStr)
         ? eq(ingestedAssets.id, parseInt(fingerprintStr, 10))
         : eq(ingestedAssets.fingerprint, fingerprintStr);

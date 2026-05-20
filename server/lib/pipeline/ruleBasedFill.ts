@@ -186,7 +186,342 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bHIF[\s-]?1[αa]\b|\bHIF[\s-]?2[αa]\b|\bHIF\b(?:\s+(?:pathway|inhibitor|alpha))/i, value: "HIF" },
   // SRC kinase
   { pattern: /\bSRC\b(?:\s+(?:kinase|pathway|family|inhibitor))/i, value: "SRC" },
+  // Emerging solid tumor targets
+  { pattern: /\bTROP[\s-]?2\b|\bTACSTD2\b/i, value: "TROP-2" },
+  { pattern: /\bNECTIN[\s-]?4\b|\bPVRL4\b/i, value: "NECTIN-4" },
+  { pattern: /\bFR[αa]\b|\bfolate\s+receptor\s+alpha\b|\bFOLR1\b/i, value: "FRα" },
+  { pattern: /\bClaudin[\s-]?18\.2\b|\bCLDN18\.2\b|\bCLDN18A2\b/i, value: "Claudin 18.2" },
+  { pattern: /\bCEACAM5\b|\bCEA\b(?:\s+(?:targeted|antigen|positive|expressing))/i, value: "CEACAM5" },
+  { pattern: /\bMUC1\b|\bMUC16\b|\bCA[\s-]?125\b/i, value: "MUC1/MUC16" },
+  { pattern: /\bMSLN\b|\bmesothelin\b/i, value: "Mesothelin" },
+  { pattern: /\bGPC3\b|\bglypican[\s-]?3\b/i, value: "GPC3" },
+  { pattern: /\bEGFRvIII\b|\bEGFR\s+variant\s+III\b/i, value: "EGFRvIII" },
+  // CD antigens (extended)
+  { pattern: /\bCD123\b|\bIL[\s-]?3R[αa]\b/i, value: "CD123" },
+  { pattern: /\bCD30\b|\bTNFRSF8\b/i, value: "CD30" },
+  { pattern: /\bCD70\b|\bTNFSF7\b/i, value: "CD70" },
+  { pattern: /\bCD79[ab]\b|\bIg[αβ]\b/i, value: "CD79" },
+  { pattern: /\bCD73\b|\bNT5E\b|\becto[\s-]?5['′][\s-]?nucleotidase\b/i, value: "CD73" },
+  { pattern: /\bCD40\b|\bTNFRSF5\b/i, value: "CD40" },
+  { pattern: /\bCD27\b|\bTNFRSF7\b/i, value: "CD27" },
+  { pattern: /\bCD200\b|\bOX2\b/i, value: "CD200" },
+  // Pain / ion channel targets
+  { pattern: /\bNav[\s-]?1\.7\b|\bSCN9A\b/i, value: "Nav1.7" },
+  { pattern: /\bNav[\s-]?1\.8\b|\bSCN10A\b/i, value: "Nav1.8" },
+  { pattern: /\bTRPV1\b|\bvanilloid\s+receptor\b/i, value: "TRPV1" },
+  { pattern: /\bTRPA1\b/i, value: "TRPA1" },
+  { pattern: /\bP2X3\b|\bpurinergic\s+receptor\s+P2X3\b/i, value: "P2X3" },
+  // Metabolic / liver targets
+  { pattern: /\bACC[12]?\b|\bacetyl[\s-]?CoA\s+carboxylase\b/i, value: "ACC" },
+  { pattern: /\bFASN\b|\bfatty\s+acid\s+synthase\b/i, value: "FASN" },
+  { pattern: /\bSCD[\s-]?1\b|\bstearoyl[\s-]?CoA\s+desaturase\b/i, value: "SCD1" },
+  { pattern: /\bFXR\b|\bfarnesoid\s+X\s+receptor\b/i, value: "FXR" },
+  { pattern: /\bTHR[βb]\b|\bthyroid\s+hormone\s+receptor\s+beta\b/i, value: "THRβ" },
+  { pattern: /\bPPAR[αγδ]?\b|\bperoxisome\s+proliferator.activated\s+receptor\b/i, value: "PPAR" },
+  // Fibrosis targets
+  { pattern: /\bLOXL2\b|\blysyl\s+oxidase[\s-]?like\s+2\b/i, value: "LOXL2" },
+  { pattern: /\bgalectin[\s-]?3\b|\bGAL[\s-]?3\b/i, value: "Galectin-3" },
+  { pattern: /\bCTGF\b|\bCCN2\b|\bconnective\s+tissue\s+growth\s+factor\b/i, value: "CTGF/CCN2" },
+  // Adenosine / immune metabolism
+  { pattern: /\bA2[Aa]R\b|\badenosine\s+A2[Aa]\s+receptor\b|\bADORA2A\b/i, value: "A2AR" },
+  { pattern: /\bCD39\b|\bENTPD1\b/i, value: "CD39" },
+  { pattern: /\bIDO1?\b|\bindoleamine\s+2,3[\s-]?dioxygenase\b/i, value: "IDO1" },
+  { pattern: /\bTDO2?\b|\btryptophan\s+2,3[\s-]?dioxygenase\b/i, value: "TDO" },
+  { pattern: /\bARG1\b|\barginase[\s-]?1\b/i, value: "Arginase-1" },
+  // Neurodegeneration / CNS
+  { pattern: /\bTREM2\b/i, value: "TREM2" },
+  { pattern: /\bLRRK2\b|\bleucine[\s-]?rich\s+repeat\s+kinase\s+2\b/i, value: "LRRK2" },
+  { pattern: /\bGBA\b|\bglucocerebrosidase\b/i, value: "GBA" },
+  { pattern: /\bASCN[\s-]?4\b|\bsodium\s+channel\b(?:\s+(?:inhibitor|blocker|Nav))/i, value: "sodium channel" },
+  // Complement (extended)
+  { pattern: /\bC3\b(?:\s+(?:inhibitor|complement|convertase|fragment|blocker))/i, value: "C3" },
+  { pattern: /\bC5\b(?:\s+(?:inhibitor|complement|convertase|fragment|blocker))/i, value: "C5" },
+  { pattern: /\bfactor\s+[BD]\b|\bCFB\b|\bCFD\b|\bproperdin\b/i, value: "complement factor B/D" },
 ];
+
+// ── Indication → Unmet Need lookup ──────────────────────────────────────────
+// Maps canonical indication values to a concise clinical unmet need statement.
+// Fills unmet_need where the LLM did not reach the asset. Zero cost.
+const INDICATION_UNMET_NEED: Record<string, string> = {
+  // Oncology — specific cancers
+  "non-small cell lung cancer": "Acquired resistance to EGFR/ALK inhibitors and checkpoint immunotherapy limits durable responses; ~30% of patients lack an actionable driver mutation and have poor options beyond chemotherapy.",
+  "small cell lung cancer": "Rapid resistance to platinum-etoposide chemotherapy and checkpoint inhibitors; 5-year survival under 7%; no curative treatment for extensive-stage disease.",
+  "lung cancer": "Most patients present at advanced stage with limited curative options; systemic therapy resistance remains a major unmet need across subtypes.",
+  "breast cancer": "Metastatic HER2-negative breast cancer has limited targeted options; triple-negative subtype lacks targeted therapy in most patients; brain metastases remain largely treatment-refractory.",
+  "triple-negative breast cancer": "No approved targeted therapy for the majority of TNBC patients lacking PD-L1 expression or BRCA mutation; high recurrence rate after standard chemotherapy.",
+  "colorectal cancer": "RAS-mutant colorectal cancer is ineligible for anti-EGFR therapy; liver metastases remain the primary cause of death; microsatellite-stable tumors are largely immunotherapy-resistant.",
+  "pancreatic cancer": "5-year survival under 12%; most patients diagnosed at unresectable stage; gemcitabine-based regimens offer limited benefit and no targeted therapies approved for KRAS-wild-type disease.",
+  "prostate cancer": "Metastatic castration-resistant prostate cancer remains incurable; AR splice variants (AR-V7) confer resistance to enzalutamide and abiraterone; limited options after second-line failure.",
+  "ovarian cancer": "High recurrence rate after platinum-based chemotherapy; PARP inhibitor resistance emerges in most BRCA-mutated patients; no curative option for recurrent platinum-resistant disease.",
+  "glioblastoma": "Median OS ~15 months despite surgery, temozolomide, and radiation; universal recurrence within 6–8 months; blood-brain barrier limits systemic drug delivery.",
+  "glioma": "Lower-grade gliomas progress to high-grade disease; IDH-mutant gliomas lack approved targeted therapy beyond standard chemotherapy; recurrence is universal.",
+  "melanoma": "Acquired resistance to BRAF/MEK inhibitors and checkpoint immunotherapy affects majority of metastatic patients; uveal melanoma is largely immunotherapy-resistant.",
+  "hepatocellular carcinoma": "Majority of patients diagnosed at intermediate or advanced stage; response to systemic therapy remains low; liver function constraints limit treatment intensity.",
+  "renal cell carcinoma": "Sarcomatoid/rhabdoid differentiation confers poor prognosis; non-clear cell subtypes lack approved targeted therapies; combination immunotherapy resistance mechanisms are poorly characterized.",
+  "bladder cancer": "High recurrence rate in non-muscle-invasive disease requiring repeated surveillance; muscle-invasive disease has ~50% 5-year survival with standard cystectomy; cisplatin ineligibility excludes many patients.",
+  "gastric cancer": "HER2-negative gastric cancer has limited targeted options; peritoneal metastasis is difficult to treat and common; most patients diagnosed at advanced stage.",
+  "acute myeloid leukemia": "Refractory or relapsed AML has <10% long-term survival; elderly/unfit patients cannot tolerate intensive chemotherapy; TP53-mutant AML has very poor prognosis with any approved therapy.",
+  "chronic lymphocytic leukemia": "BTK inhibitor resistance (C481S mutation) is emerging; Richter transformation to aggressive lymphoma has no standard effective therapy.",
+  "multiple myeloma": "Triple-class refractory disease (anti-CD38, IMiD, PI-resistant) has median survival under 6 months; no curative treatment exists; CNS myeloma is largely treatment-refractory.",
+  "diffuse large b-cell lymphoma": "~40% of patients are refractory to or relapse after first-line R-CHOP; CAR-T cell therapy access is limited by manufacturing time and cost; CNS relapse has no standard treatment.",
+  // Metabolic / Endocrine
+  "type 2 diabetes mellitus": "Progressive beta-cell failure limits durability of current therapies; cardiovascular and renal comorbidities drive mortality; significant treatment burden and non-adherence in insulin-dependent patients.",
+  "type 1 diabetes mellitus": "Continuous insulin management burden and hypoglycemia risk persist despite closed-loop systems; autoimmune destruction is irreversible once established; no broadly available curative therapy.",
+  "obesity": "Long-term weight maintenance after pharmacotherapy discontinuation is poor; current GLP-1 agonists require indefinite use; surgical options carry risk and are inaccessible to many patients.",
+  "non-alcoholic steatohepatitis": "No approved therapy for the majority of NASH patients beyond lifestyle intervention; disease progression to cirrhosis and HCC is underdiagnosed; fibrosis reversal remains limited with current agents.",
+  "non-alcoholic fatty liver disease": "Most patients are diagnosed incidentally; no approved pharmacotherapy for early-stage disease; progression to NASH and cirrhosis is a significant unmet risk.",
+  // Neurological
+  "alzheimer's disease": "Approved anti-amyloid therapies (lecanemab, donanemab) slow but do not stop progression; suitable only for early-stage patients; ARIA side effects limit use in many; tau and neuroinflammation pathways remain largely untreated.",
+  "parkinson's disease": "Levodopa-related motor fluctuations and dyskinesias are poorly controlled long-term; no disease-modifying therapy exists; non-motor symptoms (cognitive decline, autonomic dysfunction) are undertreated.",
+  "multiple sclerosis": "Progressive MS (PPMS/SPMS) has limited effective treatments; CNS repair and remyelination strategies remain investigational; therapies targeting neurodegeneration are absent.",
+  "amyotrophic lateral sclerosis": "Median survival 2–5 years; riluzole and edaravone provide only marginal benefit; no therapy stops disease progression; SOD1-targeting antisense (tofersen) is limited to SOD1-mutant subset.",
+  "huntington's disease": "No disease-modifying therapy approved; motor, cognitive, and psychiatric decline is progressive and universal in gene-positive individuals; huntingtin-lowering strategies remain investigational.",
+  "epilepsy": "~30% of patients have drug-resistant epilepsy uncontrolled by available ASMs; surgical eligibility is limited; infantile-onset epilepsies (Dravet, LGS) have severe developmental consequences.",
+  "traumatic brain injury": "No approved neuroprotective therapy; secondary injury cascade (edema, excitotoxicity) is a major driver of outcome; long-term neuropsychiatric sequelae lack effective treatment.",
+  "stroke": "Thrombolytic window is narrow (≤4.5 hours); neuroprotective agents have failed in clinical trials; functional recovery after moderate-severe stroke is incomplete with current rehabilitation approaches.",
+  // Psychiatric
+  "schizophrenia": "~30% of patients have treatment-resistant disease; negative and cognitive symptoms respond poorly to dopamine antagonists; current antipsychotics have significant metabolic and EPS side-effect burden.",
+  "major depressive disorder": "~30–40% of patients fail to achieve remission with two or more antidepressants (TRD); response can take 6–8 weeks; no reliable biomarkers predict treatment response.",
+  "psychiatric disorder": "Psychiatric conditions collectively have among the highest disability-adjusted life-year burden globally; pharmacological options are often palliative and poorly tolerated long-term.",
+  // Cardiovascular
+  "heart failure": "HFpEF (preserved ejection fraction) has limited approved therapies beyond SGLT2 inhibitors; hospitalisation rates remain high; cardiac fibrosis is not therapeutically reversible.",
+  "atrial fibrillation": "Rhythm control is difficult to maintain long-term; anticoagulation increases bleeding risk; catheter ablation has significant recurrence rates in persistent AF.",
+  "hypertension": "Resistant hypertension (uncontrolled despite 3+ agents) affects ~10% of patients; uncontrolled hypertension drives cardiovascular and renal end-organ damage globally.",
+  "coronary artery disease": "Residual cardiovascular risk persists despite optimal statin + antiplatelet therapy; vulnerable plaque detection and stabilisation remain unsolved; microvascular disease is undertreated.",
+  "atherosclerosis": "Residual ASCVD risk in statin-treated patients is substantial; plaque regression beyond lipid-lowering is limited; vascular inflammation is not therapeutically targeted.",
+  // Autoimmune / Immunological
+  "rheumatoid arthritis": "~40% of patients are inadequate responders to TNF inhibitors; biologic-refractory RA has limited options; cardiovascular comorbidity is undertreated; remission is not achieved in many patients.",
+  "crohn's disease": "Up to 50% of patients require surgery within 10 years; transmural healing is rarely achieved with current biologics; fistulising disease has no reliably effective pharmacotherapy.",
+  "ulcerative colitis": "~25% of patients require colectomy; acute severe UC unresponsive to corticosteroids has high short-term mortality; mucosal healing is not achieved in many biologic-treated patients.",
+  "inflammatory bowel disease": "Biologic non-response and loss of response are common; transmural and histological remission remain elusive; extra-intestinal manifestations are poorly controlled.",
+  "psoriasis": "Moderate-to-severe psoriasis has significant quality-of-life burden beyond skin; psoriatic arthritis requires distinct management; biologics are costly and access-limited in many markets.",
+  "systemic lupus erythematosus": "Lupus nephritis progresses to ESRD in ~10% of patients; flare management is suboptimal; organ damage accrual continues despite current DMARDs; CNS lupus is difficult to treat.",
+  "atopic dermatitis": "Severe AD has significant itch and sleep burden; dupilumab non-responders (~30%) have limited alternatives; face and hand involvement impacts quality of life disproportionately.",
+  "asthma": "Severe eosinophilic asthma unresponsive to biologics (~10%) has no approved therapy; Type-2 low (non-eosinophilic) asthma lacks effective targeted treatments; asthma-COPD overlap is undertreated.",
+  "chronic obstructive pulmonary disease": "Exacerbation prevention remains inadequate despite triple inhaler therapy; lung function decline is not halted by any approved therapy; COPD-associated muscle wasting is not therapeutically addressed.",
+  "idiopathic pulmonary fibrosis": "Nintedanib and pirfenidone slow but do not stop progression; median survival 2–3 years after diagnosis; no approved anti-fibrotic reverses established fibrosis.",
+  "autoimmune disease": "Broad-acting immunosuppression increases infection and malignancy risk; disease-specific tolerance induction strategies are not clinically available; long-term remission off therapy is rare.",
+  // Infectious
+  "hiv infection": "HIV cure remains elusive; long-acting injectable regimens improve adherence but are still lifelong; CNS HIV reservoir is pharmacologically inaccessible; HIV-associated neurocognitive disorder is undertreated.",
+  "hepatitis b": "Functional cure (HBsAg loss) is achieved in <5% with current nucleoside analogues; cccDNA and integrated HBV DNA are not eliminated; treatment must continue indefinitely in most patients.",
+  "hepatitis c": "Globally, ~58 million people remain infected; access to pangenotypic DAAs is limited in low-income countries; reinfection after cure is not prevented by treatment.",
+  "covid-19": "Immunocompromised patients have limited treatment response to antivirals; Long COVID lacks approved treatment; vaccine-resistant variants continue to emerge.",
+  "tuberculosis": "Drug-resistant TB (MDR/XDR) requires prolonged regimens with significant toxicity; TB meningitis has high mortality and morbidity; latent TB reactivation in immunosuppressed patients is undertreated.",
+  "sepsis": "28-day mortality remains 20–30% despite ICU care; no immunomodulatory therapy has shown survival benefit in broad sepsis populations; survivors frequently have long-term cognitive and physical impairment.",
+  // Genetic / Rare Disease
+  "cystic fibrosis": "Elexacaftor-tezacaftor-ivacaftor (Trikafta) is not effective for all CFTR mutation classes; ~10% of patients (non-F508del) lack approved CFTR modulator therapy; lung transplantation is the only option for end-stage disease.",
+  "duchenne muscular dystrophy": "Exon-skipping therapies apply only to specific exon-amenable mutations; cardiac and respiratory failure remain the primary cause of death; no curative therapy restores dystrophin in most patients.",
+  "spinal muscular atrophy": "Gene therapy (Zolgensma) is approved only up to age 2; older patients with established motor neuron loss do not recover lost function; treatment cost and access remain barriers globally.",
+  "sickle cell disease": "Vaso-occlusive crises cause cumulative organ damage not fully prevented by current therapies; curative gene therapy approaches (Zynteglo, Lyfgenia) are limited by cost and access; chronic pain is undertreated.",
+  "hemophilia": "Prophylaxis burden is high despite factor concentrate therapy; inhibitor development (~30% of severe HA) renders factor replacement ineffective; joint disease from recurrent bleeds is progressive.",
+  // Renal
+  "chronic kidney disease": "Progression to ESRD requires dialysis or transplant; no approved therapy restores lost nephrons; mineral and bone disorder and anemia management remain suboptimal in advanced CKD.",
+  "renal disease": "Renal fibrosis is not reversible with current agents; proteinuria reduction with RAS inhibitors is incomplete; acute kidney injury-to-CKD transition lacks therapeutic prevention.",
+  // Ophthalmic
+  "age-related macular degeneration": "Anti-VEGF injections require frequent dosing (monthly/bimonthly) with patient burden; ~30% of wet AMD patients are poor responders; geographic atrophy (dry AMD) has very limited approved treatments.",
+  "ocular disease": "Blood-retinal barrier limits drug delivery; ocular surface disease is frequently misdiagnosed; gene therapy delivery to the retina remains technically challenging.",
+  // Musculoskeletal / Bone
+  "osteoporosis": "High fracture risk in untreated or undertreated patients; anabolic therapies (romosozumab, teriparatide) have limited duration of use; vertebral fractures frequently go undiagnosed.",
+  "osteoarthritis": "No disease-modifying therapy approved; joint replacement is the only definitive intervention for advanced disease; chronic pain management relies heavily on NSAIDs with GI/CV risk.",
+  "musculoskeletal disorder": "Chronic musculoskeletal pain is frequently undertreated; structural damage in inflammatory arthropathies is not fully halted by available DMARDs; physical disability accrues progressively.",
+  // Broader categories
+  "cancer": "Most advanced solid tumors lack curative options; immunotherapy resistance affects the majority of patients; tumour heterogeneity and clonal evolution limit durability of targeted therapies.",
+  "neurological disorder": "CNS drug delivery is limited by the blood-brain barrier; neurodegeneration is not halted by any approved therapy class; patient stratification for trial enrolment remains poor.",
+  "cardiovascular disease": "Residual cardiovascular risk persists in optimally treated patients; heart failure with preserved ejection fraction (HFpEF) has limited approved therapies; cardiac fibrosis is not therapeutically reversible.",
+  "metabolic disease": "Metabolic syndrome drives cardiovascular and renal comorbidities; weight regain after pharmacotherapy discontinuation is near-universal; behavioural interventions have poor long-term adherence.",
+  "autoimmune disease": "Systemic immunosuppression increases infection and malignancy risk; disease-specific tolerance induction is not yet clinically available; many patients cycle through multiple biologics without sustained remission.",
+  "infectious disease": "Antimicrobial resistance is growing; access to effective vaccines and therapeutics remains inequitable; latent infections (HIV, TB, HSV) cannot be eradicated with current therapies.",
+  "respiratory disease": "Progressive lung function decline is not halted by any approved therapy; respiratory failure in ILD and COPD is irreversible; pulmonary hypertension complicating parenchymal disease is undertreated.",
+  "hematological disorder": "Cure is limited to patients eligible for stem-cell transplant; gene therapy approaches are not yet broadly accessible; iron overload from chronic transfusion causes progressive organ damage.",
+  "wound healing": "Chronic wounds (diabetic ulcers, pressure injuries) have high recurrence rates; current standard of care has limited efficacy in ischaemic wounds; wound-related amputations carry high mortality.",
+  "renal cell carcinoma": "Sarcomatoid differentiation and non-clear cell histology have poor responses to approved IO/TKI combinations; brain metastases from RCC are common and undertreated.",
+};
+
+// ── Indication → Comparable Drugs lookup ────────────────────────────────────
+// Maps canonical indication values (from INDICATION_RULES) to key approved /
+// late-stage drugs in that space. Zero cost — derived from structured fields only.
+const INDICATION_COMPARABLE_DRUGS: Record<string, string> = {
+  // Specific cancers
+  "non-small cell lung cancer": "osimertinib (Tagrisso), pembrolizumab (Keytruda), nivolumab (Opdivo), sotorasib (Lumakras), alectinib (Alecensa), lorlatinib (Lorbrena)",
+  "small cell lung cancer": "atezolizumab (Tecentriq), durvalumab (Imfinzi), etoposide, carboplatin",
+  "lung cancer": "pembrolizumab (Keytruda), osimertinib (Tagrisso), bevacizumab (Avastin), carboplatin, pemetrexed",
+  "breast cancer": "trastuzumab (Herceptin), palbociclib (Ibrance), ribociclib (Kisqali), fulvestrant (Faslodex), sacituzumab govitecan (Trodelvy)",
+  "triple-negative breast cancer": "pembrolizumab (Keytruda), sacituzumab govitecan (Trodelvy), olaparib (Lynparza), atezolizumab (Tecentriq)",
+  "colorectal cancer": "bevacizumab (Avastin), cetuximab (Erbitux), pembrolizumab (Keytruda), oxaliplatin, irinotecan",
+  "pancreatic cancer": "gemcitabine, nab-paclitaxel (Abraxane), erlotinib (Tarceva), olaparib (Lynparza)",
+  "prostate cancer": "enzalutamide (Xtandi), abiraterone (Zytiga), darolutamide (Nubeqa), olaparib (Lynparza), lutetium-177 PSMA (Pluvicto)",
+  "ovarian cancer": "olaparib (Lynparza), niraparib (Zejula), bevacizumab (Avastin), carboplatin, paclitaxel",
+  "glioblastoma": "temozolomide (Temodar), bevacizumab (Avastin), lomustine",
+  "glioma": "temozolomide (Temodar), bevacizumab (Avastin), lomustine",
+  "melanoma": "pembrolizumab (Keytruda), nivolumab (Opdivo), ipilimumab (Yervoy), dabrafenib + trametinib, vemurafenib (Zelboraf)",
+  "hepatocellular carcinoma": "sorafenib (Nexavar), lenvatinib (Lenvima), atezolizumab + bevacizumab (Tecentriq + Avastin), nivolumab (Opdivo)",
+  "renal cell carcinoma": "nivolumab + ipilimumab (Opdualag), pembrolizumab + axitinib (Keytruda + Inlyta), sunitinib (Sutent), cabozantinib (Cabometyx)",
+  "bladder cancer": "atezolizumab (Tecentriq), pembrolizumab (Keytruda), enfortumab vedotin (Padcev), cisplatin",
+  "gastric cancer": "trastuzumab (Herceptin), pembrolizumab (Keytruda), ramucirumab (Cyramza), fluorouracil",
+  "acute myeloid leukemia": "venetoclax (Venclexta), azacitidine (Vidaza), midostaurin (Rydapt), gilteritinib (Xospata), ivosidenib (Tibsovo)",
+  "chronic lymphocytic leukemia": "ibrutinib (Imbruvica), zanubrutinib (Brukinsa), acalabrutinib (Calquence), venetoclax (Venclexta), obinutuzumab (Gazyva)",
+  "multiple myeloma": "lenalidomide (Revlimid), bortezomib (Velcade), daratumumab (Darzalex), carfilzomib (Kyprolis), pomalidomide (Pomalyst)",
+  "diffuse large b-cell lymphoma": "rituximab (Rituxan), polatuzumab vedotin (Polivy), axicabtagene ciloleucel (Yescarta), tisagenlecleucel (Kymriah)",
+  // Metabolic / Endocrine
+  "type 2 diabetes mellitus": "semaglutide (Ozempic), tirzepatide (Mounjaro), empagliflozin (Jardiance), metformin, sitagliptin (Januvia)",
+  "type 1 diabetes mellitus": "insulin glargine (Lantus), insulin degludec (Tresiba), teplizumab (Tzield)",
+  "obesity": "semaglutide (Wegovy), tirzepatide (Zepbound), orlistat (Xenical), naltrexone-bupropion (Contrave)",
+  "non-alcoholic steatohepatitis": "resmetirom (Rezdiffra), semaglutide (Ozempic), lanifibranor, obeticholic acid",
+  "non-alcoholic fatty liver disease": "resmetirom (Rezdiffra), semaglutide, vitamin E, pioglitazone",
+  // Neurological
+  "alzheimer's disease": "lecanemab (Leqembi), donanemab (Kisunla), donepezil (Aricept), memantine (Namenda), galantamine",
+  "parkinson's disease": "levodopa-carbidopa (Sinemet), pramipexole (Mirapex), ropinirole (Requip), rasagiline (Azilect), safinamide (Xadago)",
+  "multiple sclerosis": "ocrelizumab (Ocrevus), natalizumab (Tysabri), siponimod (Mayzent), ozanimod (Zeposia), ofatumumab (Kesimpta)",
+  "amyotrophic lateral sclerosis": "riluzole (Rilutek), edaravone (Radicava), tofersen (Qalsody)",
+  "huntington's disease": "deutetrabenazine (Austedo), tetrabenazine (Xenazine), valbenazine (Ingrezza)",
+  "epilepsy": "levetiracetam (Keppra), lamotrigine (Lamictal), valproate, lacosamide (Vimpat), cenobamate (Xcopri)",
+  "traumatic brain injury": "mannitol, hypertonic saline, levetiracetam (Keppra)",
+  "stroke": "alteplase (tPA), tenecteplase (TNKase), aspirin, clopidogrel, ticagrelor",
+  // Psychiatric
+  "schizophrenia": "risperidone, olanzapine, quetiapine, aripiprazole (Abilify), clozapine, xanomeline-trospium (Cobenfy)",
+  "major depressive disorder": "sertraline, escitalopram, venlafaxine, duloxetine, bupropion, esketamine (Spravato)",
+  "psychiatric disorder": "risperidone, quetiapine, fluoxetine, sertraline, lithium",
+  // Cardiovascular
+  "heart failure": "sacubitril-valsartan (Entresto), empagliflozin (Jardiance), dapagliflozin (Farxiga), carvedilol, spironolactone",
+  "atrial fibrillation": "apixaban (Eliquis), rivaroxaban (Xarelto), dabigatran (Pradaxa), amiodarone, flecainide",
+  "hypertension": "lisinopril, amlodipine, losartan, metoprolol, hydrochlorothiazide, sacubitril-valsartan (Entresto)",
+  "coronary artery disease": "atorvastatin, aspirin, clopidogrel, ticagrelor (Brilinta), ezetimibe, inclisiran (Leqvio)",
+  "atherosclerosis": "atorvastatin, evolocumab (Repatha), alirocumab (Praluent), inclisiran (Leqvio), ezetimibe",
+  // Autoimmune / Immunological
+  "rheumatoid arthritis": "adalimumab (Humira), etanercept (Enbrel), tocilizumab (Actemra), baricitinib (Olumiant), upadacitinib (Rinvoq)",
+  "crohn's disease": "adalimumab (Humira), infliximab (Remicade), ustekinumab (Stelara), vedolizumab (Entyvio), risankizumab (Skyrizi)",
+  "ulcerative colitis": "mesalamine, infliximab (Remicade), vedolizumab (Entyvio), tofacitinib (Xeljanz), upadacitinib (Rinvoq)",
+  "inflammatory bowel disease": "mesalamine, infliximab (Remicade), adalimumab (Humira), vedolizumab (Entyvio), ustekinumab (Stelara)",
+  "psoriasis": "adalimumab (Humira), secukinumab (Cosentyx), ixekizumab (Taltz), guselkumab (Tremfya), deucravacitinib (Sotyktu)",
+  "systemic lupus erythematosus": "belimumab (Benlysta), anifrolumab (Saphnelo), hydroxychloroquine (Plaquenil), mycophenolate",
+  "atopic dermatitis": "dupilumab (Dupixent), tralokinumab (Adbry), abrocitinib (Cibinqo), upadacitinib (Rinvoq), baricitinib (Olumiant)",
+  "asthma": "dupilumab (Dupixent), mepolizumab (Nucala), benralizumab (Fasenra), tezepelumab (Tezspire), omalizumab (Xolair)",
+  "chronic obstructive pulmonary disease": "tiotropium (Spiriva), indacaterol, roflumilast (Daliresp), tezepelumab (Tezspire)",
+  "idiopathic pulmonary fibrosis": "nintedanib (Ofev), pirfenidone (Esbriet)",
+  "autoimmune disease": "adalimumab (Humira), methotrexate, hydroxychloroquine, mycophenolate, prednisone",
+  // Infectious
+  "hiv infection": "bictegravir (Biktarvy), dolutegravir (Tivicay), cabotegravir + rilpivirine (Cabenuva), lenacapavir (Sunlenca)",
+  "hepatitis b": "entecavir (Baraclude), tenofovir (Viread), pegylated interferon alfa-2a, bulevirtide (Hepcludex)",
+  "hepatitis c": "sofosbuvir-velpatasvir (Epclusa), glecaprevir-pibrentasvir (Mavyret), ledipasvir-sofosbuvir (Harvoni)",
+  "covid-19": "nirmatrelvir-ritonavir (Paxlovid), molnupiravir (Lagevrio), remdesivir (Veklury)",
+  "tuberculosis": "isoniazid, rifampicin, pyrazinamide, ethambutol, pretomanid, bedaquiline (Sirturo)",
+  "sepsis": "vancomycin, piperacillin-tazobactam (Zosyn), meropenem, norepinephrine",
+  "infectious disease": "amoxicillin, azithromycin, ceftriaxone, vancomycin, piperacillin-tazobactam",
+  // Genetic / Rare Disease
+  "cystic fibrosis": "elexacaftor-tezacaftor-ivacaftor (Trikafta), ivacaftor (Kalydeco)",
+  "duchenne muscular dystrophy": "eteplirsen (Exondys 51), golodirsen (Vyondys 53), delandistrogene moxeparvovec (Elevidys)",
+  "spinal muscular atrophy": "nusinersen (Spinraza), risdiplam (Evrysdi), onasemnogene abeparvovec (Zolgensma)",
+  "sickle cell disease": "hydroxyurea, voxelotor (Oxbryta), crizanlizumab (Adakveo), betibeglogene (Zynteglo)",
+  "hemophilia": "emicizumab (Hemlibra), fitusiran (Alhemo), factor VIII/IX concentrates, desmopressin",
+  // Renal
+  "chronic kidney disease": "dapagliflozin (Farxiga), finerenone (Kerendia), erythropoietin, semaglutide",
+  "renal disease": "dapagliflozin (Farxiga), finerenone (Kerendia), erythropoietin, losartan",
+  // Ophthalmic
+  "age-related macular degeneration": "ranibizumab (Lucentis), aflibercept (Eylea), faricimab (Vabysmo), brolucizumab (Beovu)",
+  "ocular disease": "ranibizumab (Lucentis), aflibercept (Eylea), latanoprost, timolol",
+  // Musculoskeletal / Bone
+  "osteoporosis": "alendronate (Fosamax), zoledronic acid (Reclast), denosumab (Prolia), romosozumab (Evenity), teriparatide (Forteo)",
+  "osteoarthritis": "celecoxib, intra-articular corticosteroids, intra-articular hyaluronic acid, tanezumab",
+  "musculoskeletal disorder": "NSAIDs (celecoxib), methotrexate, adalimumab (Humira), zoledronic acid",
+  // Dermatology
+  "dermatological condition": "dupilumab (Dupixent), secukinumab (Cosentyx), apremilast (Otezla), isotretinoin",
+  "wound healing": "becaplermin (Regranex), platelet-rich plasma, negative pressure wound therapy",
+  // General buckets
+  "cancer": "pembrolizumab (Keytruda), nivolumab (Opdivo), trastuzumab (Herceptin), bevacizumab (Avastin)",
+  "neurological disorder": "levetiracetam, memantine (Namenda), methylphenidate, riluzole",
+  "cardiovascular disease": "atorvastatin, aspirin, metoprolol, lisinopril, amlodipine",
+  "metabolic disease": "metformin, semaglutide (Ozempic), empagliflozin (Jardiance), atorvastatin",
+  "respiratory disease": "budesonide, salmeterol, tiotropium (Spiriva), montelukast",
+  "gastrointestinal disease": "mesalamine, infliximab (Remicade), adalimumab (Humira), pantoprazole",
+  "hematological disorder": "hydroxyurea, thalidomide, lenalidomide (Revlimid), rituximab (Rituxan)",
+  "point-of-care diagnostics": "lateral flow immunoassays, PCR-based diagnostics, biosensor platforms",
+  "hearing loss": "cochlear implant systems, hearing aids (Oticon, ReSound)",
+};
+
+// ── Target → Comparable Drugs lookup ────────────────────────────────────────
+// Maps canonical target values (from TARGET_RULES) to flagship approved drugs.
+const TARGET_COMPARABLE_DRUGS: Record<string, string> = {
+  "PD-1": "nivolumab (Opdivo), pembrolizumab (Keytruda)",
+  "PD-L1": "atezolizumab (Tecentriq), durvalumab (Imfinzi), avelumab (Bavencio)",
+  "CTLA-4": "ipilimumab (Yervoy), tremelimumab (Imjudo)",
+  "LAG-3": "relatlimab (Opdualag)",
+  "TIGIT": "vibostolimab, tiragolumab",
+  "TIM-3": "cobolimab, sabatolimab",
+  "4-1BB": "utomilumab, urelumab",
+  "OX40": "pogalizumab, tavolixizumab",
+  "EGFR": "erlotinib (Tarceva), gefitinib (Iressa), osimertinib (Tagrisso), cetuximab (Erbitux)",
+  "HER2": "trastuzumab (Herceptin), pertuzumab (Perjeta), ado-trastuzumab emtansine (Kadcyla), tucatinib (Tukysa)",
+  "HER3": "patritumab deruxtecan (HER3-DXd), zenocutuzumab",
+  "VEGF": "bevacizumab (Avastin)",
+  "VEGFR": "sorafenib (Nexavar), sunitinib (Sutent), axitinib (Inlyta), cabozantinib (Cabometyx)",
+  "KRAS": "sotorasib (Lumakras), adagrasib (Krazati)",
+  "BRAF": "vemurafenib (Zelboraf), dabrafenib (Tafinlar)",
+  "MEK": "trametinib (Mekinist), cobimetinib (Cotellic), binimetinib (Mektovi)",
+  "NRAS": "binimetinib (Mektovi)",
+  "ALK": "crizotinib (Xalkori), alectinib (Alecensa), lorlatinib (Lorbrena), brigatinib (Alunbrig)",
+  "RET": "selpercatinib (Retevmo), pralsetinib (Gavreto)",
+  "ROS1": "crizotinib (Xalkori), entrectinib (Rozlytrek), repotrectinib (Augtyro)",
+  "NTRK": "larotrectinib (Vitrakvi), entrectinib (Rozlytrek)",
+  "MET": "tepotinib (Tepmetko), capmatinib (Tabrecta), crizotinib (Xalkori)",
+  "FGFR": "erdafitinib (Balversa), infigratinib (Truseltiq), futibatinib (Lytgobi)",
+  "IGF-1R": "teprotumumab (Tepezza), ganitumab",
+  "BCR-ABL": "imatinib (Gleevec), dasatinib (Sprycel), nilotinib (Tasigna), asciminib (Scemblix)",
+  "CDK4/6": "palbociclib (Ibrance), ribociclib (Kisqali), abemaciclib (Verzenio)",
+  "CDK": "palbociclib (Ibrance), ribociclib (Kisqali), abemaciclib (Verzenio)",
+  "PI3K": "idelalisib (Zydelig), copanlisib (Aliqopa), alpelisib (Piqray), duvelisib (Copiktra)",
+  "mTOR": "everolimus (Afinitor), temsirolimus (Torisel)",
+  "AKT": "capivasertib (Truqap), ipatasertib",
+  "PARP": "olaparib (Lynparza), rucaparib (Rubraca), niraparib (Zejula), talazoparib (Talzenna)",
+  "ATR": "elimusertib, camonsertib, ceralasertib",
+  "BTK": "ibrutinib (Imbruvica), zanubrutinib (Brukinsa), acalabrutinib (Calquence), pirtobrutinib (Jaypirca)",
+  "IDH1": "ivosidenib (Tibsovo), olutasidenib (Rezlidhia)",
+  "IDH2": "enasidenib (Idhifa)",
+  "FLT3": "midostaurin (Rydapt), gilteritinib (Xospata), quizartinib (Vanflyta)",
+  "EZH2": "tazemetostat (Tazverik)",
+  "HDAC": "vorinostat (Zolinza), romidepsin (Istodax), panobinostat (Farydak), belinostat (Beleodaq)",
+  "BET/BRD4": "molibresib, birabresib",
+  "DNMT": "azacitidine (Vidaza), decitabine (Dacogen)",
+  "BCL-2": "venetoclax (Venclexta)",
+  "BCL-XL": "navitoclax",
+  "MDM2": "idasanutlin, navtemadlin, milademetan",
+  "TP53/p53": "APR-246 (eprenetapopt), APG-115",
+  "MYC": "OMO-103, VVD-159247",
+  "STAT3": "napabucasin, danvatirsen",
+  "CD19": "blinatumomab (Blincyto), tisagenlecleucel (Kymriah), axicabtagene ciloleucel (Yescarta)",
+  "CD20": "rituximab (Rituxan), obinutuzumab (Gazyva), ofatumumab (Arzerra), mosunetuzumab (Lunsumio)",
+  "CD22": "inotuzumab ozogamicin (Besylomab), moxetumomab pasudotox (Lumoxiti)",
+  "CD33": "gemtuzumab ozogamicin (Mylotarg)",
+  "CD38": "daratumumab (Darzalex), isatuximab (Sarclisa)",
+  "CD47": "magrolimab, lemzoparlimab",
+  "CD3": "blinatumomab (Blincyto), catumaxomab",
+  "TNF-alpha": "adalimumab (Humira), etanercept (Enbrel), infliximab (Remicade), golimumab (Simponi), certolizumab pegol (Cimzia)",
+  "IL-6": "tocilizumab (Actemra), sarilumab (Kevzara), siltuximab (Sylvant)",
+  "IL-1": "anakinra (Kineret), canakinumab (Ilaris), rilonacept (Arcalyst)",
+  "IL-17": "secukinumab (Cosentyx), ixekizumab (Taltz), bimekizumab (Bimzelx)",
+  "IL-23": "guselkumab (Tremfya), risankizumab (Skyrizi), tildrakizumab (Ilumya)",
+  "IL-4": "dupilumab (Dupixent — dual IL-4/IL-13 blockade)",
+  "IL-13": "dupilumab (Dupixent), tralokinumab (Adbry), lebrikizumab (Ebglyss)",
+  "IL-33": "itepekimab, tozorakimab",
+  "TGF-beta": "bintrafusp alfa, fresolimumab",
+  "NF-kB": "bortezomib (Velcade), carfilzomib (Kyprolis)",
+  "JAK1": "upadacitinib (Rinvoq), filgotinib (Jyseleca), abrocitinib (Cibinqo)",
+  "JAK2": "ruxolitinib (Jakafi), fedratinib (Inrebic), pacritinib (Vonjo)",
+  "JAK3": "tofacitinib (Xeljanz)",
+  "GLP-1R": "semaglutide (Ozempic/Wegovy), liraglutide (Victoza), tirzepatide (Mounjaro — dual GLP-1R/GIPR)",
+  "GLP-1": "semaglutide (Ozempic/Wegovy), tirzepatide (Mounjaro), liraglutide (Victoza)",
+  "PCSK9": "evolocumab (Repatha), alirocumab (Praluent), inclisiran (Leqvio)",
+  "androgen receptor": "enzalutamide (Xtandi), apalutamide (Erleada), darolutamide (Nubeqa), abiraterone (Zytiga)",
+  "estrogen receptor": "fulvestrant (Faslodex), tamoxifen, letrozole (Femara), anastrozole (Arimidex), elacestrant (Orserdu)",
+  "HIF": "belzutifan (Welireg)",
+  "BRCA1": "olaparib (Lynparza), rucaparib (Rubraca) — for BRCA1-associated cancers",
+  "BRCA2": "olaparib (Lynparza), talazoparib (Talzenna) — for BRCA2-associated cancers",
+  "Wnt": "porcupine inhibitors WNT-974, RXC004",
+  "Hedgehog/SHH": "vismodegib (Erivedge), sonidegib (Odomzo)",
+  "CXCR4": "plerixafor (Mozobil)",
+  "CCR5": "maraviroc (Selzentry)",
+  "Spike protein": "nirmatrelvir-ritonavir (Paxlovid), monoclonal antibodies (bebtelovimab, cilgavimab)",
+  "SRC": "dasatinib (Sprycel), bosutinib (Bosulif)",
+};
 
 // ── Category → Modality map ───────────────────────────────────────────────────
 // Uses stored categories[] to provide structured modality signal before text rules.
@@ -367,8 +702,13 @@ export function applyRulesToAsset(asset: {
   humanVerified: Record<string, boolean> | null;
   sourceType?: string | null;
   deepEnrichAttempts?: number | null;
+  comparableDrugs?: string | null;
+  unmetNeed?: string | null;
+  patentStatus?: string | null;
+  mechanismOfAction?: string | null;
 }): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
-  const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
+  // Include MOA in text so TARGET_RULES can match against it (e.g. "PARP inhibitor" → PARP)
+  const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? ""), (asset.mechanismOfAction ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
   const fields: Record<string, string> = {};
   // provenance tracks the enrichment_sources stamp per field (defaults to "rule")
@@ -446,6 +786,46 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Unmet need: indication lookup ────────────────────────────────────────────
+  if (!asset.unmetNeed || asset.unmetNeed.trim() === "") {
+    const ind = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
+    if (ind && ind !== "unknown") {
+      const fromInd = INDICATION_UNMET_NEED[ind];
+      if (fromInd) { fields.unmetNeed = fromInd; provenance.unmetNeed = "rule:indication"; }
+    }
+  }
+
+  // ── Comparable drugs: indication lookup (highest confidence) ─────────────────
+  // Uses the canonical indication value (already structured) for a zero-cost fill.
+  if (!asset.comparableDrugs || asset.comparableDrugs.trim() === "") {
+    const ind = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
+    if (ind && ind !== "unknown") {
+      const fromInd = INDICATION_COMPARABLE_DRUGS[ind];
+      if (fromInd) { fields.comparableDrugs = fromInd; provenance.comparableDrugs = "rule:indication"; }
+    }
+  }
+
+  // ── Comparable drugs: target lookup (fills remainder after indication pass) ──
+  if (!fields.comparableDrugs && (!asset.comparableDrugs || asset.comparableDrugs.trim() === "")) {
+    const tgt = (fields.target ?? asset.target ?? "").trim();
+    if (tgt && tgt !== "unknown") {
+      const fromTarget = TARGET_COMPARABLE_DRUGS[tgt];
+      if (fromTarget) { fields.comparableDrugs = fromTarget; provenance.comparableDrugs = "rule:target"; }
+    }
+  }
+
+  // ── ip_type from patent_status (structural signal, no text needed) ────────────
+  if (!humanV.ipType && (!asset.ipType || asset.ipType === "unknown") && !fields.ipType) {
+    const ps = (asset.patentStatus ?? "").toLowerCase();
+    if (ps === "patented" || ps === "granted") {
+      fields.ipType = "patented";
+      provenance.ipType = "rule:patent_status";
+    } else if (ps === "pending" || ps === "filed") {
+      fields.ipType = "patent pending";
+      provenance.ipType = "rule:patent_status";
+    }
+  }
+
   // ── Modality normalizer: "device" → "medical device" ─────────────────────────
   // Catch-all that converts the bare "device" string (often from LLM output or
   // stale scraped data) to the canonical "medical device" label. Runs after all
@@ -507,9 +887,14 @@ export async function runRuleBasedFill(
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
     deep_enrich_attempts: number | null;
+    comparable_drugs: string | null;
+    unmet_need: string | null;
+    patent_status: string | null;
+    mechanism_of_action: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
+           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -519,6 +904,8 @@ export async function runRuleBasedFill(
         OR indication IS NULL OR indication = 'unknown'
         OR modality IS NULL OR modality = 'unknown' OR modality = 'device'
         OR target IS NULL OR target = 'unknown'
+        OR comparable_drugs IS NULL OR comparable_drugs = ''
+        OR unmet_need IS NULL OR unmet_need = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -550,6 +937,10 @@ export async function runRuleBasedFill(
       humanVerified: row.human_verified,
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
+      comparableDrugs: row.comparable_drugs,
+      unmetNeed: row.unmet_need,
+      patentStatus: row.patent_status,
+      mechanismOfAction: row.mechanism_of_action,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -580,6 +971,8 @@ type RuleFillUpdateSet = {
   indication?: string;
   modality?: string;
   target?: string;
+  comparableDrugs?: string;
+  unmetNeed?: string;
   enrichmentSources?: SQL;
 };
 
@@ -597,6 +990,8 @@ async function flushWrites(
       if (item.fields.indication) updates.indication = item.fields.indication;
       if (item.fields.modality) updates.modality = item.fields.modality;
       if (item.fields.target) updates.target = item.fields.target;
+      if (item.fields.comparableDrugs) updates.comparableDrugs = item.fields.comparableDrugs;
+      if (item.fields.unmetNeed) updates.unmetNeed = item.fields.unmetNeed;
 
       if (fieldKeys.length > 0) {
         // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
@@ -633,9 +1028,14 @@ export async function estimateRuleBasedFill(): Promise<{
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
     deep_enrich_attempts: number | null;
+    comparable_drugs: string | null;
+    unmet_need: string | null;
+    patent_status: string | null;
+    mechanism_of_action: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
+           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -645,6 +1045,8 @@ export async function estimateRuleBasedFill(): Promise<{
         OR indication IS NULL OR indication = 'unknown'
         OR modality IS NULL OR modality = 'unknown' OR modality = 'device'
         OR target IS NULL OR target = 'unknown'
+        OR comparable_drugs IS NULL OR comparable_drugs = ''
+        OR unmet_need IS NULL OR unmet_need = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -668,6 +1070,10 @@ export async function estimateRuleBasedFill(): Promise<{
       target: row.target,
       categories: row.categories,
       humanVerified: row.human_verified,
+      comparableDrugs: row.comparable_drugs,
+      unmetNeed: row.unmet_need,
+      patentStatus: row.patent_status,
+      mechanismOfAction: row.mechanism_of_action,
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
     });

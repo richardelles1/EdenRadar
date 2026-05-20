@@ -883,7 +883,7 @@ export default function Scout() {
         const ma = a.momentum_score ?? 0;
         const mb = b.momentum_score ?? 0;
         if (mb !== ma) return mb - ma;
-        return (a.id ?? "").localeCompare(b.id ?? "");
+        return b.score - a.score;
       });
     } else if (sortMode === "recency") {
       results = [...results].sort((a, b) => {

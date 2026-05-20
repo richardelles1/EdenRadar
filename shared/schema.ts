@@ -256,11 +256,6 @@ export const ingestedAssets = pgTable("ingested_assets", {
   titleKey: text("title_key"),
 }, (t) => [
   // Index on canonical_asset_id — critical for search performance.
-  // The Scout search query includes a correlated subquery
-  //   (SELECT array_agg(alt.institution) ... WHERE alt.canonical_asset_id = ingested_assets.id)
-  // for every result row to populate the "+N institutions" badge.  Without this
-  // index that subquery does a full sequential scan of 52K rows per result row
-  // (25 scans × 52K rows = 1,300 ms).  With the index: 2.7 ms total.
   index("ingested_assets_canonical_asset_id_idx").on(t.canonicalAssetId),
 ]);
 

@@ -1247,6 +1247,31 @@ export class DatabaseStorage implements IStorage {
     await db.update(ingestedAssets).set(updateData).where(eq(ingestedAssets.id, id));
   }
 
+  async getSignalEvents(assetId: number): Promise<Array<{
+    id: number;
+    eventType: string;
+    payload: Record<string, unknown> | null;
+    occurredAt: Date;
+  }>> {
+    const rows = await db
+      .select({
+        id: assetSignalEvents.id,
+        eventType: assetSignalEvents.eventType,
+        payload: assetSignalEvents.payload,
+        occurredAt: assetSignalEvents.occurredAt,
+      })
+      .from(assetSignalEvents)
+      .where(eq(assetSignalEvents.assetId, assetId))
+      .orderBy(desc(assetSignalEvents.occurredAt))
+      .limit(20);
+    return rows.map((r) => ({
+      id: r.id,
+      eventType: r.eventType,
+      payload: r.payload ?? null,
+      occurredAt: r.occurredAt,
+    }));
+  }
+
   async wipeAllAssets(): Promise<void> {
     await db.delete(ingestedAssets);
     console.log("[storage] All ingested assets wiped");
