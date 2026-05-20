@@ -650,6 +650,61 @@ const INDICATION_BIOLOGY: Record<string, string> = {
   "endometriosis": "hormonal dysregulation",
   "polycystic ovary syndrome": "hormonal dysregulation",
   "hormonal dysregulation": "hormonal dysregulation",
+  "reproductive health": "hormonal dysregulation",
+  "urological condition": "hormonal dysregulation",
+  // Specific cancer subtypes (common LLM enrichment outputs)
+  "lung cancer": "oncogenic transcription",
+  "non-small cell lung cancer": "oncogenic transcription",
+  "small cell lung cancer": "oncogenic transcription",
+  "breast cancer": "oncogenic transcription",
+  "triple-negative breast cancer": "tumor microenvironment",
+  "colorectal cancer": "oncogenic transcription",
+  "pancreatic cancer": "oncogenic transcription",
+  "prostate cancer": "hormonal dysregulation",
+  "ovarian cancer": "hormonal dysregulation",
+  "hepatocellular carcinoma": "oncogenic transcription",
+  "liver cancer": "oncogenic transcription",
+  "renal cell carcinoma": "oncogenic transcription",
+  "kidney cancer": "oncogenic transcription",
+  "bladder cancer": "oncogenic transcription",
+  "gastric cancer": "oncogenic transcription",
+  "thyroid cancer": "oncogenic transcription",
+  "head and neck cancer": "tumor microenvironment",
+  "head and neck squamous cell carcinoma": "tumor microenvironment",
+  "endometrial cancer": "hormonal dysregulation",
+  "cervical cancer": "oncogenic transcription",
+  // Coarse LLM outputs (oncology, neurology etc.)
+  "oncology": "oncogenic transcription",
+  "hematology": "structural protein defect",
+  "neurology": "neuroinflammation",
+  "neurodegenerative disease": "protein aggregation",
+  "immunology": "autoimmune dysregulation",
+  "gastroenterology": "autoimmune dysregulation",
+  "gastrointestinal disease": "autoimmune dysregulation",
+  "dermatological condition": "autoimmune dysregulation",
+  "musculoskeletal disorder": "fibrosis",
+  "renal disease": "ischemia and oxidative stress",
+  "kidney disease": "ischemia and oxidative stress",
+  "wound healing": "fibrosis",
+  "psychiatric disorder": "synaptic dysfunction",
+  "mental health": "synaptic dysfunction",
+  "anxiety": "synaptic dysfunction",
+  "addiction": "synaptic dysfunction",
+  "surgical application": "structural protein defect",
+  "point-of-care diagnostics": "pathogen replication",
+  "medical imaging diagnostics": "tumor microenvironment",
+  "neonatal screening": "gene expression deficiency",
+  "hearing loss": "ion channel dysfunction",
+  // Diabetes variants
+  "type 2 diabetes mellitus": "insulin resistance",
+  "type 1 diabetes mellitus": "autoimmune dysregulation",
+  "diabetes mellitus": "insulin resistance",
+  "diabetes": "insulin resistance",
+  // Pain / musculoskeletal
+  "chronic pain": "ion channel dysfunction",
+  "pain": "ion channel dysfunction",
+  "osteoarthritis": "fibrosis",
+  "rheumatology": "autoimmune dysregulation",
 };
 
 // ── Target → Biology lookup (100+ entries) ────────────────────────────────────
@@ -827,11 +882,10 @@ const TARGET_BIOLOGY: Record<string, string> = {
   "Protease": "pathogen replication",
 };
 
-// ── Modality → Biology lookup (safety net, 14 entries) ────────────────────────
+// ── Modality → Biology lookup (safety net) ────────────────────────────────────
 // Priority 3 (broadest). Only fires when indication AND target are both absent.
-// Modality is 99.9% filled, so this catches the ~27% of assets lacking both
-// indication and target. Mapping is broad by design — it sets a biology floor
-// rather than a precise classification.
+// Modality is 99.9% filled, so this catches assets lacking both indication and target.
+// Mapping is broad by design — it sets a biology floor rather than a precise classification.
 const MODALITY_BIOLOGY: Record<string, string> = {
   "gene therapy": "gene expression deficiency",
   "gene editing": "gene expression deficiency",
@@ -841,12 +895,17 @@ const MODALITY_BIOLOGY: Record<string, string> = {
   "cell therapy": "immune evasion",
   "vaccine": "pathogen replication",
   "antibody": "immune evasion",
+  "biologic": "immune evasion",
   "small molecule": "aberrant kinase signaling",
   "peptide": "aberrant kinase signaling",
   "nanoparticle": "pathogen replication",
   "diagnostic": "pathogen replication",
   "medical device": "structural protein defect",
   "platform technology": "gene expression deficiency",
+  "research tool": "gene expression deficiency",
+  "imaging agent": "tumor microenvironment",
+  "radiopharmaceutical": "tumor microenvironment",
+  "drug delivery": "aberrant kinase signaling",
 };
 
 // ── Category → Modality map ───────────────────────────────────────────────────
