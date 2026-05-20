@@ -2040,9 +2040,11 @@ export async function registerRoutes(
       const storedEvents = await storage.getSignalEvents(rec.id);
       const syntheticEvents: typeof storedEvents = [];
 
+      // Back-fill first_indexed from first_seen_at so every asset has at least one event
       if (!storedEvents.some((e) => e.eventType === "first_indexed") && rec.firstSeenAt) {
         syntheticEvents.push({ id: -1, eventType: "first_indexed", payload: null, occurredAt: rec.firstSeenAt });
       }
+      // Back-fill stage_change from stage_changed_at + previous_stage columns
       if (!storedEvents.some((e) => e.eventType === "stage_change") && rec.stageChangedAt && rec.previousStage) {
         syntheticEvents.push({ id: -2, eventType: "stage_change", payload: { from: rec.previousStage, to: null }, occurredAt: rec.stageChangedAt });
       }
