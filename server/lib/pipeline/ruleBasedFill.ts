@@ -523,6 +523,286 @@ const TARGET_COMPARABLE_DRUGS: Record<string, string> = {
   "SRC": "dasatinib (Sprycel), bosutinib (Bosulif)",
 };
 
+// ── Indication → Biology lookup ──────────────────────────────────────────────
+// Maps canonical indication → biology domain. Fills biology where LLM hasn't reached.
+const INDICATION_BIOLOGY: Record<string, string> = {
+  // Oncology — specific
+  "non-small cell lung cancer": "thoracic oncology",
+  "small cell lung cancer": "thoracic oncology",
+  "lung cancer": "thoracic oncology",
+  "breast cancer": "breast oncology",
+  "triple-negative breast cancer": "breast oncology",
+  "colorectal cancer": "gastrointestinal oncology",
+  "pancreatic cancer": "gastrointestinal oncology",
+  "prostate cancer": "genitourinary oncology",
+  "ovarian cancer": "gynecologic oncology",
+  "glioblastoma": "neuro-oncology",
+  "glioma": "neuro-oncology",
+  "melanoma": "dermatologic oncology",
+  "hepatocellular carcinoma": "hepatic oncology",
+  "renal cell carcinoma": "genitourinary oncology",
+  "bladder cancer": "genitourinary oncology",
+  "gastric cancer": "gastrointestinal oncology",
+  "acute myeloid leukemia": "hematologic oncology",
+  "chronic lymphocytic leukemia": "hematologic oncology",
+  "multiple myeloma": "hematologic oncology",
+  "diffuse large b-cell lymphoma": "hematologic oncology",
+  "cancer": "oncology",
+  // Metabolic / Endocrine
+  "type 2 diabetes mellitus": "metabolic disease",
+  "type 1 diabetes mellitus": "metabolic disease",
+  "obesity": "metabolic disease",
+  "non-alcoholic steatohepatitis": "hepatology / metabolic disease",
+  "non-alcoholic fatty liver disease": "hepatology / metabolic disease",
+  "metabolic disease": "metabolic disease",
+  // Neurological
+  "alzheimer's disease": "neurodegeneration",
+  "parkinson's disease": "neurodegeneration",
+  "amyotrophic lateral sclerosis": "neurodegeneration",
+  "huntington's disease": "neurodegeneration",
+  "multiple sclerosis": "neuroimmunology",
+  "epilepsy": "neurology",
+  "traumatic brain injury": "neurology",
+  "stroke": "neurovascular",
+  "neurological disorder": "neurology",
+  // Psychiatric
+  "schizophrenia": "psychiatry",
+  "major depressive disorder": "psychiatry",
+  "psychiatric disorder": "psychiatry",
+  // Cardiovascular
+  "heart failure": "cardiology",
+  "atrial fibrillation": "cardiology",
+  "hypertension": "cardiology",
+  "coronary artery disease": "cardiology",
+  "atherosclerosis": "cardiology / vascular biology",
+  "cardiovascular disease": "cardiology",
+  // Autoimmune / Immunological
+  "rheumatoid arthritis": "rheumatology / immunology",
+  "crohn's disease": "gastroenterology / immunology",
+  "ulcerative colitis": "gastroenterology / immunology",
+  "inflammatory bowel disease": "gastroenterology / immunology",
+  "psoriasis": "dermatology / immunology",
+  "systemic lupus erythematosus": "rheumatology / immunology",
+  "atopic dermatitis": "dermatology / immunology",
+  "asthma": "pulmonology / immunology",
+  "chronic obstructive pulmonary disease": "pulmonology",
+  "idiopathic pulmonary fibrosis": "pulmonology / fibrosis",
+  "autoimmune disease": "immunology",
+  "respiratory disease": "pulmonology",
+  // Infectious
+  "hiv infection": "infectious disease / virology",
+  "hepatitis b": "infectious disease / hepatology",
+  "hepatitis c": "infectious disease / hepatology",
+  "covid-19": "infectious disease / virology",
+  "tuberculosis": "infectious disease",
+  "sepsis": "infectious disease / critical care",
+  "infectious disease": "infectious disease",
+  // Genetic / Rare
+  "cystic fibrosis": "rare disease / pulmonology",
+  "duchenne muscular dystrophy": "rare disease / neuromuscular",
+  "spinal muscular atrophy": "rare disease / neuromuscular",
+  "sickle cell disease": "rare disease / hematology",
+  "hemophilia": "rare disease / hematology",
+  "hematological disorder": "hematology",
+  // Renal
+  "chronic kidney disease": "nephrology",
+  "renal disease": "nephrology",
+  // Ophthalmic
+  "age-related macular degeneration": "ophthalmology",
+  "ocular disease": "ophthalmology",
+  // Musculoskeletal / Bone
+  "osteoporosis": "musculoskeletal / bone biology",
+  "osteoarthritis": "musculoskeletal",
+  "musculoskeletal disorder": "musculoskeletal",
+  // Other
+  "gastrointestinal disease": "gastroenterology",
+  "dermatological condition": "dermatology",
+  "wound healing": "regenerative medicine",
+  "point-of-care diagnostics": "diagnostics",
+  "neonatal screening": "pediatrics / diagnostics",
+  "hearing loss": "otolaryngology",
+  "surgical application": "surgery",
+  "medical imaging diagnostics": "radiology / imaging",
+  "urological condition": "urology",
+  "reproductive health": "reproductive medicine",
+};
+
+// ── Target → Biology lookup ───────────────────────────────────────────────────
+// Maps canonical target values to biology domain. Fills biology when indication is absent.
+const TARGET_BIOLOGY: Record<string, string> = {
+  // Checkpoint / IO
+  "PD-1": "immuno-oncology",
+  "PD-L1": "immuno-oncology",
+  "PD-L2": "immuno-oncology",
+  "CTLA-4": "immuno-oncology",
+  "LAG-3": "immuno-oncology",
+  "TIM-3": "immuno-oncology",
+  "TIGIT": "immuno-oncology",
+  "4-1BB": "immuno-oncology",
+  "OX40": "immuno-oncology",
+  // RTK / growth factor receptors
+  "EGFR": "oncology / RTK signaling",
+  "HER2": "oncology / RTK signaling",
+  "HER3": "oncology / RTK signaling",
+  "EGFRvIII": "neuro-oncology",
+  "VEGF": "oncology / angiogenesis",
+  "VEGFR": "oncology / angiogenesis",
+  "FGFR": "oncology / RTK signaling",
+  "MET": "oncology / RTK signaling",
+  "IGF-1R": "oncology / metabolic signaling",
+  // RAS/RAF/MAPK
+  "KRAS": "oncology / MAPK signaling",
+  "BRAF": "oncology / MAPK signaling",
+  "NRAS": "oncology / MAPK signaling",
+  "MEK": "oncology / MAPK signaling",
+  "ERK": "oncology / MAPK signaling",
+  // Fusion/rearrangement
+  "ALK": "thoracic oncology",
+  "RET": "oncology / kinase fusion",
+  "ROS1": "oncology / kinase fusion",
+  "NTRK": "oncology / kinase fusion",
+  "BCR-ABL": "hematologic oncology",
+  // Oncogenes / tumor suppressors
+  "MYC": "oncology / transcription factor",
+  "TP53/p53": "oncology / tumor suppression",
+  "BRCA1": "oncology / DNA repair",
+  "BRCA2": "oncology / DNA repair",
+  "PTEN": "oncology / PI3K-AKT signaling",
+  // Epigenetic
+  "EZH2": "oncology / epigenetics",
+  "HDAC": "oncology / epigenetics",
+  "BET/BRD4": "oncology / epigenetics",
+  "DNMT": "oncology / epigenetics",
+  // Cell cycle
+  "CDK4/6": "oncology / cell cycle",
+  "CDK": "oncology / cell cycle",
+  // PI3K/AKT/mTOR
+  "PI3K": "oncology / PI3K-AKT-mTOR signaling",
+  "mTOR": "oncology / PI3K-AKT-mTOR signaling",
+  "AKT": "oncology / PI3K-AKT-mTOR signaling",
+  // JAK/STAT
+  "JAK1": "immunology / JAK-STAT signaling",
+  "JAK2": "immunology / JAK-STAT signaling",
+  "JAK3": "immunology / JAK-STAT signaling",
+  "STAT3": "immuno-oncology",
+  // DNA damage
+  "PARP": "oncology / DNA damage response",
+  "ATR": "oncology / DNA damage response",
+  "ATM": "oncology / DNA damage response",
+  // Apoptosis
+  "BCL-2": "oncology / apoptosis",
+  "BCL-XL": "oncology / apoptosis",
+  "MDM2": "oncology / apoptosis",
+  // Heme / leukemia
+  "BTK": "hematologic oncology",
+  "IDH1": "hematologic oncology",
+  "IDH2": "hematologic oncology",
+  "FLT3": "hematologic oncology",
+  "CD123": "hematologic oncology",
+  "CD30": "hematologic oncology",
+  "CD70": "hematologic oncology",
+  "CD79": "hematologic oncology",
+  "CD19": "hematologic oncology / B-cell biology",
+  "CD20": "hematologic oncology / B-cell biology",
+  "CD22": "hematologic oncology / B-cell biology",
+  "CD33": "hematologic oncology",
+  "CD38": "hematologic oncology",
+  // Solid tumor antigens
+  "TROP-2": "oncology / tumor antigen",
+  "NECTIN-4": "oncology / tumor antigen",
+  "FRα": "oncology / tumor antigen",
+  "Claudin 18.2": "gastrointestinal oncology",
+  "CEACAM5": "gastrointestinal oncology",
+  "MUC1/MUC16": "oncology / tumor antigen",
+  "Mesothelin": "oncology / tumor antigen",
+  "GPC3": "hepatic oncology",
+  // IO / angiogenesis
+  "CD47": "immuno-oncology",
+  "HIF": "oncology / hypoxia biology",
+  // Cytokines / inflammation
+  "TNF-alpha": "immunology / inflammation",
+  "IL-6": "immunology / inflammation",
+  "IL-1": "immunology / inflammation",
+  "IL-17": "immunology / inflammation",
+  "IL-23": "immunology / inflammation",
+  "IL-4": "immunology / allergy",
+  "IL-13": "immunology / allergy",
+  "IL-33": "immunology / allergy",
+  "TGF-beta": "immunology / fibrosis",
+  "NF-kB": "immunology / inflammation",
+  "CD40": "immunology",
+  "CD27": "immunology",
+  "CD200": "immunology",
+  // Adenosine / immune metabolism
+  "A2AR": "immuno-oncology / adenosine biology",
+  "CD39": "immuno-oncology / adenosine biology",
+  "IDO1": "immuno-oncology / immune metabolism",
+  "TDO": "immuno-oncology / immune metabolism",
+  "Arginase-1": "immuno-oncology / immune metabolism",
+  "CD73": "immuno-oncology / adenosine biology",
+  // Metabolic
+  "GLP-1R": "metabolic disease / endocrinology",
+  "GLP-1": "metabolic disease / endocrinology",
+  "PCSK9": "cardiology / lipid metabolism",
+  "AMPK": "metabolic disease",
+  "ACC": "hepatology / metabolic disease",
+  "FASN": "hepatology / metabolic disease",
+  "SCD1": "hepatology / metabolic disease",
+  "FXR": "hepatology / metabolic disease",
+  "THRβ": "hepatology / metabolic disease",
+  "PPAR": "metabolic disease",
+  // Fibrosis
+  "LOXL2": "fibrosis / tissue remodeling",
+  "Galectin-3": "fibrosis / tissue remodeling",
+  "CTGF/CCN2": "fibrosis / tissue remodeling",
+  // Signaling / developmental
+  "Wnt": "oncology / developmental biology",
+  "Notch": "oncology / developmental biology",
+  "Hedgehog/SHH": "oncology / developmental biology",
+  "SRC": "oncology / kinase signaling",
+  // Chemokine receptors
+  "CXCR4": "oncology / immunology",
+  "CCR5": "infectious disease / immunology",
+  // Viral targets
+  "ACE2": "infectious disease / virology",
+  "NSP14": "infectious disease / virology",
+  "Spike protein": "infectious disease / virology",
+  // Hormone receptors
+  "androgen receptor": "genitourinary oncology",
+  "estrogen receptor": "breast oncology",
+  // Neurodegeneration / CNS
+  "TREM2": "neurodegeneration",
+  "LRRK2": "neurodegeneration",
+  "GBA": "neurodegeneration",
+  "sodium channel": "neurology / pain biology",
+  // Pain / ion channel
+  "Nav1.7": "neurology / pain biology",
+  "Nav1.8": "neurology / pain biology",
+  "TRPV1": "neurology / pain biology",
+  "TRPA1": "neurology / pain biology",
+  "P2X3": "neurology / pain biology",
+};
+
+// ── Modality → Biology lookup ─────────────────────────────────────────────────
+// Last-resort fill for biology when indication and target are both absent.
+// Modality is 99.9% filled so this catches nearly all remaining gaps.
+const MODALITY_BIOLOGY: Record<string, string> = {
+  "gene editing": "gene editing / genome engineering",
+  "cell therapy": "cell therapy / immunology",
+  "gene therapy": "gene therapy / genetic medicine",
+  "mrna": "RNA biology / mRNA therapeutics",
+  "rna therapy": "RNA biology",
+  "vaccine": "immunology / vaccinology",
+  "antibody": "protein biology / immunology",
+  "small molecule": "medicinal chemistry",
+  "peptide": "peptide biology",
+  "nanoparticle": "drug delivery / nanotechnology",
+  "biologic": "protein biology",
+  "diagnostic": "diagnostics / biomarker science",
+  "medical device": "biomedical engineering",
+  "software/algorithm": "health informatics",
+};
+
 // ── Category → Modality map ───────────────────────────────────────────────────
 // Uses stored categories[] to provide structured modality signal before text rules.
 const CATEGORY_MODALITY_MAP: Array<{ keywords: RegExp; value: string }> = [
@@ -706,6 +986,7 @@ export function applyRulesToAsset(asset: {
   unmetNeed?: string | null;
   patentStatus?: string | null;
   mechanismOfAction?: string | null;
+  biology?: string | null;
 }): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
   // Include MOA in text so TARGET_RULES can match against it (e.g. "PARP inhibitor" → PARP)
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? ""), (asset.mechanismOfAction ?? "")].join(" ");
@@ -826,6 +1107,31 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Biology: indication → target → modality cascade ─────────────────────────
+  // Indication is highest confidence (disease-specific), target second (mechanism-specific),
+  // modality third (broadest — catches everything modality is 99.9% filled).
+  if (!humanV.biology && (!asset.biology || asset.biology.trim() === "")) {
+    const ind = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
+    if (ind && ind !== "unknown") {
+      const fromInd = INDICATION_BIOLOGY[ind];
+      if (fromInd) { fields.biology = fromInd; provenance.biology = "rule:indication"; }
+    }
+  }
+  if (!humanV.biology && (!asset.biology || asset.biology.trim() === "") && !fields.biology) {
+    const tgt = (fields.target ?? asset.target ?? "").trim();
+    if (tgt && tgt !== "unknown") {
+      const fromTarget = TARGET_BIOLOGY[tgt];
+      if (fromTarget) { fields.biology = fromTarget; provenance.biology = "rule:target"; }
+    }
+  }
+  if (!humanV.biology && (!asset.biology || asset.biology.trim() === "") && !fields.biology) {
+    const mod = (fields.modality ?? asset.modality ?? "").toLowerCase().trim();
+    if (mod && mod !== "unknown") {
+      const fromModality = MODALITY_BIOLOGY[mod];
+      if (fromModality) { fields.biology = fromModality; provenance.biology = "rule:modality"; }
+    }
+  }
+
   // ── Modality normalizer: "device" → "medical device" ─────────────────────────
   // Catch-all that converts the bare "device" string (often from LLM output or
   // stale scraped data) to the canonical "medical device" label. Runs after all
@@ -891,10 +1197,11 @@ export async function runRuleBasedFill(
     unmet_need: string | null;
     patent_status: string | null;
     mechanism_of_action: string | null;
+    biology: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
-           comparable_drugs, unmet_need, patent_status, mechanism_of_action
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -906,6 +1213,7 @@ export async function runRuleBasedFill(
         OR target IS NULL OR target = 'unknown'
         OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR unmet_need IS NULL OR unmet_need = ''
+        OR biology IS NULL OR biology = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -941,6 +1249,7 @@ export async function runRuleBasedFill(
       unmetNeed: row.unmet_need,
       patentStatus: row.patent_status,
       mechanismOfAction: row.mechanism_of_action,
+      biology: row.biology,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -973,6 +1282,7 @@ type RuleFillUpdateSet = {
   target?: string;
   comparableDrugs?: string;
   unmetNeed?: string;
+  biology?: string;
   enrichmentSources?: SQL;
 };
 
@@ -992,6 +1302,7 @@ async function flushWrites(
       if (item.fields.target) updates.target = item.fields.target;
       if (item.fields.comparableDrugs) updates.comparableDrugs = item.fields.comparableDrugs;
       if (item.fields.unmetNeed) updates.unmetNeed = item.fields.unmetNeed;
+      if (item.fields.biology) updates.biology = item.fields.biology;
 
       if (fieldKeys.length > 0) {
         // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
@@ -1032,10 +1343,11 @@ export async function estimateRuleBasedFill(): Promise<{
     unmet_need: string | null;
     patent_status: string | null;
     mechanism_of_action: string | null;
+    biology: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
-           comparable_drugs, unmet_need, patent_status, mechanism_of_action
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -1047,6 +1359,7 @@ export async function estimateRuleBasedFill(): Promise<{
         OR target IS NULL OR target = 'unknown'
         OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR unmet_need IS NULL OR unmet_need = ''
+        OR biology IS NULL OR biology = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -1074,6 +1387,7 @@ export async function estimateRuleBasedFill(): Promise<{
       unmetNeed: row.unmet_need,
       patentStatus: row.patent_status,
       mechanismOfAction: row.mechanism_of_action,
+      biology: row.biology,
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
     });
