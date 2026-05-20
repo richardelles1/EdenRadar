@@ -188,6 +188,192 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bSRC\b(?:\s+(?:kinase|pathway|family|inhibitor))/i, value: "SRC" },
 ];
 
+// ── Indication → Comparable Drugs lookup ────────────────────────────────────
+// Maps canonical indication values (from INDICATION_RULES) to key approved /
+// late-stage drugs in that space. Zero cost — derived from structured fields only.
+const INDICATION_COMPARABLE_DRUGS: Record<string, string> = {
+  // Specific cancers
+  "non-small cell lung cancer": "osimertinib (Tagrisso), pembrolizumab (Keytruda), nivolumab (Opdivo), sotorasib (Lumakras), alectinib (Alecensa), lorlatinib (Lorbrena)",
+  "small cell lung cancer": "atezolizumab (Tecentriq), durvalumab (Imfinzi), etoposide, carboplatin",
+  "lung cancer": "pembrolizumab (Keytruda), osimertinib (Tagrisso), bevacizumab (Avastin), carboplatin, pemetrexed",
+  "breast cancer": "trastuzumab (Herceptin), palbociclib (Ibrance), ribociclib (Kisqali), fulvestrant (Faslodex), sacituzumab govitecan (Trodelvy)",
+  "triple-negative breast cancer": "pembrolizumab (Keytruda), sacituzumab govitecan (Trodelvy), olaparib (Lynparza), atezolizumab (Tecentriq)",
+  "colorectal cancer": "bevacizumab (Avastin), cetuximab (Erbitux), pembrolizumab (Keytruda), oxaliplatin, irinotecan",
+  "pancreatic cancer": "gemcitabine, nab-paclitaxel (Abraxane), erlotinib (Tarceva), olaparib (Lynparza)",
+  "prostate cancer": "enzalutamide (Xtandi), abiraterone (Zytiga), darolutamide (Nubeqa), olaparib (Lynparza), lutetium-177 PSMA (Pluvicto)",
+  "ovarian cancer": "olaparib (Lynparza), niraparib (Zejula), bevacizumab (Avastin), carboplatin, paclitaxel",
+  "glioblastoma": "temozolomide (Temodar), bevacizumab (Avastin), lomustine",
+  "glioma": "temozolomide (Temodar), bevacizumab (Avastin), lomustine",
+  "melanoma": "pembrolizumab (Keytruda), nivolumab (Opdivo), ipilimumab (Yervoy), dabrafenib + trametinib, vemurafenib (Zelboraf)",
+  "hepatocellular carcinoma": "sorafenib (Nexavar), lenvatinib (Lenvima), atezolizumab + bevacizumab (Tecentriq + Avastin), nivolumab (Opdivo)",
+  "renal cell carcinoma": "nivolumab + ipilimumab (Opdualag), pembrolizumab + axitinib (Keytruda + Inlyta), sunitinib (Sutent), cabozantinib (Cabometyx)",
+  "bladder cancer": "atezolizumab (Tecentriq), pembrolizumab (Keytruda), enfortumab vedotin (Padcev), cisplatin",
+  "gastric cancer": "trastuzumab (Herceptin), pembrolizumab (Keytruda), ramucirumab (Cyramza), fluorouracil",
+  "acute myeloid leukemia": "venetoclax (Venclexta), azacitidine (Vidaza), midostaurin (Rydapt), gilteritinib (Xospata), ivosidenib (Tibsovo)",
+  "chronic lymphocytic leukemia": "ibrutinib (Imbruvica), zanubrutinib (Brukinsa), acalabrutinib (Calquence), venetoclax (Venclexta), obinutuzumab (Gazyva)",
+  "multiple myeloma": "lenalidomide (Revlimid), bortezomib (Velcade), daratumumab (Darzalex), carfilzomib (Kyprolis), pomalidomide (Pomalyst)",
+  "diffuse large b-cell lymphoma": "rituximab (Rituxan), polatuzumab vedotin (Polivy), axicabtagene ciloleucel (Yescarta), tisagenlecleucel (Kymriah)",
+  // Metabolic / Endocrine
+  "type 2 diabetes mellitus": "semaglutide (Ozempic), tirzepatide (Mounjaro), empagliflozin (Jardiance), metformin, sitagliptin (Januvia)",
+  "type 1 diabetes mellitus": "insulin glargine (Lantus), insulin degludec (Tresiba), teplizumab (Tzield)",
+  "obesity": "semaglutide (Wegovy), tirzepatide (Zepbound), orlistat (Xenical), naltrexone-bupropion (Contrave)",
+  "non-alcoholic steatohepatitis": "resmetirom (Rezdiffra), semaglutide (Ozempic), lanifibranor, obeticholic acid",
+  "non-alcoholic fatty liver disease": "resmetirom (Rezdiffra), semaglutide, vitamin E, pioglitazone",
+  // Neurological
+  "alzheimer's disease": "lecanemab (Leqembi), donanemab (Kisunla), donepezil (Aricept), memantine (Namenda), galantamine",
+  "parkinson's disease": "levodopa-carbidopa (Sinemet), pramipexole (Mirapex), ropinirole (Requip), rasagiline (Azilect), safinamide (Xadago)",
+  "multiple sclerosis": "ocrelizumab (Ocrevus), natalizumab (Tysabri), siponimod (Mayzent), ozanimod (Zeposia), ofatumumab (Kesimpta)",
+  "amyotrophic lateral sclerosis": "riluzole (Rilutek), edaravone (Radicava), tofersen (Qalsody)",
+  "huntington's disease": "deutetrabenazine (Austedo), tetrabenazine (Xenazine), valbenazine (Ingrezza)",
+  "epilepsy": "levetiracetam (Keppra), lamotrigine (Lamictal), valproate, lacosamide (Vimpat), cenobamate (Xcopri)",
+  "traumatic brain injury": "mannitol, hypertonic saline, levetiracetam (Keppra)",
+  "stroke": "alteplase (tPA), tenecteplase (TNKase), aspirin, clopidogrel, ticagrelor",
+  // Psychiatric
+  "schizophrenia": "risperidone, olanzapine, quetiapine, aripiprazole (Abilify), clozapine, xanomeline-trospium (Cobenfy)",
+  "major depressive disorder": "sertraline, escitalopram, venlafaxine, duloxetine, bupropion, esketamine (Spravato)",
+  "psychiatric disorder": "risperidone, quetiapine, fluoxetine, sertraline, lithium",
+  // Cardiovascular
+  "heart failure": "sacubitril-valsartan (Entresto), empagliflozin (Jardiance), dapagliflozin (Farxiga), carvedilol, spironolactone",
+  "atrial fibrillation": "apixaban (Eliquis), rivaroxaban (Xarelto), dabigatran (Pradaxa), amiodarone, flecainide",
+  "hypertension": "lisinopril, amlodipine, losartan, metoprolol, hydrochlorothiazide, sacubitril-valsartan (Entresto)",
+  "coronary artery disease": "atorvastatin, aspirin, clopidogrel, ticagrelor (Brilinta), ezetimibe, inclisiran (Leqvio)",
+  "atherosclerosis": "atorvastatin, evolocumab (Repatha), alirocumab (Praluent), inclisiran (Leqvio), ezetimibe",
+  // Autoimmune / Immunological
+  "rheumatoid arthritis": "adalimumab (Humira), etanercept (Enbrel), tocilizumab (Actemra), baricitinib (Olumiant), upadacitinib (Rinvoq)",
+  "crohn's disease": "adalimumab (Humira), infliximab (Remicade), ustekinumab (Stelara), vedolizumab (Entyvio), risankizumab (Skyrizi)",
+  "ulcerative colitis": "mesalamine, infliximab (Remicade), vedolizumab (Entyvio), tofacitinib (Xeljanz), upadacitinib (Rinvoq)",
+  "inflammatory bowel disease": "mesalamine, infliximab (Remicade), adalimumab (Humira), vedolizumab (Entyvio), ustekinumab (Stelara)",
+  "psoriasis": "adalimumab (Humira), secukinumab (Cosentyx), ixekizumab (Taltz), guselkumab (Tremfya), deucravacitinib (Sotyktu)",
+  "systemic lupus erythematosus": "belimumab (Benlysta), anifrolumab (Saphnelo), hydroxychloroquine (Plaquenil), mycophenolate",
+  "atopic dermatitis": "dupilumab (Dupixent), tralokinumab (Adbry), abrocitinib (Cibinqo), upadacitinib (Rinvoq), baricitinib (Olumiant)",
+  "asthma": "dupilumab (Dupixent), mepolizumab (Nucala), benralizumab (Fasenra), tezepelumab (Tezspire), omalizumab (Xolair)",
+  "chronic obstructive pulmonary disease": "tiotropium (Spiriva), indacaterol, roflumilast (Daliresp), tezepelumab (Tezspire)",
+  "idiopathic pulmonary fibrosis": "nintedanib (Ofev), pirfenidone (Esbriet)",
+  "autoimmune disease": "adalimumab (Humira), methotrexate, hydroxychloroquine, mycophenolate, prednisone",
+  // Infectious
+  "hiv infection": "bictegravir (Biktarvy), dolutegravir (Tivicay), cabotegravir + rilpivirine (Cabenuva), lenacapavir (Sunlenca)",
+  "hepatitis b": "entecavir (Baraclude), tenofovir (Viread), pegylated interferon alfa-2a, bulevirtide (Hepcludex)",
+  "hepatitis c": "sofosbuvir-velpatasvir (Epclusa), glecaprevir-pibrentasvir (Mavyret), ledipasvir-sofosbuvir (Harvoni)",
+  "covid-19": "nirmatrelvir-ritonavir (Paxlovid), molnupiravir (Lagevrio), remdesivir (Veklury)",
+  "tuberculosis": "isoniazid, rifampicin, pyrazinamide, ethambutol, pretomanid, bedaquiline (Sirturo)",
+  "sepsis": "vancomycin, piperacillin-tazobactam (Zosyn), meropenem, norepinephrine",
+  "infectious disease": "amoxicillin, azithromycin, ceftriaxone, vancomycin, piperacillin-tazobactam",
+  // Genetic / Rare Disease
+  "cystic fibrosis": "elexacaftor-tezacaftor-ivacaftor (Trikafta), ivacaftor (Kalydeco)",
+  "duchenne muscular dystrophy": "eteplirsen (Exondys 51), golodirsen (Vyondys 53), delandistrogene moxeparvovec (Elevidys)",
+  "spinal muscular atrophy": "nusinersen (Spinraza), risdiplam (Evrysdi), onasemnogene abeparvovec (Zolgensma)",
+  "sickle cell disease": "hydroxyurea, voxelotor (Oxbryta), crizanlizumab (Adakveo), betibeglogene (Zynteglo)",
+  "hemophilia": "emicizumab (Hemlibra), fitusiran (Alhemo), factor VIII/IX concentrates, desmopressin",
+  // Renal
+  "chronic kidney disease": "dapagliflozin (Farxiga), finerenone (Kerendia), erythropoietin, semaglutide",
+  "renal disease": "dapagliflozin (Farxiga), finerenone (Kerendia), erythropoietin, losartan",
+  // Ophthalmic
+  "age-related macular degeneration": "ranibizumab (Lucentis), aflibercept (Eylea), faricimab (Vabysmo), brolucizumab (Beovu)",
+  "ocular disease": "ranibizumab (Lucentis), aflibercept (Eylea), latanoprost, timolol",
+  // Musculoskeletal / Bone
+  "osteoporosis": "alendronate (Fosamax), zoledronic acid (Reclast), denosumab (Prolia), romosozumab (Evenity), teriparatide (Forteo)",
+  "osteoarthritis": "celecoxib, intra-articular corticosteroids, intra-articular hyaluronic acid, tanezumab",
+  "musculoskeletal disorder": "NSAIDs (celecoxib), methotrexate, adalimumab (Humira), zoledronic acid",
+  // Dermatology
+  "dermatological condition": "dupilumab (Dupixent), secukinumab (Cosentyx), apremilast (Otezla), isotretinoin",
+  "wound healing": "becaplermin (Regranex), platelet-rich plasma, negative pressure wound therapy",
+  // General buckets
+  "cancer": "pembrolizumab (Keytruda), nivolumab (Opdivo), trastuzumab (Herceptin), bevacizumab (Avastin)",
+  "neurological disorder": "levetiracetam, memantine (Namenda), methylphenidate, riluzole",
+  "cardiovascular disease": "atorvastatin, aspirin, metoprolol, lisinopril, amlodipine",
+  "metabolic disease": "metformin, semaglutide (Ozempic), empagliflozin (Jardiance), atorvastatin",
+  "respiratory disease": "budesonide, salmeterol, tiotropium (Spiriva), montelukast",
+  "gastrointestinal disease": "mesalamine, infliximab (Remicade), adalimumab (Humira), pantoprazole",
+  "hematological disorder": "hydroxyurea, thalidomide, lenalidomide (Revlimid), rituximab (Rituxan)",
+  "point-of-care diagnostics": "lateral flow immunoassays, PCR-based diagnostics, biosensor platforms",
+  "hearing loss": "cochlear implant systems, hearing aids (Oticon, ReSound)",
+};
+
+// ── Target → Comparable Drugs lookup ────────────────────────────────────────
+// Maps canonical target values (from TARGET_RULES) to flagship approved drugs.
+const TARGET_COMPARABLE_DRUGS: Record<string, string> = {
+  "PD-1": "nivolumab (Opdivo), pembrolizumab (Keytruda)",
+  "PD-L1": "atezolizumab (Tecentriq), durvalumab (Imfinzi), avelumab (Bavencio)",
+  "CTLA-4": "ipilimumab (Yervoy), tremelimumab (Imjudo)",
+  "LAG-3": "relatlimab (Opdualag)",
+  "TIGIT": "vibostolimab, tiragolumab",
+  "TIM-3": "cobolimab, sabatolimab",
+  "4-1BB": "utomilumab, urelumab",
+  "OX40": "pogalizumab, tavolixizumab",
+  "EGFR": "erlotinib (Tarceva), gefitinib (Iressa), osimertinib (Tagrisso), cetuximab (Erbitux)",
+  "HER2": "trastuzumab (Herceptin), pertuzumab (Perjeta), ado-trastuzumab emtansine (Kadcyla), tucatinib (Tukysa)",
+  "HER3": "patritumab deruxtecan (HER3-DXd), zenocutuzumab",
+  "VEGF": "bevacizumab (Avastin)",
+  "VEGFR": "sorafenib (Nexavar), sunitinib (Sutent), axitinib (Inlyta), cabozantinib (Cabometyx)",
+  "KRAS": "sotorasib (Lumakras), adagrasib (Krazati)",
+  "BRAF": "vemurafenib (Zelboraf), dabrafenib (Tafinlar)",
+  "MEK": "trametinib (Mekinist), cobimetinib (Cotellic), binimetinib (Mektovi)",
+  "NRAS": "binimetinib (Mektovi)",
+  "ALK": "crizotinib (Xalkori), alectinib (Alecensa), lorlatinib (Lorbrena), brigatinib (Alunbrig)",
+  "RET": "selpercatinib (Retevmo), pralsetinib (Gavreto)",
+  "ROS1": "crizotinib (Xalkori), entrectinib (Rozlytrek), repotrectinib (Augtyro)",
+  "NTRK": "larotrectinib (Vitrakvi), entrectinib (Rozlytrek)",
+  "MET": "tepotinib (Tepmetko), capmatinib (Tabrecta), crizotinib (Xalkori)",
+  "FGFR": "erdafitinib (Balversa), infigratinib (Truseltiq), futibatinib (Lytgobi)",
+  "IGF-1R": "teprotumumab (Tepezza), ganitumab",
+  "BCR-ABL": "imatinib (Gleevec), dasatinib (Sprycel), nilotinib (Tasigna), asciminib (Scemblix)",
+  "CDK4/6": "palbociclib (Ibrance), ribociclib (Kisqali), abemaciclib (Verzenio)",
+  "CDK": "palbociclib (Ibrance), ribociclib (Kisqali), abemaciclib (Verzenio)",
+  "PI3K": "idelalisib (Zydelig), copanlisib (Aliqopa), alpelisib (Piqray), duvelisib (Copiktra)",
+  "mTOR": "everolimus (Afinitor), temsirolimus (Torisel)",
+  "AKT": "capivasertib (Truqap), ipatasertib",
+  "PARP": "olaparib (Lynparza), rucaparib (Rubraca), niraparib (Zejula), talazoparib (Talzenna)",
+  "ATR": "elimusertib, camonsertib, ceralasertib",
+  "BTK": "ibrutinib (Imbruvica), zanubrutinib (Brukinsa), acalabrutinib (Calquence), pirtobrutinib (Jaypirca)",
+  "IDH1": "ivosidenib (Tibsovo), olutasidenib (Rezlidhia)",
+  "IDH2": "enasidenib (Idhifa)",
+  "FLT3": "midostaurin (Rydapt), gilteritinib (Xospata), quizartinib (Vanflyta)",
+  "EZH2": "tazemetostat (Tazverik)",
+  "HDAC": "vorinostat (Zolinza), romidepsin (Istodax), panobinostat (Farydak), belinostat (Beleodaq)",
+  "BET/BRD4": "molibresib, birabresib",
+  "DNMT": "azacitidine (Vidaza), decitabine (Dacogen)",
+  "BCL-2": "venetoclax (Venclexta)",
+  "BCL-XL": "navitoclax",
+  "MDM2": "idasanutlin, navtemadlin, milademetan",
+  "TP53/p53": "APR-246 (eprenetapopt), APG-115",
+  "MYC": "OMO-103, VVD-159247",
+  "STAT3": "napabucasin, danvatirsen",
+  "CD19": "blinatumomab (Blincyto), tisagenlecleucel (Kymriah), axicabtagene ciloleucel (Yescarta)",
+  "CD20": "rituximab (Rituxan), obinutuzumab (Gazyva), ofatumumab (Arzerra), mosunetuzumab (Lunsumio)",
+  "CD22": "inotuzumab ozogamicin (Besylomab), moxetumomab pasudotox (Lumoxiti)",
+  "CD33": "gemtuzumab ozogamicin (Mylotarg)",
+  "CD38": "daratumumab (Darzalex), isatuximab (Sarclisa)",
+  "CD47": "magrolimab, lemzoparlimab",
+  "CD3": "blinatumomab (Blincyto), catumaxomab",
+  "TNF-alpha": "adalimumab (Humira), etanercept (Enbrel), infliximab (Remicade), golimumab (Simponi), certolizumab pegol (Cimzia)",
+  "IL-6": "tocilizumab (Actemra), sarilumab (Kevzara), siltuximab (Sylvant)",
+  "IL-1": "anakinra (Kineret), canakinumab (Ilaris), rilonacept (Arcalyst)",
+  "IL-17": "secukinumab (Cosentyx), ixekizumab (Taltz), bimekizumab (Bimzelx)",
+  "IL-23": "guselkumab (Tremfya), risankizumab (Skyrizi), tildrakizumab (Ilumya)",
+  "IL-4": "dupilumab (Dupixent — dual IL-4/IL-13 blockade)",
+  "IL-13": "dupilumab (Dupixent), tralokinumab (Adbry), lebrikizumab (Ebglyss)",
+  "IL-33": "itepekimab, tozorakimab",
+  "TGF-beta": "bintrafusp alfa, fresolimumab",
+  "NF-kB": "bortezomib (Velcade), carfilzomib (Kyprolis)",
+  "JAK1": "upadacitinib (Rinvoq), filgotinib (Jyseleca), abrocitinib (Cibinqo)",
+  "JAK2": "ruxolitinib (Jakafi), fedratinib (Inrebic), pacritinib (Vonjo)",
+  "JAK3": "tofacitinib (Xeljanz)",
+  "GLP-1R": "semaglutide (Ozempic/Wegovy), liraglutide (Victoza), tirzepatide (Mounjaro — dual GLP-1R/GIPR)",
+  "GLP-1": "semaglutide (Ozempic/Wegovy), tirzepatide (Mounjaro), liraglutide (Victoza)",
+  "PCSK9": "evolocumab (Repatha), alirocumab (Praluent), inclisiran (Leqvio)",
+  "androgen receptor": "enzalutamide (Xtandi), apalutamide (Erleada), darolutamide (Nubeqa), abiraterone (Zytiga)",
+  "estrogen receptor": "fulvestrant (Faslodex), tamoxifen, letrozole (Femara), anastrozole (Arimidex), elacestrant (Orserdu)",
+  "HIF": "belzutifan (Welireg)",
+  "BRCA1": "olaparib (Lynparza), rucaparib (Rubraca) — for BRCA1-associated cancers",
+  "BRCA2": "olaparib (Lynparza), talazoparib (Talzenna) — for BRCA2-associated cancers",
+  "Wnt": "porcupine inhibitors WNT-974, RXC004",
+  "Hedgehog/SHH": "vismodegib (Erivedge), sonidegib (Odomzo)",
+  "CXCR4": "plerixafor (Mozobil)",
+  "CCR5": "maraviroc (Selzentry)",
+  "Spike protein": "nirmatrelvir-ritonavir (Paxlovid), monoclonal antibodies (bebtelovimab, cilgavimab)",
+  "SRC": "dasatinib (Sprycel), bosutinib (Bosulif)",
+};
+
 // ── Category → Modality map ───────────────────────────────────────────────────
 // Uses stored categories[] to provide structured modality signal before text rules.
 const CATEGORY_MODALITY_MAP: Array<{ keywords: RegExp; value: string }> = [
@@ -367,8 +553,12 @@ export function applyRulesToAsset(asset: {
   humanVerified: Record<string, boolean> | null;
   sourceType?: string | null;
   deepEnrichAttempts?: number | null;
+  comparableDrugs?: string | null;
+  patentStatus?: string | null;
+  mechanismOfAction?: string | null;
 }): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
-  const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
+  // Include MOA in text so TARGET_RULES can match against it (e.g. "PARP inhibitor" → PARP)
+  const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? ""), (asset.mechanismOfAction ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
   const fields: Record<string, string> = {};
   // provenance tracks the enrichment_sources stamp per field (defaults to "rule")
@@ -446,6 +636,37 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Comparable drugs: indication lookup (highest confidence) ─────────────────
+  // Uses the canonical indication value (already structured) for a zero-cost fill.
+  if (!asset.comparableDrugs || asset.comparableDrugs.trim() === "") {
+    const ind = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
+    if (ind && ind !== "unknown") {
+      const fromInd = INDICATION_COMPARABLE_DRUGS[ind];
+      if (fromInd) { fields.comparableDrugs = fromInd; provenance.comparableDrugs = "rule:indication"; }
+    }
+  }
+
+  // ── Comparable drugs: target lookup (fills remainder after indication pass) ──
+  if (!fields.comparableDrugs && (!asset.comparableDrugs || asset.comparableDrugs.trim() === "")) {
+    const tgt = (fields.target ?? asset.target ?? "").trim();
+    if (tgt && tgt !== "unknown") {
+      const fromTarget = TARGET_COMPARABLE_DRUGS[tgt];
+      if (fromTarget) { fields.comparableDrugs = fromTarget; provenance.comparableDrugs = "rule:target"; }
+    }
+  }
+
+  // ── ip_type from patent_status (structural signal, no text needed) ────────────
+  if (!humanV.ipType && (!asset.ipType || asset.ipType === "unknown") && !fields.ipType) {
+    const ps = (asset.patentStatus ?? "").toLowerCase();
+    if (ps === "patented" || ps === "granted") {
+      fields.ipType = "patented";
+      provenance.ipType = "rule:patent_status";
+    } else if (ps === "pending" || ps === "filed") {
+      fields.ipType = "patent pending";
+      provenance.ipType = "rule:patent_status";
+    }
+  }
+
   // ── Modality normalizer: "device" → "medical device" ─────────────────────────
   // Catch-all that converts the bare "device" string (often from LLM output or
   // stale scraped data) to the canonical "medical device" label. Runs after all
@@ -507,9 +728,13 @@ export async function runRuleBasedFill(
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
     deep_enrich_attempts: number | null;
+    comparable_drugs: string | null;
+    patent_status: string | null;
+    mechanism_of_action: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
+           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
+           comparable_drugs, patent_status, mechanism_of_action
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -519,6 +744,7 @@ export async function runRuleBasedFill(
         OR indication IS NULL OR indication = 'unknown'
         OR modality IS NULL OR modality = 'unknown' OR modality = 'device'
         OR target IS NULL OR target = 'unknown'
+        OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -550,6 +776,9 @@ export async function runRuleBasedFill(
       humanVerified: row.human_verified,
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
+      comparableDrugs: row.comparable_drugs,
+      patentStatus: row.patent_status,
+      mechanismOfAction: row.mechanism_of_action,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -580,6 +809,7 @@ type RuleFillUpdateSet = {
   indication?: string;
   modality?: string;
   target?: string;
+  comparableDrugs?: string;
   enrichmentSources?: SQL;
 };
 
@@ -597,6 +827,7 @@ async function flushWrites(
       if (item.fields.indication) updates.indication = item.fields.indication;
       if (item.fields.modality) updates.modality = item.fields.modality;
       if (item.fields.target) updates.target = item.fields.target;
+      if (item.fields.comparableDrugs) updates.comparableDrugs = item.fields.comparableDrugs;
 
       if (fieldKeys.length > 0) {
         // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
@@ -633,9 +864,13 @@ export async function estimateRuleBasedFill(): Promise<{
     human_verified: Record<string, boolean> | null;
     source_type: string | null;
     deep_enrich_attempts: number | null;
+    comparable_drugs: string | null;
+    patent_status: string | null;
+    mechanism_of_action: string | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
-           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts
+           indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
+           comparable_drugs, patent_status, mechanism_of_action
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -645,6 +880,7 @@ export async function estimateRuleBasedFill(): Promise<{
         OR indication IS NULL OR indication = 'unknown'
         OR modality IS NULL OR modality = 'unknown' OR modality = 'device'
         OR target IS NULL OR target = 'unknown'
+        OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -668,6 +904,9 @@ export async function estimateRuleBasedFill(): Promise<{
       target: row.target,
       categories: row.categories,
       humanVerified: row.human_verified,
+      comparableDrugs: row.comparable_drugs,
+      patentStatus: row.patent_status,
+      mechanismOfAction: row.mechanism_of_action,
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
     });
