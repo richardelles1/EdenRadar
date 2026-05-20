@@ -416,6 +416,7 @@ import {
   galwayScraper,
   researchLuxembourgScraper,
   auaScraper,
+  burgosScraper,
   cuhkOrktsScraper,
   // Task #717 — Restored scrapers for orphaned institutions
   novaLisbonScraper,
@@ -883,6 +884,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   galwayScraper,                 // University of Galway — in-part "universityofgalway" ~37
   researchLuxembourgScraper,    // Research Luxembourg — in-part "researchluxembourg" ~77
   auaScraper,                    // American University of Armenia — in-part "aua" ~4
+  burgosScraper,                 // University of Burgos (Spain) — in-part "ubu"
   cuhkOrktsScraper,              // Chinese University of Hong Kong (ORKTS) — TechPublisher "cuhk-orkts"
   // ── Task #1051 — FLC (Federal Laboratory Consortium) ─────────────────────
   flcScraper,                    // flc.flintbox.com — US federal lab tech (NASA, USDA, DoE, etc.) — 4915 listings confirmed 2026-05-19
