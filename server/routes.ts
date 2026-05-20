@@ -13451,7 +13451,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       // Phase 1: fast DB queries (parallel) — resolve linked asset first so biology
       // is available for the scored comparables query in Phase 2.
       const [relatedRaw, linkedRaw] = await Promise.allSettled([
-        storage.keywordSearchIngestedAssets(searchQuery, 10),
+        withTimeout(storage.keywordSearchIngestedAssets(searchQuery, 10), 2000, []),
         listing.ingestedAssetId
           ? db.select().from(ingestedAssets).where(eq(ingestedAssets.id, listing.ingestedAssetId)).limit(1)
           : Promise.resolve([] as typeof ingestedAssets.$inferSelect[]),
@@ -13463,13 +13463,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const [trialsRaw, patentsRaw, compsRaw] = await Promise.allSettled([
         withTimeout(searchClinicalTrials(listing.therapeuticArea, 5).catch(() => []), 900, []),
         withTimeout(searchPatents(patentQuery, 5).catch(() => []), 900, []),
-        storage.queryDealComparables({
+        withTimeout(storage.queryDealComparables({
           modality: listing.modality ?? null,
           biology: linkedEarly?.biology ?? null,
           therapeuticArea: listing.therapeuticArea ?? null,
           stage: listing.stage ?? null,
           limit: 5,
-        }),
+        }), 2000, []),
       ]);
 
       const relatedTtoAssets = relatedRaw.status === "fulfilled"
