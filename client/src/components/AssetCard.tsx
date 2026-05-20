@@ -2,12 +2,19 @@ import { useState, useRef } from "react";
 import {
   Tooltip, TooltipContent, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { BookmarkCheck, Building2, FlaskConical, ExternalLink, TrendingUp } from "lucide-react";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import { BookmarkCheck, Building2, FlaskConical, ExternalLink, TrendingUp, Info } from "lucide-react";
 import { PipelinePicker } from "./PipelinePicker";
 import type { ScoredAsset, ScoreBreakdown } from "@/lib/types";
 import type { SavedAsset } from "@shared/schema";
 import { useLocation } from "wouter";
 import { SCOUT_CARD_TINTS } from "@/lib/scoutCardTints";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 type TierKey = "high" | "mid" | "low" | "none";
 
@@ -32,14 +39,13 @@ const TIER_BORDER_BOTTOM_RIGHT: Record<TierKey, string> = {
   none: "border-zinc-200/60 dark:border-zinc-700/40",
 };
 
-const SCORE_BREAKDOWN_KEYS = ["fit", "novelty", "readiness", "licensability"] as const;
+const SCORE_BREAKDOWN_KEYS = ["fit", "record_quality", "availability"] as const;
 type BreakdownKey = typeof SCORE_BREAKDOWN_KEYS[number];
 
 const BREAKDOWN_LABELS: Record<BreakdownKey, string> = {
-  fit: "Buyer Fit",
-  novelty: "Novelty",
-  readiness: "Readiness",
-  licensability: "Licensability",
+  fit: "Fit",
+  record_quality: "Record Quality",
+  availability: "Availability",
 };
 
 const BIOTECH_ACRONYM_MAP: Record<string, string> = {
@@ -60,6 +66,47 @@ function normalizePillValue(val: string | undefined | null): string | null {
   const key = v.toLowerCase().replace(/[-\s]/g, "");
   if (BIOTECH_ACRONYM_MAP[key]) return BIOTECH_ACRONYM_MAP[key];
   return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
+function ScoreBreakdownRows({
+  breakdown,
+  isUnscored,
+}: {
+  breakdown: ScoreBreakdown | null | undefined;
+  isUnscored: boolean;
+}) {
+  if (isUnscored || !breakdown) {
+    return <p className="text-[11px] text-muted-foreground">No score data available for this asset.</p>;
+  }
+  return (
+    <div className="space-y-2.5">
+      {SCORE_BREAKDOWN_KEYS.map((k) => {
+        const val = breakdown[k as keyof ScoreBreakdown] as number | undefined;
+        const basis = breakdown.dimension_basis?.[k];
+        const displayVal = typeof val === "number" ? Math.round(val) : null;
+        const t: TierKey = displayVal !== null && displayVal >= 75 ? "high" : displayVal !== null && displayVal >= 50 ? "mid" : "low";
+        return (
+          <div key={k} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-medium text-foreground w-24 shrink-0">{BREAKDOWN_LABELS[k]}</span>
+              <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all ${t === "high" ? "bg-emerald-500/70" : t === "mid" ? "bg-amber-500/70" : "bg-muted-foreground/40"}`}
+                  style={{ width: displayVal !== null ? `${displayVal}%` : "0%" }}
+                />
+              </div>
+              <span className={`text-[11px] font-mono font-semibold w-7 text-right tabular-nums ${displayVal !== null ? TIER_SCORE_TEXT[t] : "text-muted-foreground"}`}>
+                {displayVal !== null ? `${displayVal}%` : "—"}
+              </span>
+            </div>
+            {basis && (
+              <p className="text-[10px] text-muted-foreground leading-snug pl-0.5">{basis}</p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 const PILL_MUTED_TEXT = "text-zinc-500 dark:text-zinc-400";
@@ -92,7 +139,9 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [breakdownOpen, setBreakdownOpen] = useState(false);
   const [, setLocation] = useLocation();
+  const isMobile = useIsMobile();
 
   const isUnscored = asset.score === 0 || (asset.score_breakdown?.signal_coverage ?? 0) === 0;
   const isResearcherPublished = asset.source_types?.includes("researcher");
@@ -197,9 +246,9 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           style={{ background: SCOUT_CARD_TINTS.tto.stripColor }}
         />
 
-        {/* Score badge — flush top-left, NO backdrop-filter (causes z-index break) */}
-        <Tooltip>
-          <TooltipTrigger asChild>
+        {/* Score badge — flush top-left. Click/hover → breakdown popover (desktop) or bottom sheet (mobile). */}
+        {isMobile ? (
+          <>
             <div
               className={`
                 absolute top-0 left-0 z-[5]
@@ -208,46 +257,71 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 border-b border-r
                 bg-white dark:bg-zinc-900
                 ${TIER_BORDER_BOTTOM_RIGHT[tier]}
+                cursor-pointer select-none
               `}
-              style={{
-                borderRadius: "17px 0 10px 0",
-                minWidth: "52px",
-              }}
+              style={{ borderRadius: "17px 0 10px 0", minWidth: "52px" }}
               data-testid="score-badge"
+              onClick={(e) => { e.stopPropagation(); setBreakdownOpen(true); }}
             >
-              <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">
-                Score
-              </span>
+              <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Score</span>
               <span className={`font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5 ${TIER_SCORE_TEXT[tier]}`}>
                 {scoreDisplay !== null ? scoreDisplay : <span className="opacity-40 text-lg">—</span>}
               </span>
             </div>
-          </TooltipTrigger>
-          {asset.score_breakdown && !isUnscored && (
-            <TooltipContent side="right" className="p-3 w-52 shadow-xl">
-              <p className="text-xs font-semibold mb-2">Signal Profile</p>
-              <div className="space-y-1.5">
-                {SCORE_BREAKDOWN_KEYS.map((k) => {
-                  const val: number = asset.score_breakdown[k as keyof ScoreBreakdown] as number;
-                  if (!val || val === 0) return null;
-                  const t: TierKey = val >= 75 ? "high" : val >= 50 ? "mid" : "low";
-                  return (
-                    <div key={k} className="flex items-center gap-2">
-                      <span className="text-[10px] text-muted-foreground w-20 shrink-0">{BREAKDOWN_LABELS[k]}</span>
-                      <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${t === "high" ? "bg-emerald-500/70" : t === "mid" ? "bg-amber-500/70" : "bg-muted-foreground/40"}`}
-                          style={{ width: `${val}%` }}
-                        />
-                      </div>
-                      <span className={`text-[10px] font-mono font-semibold w-6 text-right ${TIER_SCORE_TEXT[t]}`}>{val}</span>
-                    </div>
-                  );
-                })}
+            <Sheet open={breakdownOpen} onOpenChange={setBreakdownOpen}>
+              <SheetContent side="bottom" className="px-4 pt-4 pb-8 rounded-t-2xl" onClick={(e) => e.stopPropagation()} data-testid="score-breakdown-sheet">
+                <SheetHeader className="mb-4">
+                  <SheetTitle className="flex items-center gap-2 text-sm">
+                    <Info className="w-4 h-4 text-muted-foreground" />
+                    Score breakdown
+                  </SheetTitle>
+                </SheetHeader>
+                <ScoreBreakdownRows breakdown={asset.score_breakdown} isUnscored={isUnscored} />
+              </SheetContent>
+            </Sheet>
+          </>
+        ) : (
+          <Popover open={breakdownOpen} onOpenChange={setBreakdownOpen}>
+            <PopoverTrigger asChild>
+              <div
+                className={`
+                  absolute top-0 left-0 z-[5]
+                  flex flex-col items-center justify-center
+                  px-3 py-1.5
+                  border-b border-r
+                  bg-white dark:bg-zinc-900
+                  ${TIER_BORDER_BOTTOM_RIGHT[tier]}
+                  cursor-pointer select-none
+                `}
+                style={{ borderRadius: "17px 0 10px 0", minWidth: "52px" }}
+                data-testid="score-badge"
+                onClick={(e) => e.stopPropagation()}
+                onMouseEnter={() => setBreakdownOpen(true)}
+                onMouseLeave={() => setBreakdownOpen(false)}
+              >
+                <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Score</span>
+                <span className={`font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5 ${TIER_SCORE_TEXT[tier]}`}>
+                  {scoreDisplay !== null ? scoreDisplay : <span className="opacity-40 text-lg">—</span>}
+                </span>
               </div>
-            </TooltipContent>
-          )}
-        </Tooltip>
+            </PopoverTrigger>
+            <PopoverContent
+              side="right"
+              align="start"
+              className="p-3 w-64 shadow-xl z-[50]"
+              onClick={(e) => e.stopPropagation()}
+              onMouseEnter={() => setBreakdownOpen(true)}
+              onMouseLeave={() => setBreakdownOpen(false)}
+              data-testid="score-breakdown-popover"
+            >
+              <div className="flex items-center gap-1.5 mb-2.5">
+                <Info className="w-3 h-3 text-muted-foreground shrink-0" />
+                <p className="text-xs font-semibold">Score breakdown</p>
+              </div>
+              <ScoreBreakdownRows breakdown={asset.score_breakdown} isUnscored={isUnscored} />
+            </PopoverContent>
+          </Popover>
+        )}
 
         {/* Bookmark — top-right */}
         <div
