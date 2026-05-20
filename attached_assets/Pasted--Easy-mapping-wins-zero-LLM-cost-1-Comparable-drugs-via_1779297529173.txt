@@ -1,0 +1,54 @@
+ Easy mapping wins (zero LLM cost)
+
+  1. Comparable drugs via indication lookup table — biggest opportunity in the dataset. You're at 8.9%
+   but indication is 73.7% filled. Build a static map: indication → standard-of-care drugs. "Breast
+  cancer" → trastuzumab, palbociclib, fulvestrant. "PD-1 NSCLC" → nivolumab, pembrolizumab. Apply
+  deterministically to all 21,600 assets that have indication but no comparable_drugs. Estimated lift:
+   8.9% → ~55%. Zero cost, one-time build.
+
+  2. Target → comparable drugs reverse — for the 7,941 assets with a known target, derive the flagship
+   drug. PD-1 → nivolumab/pembrolizumab. EGFR → erlotinib/osimertinib. KRAS → sotorasib. Another
+  ~7,000 assets filled, no LLM.
+
+  3. comparable_drugs → target reverse — for the 2,960 with comparable_drugs already filled, parse the
+   drug names and look up their primary targets. Free target fill for ~2K assets.
+
+  4. MOA → target hint — MOA is 81.9% filled. Many MOAs uniquely imply a target class. "PARP
+  inhibitor" → PARP. "CDK4/6 inhibitor" → CDK4/6. Could extract target for ~3–5K dark assets with zero
+   cost from existing MOA text.
+
+  5. patent_status → ip_type — 13,562 have patent_status but only 9,933 have ip_type. Simple rule: if
+  patent_status = 'patented' AND ip_type IS NULL → ip_type = 'patented'. Closes part of the 70%
+  ip_type gap with a single SQL update.
+
+  Combined, these five rules could move comparable_drugs from 8.9% to ~55–60% and target from 23.8% to
+   ~35–40% with no API calls.
+
+  ---
+  The landscape tab — where this becomes the moat
+
+  You framed it correctly. The next-level play isn't "search + four tabs" — it's anchor a TTO asset's
+  structured metadata and automatically generate its competitive landscape. Specifically:
+
+  - Auto-query from asset metadata: An asset with target = PD-1, indication = NSCLC, modality =
+  antibody already has everything needed to pre-populate the patents, trials, and research tabs with a
+   precision search. The user never types a query — the landscape is derived from the proprietary
+  asset. Nobody without your TTO corpus can do this.
+  - Target saturation score: How many TTO assets share this target? PD-1 = 400+ = extremely crowded. A
+   novel KRAS G12C inhibitor from a small institution = 12 = white space. You can answer this in real
+  time because it's just a GROUP BY on your own data. This is something BD teams pay analysts months
+  to compile.
+  - Biology-level pipeline map: "17 assets in your database address immune evasion in NSCLC — 3 phase
+  1, 11 preclinical, 3 discovery. The patent space has grown 34% in 2 years." That sentence is a
+  market map. You generate it in milliseconds because you have the biology taxonomy applied at scale.
+  No consultant report does this.
+  - Institution trajectory view: For a given institution, cross-reference TTO assets + their recent
+  patents (USPTO ODP) + their recent publications (OpenAlex). "MIT has 14 oncology assets. 4 have
+  granted patents filed in the last 18 months. 2 have moved to trials." This forward-looking signal
+  doesn't exist anywhere else.
+
+  The virtuous cycle: filling target and comparable_drugs more completely makes every landscape query
+  sharper. That's why those two fields have disproportionate impact — they're not just display fields,
+   they're the anchors for the landscape layer. Start with the comparable_drugs indication lookup
+  table and the target/MOA reverse lookups — they're a few hundred lines of deterministic code and
+  they unlock the landscape intelligence layer significantly.
