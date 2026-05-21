@@ -1,0 +1,52 @@
+● Branch is pushed. Here's everything Replit needs to know:
+
+  ---
+  PR: data-enrichment-cc2
+
+  Branch: feat/data-enrichment-cc2
+  Create PR at: https://github.com/richardelles1/EdenRadar/pull/new/feat/data-enrichment-cc2
+
+  ---
+  What changed (2 files, 373 insertions)
+
+  shared/schema.ts — 2 new Drizzle columns:
+  - targetClass: text("target_class") — functional target group for landscape grid
+  - unmetNeedSeverity: integer("unmet_need_severity") — 1–5 severity score for White Space Finder
+
+  server/lib/pipeline/ruleBasedFill.ts — 4 major additions:
+
+  ┌──────────────────────────────────┬──────────┬────────────────────────────────────────────────┐
+  │             Addition             │   Size   │                    Purpose                     │
+  ├──────────────────────────────────┼──────────┼────────────────────────────────────────────────┤
+  │ TARGET_CLASS lookup              │ 90+      │ Groups individual targets into ~15 categories  │
+  │                                  │ entries  │ → enables Target×Modality grid                 │
+  ├──────────────────────────────────┼──────────┼────────────────────────────────────────────────┤
+  │ INDICATION_UNMET_NEED_SEVERITY   │ 60+      │ 1–5 severity per indication → White Space      │
+  │ lookup                           │ entries  │ Finder overlay                                 │
+  ├──────────────────────────────────┼──────────┼────────────────────────────────────────────────┤
+  │ TARGET_INDICATION reverse lookup │ 23       │ Fills blank indication from specific targets   │
+  │                                  │ entries  │ (LRRK2→Parkinson's, BTK→CLL, etc.)             │
+  ├──────────────────────────────────┼──────────┼────────────────────────────────────────────────┤
+  │ Expanded TARGET_RULES regex      │ 18       │ Catches full scientific names in MOA text      │
+  │                                  │ targets  │ (e.g. "poly ADP-ribose polymerase" → PARP)     │
+  └──────────────────────────────────┴──────────┴────────────────────────────────────────────────┘
+
+  The applyRulesToAsset function, RuleFillUpdateSet type, flushWrites, and both SQL queries in
+  runRuleBasedFill / estimateRuleBasedFill are all updated to handle the two new fields end-to-end.
+
+  DB migration already applied — columns exist in the database. Replit does not need to run any
+  migration command.
+
+  ---
+  How to tell Replit
+
+  Send them this message (copy-paste ready):
+
+  ▎ PR: data-enrichment-cc2 — branch feat/data-enrichment-cc2
+  ▎
+  ▎ Please pull and merge this PR. The Supabase DB migration is already applied (columns target_class
+  ▎ and unmet_need_severity exist in the DB, and stage_changed_at has been backfilled). The changes
+  ▎ are in 2 files: shared/schema.ts (2 new Drizzle column declarations) and
+  ▎ server/lib/pipeline/ruleBasedFill.ts (new lookup tables + fill logic + SQL query updates). No
+  ▎ scraper connections were modified. Once merged, trigger Admin → Rule-Based Fill to populate the
+  ▎ new fields across all relevant assets.
