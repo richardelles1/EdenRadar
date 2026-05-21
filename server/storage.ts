@@ -2325,7 +2325,7 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
-              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 5`,
             ),
             // Bucket D — null-category orphan (enrichedAt IS NOT NULL but categories IS NULL):
             //   Covers assets that were enriched but the GPT call returned no category data
@@ -2336,7 +2336,7 @@ export class DatabaseStorage implements IStorage {
             and(
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.categories} IS NULL`,
-              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 5`,
             ),
           ),
         ),
@@ -2360,12 +2360,12 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
-              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 5`,
             ),
             and(
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.categories} IS NULL`,
-              sql`${ingestedAssets.deepEnrichAttempts} <= 3`,
+              sql`${ingestedAssets.deepEnrichAttempts} <= 5`,
             ),
           ),
         ),

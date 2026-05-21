@@ -246,7 +246,7 @@ export function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfil
   const missed: string[] = [];
 
   if (buyerProfile.therapeutic_areas.length > 0) {
-    const assetText = `${asset.indication ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
+    const assetText = `${asset.indication ?? ""} ${asset.biology ?? ""} ${asset.target ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
     const hit = buyerProfile.therapeutic_areas.some((ta) => assetText.includes(ta.toLowerCase()));
     score += hit ? 40 : 0;
     checks++;
