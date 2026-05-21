@@ -531,6 +531,8 @@ const TARGET_CLASS: Record<string, string> = {
   "PD-1": "checkpoint immunotherapy",
   "PD-L1": "checkpoint immunotherapy",
   "PD-L2": "checkpoint immunotherapy",
+  "PDCD1": "checkpoint immunotherapy",   // LLM alias for PD-1
+  "CD274": "checkpoint immunotherapy",   // LLM alias for PD-L1
   "CTLA-4": "checkpoint immunotherapy",
   "LAG-3": "checkpoint immunotherapy",
   "TIM-3": "checkpoint immunotherapy",
@@ -549,6 +551,7 @@ const TARGET_CLASS: Record<string, string> = {
   "EGFR": "receptor tyrosine kinase",
   "EGFRvIII": "receptor tyrosine kinase",
   "HER2": "receptor tyrosine kinase",
+  "ERBB2": "receptor tyrosine kinase",   // LLM alias for HER2
   "HER3": "receptor tyrosine kinase",
   "VEGFR": "receptor tyrosine kinase",
   "FGFR": "receptor tyrosine kinase",
@@ -583,6 +586,7 @@ const TARGET_CLASS: Record<string, string> = {
   "BRCA1": "DNA damage response",
   "BRCA2": "DNA damage response",
   "TP53/p53": "DNA damage response",
+  "TP53": "DNA damage response",         // LLM alias (omits /p53)
   // Apoptosis
   "BCL-2": "apoptosis",
   "BCL-XL": "apoptosis",
@@ -607,6 +611,7 @@ const TARGET_CLASS: Record<string, string> = {
   "IL-13": "cytokine/inflammation",
   "IL-33": "cytokine/inflammation",
   "TGF-beta": "cytokine/inflammation",
+  "TGFB1": "cytokine/inflammation",      // LLM alias for TGF-beta
   "NF-kB": "cytokine/inflammation",
   // Metabolic/hormone receptor
   "GLP-1R": "metabolic hormone",
@@ -674,10 +679,14 @@ const TARGET_CLASS: Record<string, string> = {
   "ACE2": "viral target",
   "NSP14": "viral target",
   "Spike protein": "viral target",
+  "sars-cov-2": "viral target",           // LLM alias (virus name used as target)
   // Neurodegeneration
   "TREM2": "neurodegeneration",
   "LRRK2": "neurodegeneration",
   "GBA": "neurodegeneration",
+  "MAPT": "neurodegeneration",            // tau protein (Alzheimer's)
+  "SNCA": "neurodegeneration",            // alpha-synuclein (Parkinson's)
+  "APP": "neurodegeneration",             // amyloid precursor protein (Alzheimer's)
   // Non-receptor kinase
   "SRC": "non-receptor kinase",
   // Adenosine/immune metabolism
@@ -774,6 +783,26 @@ const INDICATION_UNMET_NEED_SEVERITY: Record<string, number> = {
   "hypercholesterolemia": 1,
   "ankylosing spondylitis": 1,
   "influenza": 1,
+  // Broad LLM categories and canonical form aliases
+  "cancer": 3,
+  "hiv infection": 3,                    // LLM canonical (253 assets vs "hiv")
+  "type 2 diabetes mellitus": 2,         // LLM canonical (131 assets)
+  "neurological disorder": 3,
+  "infectious disease": 3,
+  "hematological disorder": 3,
+  "pain": 3,
+  "renal disease": 3,
+  "autoimmune disease": 2,
+  "musculoskeletal disorder": 2,
+  "ocular disease": 2,
+  "gastrointestinal disease": 2,
+  "dermatological condition": 2,
+  "reproductive health": 2,
+  "respiratory disease": 2,
+  "wound healing": 1,
+  "point-of-care diagnostics": 1,
+  "surgical application": 1,
+  "medical imaging diagnostics": 1,
 };
 
 // ── Target → Indication reverse lookup (narrow, high-confidence set) ──────────
@@ -903,6 +932,7 @@ const INDICATION_BIOLOGY: Record<string, string> = {
   // Infectious disease
   "hiv": "immune evasion",
   "hiv/aids": "immune evasion",
+  "hiv infection": "immune evasion",     // LLM canonical form (253 assets)
   "hepatitis b": "immune evasion",
   "hepatitis c": "pathogen replication",
   "influenza": "pathogen replication",
