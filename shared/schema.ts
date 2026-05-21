@@ -254,6 +254,14 @@ export const ingestedAssets = pgTable("ingested_assets", {
   // Sorted-token fingerprint of the asset title used for fast O(1) exact-title
   // cross-institution dedup (managed via startup migration).
   titleKey: text("title_key"),
+  // Functional target class grouping 100+ individual targets into ~15 categories
+  // (checkpoint immunotherapy, receptor tyrosine kinase, RAS/MAPK pathway, etc.)
+  // Enables the Target×Modality landscape grid. Managed via startup migration.
+  targetClass: text("target_class"),
+  // Unmet need severity score (1–5): 1 = addressable gap, 5 = critical unmet need.
+  // Drives the White Space Finder overlay on the landscape intelligence page.
+  // Managed via startup migration.
+  unmetNeedSeverity: integer("unmet_need_severity"),
 }, (t) => [
   // Index on canonical_asset_id — critical for search performance.
   index("ingested_assets_canonical_asset_id_idx").on(t.canonicalAssetId),
