@@ -38,7 +38,7 @@ import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from ".
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
 import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import {
@@ -7093,7 +7093,32 @@ Do not respond with anything else.`;
           return undefined;
         }),
       ]);
-      const history = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
+      const allMessages = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
+
+      // ── Session summarization: at turn 8, compress older turns into a context note ──
+      // Keeps the last 4 turns fresh and prepends a summary of everything prior,
+      // effectively tripling usable context without growing token cost.
+      const assistantTurnCount = allMessages.filter((m) => m.role === "assistant").length;
+      const storedSummary = session.focusContext?._summary as string | undefined;
+      let history: typeof allMessages;
+      if (assistantTurnCount >= 8 && storedSummary) {
+        history = [
+          { role: "user" as const, content: `[Prior conversation summary]\n${storedSummary}` },
+          { role: "assistant" as const, content: "Understood. Continuing from there." },
+          ...allMessages.slice(-4),
+        ];
+      } else {
+        history = allMessages.slice(-6);
+      }
+      // Trigger async summarization once we hit turn 8 (fire-and-forget, stores in focusContext._summary)
+      if (assistantTurnCount === 8 && !storedSummary) {
+        summarizeSession(allMessages).then(async (summary) => {
+          if (summary) {
+            const updatedFocus = { ...(session.focusContext ?? {}), _summary: summary } as SessionFocusContext;
+            await persistSessionFocus(sid, updatedFocus).catch(() => {});
+          }
+        });
+      }
 
       // ── Seed in-memory focus from DB on first message of this server process ──
       seedSessionFocusFromDb(sid, session.focusContext);
@@ -7587,9 +7612,9 @@ Do not respond with anything else.`;
       ].slice(0, 15);
 
       // Derive engagement signals from session message history (includes back-refs
-      // and follow-up turns already persisted to DB) then rerank with profile + adaptive tiers.
+      // and follow-up turns already persisted to DB) then rerank with profile + adaptive + biology tiers.
       const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
-      const retrieved = rerankAssets(merged, ctx, engagementSignals);
+      const retrieved = rerankAssets(merged, ctx, engagementSignals, focusContext?.biology);
 
       const assetPayload = retrieved.map((a) => ({
         id: a.id, assetName: a.assetName, institution: a.institution,
@@ -7636,7 +7661,21 @@ Do not respond with anything else.`;
       return res.status(400).json({ error: "sessionId, messageIndex, and sentiment (up|down) required" });
     }
     try {
-      await storage.createEdenMessageFeedback(sessionId, messageIndex, sentiment);
+      // Enrich feedback with user_id, rated asset IDs, and the query that generated the response.
+      // All three are derivable server-side from auth + session history — no client change needed.
+      const userId = (req as any).userId ?? null;
+      let assetIds: number[] | undefined;
+      let queryText: string | undefined;
+      try {
+        const sess = await storage.getOrCreateEdenSession(sessionId);
+        const msgs = sess.messages ?? [];
+        const assistantMsg = msgs[messageIndex];
+        if (assistantMsg?.assetIds?.length) assetIds = assistantMsg.assetIds;
+        // The user turn immediately preceding the assistant response
+        const userMsg = msgs[messageIndex - 1];
+        if (userMsg?.role === "user") queryText = userMsg.content.slice(0, 500);
+      } catch { /* non-fatal — still record the sentiment */ }
+      await storage.createEdenMessageFeedback(sessionId, messageIndex, sentiment, { userId, assetIds, queryText });
       return res.json({ ok: true });
     } catch (err) {
       console.error("[EDEN feedback]", err);

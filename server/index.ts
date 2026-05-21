@@ -567,6 +567,10 @@ async function runStartupMigrations() {
       CREATE UNIQUE INDEX IF NOT EXISTS eden_message_feedback_session_msg_uidx
       ON eden_message_feedback(session_id, message_index)
     `);
+    await mdb.execute(sql`ALTER TABLE eden_message_feedback ADD COLUMN IF NOT EXISTS user_id text`);
+    await mdb.execute(sql`ALTER TABLE eden_message_feedback ADD COLUMN IF NOT EXISTS asset_ids integer[]`);
+    await mdb.execute(sql`ALTER TABLE eden_message_feedback ADD COLUMN IF NOT EXISTS query_text text`);
+    await mdb.execute(sql`ALTER TABLE eden_sessions ADD COLUMN IF NOT EXISTS user_id text`);
     log("[startup] eden_message_feedback table ready", "startup");
   } catch (err: any) {
     log(`[startup] eden_message_feedback migration failed: ${err?.message}`, "startup");
