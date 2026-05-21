@@ -1,0 +1,35 @@
+  Here's what the PR contains:
+
+  ---
+  Root cause fixed: CONFIDENCE_AWARE_RANKING_ENABLED defaulted to true in non-prod, which multiplied
+  every score by rawTotal × (0.4 + 0.6 × confidenceFactor). With category_confidence near 0, that
+  collapsed everything to 4–7.
+
+  4-dimension model (was 3):
+
+  ┌──────────────────┬────────┬──────────────────────────────────────────────────────────┐
+  │    Dimension     │ Weight │                          Before                          │
+  ├──────────────────┼────────┼──────────────────────────────────────────────────────────┤
+  │ search_relevance │ 45%    │ ❌ didn't exist                                          │
+  ├──────────────────┼────────┼──────────────────────────────────────────────────────────┤
+  │ fit              │ 35%    │ 75% — produced neutral 50 for all assets without profile │
+  ├──────────────────┼────────┼──────────────────────────────────────────────────────────┤
+  │ record_quality   │ 12%    │ 15%                                                      │
+  ├──────────────────┼────────┼──────────────────────────────────────────────────────────┤
+  │ availability     │ 8%     │ 10%                                                      │
+  └──────────────────┴────────┴──────────────────────────────────────────────────────────┘
+
+  With search_relevance carrying 45% of the score from normalized RRF rank, the #1 search result
+  genuinely scores above #50. Filter-only browsing (no query) gets hasData:false on this dimension and
+   the weight auto-redistributes to the other three.
+
+  buyerProfile gap closed: The full session profile (preferred_stages, indication_keywords,
+  target_keywords, excluded_stages) now reaches the scout endpoint — previously only therapeutic_areas
+   and modalities came from the DB.
+
+  Admin Re-Score button: All three rescore endpoints now exist — 404 is gone.
+
+  ScoreBadge: TTO assets now show "Query Match / Buyer Fit / Data Quality / Availability" bars instead
+   of the legacy non-applicable dims.
+
+✻ Cogitated for 15m 35s
