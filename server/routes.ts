@@ -1041,6 +1041,8 @@ export async function registerRoutes(
             scored_dimensions,
             dimension_basis,
             confidence_factor: Math.round(confidenceFactor * 100) / 100,
+            confidence_aware_enabled: CONFIDENCE_AWARE,
+            raw_total: rawTotal,
             ...(catConf !== undefined ? { category_confidence: catConf } : {}),
             ...(typeof r.textRelevance === "number" ? { text_relevance: Math.round(r.textRelevance * 1000) / 1000 } : {}),
             ...(hybridScoreById.has(r.id)
