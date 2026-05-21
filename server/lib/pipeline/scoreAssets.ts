@@ -21,13 +21,17 @@ const WEIGHTS: Record<string, number> = {
   competition: 0.10,
 };
 
-// TTO 3-dimension model (Task #980): used for tech_transfer assets in Scout.
-// Licensability/Novelty/Competition are near-constants for TTO corpus (~95/90/80)
-// so they produce zero differentiation. Fit is the reason a buyer opens Scout.
+// TTO 4-dimension model: search_relevance replaces the static fit monopoly.
+// Without a buyer profile, fit was pinned at 50 for every asset — making all
+// scores cluster at 42–55. Adding search_relevance (RRF-normalized, per-query)
+// creates real differentiation so the #1 match genuinely ranks above #50.
+// When no query is present (filter-only browse), search_relevance returns
+// hasData:false and its weight is redistributed to the remaining dimensions.
 export const TTO_WEIGHTS: Record<string, number> = {
-  fit: 0.75,
-  record_quality: 0.15,
-  availability: 0.10,
+  search_relevance: 0.45,  // how well this asset matched THIS specific query
+  fit:              0.35,  // saved thesis / buyer profile match
+  record_quality:   0.12,  // data completeness
+  availability:     0.08,  // recency of TTO portal confirmation
 };
 
 // ─── Confidence-aware ranking (Task #693) ─────────────────────────────────────
@@ -35,11 +39,9 @@ export const CONFIDENCE_FLOOR = 0.4;
 export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 const isProdEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
 const flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
-export const CONFIDENCE_AWARE_RANKING_ENABLED = flagRaw === "true"
-  ? true
-  : flagRaw === "false"
-    ? false
-    : !isProdEnv;
+// Require explicit opt-in; never default ON in non-prod (was !isProdEnv which
+// caused all scores to be crushed to 4–7 in dev due to low category_confidence).
+export const CONFIDENCE_AWARE_RANKING_ENABLED = flagRaw === "true";
 
 /** Stable re-order: keep score order, but push assets with confidence_factor
  *  below `LOW_CONFIDENCE_THRESHOLD` out of the top 5 whenever 5+ higher-
@@ -401,6 +403,25 @@ export function scoreAvailability(asset: Partial<ScoredAsset>): DimensionResult 
   }
 
   return { score, hasData: true, basis };
+}
+
+// ─── TTO-specific dimension: Search Relevance ─────────────────────────────────
+// Derived from the hybrid RRF score, normalized to [0,100] by the caller
+// (routes.ts). When no query is present (filter-only browse) the caller passes
+// undefined and this returns hasData:false — its 45% weight is auto-
+// redistributed to the remaining dimensions by computeTotal, so filter-only
+// results are still ranked by fit + quality + availability.
+export function scoreSearchRelevance(normalizedScore?: number): DimensionResult {
+  if (normalizedScore == null) {
+    return { score: 50, hasData: false, basis: "No query — relevance not applicable" };
+  }
+  const s = Math.max(0, Math.min(100, Math.round(normalizedScore)));
+  let basis: string;
+  if (s >= 80) basis = `Strong query match (relevance: ${s}/100)`;
+  else if (s >= 60) basis = `Good query match (relevance: ${s}/100)`;
+  else if (s >= 40) basis = `Moderate query match (relevance: ${s}/100)`;
+  else basis = `Weak query match (relevance: ${s}/100)`;
+  return { score: s, hasData: true, basis };
 }
 
 // ─── computeTotal ─────────────────────────────────────────────────────────────
