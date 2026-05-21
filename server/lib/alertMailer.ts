@@ -5,12 +5,31 @@ import { eq, gt, and, ilike, or, inArray, desc, isNotNull } from "drizzle-orm";
 import { renderDispatchEmail, type DispatchAsset } from "./emailTemplate";
 import { sendEmail, FROM_DIGEST, unsubscribeUrlFor } from "../email";
 
-const DIGEST_SAMPLE_LIMIT = 3;
+const DIGEST_SAMPLE_LIMIT = 8;
 const SUPPORT_EMAIL = "support@edenradar.com";
 
 function frequencyWindowHours(frequency: string): number {
   if (frequency === "weekly") return 168;
   return 24;
+}
+
+function frequencyLabel(frequency: string): string {
+  if (frequency === "weekly") return "Weekly";
+  if (frequency === "realtime") return "Realtime";
+  return "Daily";
+}
+
+/** Prevent daily/weekly digests from firing between 10pm and 6am ET. */
+function isWithinDeliveryWindow(): boolean {
+  const etHour = parseInt(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      hour12: false,
+    }).format(new Date()),
+    10,
+  );
+  return etHour >= 6 && etHour < 22;
 }
 
 function shouldSendNow(lastSentAt: Date | null, windowHours: number): boolean {
@@ -256,6 +275,11 @@ async function evaluateAlerts(): Promise<void> {
         skippedCount++;
         continue;
       }
+      if (!isWithinDeliveryWindow()) {
+        console.log(`[alertMailer] Alert ${alert.id} — skip: outside delivery window (6am–10pm ET)`);
+        skippedCount++;
+        continue;
+      }
     }
 
     // First-run cap: 6h for realtime, 48h for daily/weekly.
@@ -286,10 +310,9 @@ async function evaluateAlerts(): Promise<void> {
     const alertName = alert.name?.trim() ||
       `My Alert — ${new Date(alert.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     const totalCount = matched.length;
-    // Show up to 3 sample assets in the digest; remaining count shown in a footer CTA
     const sampleAssets = matched.slice(0, DIGEST_SAMPLE_LIMIT);
-    const subject = `EdenRadar Alert: ${totalCount} new match${totalCount !== 1 ? "es" : ""} — ${alertName}`;
-    const windowLabel = `Alert: ${alertName} · ${totalCount} new asset${totalCount !== 1 ? "s" : ""}`;
+    const subject = `EdenRadar: ${totalCount} new match${totalCount !== 1 ? "es" : ""} — ${alertName}`;
+    const windowLabel = `${frequencyLabel(frequency)} Alert: ${alertName} · ${totalCount} new asset${totalCount !== 1 ? "s" : ""}`;
     const appBaseUrl = process.env.APP_BASE_URL ?? process.env.APP_URL ?? "https://edenradar.com";
     const unsubscribeUrl = unsubscribeUrlFor(alert.userId);
 

@@ -113,6 +113,11 @@ interface PreviewResponse {
   samples: Array<{ id: number; assetName: string; institution: string; modality: string; developmentStage: string }>;
 }
 
+interface IndustryProfileBrief {
+  notificationPrefs: { frequency: "realtime" | "daily" | "weekly" } | null;
+  subscribedToDigest: boolean;
+}
+
 function normalizeModality(m: string): string {
   return m.toLowerCase();
 }
@@ -193,7 +198,7 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
           {isEnabled && matchCount > 0 && (
             <Badge
               variant="secondary"
-              className="shrink-0 text-[10px] tabular-nums px-1.5 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+              className="shrink-0 text-[11px] tabular-nums px-1.5 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
               data-testid={`alert-match-count-${alert.id}`}
             >
               +{matchCount} new
@@ -201,31 +206,31 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
           )}
         </div>
         {isAllNew ? (
-          <p className="text-[10px] text-muted-foreground">Matches all new TTO assets</p>
+          <p className="text-[11px] text-muted-foreground">Matches all new TTO assets</p>
         ) : criteriaChips.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {criteriaChips.slice(0, 6).map((chip, i) => (
-              <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded-full border truncate max-w-[130px] ${chip.colorClass}`}>{chip.label}</span>
+              <span key={i} className={`text-[11px] px-1.5 py-0.5 rounded-full border truncate max-w-[140px] ${chip.colorClass}`}>{chip.label}</span>
             ))}
             {criteriaChips.length > 6 && (
-              <span className="text-[10px] text-muted-foreground">+{criteriaChips.length - 6} more</span>
+              <span className="text-[11px] text-muted-foreground">+{criteriaChips.length - 6} more</span>
             )}
           </div>
         ) : null}
         {!isAllNew && hasExploreCriteria && (
           <Link href={exploreUrl}>
-            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
               Explore matches →
             </span>
           </Link>
         )}
         {alert.lastAlertSentAt ? (
-          <p className="text-[10px] text-muted-foreground flex items-center gap-1" data-testid={`alert-last-triggered-${alert.id}`}>
+          <p className="text-xs text-muted-foreground flex items-center gap-1" data-testid={`alert-last-triggered-${alert.id}`}>
             <Clock className="w-2.5 h-2.5 shrink-0" />
             Last triggered {new Date(alert.lastAlertSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
           </p>
         ) : (
-          <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1" data-testid={`alert-last-triggered-${alert.id}`}>
+          <p className="text-xs text-muted-foreground/60 flex items-center gap-1" data-testid={`alert-last-triggered-${alert.id}`}>
             <Clock className="w-2.5 h-2.5 shrink-0" />
             Never triggered
           </p>
@@ -262,7 +267,35 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   );
 }
 
-function MyAlertsSection({ onCreateAlert, matchCounts = {} }: { onCreateAlert: () => void; matchCounts?: Record<number, number> }) {
+function DeliveryStatusBanner({ profile }: { profile: IndustryProfileBrief | null | undefined }) {
+  const frequency = profile?.notificationPrefs?.frequency ?? "daily";
+  const subscribed = profile?.subscribedToDigest ?? false;
+  const freqLabel = frequency === "weekly" ? "Weekly" : frequency === "realtime" ? "As discovered" : "Daily";
+
+  if (!subscribed) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+        <Bell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+        <p className="text-xs text-amber-700 dark:text-amber-400 flex-1">
+          Email alerts are disabled.{" "}
+          <Link href="/industry/settings" className="underline font-medium">Enable in Settings</Link>.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2">
+      <Clock className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+      <p className="text-xs text-muted-foreground flex-1">
+        Delivering <span className="font-medium text-foreground">{freqLabel}</span> via email · 6am–10pm ET delivery window ·{" "}
+        <Link href="/industry/settings" className="text-primary hover:underline">Manage frequency</Link>
+      </p>
+    </div>
+  );
+}
+
+function MyAlertsSection({ onCreateAlert, matchCounts = {}, profile }: { onCreateAlert: () => void; matchCounts?: Record<number, number>; profile?: IndustryProfileBrief | null }) {
   const [editingAlert, setEditingAlert] = useState<UserAlert | null>(null);
   const { data: alerts = [], isLoading } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
@@ -307,6 +340,8 @@ function MyAlertsSection({ onCreateAlert, matchCounts = {} }: { onCreateAlert: (
             <Plus className="w-3 h-3" /> Add alert
           </button>
         </div>
+
+        <DeliveryStatusBanner profile={profile} />
 
         {isLoading ? (
           <div className="space-y-2">
@@ -1157,6 +1192,12 @@ export default function Alerts() {
 
   const { data: alerts = [] } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
+  const { data: profileData } = useQuery<{ profile: IndustryProfileBrief | null }>({
+    queryKey: ["/api/industry/profile"],
+    staleTime: 10 * 60 * 1000,
+  });
+  const profile = profileData?.profile;
+
   // Per-visit snapshot lifecycle:
   //   - "Visit" = one Alerts route instance. Refreshes (full page reload) do
   //     NOT fire React's cleanup, so the sessionStorage cache survives and
@@ -1272,7 +1313,7 @@ export default function Alerts() {
             <div>
               <h1 className="text-xl font-bold text-foreground">Alerts</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                New TTO assets, concepts, and research activity since {sinceLabel}.
+                New TTO assets and research activity since {sinceLabel}. Alerts deliver by email when new matches are found.
               </p>
             </div>
             <Button className="gap-2 shrink-0" onClick={() => setSheetOpen(true)} data-testid="button-create-alert">
@@ -1296,7 +1337,7 @@ export default function Alerts() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
-              <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} matchCounts={alertMatchCounts} />
+              <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} matchCounts={alertMatchCounts} profile={profile} />
 
               <div className="border-t border-border/40" />
 
@@ -1320,8 +1361,8 @@ export default function Alerts() {
                   <Clock className="w-4 h-4" />
                   <span className="text-xs font-medium">Since last visit</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1" data-testid="text-since-label">
-                  Showing activity since {sinceLabel}
+                <p className="text-[11px] text-muted-foreground/70 -mt-1" data-testid="text-since-label">
+                  Activity since {sinceLabel}
                 </p>
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between text-sm">
@@ -1351,6 +1392,30 @@ export default function Alerts() {
                     Mark all as seen
                   </button>
                 )}
+
+                {/* Email delivery status */}
+                <div className="border-t border-border/40 pt-3 space-y-1.5">
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Email Delivery</p>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Frequency</span>
+                    <span className="font-medium text-foreground capitalize">
+                      {profile?.notificationPrefs?.frequency === "realtime"
+                        ? "As discovered"
+                        : profile?.notificationPrefs?.frequency === "weekly"
+                        ? "Weekly"
+                        : "Daily"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">Email alerts</span>
+                    <span className={`font-medium ${profile?.subscribedToDigest ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                      {profile?.subscribedToDigest ? "Enabled" : "Disabled"}
+                    </span>
+                  </div>
+                  <Link href="/industry/settings">
+                    <span className="text-[11px] text-primary hover:underline">Manage settings →</span>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>
