@@ -369,13 +369,13 @@ Write in the voice of a premium commercial intelligence service. Use precise lan
   }
 }
 
-export async function generateDossierNarrative(asset: ScoredAsset): Promise<string> {
+function buildDossierPrompt(asset: ScoredAsset): string {
   const signals = asset.signals
     .slice(0, 5)
     .map((s) => `- [${s.source_type}] ${s.title} (${s.date})`)
     .join("\n");
 
-  const prompt = `You are a senior biotech deal analyst writing a confidential asset dossier for a pharma licensing team.
+  return `You are a senior biotech deal analyst writing a confidential asset dossier for a pharma licensing team.
 
 Write a detailed commercial opportunity brief for this drug asset. Structure it as:
 
@@ -406,27 +406,41 @@ Supporting Evidence:
 ${signals}
 
 Write in precise, professional language suitable for a BD executive.`;
+}
 
+/** Stream dossier narrative token-by-token. Uses mini by default; pass fullModel=true for gpt-4o. */
+export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = false): AsyncGenerator<string> {
+  const prompt = buildDossierPrompt(asset);
+  const model = fullModel ? "gpt-4o" : "gpt-4o-mini";
+  const client = fullModel ? clientFull : clientMini;
+  const maxTokens = fullModel ? 900 : 700;
+
+  const stream = await client.chat.completions.create({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.3,
+    max_tokens: maxTokens,
+    stream: true,
+  });
+
+  for await (const chunk of stream) {
+    const text = chunk.choices[0]?.delta?.content ?? "";
+    if (text) yield text;
+  }
+}
+
+export async function generateDossierNarrative(asset: ScoredAsset): Promise<string> {
+  const prompt = buildDossierPrompt(asset);
   try {
-    const response = await clientFull.chat.completions.create({
-      model: "gpt-4o",
+    const response = await clientMini.chat.completions.create({
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
-      max_tokens: 900,
+      max_tokens: 700,
     });
     return response.choices[0]?.message?.content?.trim() ?? "";
   } catch (err) {
     if (isFatalOpenAIError(err)) throw err;
-    try {
-      const fallback = await clientMini.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.3,
-        max_tokens: 700,
-      });
-      return fallback.choices[0]?.message?.content?.trim() ?? "";
-    } catch {
-      return "";
-    }
+    return "";
   }
 }
