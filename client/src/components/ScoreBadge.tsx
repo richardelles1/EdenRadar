@@ -9,6 +9,9 @@ interface ScoreBadgeProps {
     licensability: number;
     fit: number;
     competition: number;
+    search_relevance?: number;
+    record_quality?: number;
+    availability?: number;
     total: number;
     signal_coverage?: number;
     scored_dimensions?: string[];
@@ -23,14 +26,18 @@ function scoreColor(score: number): { bg: string; text: string; ring: string } {
 }
 
 const BREAKDOWN_LABELS: Record<string, string> = {
-  fit: "Buyer Fit",
-  novelty: "Novelty",
-  readiness: "Readiness",
-  licensability: "Licensability",
+  search_relevance: "Query Match",
+  fit:              "Buyer Fit",
+  record_quality:   "Data Quality",
+  availability:     "Availability",
+  novelty:          "Novelty",
+  readiness:        "Readiness",
+  licensability:    "Licensability",
+  freshness:        "Freshness",
 };
 
-const MEANINGFUL_DIMS = ["fit", "novelty", "readiness", "licensability"] as const;
-type MeaningfulDim = typeof MEANINGFUL_DIMS[number];
+const TTO_DIMS    = ["search_relevance", "fit", "record_quality", "availability"] as const;
+const LEGACY_DIMS = ["fit", "novelty", "readiness", "licensability"] as const;
 
 export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
   const isUnscored = score === 0 || (breakdown?.signal_coverage ?? 0) === 0;
@@ -57,18 +64,17 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
 
   if (!breakdown) return badge;
 
-  const scoredDims = breakdown.scored_dimensions ?? MEANINGFUL_DIMS.slice();
-  const dims = MEANINGFUL_DIMS.filter(
-    (k): k is MeaningfulDim =>
-      k in breakdown &&
-      scoredDims.includes(k) &&
-      (breakdown as unknown as Record<string, number>)[k] > 0
+  const scoredDims = breakdown.scored_dimensions ?? [];
+  const isTTO = scoredDims.includes("record_quality") || scoredDims.includes("search_relevance");
+  const preferredDims: readonly string[] = isTTO ? TTO_DIMS : LEGACY_DIMS;
+
+  const dims = preferredDims.filter(
+    (k) => k in breakdown && (breakdown as unknown as Record<string, number>)[k] > 0
   );
 
   if (dims.length === 0) return badge;
 
   const coverage = breakdown.signal_coverage ?? 0;
-  const scoredCount = (breakdown.scored_dimensions ?? Object.keys(breakdown).filter((k) => k !== "total" && k !== "signal_coverage" && k !== "scored_dimensions" && k !== "dimension_basis")).length;
 
   return (
     <Tooltip>
@@ -76,7 +82,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
       <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
         <p className="text-xs font-semibold text-foreground mb-1">Signal Profile</p>
         <p className="text-[10px] text-muted-foreground mb-2">
-          {scoredCount} of 6 dimensions scored
+          {dims.length} dimension{dims.length !== 1 ? "s" : ""} scored · {coverage}% coverage
         </p>
         <div className="space-y-1.5">
           {dims.map((k) => {
@@ -84,7 +90,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
             const { text: t, bg: b } = scoreColor(val);
             return (
               <div key={k} className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground w-24 shrink-0">{BREAKDOWN_LABELS[k]}</span>
+                <span className="text-[10px] text-muted-foreground w-24 shrink-0">{BREAKDOWN_LABELS[k] ?? k}</span>
                 <div className="flex-1 h-1.5 rounded-full bg-card-border overflow-hidden">
                   <div className={`h-full rounded-full ${b.replace("/15", "/60")}`} style={{ width: `${val}%` }} />
                 </div>

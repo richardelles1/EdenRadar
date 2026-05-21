@@ -541,6 +541,7 @@ export default function Scout() {
         ...(profileIndication ? { indication: profileIndication } : {}),
         ...(useMultiInstitution ? { institutions } : {}),
         ...dateBounds,
+        buyerProfile,
       });
       if (!res.ok) {
         const err = await res.json();

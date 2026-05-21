@@ -26,7 +26,7 @@ import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreFit as scoreFitTTO, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreFit as scoreFitTTO, scoreSearchRelevance, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
@@ -668,8 +668,9 @@ export async function registerRoutes(
         limit: z.number().int().min(1).max(200).default(100),
         since: z.string().optional(),
         before: z.string().optional(),
+        buyerProfile: buyerProfileSchema,
       });
-      const { query, minSimilarity, modality, stage, indication, institution, biology, biologies, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
+      const { query, minSimilarity, modality, stage, indication, institution, biology, biologies, modalities, stages, institutions, limit, since, before, buyerProfile: sessionBuyerProfile } = schema.parse(req.body);
       const hasAnyFilter = !!(modality || stage || indication || institution || biology || since || before
         || (biologies && biologies.length) || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
       if (!query.trim() && !hasAnyFilter) {
@@ -828,6 +829,23 @@ export async function registerRoutes(
         }
       }
 
+      // Normalize RRF scores to [0, 100] for the search_relevance dimension.
+      // Last-place gets 20 (not 0) so an asset appearing in only one retrieval
+      // path isn't penalised purely for missing the other. When no query was
+      // issued (filter-only browse), normalizedRrfById stays empty and
+      // scoreSearchRelevance returns hasData:false — computeTotal then
+      // auto-redistributes the 45% weight to the remaining dimensions.
+      const normalizedRrfById = new Map<number, number>();
+      if (runHybrid && hybridScoreById.size > 0) {
+        const vals = [...hybridScoreById.values()].map((h) => h.rrfScore);
+        const maxR = Math.max(...vals);
+        const minR = Math.min(...vals);
+        const rrfRange = maxR - minR || 1;
+        for (const [id, h] of hybridScoreById) {
+          normalizedRrfById.set(id, 20 + Math.round(((h.rrfScore - minR) / rrfRange) * 80));
+        }
+      }
+
       // Debug surface (#761 step 5): when an internal flag/header is set,
       // surface the synonym expansion so we can verify which groups fired.
       // Off by default so the production payload is unchanged.
@@ -885,11 +903,10 @@ export async function registerRoutes(
         }
       }
 
-      // Default policy: ON in non-prod, OFF in prod unless flag explicitly set.
+      // Require explicit opt-in only — never default ON (was !_isProd which crushed
+      // all scores to 4–7 in non-prod due to low category_confidence).
       const _flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
-      const _isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
-      const CONFIDENCE_AWARE =
-        _flagRaw === "true" ? true : _flagRaw === "false" ? false : !_isProd;
+      const CONFIDENCE_AWARE = _flagRaw === "true";
       const CONF_FLOOR = 0.4;
       const LOW_CONF = 0.5;
 
@@ -924,27 +941,29 @@ export async function registerRoutes(
         }
       }
 
-      // Step 2: build fit profile solely from the user's saved Deal Focus thesis.
-      // The search query already determines which assets surface via text ranking.
-      // Using it a second time for fit scoring penalises assets whose stored modality
-      // field doesn't literally match the query string — even when they are clearly
-      // relevant — because normalised DB values ("Cell Therapy") never substring-match
-      // the query term ("car-t"). Fit should only be a boost for matching the saved
-      // thesis, not a structural penalty on every general search.
+      // Step 2: build fit profile. Prefer the session buyerProfile (has full
+      // criteria: stages, keywords, excluded stages) over the DB-only profile
+      // (therapeutic_areas + modalities only). The search query already drives
+      // which assets surface via text ranking — fit is an additional boost for
+      // thesis alignment, not a search signal.
       let scoutFitProfile: import("./lib/types").BuyerProfile | undefined;
-      if (savedFitBasis && (savedFitBasis.therapeutic_areas.length > 0 || savedFitBasis.modalities.length > 0)) {
+      const sessionHasCriteria = !!(sessionBuyerProfile && (
+        (sessionBuyerProfile.therapeutic_areas?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.modalities?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.preferred_stages?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.indication_keywords?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.target_keywords?.length ?? 0) > 0
+      ));
+      if (sessionHasCriteria && sessionBuyerProfile) {
+        scoutFitProfile = { ...DEFAULT_BUYER_PROFILE, ...sessionBuyerProfile };
+      } else if (savedFitBasis && (savedFitBasis.therapeutic_areas.length > 0 || savedFitBasis.modalities.length > 0)) {
         scoutFitProfile = {
           ...DEFAULT_BUYER_PROFILE,
           therapeutic_areas:   savedFitBasis.therapeutic_areas,
           modalities:          savedFitBasis.modalities,
-          preferred_stages:    [],
-          excluded_stages:     [],
-          indication_keywords: [],
-          target_keywords:     [],
-          owner_type_preference: "any",
         };
       }
-      // No saved profile → scoutFitProfile remains undefined → scoreFit returns
+      // No profile → scoutFitProfile remains undefined → scoreFit returns
       // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
 
       // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
@@ -969,14 +988,16 @@ export async function registerRoutes(
           latest_signal_date: r.lastSeenAt ?? "",
         };
 
+        const searchRelevanceResult = scoreSearchRelevance(normalizedRrfById.get(r.id));
         const fitRes             = scoreFitTTO(partialAsset, scoutFitProfile);
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
-          fit:            fitRes,
-          record_quality: completenessResult,
-          availability:   availabilityResult,
+          search_relevance: searchRelevanceResult,
+          fit:              fitRes,
+          record_quality:   completenessResult,
+          availability:     availabilityResult,
         };
 
         const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
@@ -1006,6 +1027,7 @@ export async function registerRoutes(
           source_types: ["tech_transfer"],
           score: total,
           score_breakdown: {
+            search_relevance: searchRelevanceResult.score,
             fit:            fitRes.score,
             record_quality: completenessResult.score,
             availability:   availabilityResult.score,
@@ -1064,13 +1086,12 @@ export async function registerRoutes(
       const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
       const completenessOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.completeness ?? 0;
       const recencyOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.recencyMs ?? 0;
-      // TTO fit-first sort (Task #980):
+      // TTO score sort (4-dimension model):
       //   1. Exact-name matches pinned to top.
-      //   2. Score (fit-weighted) is the primary order — the new 3-dimension model
-      //      already encodes query fit (75%), so score IS the fit signal.
-      //   3. For queried searches, text_relevance / RRF acts as a secondary
-      //      tiebreaker to keep strong text-match assets from being buried behind
-      //      same-scoring records that happen to have a marginally better fit.
+      //   2. Score is the primary order. The 4-dimension model weights:
+      //      search_relevance 45%, fit 35%, record_quality 12%, availability 8%
+      //      — so score already IS the combined relevance+fit signal.
+      //   3. RRF / text_relevance as secondary tiebreaker between equal scores.
       //   4. Completeness → recency as final tiebreakers.
       assets.sort((a, b) => {
         const ax = isExact(a) ? 1 : 0;
@@ -4380,6 +4401,104 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
     }
+  });
+
+  // ── Rescore All Assets ────────────────────────────────────────────────────
+  // Re-computes completeness_score for every TTO asset using the current
+  // field weights in computeCompletenessScore. Run this after bulk field
+  // updates (MOA fill, biology fill, etc.) to apply the new weights.
+  let rescoreRunning = false;
+  let rescoreProcessed = 0;
+  let rescoreTotal = 0;
+  let rescoreUpdated = 0;
+  let rescoreElapsedMs = 0;
+  let rescoreStartedAt = 0;
+  let rescoreLastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/rescore/status", async (_req, res) => {
+    res.json({
+      running: rescoreRunning,
+      processed: rescoreProcessed,
+      total: rescoreTotal,
+      updated: rescoreUpdated,
+      elapsedMs: rescoreRunning ? Date.now() - rescoreStartedAt : rescoreElapsedMs,
+      lastSummary: rescoreLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/rescore", async (req, res) => {
+    if (rescoreRunning) {
+      return res.status(409).json({ error: "Rescore already running" });
+    }
+    rescoreRunning = true;
+    rescoreProcessed = 0;
+    rescoreTotal = 0;
+    rescoreUpdated = 0;
+    rescoreStartedAt = Date.now();
+    res.json({ started: true });
+
+    (async () => {
+      try {
+        const countResult = await db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE relevant = true`);
+        rescoreTotal = Number((countResult.rows[0] as any)?.n ?? 0);
+
+        const BATCH = 100;
+        let offset = 0;
+        let updated = 0;
+
+        while (rescoreRunning) {
+          const rows = await db.execute(sql`
+            SELECT id, indication, modality, development_stage, summary,
+                   mechanism_of_action, ip_type, patent_status, source_type, biology
+            FROM ingested_assets
+            WHERE relevant = true
+            ORDER BY id
+            LIMIT ${BATCH} OFFSET ${offset}
+          `);
+          if (rows.rows.length === 0) break;
+
+          for (const row of rows.rows as Record<string, unknown>[]) {
+            const newScore = computeCompletenessScore({
+              indication:       row.indication != null ? String(row.indication) : undefined,
+              modality:         row.modality != null ? String(row.modality) : undefined,
+              developmentStage: row.development_stage != null ? String(row.development_stage) : undefined,
+              summary:          row.summary != null ? String(row.summary) : undefined,
+              mechanismOfAction: row.mechanism_of_action != null ? String(row.mechanism_of_action) : undefined,
+              ipType:           row.ip_type != null ? String(row.ip_type) : undefined,
+              patentStatus:     row.patent_status != null ? String(row.patent_status) : undefined,
+              sourceType:       row.source_type != null ? String(row.source_type) : undefined,
+              biology:          row.biology != null ? String(row.biology) : undefined,
+            });
+            if (newScore != null) {
+              await db.execute(sql`UPDATE ingested_assets SET completeness_score = ${newScore} WHERE id = ${Number(row.id)}`);
+              updated++;
+            }
+            rescoreProcessed++;
+          }
+
+          offset += BATCH;
+          if (rows.rows.length < BATCH) break;
+        }
+
+        const durationMs = Date.now() - rescoreStartedAt;
+        rescoreElapsedMs = durationMs;
+        rescoreUpdated = updated;
+        rescoreLastSummary = { updated, total: rescoreProcessed, durationMs, completedAt: new Date().toISOString() };
+        console.log(`[rescore] Done — ${updated}/${rescoreProcessed} updated in ${Math.round(durationMs / 1000)}s`);
+      } catch (err: any) {
+        console.error("[rescore] Error:", err.message);
+      } finally {
+        rescoreRunning = false;
+      }
+    })();
+  });
+
+  app.post("/api/admin/enrichment/rescore/stop", async (_req, res) => {
+    if (!rescoreRunning) {
+      return res.json({ stopped: false, reason: "No rescore running" });
+    }
+    rescoreRunning = false;
+    res.json({ stopped: true });
   });
 
   // ── Modality Rule-Fill ────────────────────────────────────────────────────

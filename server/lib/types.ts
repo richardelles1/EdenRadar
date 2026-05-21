@@ -28,7 +28,8 @@ export interface ScoreBreakdown {
   licensability: number;
   fit: number;
   competition: number;
-  /** TTO 3-dimension model (Task #980). Present when the new TTO weights are used. */
+  /** TTO 4-dimension model. Present when the TTO weights are used. */
+  search_relevance?: number;
   record_quality?: number;
   availability?: number;
   total: number;
