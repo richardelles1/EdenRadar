@@ -12,6 +12,7 @@ interface ScoreBadgeProps {
     search_relevance?: number;
     record_quality?: number;
     availability?: number;
+    fit_bonus?: number;
     total: number;
     signal_coverage?: number;
     scored_dimensions?: string[];
@@ -27,7 +28,6 @@ function scoreColor(score: number): { bg: string; text: string; ring: string } {
 
 const BREAKDOWN_LABELS: Record<string, string> = {
   search_relevance: "Query Match",
-  fit:              "Buyer Fit",
   record_quality:   "Data Quality",
   availability:     "Availability",
   novelty:          "Novelty",
@@ -36,8 +36,10 @@ const BREAKDOWN_LABELS: Record<string, string> = {
   freshness:        "Freshness",
 };
 
-const TTO_DIMS    = ["search_relevance", "fit", "record_quality", "availability"] as const;
-const LEGACY_DIMS = ["fit", "novelty", "readiness", "licensability"] as const;
+// Dimensions shown as bars in the TTO tooltip
+const TTO_DIMS    = ["search_relevance", "record_quality", "availability"] as const;
+// Dimensions shown as bars in the legacy (non-TTO) tooltip
+const LEGACY_DIMS = ["novelty", "readiness", "licensability"] as const;
 
 export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
   const isUnscored = score === 0 || (breakdown?.signal_coverage ?? 0) === 0;
@@ -67,23 +69,19 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
   const scoredDims = breakdown.scored_dimensions ?? [];
   const isTTO = scoredDims.includes("record_quality") || scoredDims.includes("search_relevance");
   const preferredDims: readonly string[] = isTTO ? TTO_DIMS : LEGACY_DIMS;
+  const fitBonus = breakdown.fit_bonus ?? 0;
 
   const dims = preferredDims.filter(
     (k) => k in breakdown && (breakdown as unknown as Record<string, number>)[k] > 0
   );
 
-  if (dims.length === 0) return badge;
-
-  const coverage = breakdown.signal_coverage ?? 0;
+  if (dims.length === 0 && fitBonus === 0) return badge;
 
   return (
     <Tooltip>
       <TooltipTrigger asChild>{badge}</TooltipTrigger>
       <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
-        <p className="text-xs font-semibold text-foreground mb-1">Signal Profile</p>
-        <p className="text-[10px] text-muted-foreground mb-2">
-          {dims.length} dimension{dims.length !== 1 ? "s" : ""} scored · {coverage}% coverage
-        </p>
+        <p className="text-xs font-semibold text-foreground mb-2">Signal Profile</p>
         <div className="space-y-1.5">
           {dims.map((k) => {
             const val = (breakdown as unknown as Record<string, number>)[k];
@@ -99,6 +97,13 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
             );
           })}
         </div>
+        {fitBonus > 0 && (
+          <div className="mt-2 pt-2 border-t border-card-border flex items-center gap-1.5">
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
+              +{fitBonus} thesis match
+            </span>
+          </div>
+        )}
       </TooltipContent>
     </Tooltip>
   );
