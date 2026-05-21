@@ -224,11 +224,11 @@ export function scoreLicensability(asset: Partial<ScoredAsset>): DimensionResult
 // Scoring baseline 25 when criteria are set (vs 50 neutral for no profile).
 export function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): DimensionResult {
   if (!buyerProfile) {
-    // No profile = unknown fit, not bad fit.  Return neutral (50) with hasData:true
-    // so this dimension is counted in signal_coverage.  Without this, signal_coverage
-    // collapses from 100% to 25% (only record_quality+availability) and the
-    // CONFIDENCE_AWARE multiplier cascades all scores down to 4–7.
-    return { score: 50, hasData: true, basis: "No buyer profile — all assets treated equally" };
+    // No profile = fit unknown; exclude from weighted sum so query relevance and
+    // data quality drive the score. Previously returned neutral 50 (hasData:true)
+    // to prevent confidence squashing from cascading — that workaround is no longer
+    // needed now that CONFIDENCE_AWARE_RANKING_ENABLED requires explicit opt-in.
+    return { score: 50, hasData: false, basis: "No buyer profile — fit not scored" };
   }
 
   const hasCriteria =
@@ -418,11 +418,13 @@ export function scoreSearchRelevance(normalizedScore?: number): DimensionResult 
   const s = Math.max(0, Math.min(100, Math.round(normalizedScore)));
   let basis: string;
   if (s >= 80) basis = `Strong query match (relevance: ${s}/100)`;
-  else if (s >= 60) basis = `Good query match (relevance: ${s}/100)`;
-  else if (s >= 40) basis = `Moderate query match (relevance: ${s}/100)`;
+  else if (s >= 55) basis = `Good query match (relevance: ${s}/100)`;
+  else if (s >= 30) basis = `Moderate query match (relevance: ${s}/100)`;
   else basis = `Weak query match (relevance: ${s}/100)`;
   return { score: s, hasData: true, basis };
 }
+
+
 
 // ─── computeTotal ─────────────────────────────────────────────────────────────
 // Accepts an optional `weights` override so the TTO model can supply

@@ -829,12 +829,14 @@ export async function registerRoutes(
         }
       }
 
-      // Normalize RRF scores to [0, 100] for the search_relevance dimension.
-      // Last-place gets 20 (not 0) so an asset appearing in only one retrieval
-      // path isn't penalised purely for missing the other. When no query was
-      // issued (filter-only browse), normalizedRrfById stays empty and
-      // scoreSearchRelevance returns hasData:false — computeTotal then
-      // auto-redistributes the 45% weight to the remaining dimensions.
+      // Normalize query relevance scores to [20, 100] for the search_relevance
+      // dimension. Last-place gets 20 so a single-retrieval-path match isn't
+      // penalised; best match gets 100. Two paths:
+      //  - Hybrid (both keyword + vector): normalize RRF scores
+      //  - Keyword-only (hybrid disabled, common in prod): normalize textRelevance
+      // When no query was issued (filter-only browse), the map stays empty and
+      // scoreSearchRelevance returns hasData:false — computeTotal auto-redistributes
+      // the 45% weight to the remaining dimensions.
       const normalizedRrfById = new Map<number, number>();
       if (runHybrid && hybridScoreById.size > 0) {
         const vals = [...hybridScoreById.values()].map((h) => h.rrfScore);
@@ -842,7 +844,18 @@ export async function registerRoutes(
         const minR = Math.min(...vals);
         const rrfRange = maxR - minR || 1;
         for (const [id, h] of hybridScoreById) {
-          normalizedRrfById.set(id, 20 + Math.round(((h.rrfScore - minR) / rrfRange) * 80));
+          normalizedRrfById.set(id, Math.round(((h.rrfScore - minR) / rrfRange) * 100));
+        }
+      } else if (!runHybrid && trimmedQuery && results.length > 0) {
+        // Keyword-only path: textRelevance (ts_rank_cd) is already ordered high→low.
+        // Normalize it to [0, 100] so search_relevance contributes to score
+        // differentiation even when hybrid search is disabled.
+        const textScores = results.map((r) => r.textRelevance ?? 0);
+        const maxT = Math.max(...textScores);
+        const minT = Math.min(...textScores);
+        const textRange = maxT - minT || 1;
+        for (const r of results) {
+          normalizedRrfById.set(r.id, Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 100));
         }
       }
 
