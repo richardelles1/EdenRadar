@@ -7516,3 +7516,88 @@ export const cuhkOrktsScraper = createTechPublisherScraper(
   "Chinese University of Hong Kong (ORKTS)",
   { maxPg: 30 }
 );
+
+// ── Inserm Transfert ──────────────────────────────────────────────────────────
+// technology-offers.inserm-transfert.com/offer/[slug]/ — ~1001 English listings
+// Enumerated via WP sitemap: /wp-sitemap-posts-inserm_forms-1.xml
+// Custom WP theme (inserm); all offer content served in English.
+// Probed: 2026-05-21
+export const insermTransfertScraper: InstitutionScraper = {
+  institution: "Inserm Transfert",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const INST = "Inserm Transfert";
+    const SITEMAP = "https://technology-offers.inserm-transfert.com/wp-sitemap-posts-inserm_forms-1.xml";
+    const TIMEOUT_MS = 20_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    const LOWER = new Set(["a","an","the","and","but","or","for","nor","on","at","to","by","in","of","up","as","is","vs"]);
+    const slugToTitle = (slug: string): string =>
+      slug.split("-").map((w, i) =>
+        (i === 0 || !LOWER.has(w)) ? w.charAt(0).toUpperCase() + w.slice(1) : w
+      ).join(" ");
+
+    try {
+      const sitemapRes = await fetch(SITEMAP, {
+        headers: { "User-Agent": UA },
+        signal: signal ?? AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!sitemapRes.ok) throw new SiteHttpError(sitemapRes.status, SITEMAP);
+      const xml = await sitemapRes.text();
+
+      const urlRe = /<loc>(https:\/\/technology-offers\.inserm-transfert\.com\/offer\/([^<]+?))\/<\/loc>/g;
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      let m: RegExpExecArray | null;
+      while ((m = urlRe.exec(xml)) !== null) {
+        const url = m[1] + "/";
+        const slug = m[2];
+        if (seen.has(url)) continue;
+        seen.add(url);
+        results.push({
+          title: slugToTitle(slug),
+          description: "",
+          url,
+          institution: INST,
+        });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings from sitemap`);
+      if (results.length === 0) return [];
+
+      await enrichWithDetailPages(
+        results,
+        {
+          description: [
+            ".offer-description",
+            ".offer__description",
+            ".entry-content p",
+            ".wp-block-post-content p",
+            ".single-offer__content p",
+            "main article p",
+            "main p",
+          ],
+          technologyId: [
+            ".offer-reference",
+            ".offer__reference",
+            "[class*='reference']",
+            "[class*='tech-id']",
+          ],
+          inventors: [
+            ".offer-inventors li",
+            ".offer__inventors li",
+            "[class*='inventor'] li",
+          ],
+          contactEmail: ["a[href^='mailto:']"],
+        },
+        500,
+        signal,
+      );
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
