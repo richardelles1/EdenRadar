@@ -104,9 +104,9 @@ Common fields (ALL types):
 - innovationClaim (string): one-sentence novel claim, or ""
 
 Drug/Biologic ONLY — return null for all other types:
-- target: the primary molecular target. Use HGNC gene symbol when determinable (e.g. "KRAS", "EGFR", "IL6", "PDCD1"). Infer from contextual language: "mutant RAS signaling" → "KRAS", "PD-L1 checkpoint" → "CD274", "HER2-positive" → "ERBB2", "amyloid beta" → "APP", "androgen receptor" → "AR", "BCR-ABL fusion" → "ABL1". Use best standard name if HGNC symbol unknown (e.g. "PD-1", "VEGF", "Ras"). Return null ONLY when no molecular target is identifiable from the text.
+- target: the primary molecular target. Use the standard clinical name (e.g. "PD-1", "PD-L1", "HER2", "EGFR", "KRAS", "VEGF", "amyloid beta", "androgen receptor", "BCR-ABL"). Use HGNC gene symbol only when no widely recognized clinical name exists. Infer from contextual language: "mutant RAS signaling" → "KRAS", "PD-L1 checkpoint" → "PD-L1", "HER2-positive" → "HER2", "amyloid precursor protein" → "amyloid beta". Return null ONLY when no molecular target is identifiable from the text.
 - modality: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|diagnostic|platform technology|unknown — or null
-- indication: MeSH disease name (e.g. "non-small cell lung cancer", "type 2 diabetes mellitus"), or null
+- indication: MeSH disease name, or null. Prefer the most specific applicable term: "non-small cell lung cancer" not "lung cancer" or "cancer"; "glioblastoma" not "brain cancer"; "chronic lymphocytic leukemia" not "leukemia". Only use a broad term ("cancer", "neurological disorder") when the text genuinely does not specify the disease subtype.
 - mechanismOfAction: brief MOA description, or null
 - comparableDrugs: existing approved or late-stage treatments in this indication/target space, or null
 - unmetNeed: specific clinical gap this addresses vs current standard of care, or null
@@ -133,13 +133,13 @@ function buildGapFillSystemPrompt(fields: string[]): string {
     `You are a biotech licensing analyst. Return a JSON object with exactly these fields: ${fields.join(", ")}. Provide the best available value for each field based on the text, or null if genuinely not determinable.`,
   ];
   if (fields.includes("target")) {
-    lines.push(`target: the primary molecular target using HGNC gene symbol when possible (e.g. "KRAS", "EGFR", "PDCD1", "CD274", "AR"). Infer from contextual language — "mutant RAS" → "KRAS", "PD-L1 checkpoint" → "CD274", "HER2-positive" → "ERBB2". Return null only if no molecular target is identifiable.`);
+    lines.push(`target: the primary molecular target using the standard clinical name (e.g. "PD-1", "PD-L1", "HER2", "EGFR", "KRAS", "VEGF", "androgen receptor", "BCR-ABL"). Use HGNC gene symbol only when no widely recognized clinical name exists. Infer from contextual language — "mutant RAS" → "KRAS", "PD-L1 checkpoint" → "PD-L1", "HER2-positive" → "HER2". Return null only if no molecular target is identifiable.`);
   }
   if (fields.includes("modality")) {
     lines.push(`modality: MUST be one of exactly: small molecule | antibody | bispecific antibody | car-t | gene therapy | gene editing | mrna therapy | cell therapy | peptide | sirna | adc | protac | vaccine | nanoparticle | diagnostic | platform technology | unknown`);
   }
   if (fields.includes("indication")) {
-    lines.push(`indication: the primary disease indication using a MeSH disease name (e.g. "non-small cell lung cancer", "type 2 diabetes mellitus", "glioblastoma"). Return null only if no disease target is mentioned.`);
+    lines.push(`indication: the primary disease indication using a MeSH disease name. Prefer the most specific applicable term: "non-small cell lung cancer" not "lung cancer" or "cancer"; "glioblastoma" not "brain cancer"; "chronic lymphocytic leukemia" not "leukemia". Only use a broad term when the text genuinely does not specify the disease subtype. Return null only if no disease is mentioned.`);
   }
   if (fields.includes("developmentStage")) {
     lines.push(`developmentStage: MUST be one of exactly: discovery | preclinical | phase 1 | phase 2 | phase 3 | approved | unknown. Infer from context — "animal model efficacy", "in vivo proof of concept" → preclinical; "dose escalation", "enrolled patients" → phase 1 or phase 2; "IND-enabling" → preclinical; "FDA approved" → approved.`);
