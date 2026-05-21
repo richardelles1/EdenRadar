@@ -1352,7 +1352,7 @@ export async function registerRoutes(
     type RangeOpt = typeof validRanges[number];
     const rangeParam = (req.query.range as string) || "all";
     const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
-    const CACHE_KEY = `intelligence:market:v5:${range}`;
+    const CACHE_KEY = `intelligence:market:v6:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
@@ -1362,7 +1362,7 @@ export async function registerRoutes(
       const dfWhere = days !== null ? sql.raw(`WHERE first_seen_at >= NOW() - INTERVAL '${days} days' AND`) : sql.raw("WHERE");
 
       const deltaDays = days ?? 90;
-      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow, breadthRows] = await Promise.all([
+      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow, stageFunnelRows, opportunityRows, risingRows, instPipelineRows] = await Promise.all([
         db.execute(sql`
           SELECT biology,
             COUNT(*)::int AS count,
@@ -1377,6 +1377,7 @@ export async function registerRoutes(
           FROM ingested_assets
           WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
             AND modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+            AND modality NOT IN ('other', 'medical device', 'research tool', 'biologic')
           ${df}
           GROUP BY biology, modality
         `),
@@ -1386,6 +1387,7 @@ export async function registerRoutes(
             COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '90 days')::int AS recent_delta
           FROM ingested_assets
           ${dfWhere} modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+            AND modality NOT IN ('other', 'medical device', 'research tool', 'biologic')
           GROUP BY modality ORDER BY total DESC LIMIT 12
         `),
         db.execute(sql`
@@ -1414,23 +1416,67 @@ export async function registerRoutes(
         `),
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
         db.execute(sql`
+          SELECT development_stage AS stage, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE relevant = true
+            AND development_stage IS NOT NULL AND development_stage != '' AND development_stage != 'unknown'
+          ${df}
+          GROUP BY development_stage
+        `),
+        db.execute(sql`
+          SELECT biology,
+            COUNT(*)::int AS asset_count,
+            ROUND(AVG(unmet_need_severity)::numeric, 2)::float AS avg_unmet_need
+          FROM ingested_assets
+          WHERE relevant = true
+            AND biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+            AND unmet_need_severity IS NOT NULL
+          ${df}
+          GROUP BY biology
+          HAVING COUNT(*) >= 5
+          ORDER BY avg_unmet_need DESC, asset_count ASC
+          LIMIT 20
+        `),
+        db.execute(sql`
+          SELECT id, asset_name, institution, biology, modality, development_stage,
+            LEAST(100,
+              CASE WHEN stage_changed_at >= NOW() - INTERVAL '30 days' THEN 40
+                   WHEN stage_changed_at >= NOW() - INTERVAL '60 days' THEN 30
+                   WHEN stage_changed_at >= NOW() - INTERVAL '90 days' THEN 20
+                   WHEN stage_changed_at >= NOW() - INTERVAL '180 days' THEN 10
+                   ELSE 0 END +
+              CASE WHEN last_content_change_at >= NOW() - INTERVAL '30 days' THEN 20
+                   WHEN last_content_change_at >= NOW() - INTERVAL '60 days' THEN 15
+                   WHEN last_content_change_at >= NOW() - INTERVAL '90 days' THEN 10
+                   WHEN last_content_change_at >= NOW() - INTERVAL '180 days' THEN 5
+                   ELSE 0 END +
+              CASE WHEN first_seen_at >= NOW() - INTERVAL '14 days' THEN 20
+                   WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 15
+                   WHEN first_seen_at >= NOW() - INTERVAL '60 days' THEN 10
+                   WHEN first_seen_at >= NOW() - INTERVAL '90 days' THEN 5
+                   ELSE 0 END
+            ) AS momentum_score
+          FROM ingested_assets
+          WHERE relevant = true
+          ORDER BY momentum_score DESC
+          LIMIT 15
+        `),
+        db.execute(sql`
           WITH top_insts AS (
             SELECT institution
             FROM ingested_assets
-            ${dfWhere} institution IS NOT NULL AND institution != ''
-            GROUP BY institution
-            ORDER BY COUNT(*) DESC
-            LIMIT 20
+            WHERE relevant = true AND institution IS NOT NULL AND institution != ''
+            ${df}
+            GROUP BY institution ORDER BY COUNT(*) DESC LIMIT 10
           )
-          SELECT ia.institution,
-            COUNT(*)::int AS total,
-            COUNT(DISTINCT ia.biology)::int AS bio_breadth,
-            COUNT(DISTINCT ia.modality)::int AS mod_breadth
+          SELECT ia.institution, ia.development_stage AS stage, COUNT(*)::int AS count
           FROM ingested_assets ia
-          INNER JOIN top_insts ON ia.institution = top_insts.institution
-          ${dfWhere} ia.institution IS NOT NULL AND ia.institution != ''
-          GROUP BY ia.institution
-          ORDER BY COUNT(DISTINCT ia.biology) + COUNT(DISTINCT ia.modality) DESC
+          INNER JOIN top_insts ti ON ia.institution = ti.institution
+          WHERE ia.relevant = true
+            AND ia.development_stage IS NOT NULL
+            AND ia.development_stage != '' AND ia.development_stage != 'unknown'
+          ${df}
+          GROUP BY ia.institution, ia.development_stage
         `),
       ]);
 
@@ -1476,21 +1522,55 @@ export async function registerRoutes(
       }));
 
       const totalAssetsIndexed = Number((totalRow.rows[0] as Record<string, unknown>)?.total ?? 0);
-
-      // recentDeltaWindow: the period label for `recentDelta` on each modality entry.
-      // For range=all: "90d" (backend computes delta as last 90 days vs all-time total).
-      // For specific ranges: the range itself (e.g. "30d") — delta = total for that window.
       const recentDeltaWindow: string = range === "all" ? "90d" : range;
 
-      const institutionBreadth = (breadthRows.rows as Record<string, unknown>[]).map((r) => ({
-        institution: String(r.institution ?? ""),
-        total: Number(r.total ?? 0),
-        bioBreadth: Number(r.bio_breadth ?? 0),
-        modBreadth: Number(r.mod_breadth ?? 0),
-        breadthScore: Number(r.bio_breadth ?? 0) + Number(r.mod_breadth ?? 0),
+      const stageFunnel = (stageFunnelRows.rows as Record<string, unknown>[]).map((r) => ({
+        stage: String(r.stage ?? ""),
+        count: Number(r.count ?? 0),
       }));
 
-      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow, institutionBreadth };
+      const whitespaceOpportunity = (opportunityRows.rows as Record<string, unknown>[]).map((r) => ({
+        biology: String(r.biology ?? ""),
+        assetCount: Number(r.asset_count ?? 0),
+        avgUnmetNeed: Number(r.avg_unmet_need ?? 0),
+      }));
+
+      const risingAssets = (risingRows.rows as Record<string, unknown>[]).map((r) => ({
+        id: Number(r.id ?? 0),
+        title: String(r.asset_name ?? ""),
+        institution: String(r.institution ?? ""),
+        biology: String(r.biology ?? ""),
+        modality: String(r.modality ?? ""),
+        developmentStage: String(r.development_stage ?? ""),
+        momentumScore: Number(r.momentum_score ?? 0),
+      }));
+
+      const instStageMap = new Map<string, { institution: string; stages: Record<string, number>; total: number }>();
+      for (const r of instPipelineRows.rows as Record<string, unknown>[]) {
+        const inst = String(r.institution ?? "");
+        const stage = String(r.stage ?? "");
+        const count = Number(r.count ?? 0);
+        if (!instStageMap.has(inst)) instStageMap.set(inst, { institution: inst, stages: {}, total: 0 });
+        const entry = instStageMap.get(inst)!;
+        entry.stages[stage] = count;
+        entry.total += count;
+      }
+      const institutionPipeline = [...instStageMap.values()]
+        .sort((a, b) => b.total - a.total)
+        .map((e) => ({
+          institution: e.institution.length > 28 ? e.institution.slice(0, 28) + "…" : e.institution,
+          total: e.total,
+          discovery: e.stages["discovery"] ?? 0,
+          earlyStage: e.stages["early stage"] ?? 0,
+          preclinical: e.stages["preclinical"] ?? 0,
+          phase1: e.stages["phase 1"] ?? 0,
+          phase2: e.stages["phase 2"] ?? 0,
+          phase3: e.stages["phase 3"] ?? 0,
+          approved: e.stages["approved"] ?? 0,
+          commercial: e.stages["commercial"] ?? 0,
+        }));
+
+      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow, stageFunnel, whitespaceOpportunity, risingAssets, institutionPipeline };
       cacheSet(CACHE_KEY, result, TTL_MS);
       return res.json(result);
     } catch (err: any) {
