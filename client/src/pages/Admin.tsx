@@ -8879,6 +8879,8 @@ function AdminInner() {
       setTheme={setTheme}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
+      navOpen={navOpen}
+      setNavOpen={setNavOpen}
       onChangePassword={onChangePassword}
       adminEmail={session?.user?.email ?? ""}
     />
@@ -12745,13 +12747,15 @@ function ExportLogTable({ pw }: { pw: string }) {
   );
 }
 
-function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, onChangePassword, adminEmail }: {
+function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, navOpen, setNavOpen, onChangePassword, adminEmail }: {
   pw: string;
   setAuthed: (v: boolean) => void;
   theme: string;
   setTheme: (v: "light" | "dark") => void;
   activeTab: string;
   setActiveTab: (v: string) => void;
+  navOpen: Record<string, boolean>;
+  setNavOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   onChangePassword?: () => void | Promise<void>;
   adminEmail?: string;
 }) {
