@@ -122,12 +122,34 @@ function watchdogTick() {
     const maxMs = WATCHDOG_EVICT_MS[scraperType] ?? WATCHDOG_EVICT_MS.http;
     const elapsedMin = Math.round((now - dispatchedAt) / 60000);
     if (now - dispatchedAt > maxMs) {
+      const reason = `watchdog eviction after ${elapsedMin}min (${scraperType} limit: ${maxMs / 60000}min)`;
       console.warn(`[scheduler] WATCHDOG: ${institution} stuck for ${elapsedMin} min (limit ${maxMs / 60000} min) — force-evicting`);
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       institutionDispatchedAt.delete(institution);
       releaseSyncLock(institution);
       failedThisCycle++;
       evicted = true;
+      // Update in-memory health cache so the UI reflects the eviction immediately.
+      // Do NOT fire updateScraperHealth() here — runOne's async promise is still in
+      // flight and will write the DB record when it settles. Writing from both paths
+      // would double-increment consecutiveFailures.
+      const current = scraperHealthCache.get(institution);
+      const newFailures = (current?.consecutiveFailures ?? 0) + 1;
+      scraperHealthCache.set(institution, {
+        institution,
+        consecutiveFailures: newFailures,
+        lastFailureReason: reason,
+        lastFailureAt: new Date(),
+        lastSuccessAt: current?.lastSuccessAt ?? null,
+        backoffUntil: newFailures >= 12 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) :
+                     newFailures >= 8  ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) :
+                     newFailures >= 5  ? new Date(Date.now() + 24 * 60 * 60 * 1000) :
+                     newFailures >= 3  ? new Date(Date.now() + 6 * 60 * 60 * 1000) :
+                     (current?.backoffUntil ?? null),
+        lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
+        lastSuccessRawCount: current?.lastSuccessRawCount ?? null,
+        lastCompletedCycle: current?.lastCompletedCycle ?? null,
+      });
     }
   }
   if (evicted) scheduleNext();
