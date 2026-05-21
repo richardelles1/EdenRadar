@@ -62,6 +62,7 @@
 
 import { storage } from "../storage";
 import { runAllScrapers, ALL_SCRAPERS, type ScrapedListing } from "./scrapers/index";
+import { stripDocketPrefix } from "./scrapers/utils";
 import { enrichBatch } from "./scrapers/enrichAsset";
 import { preFilterBatch } from "./pipeline/relevancePreFilter";
 import { activePreFilterBatch } from "./pipeline/relevanceClassifier";
@@ -159,9 +160,9 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
         const hash = computeContentHash(l.title, l.description || "", l.abstract);
         return {
           fingerprint: makeFingerprint(l.title, l.institution),
-          assetName: l.title,
+          assetName: stripDocketPrefix(l.title),
           institution: l.institution,
-          summary: l.description || l.title,
+          summary: l.description || stripDocketPrefix(l.title),
           sourceUrl: normalizeSourceUrl(l.url),
           sourceType: "tech_transfer" as const,
           developmentStage: l.stage ?? "unknown",
@@ -635,9 +636,9 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         sessionId,
         institution: institutionName,
         fingerprint: fp,
-        assetName: l.title,
+        assetName: stripDocketPrefix(l.title),
         sourceUrl: normalizeSourceUrl(l.url),
-        summary: l.description || l.title,
+        summary: l.description || stripDocketPrefix(l.title),
         isNew,
         relevant: null,
         target: "unknown",

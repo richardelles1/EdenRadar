@@ -179,6 +179,15 @@ export function cleanText(text: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/** Strips leading institutional docket/case numbers from TTO listing titles.
+ * Handles: "NNNN - Title", "YYYY-NNN - Title", "NNNN: Title"
+ * Leaves intact: "3D scaffold", "17β-estradiol", "1,4,7-triazine" (scientific names).
+ * Applied to asset_name at ingest time only — fingerprint always uses the raw scraped title. */
+export function stripDocketPrefix(title: string): string {
+  const stripped = title.replace(/^(\d{2,}[.\-]\d+\s*[-: ]*|\d{4,}\s*[-:]\s*)\s*/, "").trim();
+  return stripped || title.trim();
+}
+
 export function resolveUrl(base: string, href: string): string {
   try {
     return new URL(href, base).toString();
