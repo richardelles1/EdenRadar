@@ -16,7 +16,7 @@ import { useLocation, Link } from "wouter";
 
 type HealthStatus =
   | "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing"
-  | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure";
+  | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure" | "empty_response";
 
 interface HealthRow {
   institution: string;
@@ -207,6 +207,7 @@ function healthDot(status: HealthStatus): string {
     case "never": return "bg-muted-foreground/30";
     case "stale": return "bg-amber-400";
     case "warning": return "bg-amber-500";
+    case "empty_response": return "bg-yellow-500";
     case "degraded": return "bg-orange-500";
     default: return "bg-red-500";
   }

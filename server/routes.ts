@@ -3671,7 +3671,7 @@ export async function registerRoutes(
         const scraperHealth = scraperHealthMap.get(name);
         const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure";
+        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure" | "empty_response";
 
         function classifyByError(errMsg: string | null | undefined): HealthStatus {
           if (!errMsg) return "parser_failure";
@@ -3698,10 +3698,13 @@ export async function registerRoutes(
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           if ((session.rawCount ?? 0) === 0) {
-            // No error message + existing DB records = sitemap-based scraper found nothing new.
-            // That is healthy ("index is current"), not a parser failure.
-            if (!session.errorMessage && totalInDb > 0) {
-              health = "ok";
+            if (session.errorMessage) {
+              health = classifyByError(session.errorMessage);
+            } else if (totalInDb > 0) {
+              // rawCount=0 with no error message: could be a legitimately empty sitemap diff
+              // OR a silent block (Cloudflare, rate-limit with no HTTP error). Flag as
+              // empty_response so the admin can see it, rather than showing false green.
+              health = "empty_response";
             } else {
               health = classifyByError(session.errorMessage);
             }
