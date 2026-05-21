@@ -524,6 +524,7 @@ export function buildFocusContextBlock(focus: SessionFocusContext): string {
   if (focus.stage) parts.push(`Stage: ${focus.stage}`);
   if (focus.indication) parts.push(`Indication area: ${focus.indication}`);
   if (focus.institution) parts.push(`Institution: ${focus.institution}`);
+  if (focus.biology) parts.push(`Biology mechanism: ${focus.biology}`);
   if (!parts.length) return "";
   return `## Active session focus\n${parts.join(" | ")}\n\nWhen answering, naturally acknowledge the active filters. If the user asks a count question, use the filtered count, not the global total.`;
 }
@@ -535,6 +536,7 @@ export type PortfolioStats = {
   byModality: { modality: string; count: number }[];
   byStage: { stage: string; count: number }[];
   byTherapyArea: { area: string; count: number }[];
+  byBiology: { biology: string; count: number }[];
   topInstitutions: { institution: string; count: number }[];
   lastFetched: number;
 };
@@ -547,7 +549,7 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
     return _statsCache;
   }
 
-  const [totalRows, allTotalRows, modalityRows, stageRows, institutionRows, therapyAreaRows] = await Promise.all([
+  const [totalRows, allTotalRows, modalityRows, stageRows, institutionRows, therapyAreaRows, biologyRows] = await Promise.all([
     db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
     db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
     db.execute(sql`
@@ -570,6 +572,11 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
       .where(sql`${therapyAreaTaxonomy.assetCount} > 0`)
       .orderBy(desc(therapyAreaTaxonomy.assetCount))
       .limit(15),
+    db.execute(sql`
+      SELECT biology, COUNT(*)::int AS count FROM ingested_assets
+      WHERE relevant = true AND biology IS NOT NULL AND biology NOT IN ('', 'unknown', 'other')
+      GROUP BY biology ORDER BY count DESC LIMIT 20
+    `),
   ]);
 
   const relevantTotal = Number((totalRows.rows[0] as Record<string, unknown>)?.total ?? 0);
@@ -591,12 +598,17 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
     area: r.name,
     count: r.assetCount,
   }));
+  const byBiology = (biologyRows.rows as Record<string, unknown>[]).map((r) => ({
+    biology: String(r.biology ?? ""),
+    count: Number(r.count ?? 0),
+  }));
 
   _statsCache = {
     total,
     byModality,
     byStage,
     byTherapyArea,
+    byBiology,
     topInstitutions,
     lastFetched: Date.now(),
   };
@@ -623,11 +635,15 @@ function buildPortfolioStatsBlock(stats: PortfolioStats): string {
     ? stats.byTherapyArea.slice(0, 12).map((a) => `${a.area} (${a.count})`).join(", ")
     : "";
 
+  const biologyLines = stats.byBiology.length > 0
+    ? stats.byBiology.slice(0, 12).map((b) => `${b.biology} (${b.count.toLocaleString()})`).join(", ")
+    : "";
+
   return `## Your portfolio — live numbers you know cold
 Total relevant assets indexed: **${stats.total.toLocaleString()}**
 By modality: ${modalityLines}
 By development stage: ${stageLines}
-Top 15 institutions by asset count: ${topInst}${therapyAreaLines ? `\nTop therapy areas: ${therapyAreaLines}` : ""}
+Top 15 institutions by asset count: ${topInst}${therapyAreaLines ? `\nTop therapy areas: ${therapyAreaLines}` : ""}${biologyLines ? `\nBy biology mechanism: ${biologyLines}` : ""}
 
 When asked "how many" questions, use these numbers. Do not count from retrieved assets — use your portfolio knowledge. If asked for a breakdown you don't have here, say so and offer to dig into the data.`;
 }
@@ -749,7 +765,7 @@ function buildExtraSQL(filters: QueryFilters, geoRx?: string): ExtraSQL | undefi
   if (filters.stage) parts.push(sql`development_stage ILIKE ${`%${filters.stage}%`}`);
   if (filters.indication) parts.push(sql`indication ILIKE ${`%${filters.indication}%`}`);
   if (filters.institution) parts.push(sql`institution ILIKE ${`%${filters.institution}%`}`);
-  if (filters.biology) parts.push(sql`biology = ${filters.biology}`);
+  if (filters.biology) parts.push(sql`biology ILIKE ${`%${filters.biology}%`}`);
   if (!parts.length) return undefined;
   return parts.reduce((acc, cond) => sql`${acc} AND ${cond}`);
 }
@@ -1009,6 +1025,7 @@ function buildContext(assets: RetrievedAsset[]): string {
         `[Asset ${i + 1}] ${a.assetName}`,
         `  Institution: ${a.institution}`,
         a.technologyId ? `  Technology ID: ${a.technologyId}` : null,
+        a.biology ? `  Biology: ${a.biology}` : null,
         a.mechanismOfAction ? `  Mechanism: ${a.mechanismOfAction}` : null,
         a.innovationClaim ? `  Innovation: ${a.innovationClaim}` : null,
         `  Target: ${a.target} | Modality: ${a.modality}`,
@@ -1031,11 +1048,13 @@ function buildContext(assets: RetrievedAsset[]): string {
 //
 // Tier 1 (static profile): modality match +3, indication match +2
 // Tier 2 (adaptive, additive): modality match +Math.min(2, freq), indication +Math.min(1, freq)
-// Only applied when assets.length > LIMIT so top-N selection is meaningful.
+// Tier 3 (active biology): biology match +2 when session focus biology is set
+// Only applied when assets.length > LIMIT, or when activeBiology forces reranking.
 export function rerankAssets(
   assets: RetrievedAsset[],
   userContext?: UserContext,
-  engagementSignals?: EngagementSignals
+  engagementSignals?: EngagementSignals,
+  activeBiology?: string
 ): RetrievedAsset[] {
   const LIMIT = 8;
 
@@ -1049,14 +1068,15 @@ export function rerankAssets(
     ([ind, count]) => ({ key: ind.toLowerCase(), count })
   );
 
-  // Short-circuit: when candidates fit within the limit, ordering is irrelevant;
-  // skip scoring to preserve existing top-N semantic-similarity ordering.
-  if (assets.length <= LIMIT) return assets.slice(0, LIMIT);
-
   const hasProfileBoosts = preferredModalities.length > 0 || preferredAreas.length > 0;
   const hasEngagementBoosts = engagedModalities.length > 0 || engagedIndications.length > 0;
 
-  if (!hasProfileBoosts && !hasEngagementBoosts) return assets.slice(0, LIMIT);
+  // Short-circuit: when candidates fit within the limit and no active biology filter,
+  // skip scoring to preserve existing semantic-similarity ordering.
+  if (assets.length <= LIMIT && !activeBiology) return assets.slice(0, LIMIT);
+  if (!hasProfileBoosts && !hasEngagementBoosts && !activeBiology) return assets.slice(0, LIMIT);
+
+  const activeBioLower = activeBiology?.toLowerCase();
 
   const scored = assets.map((a) => {
     let boost = 0;
@@ -1081,6 +1101,12 @@ export function rerankAssets(
       const ind = a.indication.toLowerCase();
       const match = engagedIndications.find((ei) => ind.includes(ei.key) || ei.key.includes(ind));
       if (match) boost += Math.min(1, match.count);
+    }
+
+    // Tier 3: active session biology filter boost
+    if (activeBioLower && a.biology) {
+      const bio = a.biology.toLowerCase();
+      if (bio.includes(activeBioLower) || activeBioLower.includes(bio)) boost += 2;
     }
 
     return { asset: a, boost };
@@ -1410,6 +1436,36 @@ Be specific using the data provided. Name real tradeoffs. Avoid false balance �
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
     if (delta) yield delta;
+  }
+}
+
+// ── Session summarization (turn 8+) ──────────────────────────────────────
+// Compresses older turns into a 200-token context note, keeping last 4 turns
+// fresh. Called async after the assistant message is persisted.
+export async function summarizeSession(
+  messages: Array<{ role: "user" | "assistant"; content: string }>
+): Promise<string> {
+  const toSummarize = messages.slice(0, -4);
+  if (toSummarize.length < 4) return "";
+  const transcript = toSummarize
+    .map((m) => `${m.role === "user" ? "User" : "EDEN"}: ${m.content.slice(0, 300)}`)
+    .join("\n");
+  try {
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Summarize this biotech BD research conversation. Extract: assets discussed (names + institutions), therapy areas or modalities explored, any active filters the user set, key decisions made. Output 3-5 concise bullet points.",
+        },
+        { role: "user", content: transcript },
+      ],
+      temperature: 0.3,
+      max_tokens: 200,
+    });
+    return resp.choices[0]?.message?.content ?? "";
+  } catch {
+    return "";
   }
 }
 
