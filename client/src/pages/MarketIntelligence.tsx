@@ -10,6 +10,7 @@ import {
   Tooltip as RechartsTip, ResponsiveContainer,
 } from "recharts";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { getAuthHeaders } from "@/lib/queryClient";
 import { PipelinePicker } from "@/components/PipelinePicker";
 import type { PipelinePickerPayload } from "@/components/PipelinePicker";
@@ -89,18 +90,29 @@ const STAGE_LABELS: Record<string, string> = {
 };
 
 const STAGE_COLORS: Record<string, string> = {
-  "discovery": "#6b7280",
-  "early stage": "#4b90d4",
-  "earlyStage": "#4b90d4",
-  "preclinical": "#3b82f6",
-  "phase 1": "#34d399",
-  "phase1": "#34d399",
-  "phase 2": "#10b981",
-  "phase2": "#10b981",
-  "phase 3": "#059669",
-  "phase3": "#059669",
-  "approved": "#f59e0b",
-  "commercial": "#f97316",
+  "discovery":   "#9dbea6",
+  "early stage": "#74aa84",
+  "earlyStage":  "#74aa84",
+  "preclinical": "#4d9464",
+  "phase 1":     "#2f7d4a",
+  "phase1":      "#2f7d4a",
+  "phase 2":     "#1a6636",
+  "phase2":      "#1a6636",
+  "phase 3":     "#0e5027",
+  "phase3":      "#0e5027",
+  "approved":    "#c89f1a",
+  "commercial":  "#a87c0f",
+};
+
+const STAGE_TOOLTIPS: Record<string, string> = {
+  "discovery":   "Early research phase — target identification, basic science.",
+  "early stage": "Pre-Phase-1 catch-all: confirmed pre-clinical but specific stage indeterminate.",
+  "preclinical": "In-vivo/in-vitro studies before first-in-human trials.",
+  "phase 1":     "First-in-human safety and dosing trials.",
+  "phase 2":     "Efficacy and side-effect trials in target patient population.",
+  "phase 3":     "Large-scale confirmatory trials before regulatory submission.",
+  "approved":    "May indicate use of an approved compound or mechanism — not necessarily FDA approval of this specific TTO asset.",
+  "commercial":  "Commercially available or actively licensed.",
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -204,41 +216,52 @@ function StageFunnelPanel({ data }: { data: StageFunnelEntry[] }) {
   const total = ordered.reduce((sum, s) => sum + s.count, 0);
 
   return (
-    <div className="space-y-2.5">
-      {ordered.map((entry) => {
-        const pct = total > 0 ? Math.round((entry.count / total) * 100) : 0;
-        const barWidth = Math.max(4, Math.sqrt(entry.count / maxCount) * 100);
-        const color = STAGE_COLORS[entry.stage] ?? ACCENT;
-        return (
-          <div key={entry.stage} className="flex items-center gap-3">
-            <div className="w-[90px] text-right shrink-0">
-              <span className="text-xs font-semibold text-foreground">{STAGE_LABELS[entry.stage] ?? capitalize(entry.stage)}</span>
-            </div>
-            <div className="flex-1 min-w-0 h-7 rounded-md overflow-hidden" style={{ background: "hsl(var(--muted) / 0.25)" }}>
-              <div
-                className="h-full rounded-md flex items-center px-2.5 transition-all duration-700"
-                style={{ width: `${barWidth}%`, background: color, minWidth: 50 }}
-              >
-                <span className="text-[10px] font-bold text-white/95 tabular-nums">
-                  {entry.count.toLocaleString()}
-                </span>
+    <TooltipProvider delayDuration={300}>
+      <div className="flex flex-col h-full">
+        <div className="flex-1 space-y-2.5">
+          {ordered.map((entry) => {
+            const pct = total > 0 ? Math.round((entry.count / total) * 100) : 0;
+            const barWidth = Math.max(4, Math.sqrt(entry.count / maxCount) * 100);
+            const color = STAGE_COLORS[entry.stage] ?? ACCENT;
+            const tip = STAGE_TOOLTIPS[entry.stage];
+            return (
+              <div key={entry.stage} className="flex items-center gap-3">
+                <div className="w-[90px] text-right shrink-0">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-xs font-semibold text-foreground cursor-default border-b border-dashed border-muted-foreground/30">
+                        {STAGE_LABELS[entry.stage] ?? capitalize(entry.stage)}
+                      </span>
+                    </TooltipTrigger>
+                    {tip && (
+                      <TooltipContent side="left" className="max-w-[200px] text-[11px]">
+                        {tip}
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </div>
+                <div className="flex-1 min-w-0 h-7 rounded-md overflow-hidden" style={{ background: "hsl(var(--muted) / 0.25)" }}>
+                  <div
+                    className="h-full rounded-md flex items-center px-2.5 transition-all duration-700"
+                    style={{ width: `${barWidth}%`, background: color, minWidth: 50 }}
+                  >
+                    <span className="text-[10px] font-bold text-white/90 tabular-nums">
+                      {entry.count.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+                <div className="w-8 text-right shrink-0">
+                  <span className="text-[10px] text-muted-foreground tabular-nums">{pct}%</span>
+                </div>
               </div>
-            </div>
-            <div className="w-8 text-right shrink-0">
-              <span className="text-[10px] text-muted-foreground tabular-nums">{pct}%</span>
-            </div>
-          </div>
-        );
-      })}
-      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-border/50 flex-wrap">
-        {STAGE_ORDER.filter((s) => data.some((d) => d.stage === s)).map((s) => (
-          <div key={s} className="flex items-center gap-1.5">
-            <div className="w-2 h-2 rounded-full shrink-0" style={{ background: STAGE_COLORS[s] ?? ACCENT }} />
-            <span className="text-[9px] text-muted-foreground">{STAGE_LABELS[s]}</span>
-          </div>
-        ))}
+            );
+          })}
+        </div>
+        <p className="text-[9px] text-muted-foreground mt-4 pt-3 border-t border-border/50 italic shrink-0">
+          Hover a stage label for definitions. Approved may reflect use of an approved compound, not FDA clearance of this asset.
+        </p>
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -247,14 +270,13 @@ function StageFunnelPanel({ data }: { data: StageFunnelEntry[] }) {
 function WhiteSpaceFinderPanel({
   data, onRowClick,
 }: { data: WhitespaceOpportunityEntry[]; onRowClick: (biology: string, count: number) => void }) {
-  if (!data.length) return <EmptyState message="Enriching unmet need data — check back shortly." />;
+  if (!data.length) return <EmptyState message="Enriching unmet need data. Check back shortly." />;
 
   const withScore = data.map((d) => ({
     ...d,
     oppScore: d.avgUnmetNeed / Math.log2(d.assetCount + 2),
   }));
   const maxScore = Math.max(...withScore.map((d) => d.oppScore), 1);
-  const maxCount = Math.max(...data.map((d) => d.assetCount), 1);
   const sorted = [...withScore].sort((a, b) => b.oppScore - a.oppScore);
 
   function badge(oppScore: number) {
@@ -264,60 +286,83 @@ function WhiteSpaceFinderPanel({
     return { label: "Monitor", color: "hsl(var(--muted-foreground))", bg: "hsl(var(--muted) / 0.45)" };
   }
 
+  const COL = "1fr 72px 64px 72px";
+
   return (
-    <div className="flex flex-col h-full">
-      <div
-        className="grid text-[9px] uppercase tracking-wide text-muted-foreground font-semibold pb-1.5 mb-1 border-b border-border/50 shrink-0"
-        style={{ gridTemplateColumns: "1fr 52px 90px 68px" }}
-      >
-        <span>Biology</span>
-        <span className="text-center">Need</span>
-        <span className="text-center">Assets</span>
-        <span className="text-right">Signal</span>
-      </div>
-      <div className="flex-1 overflow-y-auto space-y-0.5 pr-0.5 min-h-0">
-        {sorted.map((entry) => {
-          const b = badge(entry.oppScore);
-          const barPct = (entry.assetCount / maxCount) * 100;
-          const dots = Math.round(entry.avgUnmetNeed);
-          return (
-            <button
-              key={entry.biology}
-              className="w-full grid items-center py-1.5 px-1 rounded-lg hover:bg-accent/20 transition-colors text-left gap-2"
-              style={{ gridTemplateColumns: "1fr 52px 90px 68px" }}
-              onClick={() => onRowClick(entry.biology, entry.assetCount)}
-            >
-              <span className="text-xs font-medium text-foreground truncate leading-snug">
-                {capitalize(entry.biology)}
+    <TooltipProvider delayDuration={300}>
+      <div className="flex flex-col h-full">
+        <div
+          className="grid items-center text-[9px] uppercase tracking-wide text-muted-foreground font-semibold pb-2 mb-1 border-b border-border/50 shrink-0 gap-2 px-1"
+          style={{ gridTemplateColumns: COL }}
+        >
+          <span>Biology</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-center cursor-default flex items-center justify-center gap-0.5">
+                Need <Info className="w-2.5 h-2.5 opacity-50" />
               </span>
-              <div className="flex justify-center gap-0.5">
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <div key={i} className="w-1.5 h-1.5 rounded-full"
-                    style={{ background: i <= dots ? ACCENT : "hsl(var(--muted) / 0.45)" }} />
-                ))}
-              </div>
-              <div className="flex items-center gap-1.5 px-1">
-                <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: "hsl(var(--muted) / 0.3)" }}>
-                  <div className="h-full rounded-full" style={{ width: `${barPct}%`, background: "hsl(142 71% 45% / 0.55)" }} />
-                </div>
-                <span className="text-[9px] text-muted-foreground tabular-nums w-10 text-right">
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[200px] text-[11px]">
+              Average unmet need severity for this biology area (1 = addressable gap, 5 = critical unmet need). Based on disease indication severity scores.
+            </TooltipContent>
+          </Tooltip>
+          <span className="text-right">Assets</span>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="text-right cursor-default flex items-center justify-end gap-0.5">
+                Signal <Info className="w-2.5 h-2.5 opacity-50" />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[220px] text-[11px]">
+              Opportunity signal = unmet need divided by asset density. High Opp means high need with few assets indexed. Click any row to explore those assets.
+            </TooltipContent>
+          </Tooltip>
+        </div>
+        <div className="flex-1 overflow-y-auto intel-scroll space-y-0.5 min-h-0">
+          {sorted.map((entry) => {
+            const b = badge(entry.oppScore);
+            const dots = Math.round(entry.avgUnmetNeed);
+            return (
+              <button
+                key={entry.biology}
+                className="w-full grid items-center py-1.5 px-1 rounded-lg hover:bg-accent/20 transition-colors text-left gap-2"
+                style={{ gridTemplateColumns: COL }}
+                onClick={() => onRowClick(entry.biology, entry.assetCount)}
+              >
+                <span className="text-xs font-medium text-foreground truncate leading-snug">
+                  {capitalize(entry.biology)}
+                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex justify-center gap-0.5">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="w-2 h-2 rounded-full"
+                          style={{ background: i <= dots ? ACCENT : "hsl(var(--muted) / 0.35)" }} />
+                      ))}
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-[11px]">
+                    Unmet need: {entry.avgUnmetNeed.toFixed(1)} / 5
+                  </TooltipContent>
+                </Tooltip>
+                <span className="text-[10px] text-muted-foreground tabular-nums text-right font-medium">
                   {entry.assetCount.toLocaleString()}
                 </span>
-              </div>
-              <div className="flex justify-end">
-                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
-                  style={{ color: b.color, background: b.bg }}>
-                  {b.label}
-                </span>
-              </div>
-            </button>
-          );
-        })}
+                <div className="flex justify-end">
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded whitespace-nowrap"
+                    style={{ color: b.color, background: b.bg }}>
+                    {b.label}
+                  </span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        <p className="text-[9px] text-muted-foreground mt-2 pt-2 border-t border-border/50 shrink-0 italic">
+          Ranked by unmet need divided by asset density. High Opp = urgent gap with few assets indexed.
+        </p>
       </div>
-      <p className="text-[9px] text-muted-foreground mt-2 pt-2 border-t border-border/50 shrink-0 italic">
-        Ranked by unmet need ÷ asset density — High Opp = urgent gap with few assets indexed
-      </p>
-    </div>
+    </TooltipProvider>
   );
 }
 
@@ -327,7 +372,7 @@ function RisingAssetsPanel({ data }: { data: RisingAsset[] }) {
   if (!data.length) return <EmptyState message="No momentum signals detected yet." />;
 
   return (
-    <div className="overflow-y-auto space-y-2 pr-0.5" style={{ maxHeight: 480 }}>
+    <div className="overflow-y-auto intel-scroll space-y-2" style={{ maxHeight: 480 }}>
       {data.map((asset) => {
         const isRising = asset.momentumScore >= 40;
         return (
@@ -394,6 +439,20 @@ function InstitutionPipelinePanel({
     );
   };
 
+  const CustomTick = ({ x, y, payload }: any) => (
+    <text
+      x={8}
+      y={y}
+      textAnchor="start"
+      dominantBaseline="middle"
+      fontSize={10}
+      fill="hsl(var(--foreground))"
+      opacity={0.85}
+    >
+      {payload.value}
+    </text>
+  );
+
   return (
     <div>
       <div style={{ height: chartHeight }}>
@@ -414,8 +473,8 @@ function InstitutionPipelinePanel({
             <YAxis
               type="category"
               dataKey="institution"
-              width={205}
-              tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
+              width={210}
+              tick={<CustomTick />}
             />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border) / 0.2)" horizontal={false} />
             <RechartsTip content={<CustomTooltip />} cursor={{ fill: "hsl(var(--accent) / 0.15)" }} />
@@ -450,7 +509,7 @@ function ModalityMomentumPanel({
 }: { data: ModalityEntry[]; recentDeltaWindow: string; onRowClick: (entry: ModalityEntry) => void }) {
   if (!data.length) return <EmptyState message="No modality data available." />;
   return (
-    <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: 320 }}>
+    <div className="overflow-y-auto intel-scroll space-y-1" style={{ maxHeight: 320 }}>
       {data.map((entry, i) => (
         <button
           key={entry.modality}
@@ -483,7 +542,7 @@ function ModalityMomentumPanel({
 function BiologyLandscapePanel({ data, onRowClick }: { data: BiologyEntry[]; onRowClick: (entry: BiologyEntry) => void }) {
   if (!data.length) return <EmptyState message="Biology data is being populated by the AI enrichment pipeline." />;
   return (
-    <div className="overflow-y-auto space-y-1 pr-0.5" style={{ maxHeight: 320 }}>
+    <div className="overflow-y-auto intel-scroll space-y-1" style={{ maxHeight: 320 }}>
       {data.map((entry, i) => (
         <button
           key={entry.biology}
@@ -881,6 +940,10 @@ export default function MarketIntelligence() {
           from { transform: translateX(100%); }
           to   { transform: translateX(0); }
         }
+        .intel-scroll::-webkit-scrollbar { width: 3px; }
+        .intel-scroll::-webkit-scrollbar-track { background: transparent; }
+        .intel-scroll::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9999px; }
+        .intel-scroll::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.35); }
       `}</style>
 
       {tooltip && (
@@ -1016,9 +1079,9 @@ export default function MarketIntelligence() {
                 <SectionPanel
                   icon={GitBranch}
                   title="Pre-Commercial Pipeline"
-                  subtitle="Stage distribution across all relevant TTO assets. Indexed by ingestion date."
+                  subtitle="Stage distribution across all relevant TTO assets. Hover a label for definitions."
                   delay={60}
-                  className="min-h-[280px]"
+                  className="h-[400px]"
                 >
                   <StageFunnelPanel data={data.stageFunnel} />
                 </SectionPanel>
@@ -1026,9 +1089,9 @@ export default function MarketIntelligence() {
                 <SectionPanel
                   icon={Crosshair}
                   title="White Space Finder"
-                  subtitle="High unmet need × low asset density = opportunity. Click any row to explore."
+                  subtitle="High unmet need with low asset density signals an opportunity. Click any row to explore."
                   delay={80}
-                  className="min-h-[280px]"
+                  className="h-[400px]"
                 >
                   <WhiteSpaceFinderPanel
                     data={data.whitespaceOpportunity}
@@ -1061,7 +1124,7 @@ export default function MarketIntelligence() {
                 <SectionPanel
                   icon={Zap}
                   title="Rising Assets"
-                  subtitle="Top assets by momentum signal — recent stage changes, content updates, and new discoveries."
+                  subtitle="Top assets by momentum signal: recent stage changes, content updates, and new discoveries."
                   delay={120}
                   className="min-h-[520px]"
                 >
@@ -1071,7 +1134,7 @@ export default function MarketIntelligence() {
                 <SectionPanel
                   icon={Building2}
                   title="Institution Pipeline Depth"
-                  subtitle="Top 10 institutions by total assets — stage distribution shows pipeline maturity. Click to explore."
+                  subtitle="Top 10 institutions by total assets. Stage distribution shows pipeline maturity. Click to explore."
                   delay={140}
                   className="min-h-[520px]"
                 >
@@ -1103,7 +1166,7 @@ export default function MarketIntelligence() {
                 <SectionPanel
                   icon={TrendingUp}
                   title="Modality Momentum"
-                  subtitle={range !== "all" ? `Assets by modality ${forLabel(rangeOpt)}` : "All assets by modality — non-therapeutic categories excluded"}
+                  subtitle={range !== "all" ? `Assets by modality ${forLabel(rangeOpt)}` : "All assets by modality. Non-therapeutic categories excluded."}
                   delay={180}
                 >
                   <ModalityMomentumPanel
