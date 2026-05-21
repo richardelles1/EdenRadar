@@ -77,8 +77,8 @@ const MODALITY_RULES: Array<{ pattern: RegExp; value: string }> = [
 // Applied only when target is null/'unknown' and not human-verified.
 const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   // Checkpoint / IO
-  { pattern: /\bPD[\s-]?L1\b|\bCD274\b/i, value: "PD-L1" },
-  { pattern: /\bPD[\s-]?1\b|\bPDCD1\b/i, value: "PD-1" },
+  { pattern: /\bPD[\s-]?L1\b|\bCD274\b|\bprogrammed\s+(?:cell\s+)?death[\s-]?ligand[\s-]?1\b/i, value: "PD-L1" },
+  { pattern: /\bPD[\s-]?1\b|\bPDCD1\b|\bprogrammed\s+(?:cell\s+)?death\s+(?:protein\s+)?1\b(?!\s*ligand)/i, value: "PD-1" },
   { pattern: /\bCTLA[\s-]?4\b/i, value: "CTLA-4" },
   { pattern: /\bLAG[\s-]?3\b/i, value: "LAG-3" },
   { pattern: /\bTIM[\s-]?3\b/i, value: "TIM-3" },
@@ -87,12 +87,12 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bOX40\b|\bCD134\b/i, value: "OX40" },
   { pattern: /\bPD[\s-]?L2\b/i, value: "PD-L2" },
   // RTK receptors
-  { pattern: /\bEGFR\b/i, value: "EGFR" },
-  { pattern: /\bHER2\b|\bERBB2\b/i, value: "HER2" },
+  { pattern: /\bEGFR\b|\bepidermal\s+growth\s+factor\s+receptor\b/i, value: "EGFR" },
+  { pattern: /\bHER2\b|\bERBB2\b|\bhuman\s+epidermal\s+growth\s+factor\s+receptor\s+2\b/i, value: "HER2" },
   { pattern: /\bHER3\b|\bERBB3\b/i, value: "HER3" },
-  { pattern: /\bVEGFR\b/i, value: "VEGFR" },
-  { pattern: /\bVEGF\b(?!R)/i, value: "VEGF" },
-  { pattern: /\bFGFR[0-9]?\b/i, value: "FGFR" },
+  { pattern: /\bVEGFR\b|\bvascular\s+endothelial\s+growth\s+factor\s+receptor\b/i, value: "VEGFR" },
+  { pattern: /\bVEGF\b(?!R)|\bvascular\s+endothelial\s+growth\s+factor\b(?!\s+receptor)/i, value: "VEGF" },
+  { pattern: /\bFGFR[0-9]?\b|\bfibroblast\s+growth\s+factor\s+receptor\b/i, value: "FGFR" },
   { pattern: /\bMET\b(?:\s+(?:kinase|receptor|tyrosine|proto|inhibitor|amplification|exon))/i, value: "MET" },
   { pattern: /\bIGF[\s-]?1R\b/i, value: "IGF-1R" },
   // RAS/RAF/MAPK pathway
@@ -102,11 +102,11 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bMEK[0-9]?\b/i, value: "MEK" },
   { pattern: /\bERK[0-9]?\b(?:\s+(?:kinase|pathway|inhibitor|phospho))/i, value: "ERK" },
   // Fusion/rearrangement targets
-  { pattern: /\bALK\b(?:\s+(?:kinase|receptor|inhibitor|fusion|rearrangement|mutation|positive))/i, value: "ALK" },
-  { pattern: /\bRET\b(?:\s+(?:kinase|proto|fusion|rearrangement|mutation|inhibitor))/i, value: "RET" },
+  { pattern: /\bALK\b(?:\s+(?:kinase|receptor|inhibitor|fusion|rearrangement|mutation|positive))|\banaplastic\s+lymphoma\s+kinase\b/i, value: "ALK" },
+  { pattern: /\bRET\b(?:\s+(?:kinase|proto|fusion|rearrangement|mutation|inhibitor))|\brearranged\s+during\s+transfection\b/i, value: "RET" },
   { pattern: /\bROS1\b/i, value: "ROS1" },
-  { pattern: /\bNTRK[0-9]?\b/i, value: "NTRK" },
-  { pattern: /\bBCR[\s-]?ABL\b/i, value: "BCR-ABL" },
+  { pattern: /\bNTRK[0-9]?\b|\bneurotrophic\s+(?:tyrosine|tropomyosin)\s+(?:receptor\s+)?kinase\b|\btropomyosin\s+receptor\s+kinase\b/i, value: "NTRK" },
+  { pattern: /\bBCR[\s-]?ABL\b|\bbreakpoint\s+cluster\s+region[\s-]?Abelson\b/i, value: "BCR-ABL" },
   // Oncogenes
   { pattern: /\bMYC\b|\bc[\s-]?Myc\b|\bN[\s-]?Myc\b/i, value: "MYC" },
   // Tumor suppressors
@@ -115,29 +115,29 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bBRCA2\b/i, value: "BRCA2" },
   { pattern: /\bPTEN\b/i, value: "PTEN" },
   // Epigenetic
-  { pattern: /\bEZH2\b/i, value: "EZH2" },
-  { pattern: /\bHDAC[0-9]?\b/i, value: "HDAC" },
-  { pattern: /\bBRD4\b|\bBET\b(?:\s+bromodomain)/i, value: "BET/BRD4" },
-  { pattern: /\bDNMT[0-9]?\b/i, value: "DNMT" },
+  { pattern: /\bEZH2\b|\benhancer\s+of\s+zeste\s+homolog\s+2\b/i, value: "EZH2" },
+  { pattern: /\bHDAC[0-9]?\b|\bhistone\s+deacetylase\b/i, value: "HDAC" },
+  { pattern: /\bBRD4\b|\bBET\b(?:\s+bromodomain)|\bbromodomain\s+and\s+extra[\s-]?terminal\b/i, value: "BET/BRD4" },
+  { pattern: /\bDNMT[0-9]?\b|\bDNA\s+methyltransferase\b/i, value: "DNMT" },
   // Cell cycle
-  { pattern: /\bCDK4\/6\b|\bCDK4\b|\bCDK6\b/i, value: "CDK4/6" },
-  { pattern: /\bCDK[0-9]+\b(?:\s+(?:inhibitor|kinase|pathway))/i, value: "CDK" },
+  { pattern: /\bCDK4\/6\b|\bCDK4\b|\bCDK6\b|\bcyclin[\s-]?dependent\s+kinase\s+(?:4(?:\/6)?|6)\b/i, value: "CDK4/6" },
+  { pattern: /\bCDK[0-9]+\b(?:\s+(?:inhibitor|kinase|pathway))|\bcyclin[\s-]?dependent\s+kinase\b(?!\s+(?:4|6))/i, value: "CDK" },
   // PI3K/AKT/mTOR
-  { pattern: /\bPI3K\b|\bPI3K[αβγδ]\b/i, value: "PI3K" },
-  { pattern: /\bmTOR\b|\bmTORC[12]\b/i, value: "mTOR" },
+  { pattern: /\bPI3K\b|\bPI3K[αβγδ]\b|\bphospho(?:ino)?sitide[\s-]3[\s-]?kinase\b|\bphosphatidylinositol[\s-]3[\s-]?kinase\b/i, value: "PI3K" },
+  { pattern: /\bmTOR\b|\bmTORC[12]\b|\b(?:mechanistic|mammalian)\s+target\s+of\s+rapamycin\b/i, value: "mTOR" },
   { pattern: /\bAKT[0-9]?\b/i, value: "AKT" },
   // JAK/STAT
-  { pattern: /\bJAK1\b/i, value: "JAK1" },
-  { pattern: /\bJAK2\b/i, value: "JAK2" },
-  { pattern: /\bJAK3\b/i, value: "JAK3" },
-  { pattern: /\bSTAT3\b/i, value: "STAT3" },
+  { pattern: /\bJAK1\b|\bJanus\s+kinase\s+1\b/i, value: "JAK1" },
+  { pattern: /\bJAK2\b|\bJanus\s+kinase\s+2\b/i, value: "JAK2" },
+  { pattern: /\bJAK3\b|\bJanus\s+kinase\s+3\b/i, value: "JAK3" },
+  { pattern: /\bSTAT3\b|\bsignal\s+transducer\s+and\s+activator\s+of\s+transcription\s+3\b/i, value: "STAT3" },
   // Heme/leukemia
-  { pattern: /\bBTK\b/i, value: "BTK" },
-  { pattern: /\bIDH1\b/i, value: "IDH1" },
-  { pattern: /\bIDH2\b/i, value: "IDH2" },
-  { pattern: /\bFLT3\b/i, value: "FLT3" },
+  { pattern: /\bBTK\b|\bBruton'?s?\s+tyrosine\s+kinase\b/i, value: "BTK" },
+  { pattern: /\bIDH1\b|\bisocitrate\s+dehydrogenase\s+(?:\(NADP[+]?\)\s+)?1\b/i, value: "IDH1" },
+  { pattern: /\bIDH2\b|\bisocitrate\s+dehydrogenase\s+(?:\(NADP[+]?\)\s+)?2\b/i, value: "IDH2" },
+  { pattern: /\bFLT3\b|\bfms[\s-]?(?:like|related)\s+tyrosine\s+kinase\s+3\b/i, value: "FLT3" },
   // DNA damage response
-  { pattern: /\bPARP[0-9]?\b/i, value: "PARP" },
+  { pattern: /\bPARP[0-9]?\b|\bpoly[\s-]?\(?ADP[\s-]?ribose\)?[\s-]?polymerase\b/i, value: "PARP" },
   { pattern: /\bATR\b(?:\s+(?:kinase|inhibitor|pathway))/i, value: "ATR" },
   { pattern: /\bATM\b(?:\s+(?:kinase|inhibitor|pathway))/i, value: "ATM" },
   // Apoptosis
@@ -164,9 +164,9 @@ const TARGET_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bCD47\b/i, value: "CD47" },
   { pattern: /\bCD3\b(?:\s+(?:T[\s-]?cell|receptor|complex|antibody|agonist))/i, value: "CD3" },
   // Metabolic
-  { pattern: /\bGLP[\s-]?1R\b|\bGLP[\s-]?1\s+receptor\b/i, value: "GLP-1R" },
-  { pattern: /\bGLP[\s-]?1\b|\bGlucagon[\s-]?like\s+peptide/i, value: "GLP-1" },
-  { pattern: /\bPCSK9\b/i, value: "PCSK9" },
+  { pattern: /\bGLP[\s-]?1R\b|\bGLP[\s-]?1\s+receptor\b|\bglucagon[\s-]?like\s+peptide[\s-]?1\s+receptor\b/i, value: "GLP-1R" },
+  { pattern: /\bGLP[\s-]?1\b|\bGlucagon[\s-]?like\s+peptide\b(?!\s*[\s-]?1\s+receptor)/i, value: "GLP-1" },
+  { pattern: /\bPCSK9\b|\bproprotein\s+convertase\s+subtilisin(?:\/kexin)?(?:\s+type)?\s*9\b/i, value: "PCSK9" },
   { pattern: /\bAMPK\b/i, value: "AMPK" },
   // Signaling pathways
   { pattern: /\bWnt\b(?:\s+(?:pathway|signaling|receptor|target))/i, value: "Wnt" },
@@ -521,6 +521,289 @@ const TARGET_COMPARABLE_DRUGS: Record<string, string> = {
   "CCR5": "maraviroc (Selzentry)",
   "Spike protein": "nirmatrelvir-ritonavir (Paxlovid), monoclonal antibodies (bebtelovimab, cilgavimab)",
   "SRC": "dasatinib (Sprycel), bosutinib (Bosulif)",
+};
+
+// ── Target → Class lookup ─────────────────────────────────────────────────────
+// Groups individual molecular targets into ~15 functional categories for the
+// Target×Modality landscape grid. Applied after target is resolved.
+const TARGET_CLASS: Record<string, string> = {
+  // Checkpoint immunotherapy
+  "PD-1": "checkpoint immunotherapy",
+  "PD-L1": "checkpoint immunotherapy",
+  "PD-L2": "checkpoint immunotherapy",
+  "CTLA-4": "checkpoint immunotherapy",
+  "LAG-3": "checkpoint immunotherapy",
+  "TIM-3": "checkpoint immunotherapy",
+  "TIGIT": "checkpoint immunotherapy",
+  "4-1BB": "checkpoint immunotherapy",
+  "OX40": "checkpoint immunotherapy",
+  "CD47": "checkpoint immunotherapy",
+  "CD73": "checkpoint immunotherapy",
+  "A2AR": "checkpoint immunotherapy",
+  "IDO1": "checkpoint immunotherapy",
+  "TDO": "checkpoint immunotherapy",
+  "Arginase-1": "checkpoint immunotherapy",
+  "CD39": "checkpoint immunotherapy",
+  "CD40": "checkpoint immunotherapy",
+  // Receptor tyrosine kinase
+  "EGFR": "receptor tyrosine kinase",
+  "EGFRvIII": "receptor tyrosine kinase",
+  "HER2": "receptor tyrosine kinase",
+  "HER3": "receptor tyrosine kinase",
+  "VEGFR": "receptor tyrosine kinase",
+  "FGFR": "receptor tyrosine kinase",
+  "MET": "receptor tyrosine kinase",
+  "IGF-1R": "receptor tyrosine kinase",
+  "FLT3": "receptor tyrosine kinase",
+  "AXL": "receptor tyrosine kinase",
+  // Fusion/rearrangement kinase
+  "ALK": "fusion kinase",
+  "RET": "fusion kinase",
+  "ROS1": "fusion kinase",
+  "NTRK": "fusion kinase",
+  "BCR-ABL": "fusion kinase",
+  // RAS/MAPK pathway
+  "KRAS": "RAS/MAPK pathway",
+  "BRAF": "RAS/MAPK pathway",
+  "NRAS": "RAS/MAPK pathway",
+  "MEK": "RAS/MAPK pathway",
+  "ERK": "RAS/MAPK pathway",
+  // PI3K/AKT/mTOR
+  "PI3K": "PI3K/AKT/mTOR",
+  "AKT": "PI3K/AKT/mTOR",
+  "mTOR": "PI3K/AKT/mTOR",
+  "PTEN": "PI3K/AKT/mTOR",
+  // Cell cycle
+  "CDK4/6": "cell cycle",
+  "CDK": "cell cycle",
+  // DNA damage response
+  "PARP": "DNA damage response",
+  "ATR": "DNA damage response",
+  "ATM": "DNA damage response",
+  "BRCA1": "DNA damage response",
+  "BRCA2": "DNA damage response",
+  "TP53/p53": "DNA damage response",
+  // Apoptosis
+  "BCL-2": "apoptosis",
+  "BCL-XL": "apoptosis",
+  "MDM2": "apoptosis",
+  // Epigenetics
+  "EZH2": "epigenetics",
+  "HDAC": "epigenetics",
+  "BET/BRD4": "epigenetics",
+  "DNMT": "epigenetics",
+  // JAK/STAT signaling
+  "JAK1": "JAK/STAT signaling",
+  "JAK2": "JAK/STAT signaling",
+  "JAK3": "JAK/STAT signaling",
+  "STAT3": "JAK/STAT signaling",
+  // Cytokine/inflammation
+  "TNF-alpha": "cytokine/inflammation",
+  "IL-6": "cytokine/inflammation",
+  "IL-1": "cytokine/inflammation",
+  "IL-17": "cytokine/inflammation",
+  "IL-23": "cytokine/inflammation",
+  "IL-4": "cytokine/inflammation",
+  "IL-13": "cytokine/inflammation",
+  "IL-33": "cytokine/inflammation",
+  "TGF-beta": "cytokine/inflammation",
+  "NF-kB": "cytokine/inflammation",
+  // Metabolic/hormone receptor
+  "GLP-1R": "metabolic hormone",
+  "GLP-1": "metabolic hormone",
+  "PCSK9": "metabolic hormone",
+  "AMPK": "metabolic hormone",
+  "PPAR": "metabolic hormone",
+  "THRβ": "metabolic hormone",
+  "ACC": "metabolic hormone",
+  "FASN": "metabolic hormone",
+  "SCD1": "metabolic hormone",
+  "FXR": "metabolic hormone",
+  "androgen receptor": "metabolic hormone",
+  "estrogen receptor": "metabolic hormone",
+  // Ion channel / pain
+  "Nav1.7": "ion channel",
+  "Nav1.8": "ion channel",
+  "TRPV1": "ion channel",
+  "TRPA1": "ion channel",
+  "P2X3": "ion channel",
+  "sodium channel": "ion channel",
+  // Fibrosis/ECM
+  "LOXL2": "fibrosis/ECM",
+  "Galectin-3": "fibrosis/ECM",
+  "CTGF/CCN2": "fibrosis/ECM",
+  // Complement
+  "C3": "complement",
+  "C5": "complement",
+  "complement factor B/D": "complement",
+  // Solid tumor antigen
+  "TROP-2": "solid tumor antigen",
+  "NECTIN-4": "solid tumor antigen",
+  "FRα": "solid tumor antigen",
+  "Claudin 18.2": "solid tumor antigen",
+  "CEACAM5": "solid tumor antigen",
+  "MUC1/MUC16": "solid tumor antigen",
+  "Mesothelin": "solid tumor antigen",
+  "GPC3": "solid tumor antigen",
+  "HIF": "solid tumor antigen",
+  // Heme/liquid tumor antigen
+  "CD19": "B-cell/lymphoid antigen",
+  "CD20": "B-cell/lymphoid antigen",
+  "CD22": "B-cell/lymphoid antigen",
+  "CD30": "B-cell/lymphoid antigen",
+  "CD70": "B-cell/lymphoid antigen",
+  "CD79": "B-cell/lymphoid antigen",
+  "CD33": "myeloid antigen",
+  "CD38": "myeloid antigen",
+  "CD123": "myeloid antigen",
+  // B-cell kinase
+  "BTK": "B-cell kinase",
+  // Metabolic enzyme
+  "IDH1": "metabolic enzyme",
+  "IDH2": "metabolic enzyme",
+  // Transcription factor
+  "MYC": "transcription factor",
+  // Developmental signaling
+  "Wnt": "developmental signaling",
+  "Notch": "developmental signaling",
+  "Hedgehog/SHH": "developmental signaling",
+  // Chemokine receptor
+  "CXCR4": "chemokine receptor",
+  "CCR5": "chemokine receptor",
+  // Viral target
+  "ACE2": "viral target",
+  "NSP14": "viral target",
+  "Spike protein": "viral target",
+  // Neurodegeneration
+  "TREM2": "neurodegeneration",
+  "LRRK2": "neurodegeneration",
+  "GBA": "neurodegeneration",
+  // Non-receptor kinase
+  "SRC": "non-receptor kinase",
+  // Adenosine/immune metabolism
+  "VEGF": "angiogenesis",
+};
+
+// ── Indication → Unmet Need Severity (1–5) ───────────────────────────────────
+// Integer scale: 5 = critical (no approved curative option, high mortality),
+// 1 = addressable (established treatments with good coverage).
+// Used to overlay White Space Finder on the landscape intelligence heatmap.
+const INDICATION_UNMET_NEED_SEVERITY: Record<string, number> = {
+  // 5 = critical
+  "glioblastoma": 5,
+  "pancreatic cancer": 5,
+  "small cell lung cancer": 5,
+  "mesothelioma": 5,
+  "als": 5,
+  "amyotrophic lateral sclerosis": 5,
+  "huntington's disease": 5,
+  "duchenne muscular dystrophy": 5,
+  "idiopathic pulmonary fibrosis": 5,
+  "pulmonary fibrosis": 5,
+  "fibrosis": 5,
+  // 4 = high
+  "non-small cell lung cancer": 4,
+  "triple-negative breast cancer": 4,
+  "ovarian cancer": 4,
+  "hepatocellular carcinoma": 4,
+  "glioma": 4,
+  "parkinson's disease": 4,
+  "alzheimer's disease": 4,
+  "multiple sclerosis": 4,
+  "prostate cancer": 4,
+  "melanoma": 4,
+  "acute myeloid leukemia": 4,
+  "aml": 4,
+  "sepsis": 4,
+  "tuberculosis": 4,
+  "antimicrobial resistance": 4,
+  "cystic fibrosis": 4,
+  "sickle cell disease": 4,
+  "hiv/aids": 4,
+  // 3 = moderate
+  "breast cancer": 3,
+  "colorectal cancer": 3,
+  "lymphoma": 3,
+  "diffuse large b-cell lymphoma": 3,
+  "multiple myeloma": 3,
+  "leukemia": 3,
+  "chronic lymphocytic leukemia": 3,
+  "cll": 3,
+  "neuropathic pain": 3,
+  "epilepsy": 3,
+  "heart failure": 3,
+  "stroke": 3,
+  "non-alcoholic steatohepatitis": 3,
+  "nash": 3,
+  "rheumatoid arthritis": 3,
+  "inflammatory bowel disease": 3,
+  "crohn's disease": 3,
+  "lupus": 3,
+  "systemic lupus erythematosus": 3,
+  "schizophrenia": 3,
+  "depression": 3,
+  "bipolar disorder": 3,
+  "hiv": 3,
+  "spinal cord injury": 3,
+  "traumatic brain injury": 3,
+  // 2 = manageable
+  "lung cancer": 2,
+  "gastric cancer": 2,
+  "esophageal cancer": 2,
+  "bladder cancer": 2,
+  "renal cell carcinoma": 2,
+  "thyroid cancer": 2,
+  "sarcoma": 2,
+  "diabetes type 2": 2,
+  "type 2 diabetes": 2,
+  "obesity": 2,
+  "hypertension": 2,
+  "cardiovascular disease": 2,
+  "atherosclerosis": 2,
+  "asthma": 2,
+  "psoriasis": 2,
+  "atopic dermatitis": 2,
+  "ulcerative colitis": 2,
+  "migraine": 2,
+  "hepatitis b": 2,
+  "hepatitis c": 2,
+  "covid-19": 2,
+  // 1 = addressable
+  "type 1 diabetes": 1,
+  "diabetes type 1": 1,
+  "hypercholesterolemia": 1,
+  "ankylosing spondylitis": 1,
+  "influenza": 1,
+};
+
+// ── Target → Indication reverse lookup (narrow, high-confidence set) ──────────
+// Fills indication when it is missing and a highly specific target implies
+// a single canonical disease. Only the most unambiguous mappings are included —
+// targets that are used across multiple indications are excluded.
+const TARGET_INDICATION: Record<string, string> = {
+  "PCSK9": "atherosclerosis",
+  "GLP-1R": "type 2 diabetes",
+  "GLP-1": "type 2 diabetes",
+  "LRRK2": "parkinson's disease",
+  "GBA": "parkinson's disease",
+  "TREM2": "alzheimer's disease",
+  "Nav1.7": "neuropathic pain",
+  "Nav1.8": "neuropathic pain",
+  "P2X3": "neuropathic pain",
+  "TRPV1": "neuropathic pain",
+  "ACE2": "covid-19",
+  "NSP14": "covid-19",
+  "Spike protein": "covid-19",
+  "CCR5": "hiv",
+  "FLT3": "acute myeloid leukemia",
+  "IDH1": "acute myeloid leukemia",
+  "IDH2": "acute myeloid leukemia",
+  "BCR-ABL": "chronic myeloid leukemia",
+  "androgen receptor": "prostate cancer",
+  "estrogen receptor": "breast cancer",
+  "LOXL2": "idiopathic pulmonary fibrosis",
+  "Galectin-3": "idiopathic pulmonary fibrosis",
+  "BTK": "chronic lymphocytic leukemia",
 };
 
 // ── Indication → Biology lookup (85 entries) ─────────────────────────────────
@@ -1092,6 +1375,8 @@ export function applyRulesToAsset(asset: {
   patentStatus?: string | null;
   mechanismOfAction?: string | null;
   biology?: string | null;
+  targetClass?: string | null;
+  unmetNeedSeverity?: number | null;
 }): { fields: Record<string, string>; dataSparse: boolean; provenance: Record<string, string> } {
   // Include MOA in text so TARGET_RULES can match against it (e.g. "PARP inhibitor" → PARP)
   const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? ""), (asset.mechanismOfAction ?? "")].join(" ");
@@ -1172,6 +1457,17 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Target → Indication reverse lookup ───────────────────────────────────────
+  // Runs after target fill. Only fires when indication is still missing and the
+  // target has a single unambiguous disease mapping (narrow high-confidence set).
+  if (!humanV.indication && (!asset.indication || asset.indication === "unknown") && !fields.indication) {
+    const tgt = (fields.target ?? asset.target ?? "").trim();
+    if (tgt && tgt !== "unknown") {
+      const fromTarget = TARGET_INDICATION[tgt];
+      if (fromTarget) { fields.indication = fromTarget; provenance.indication = "rule:target"; }
+    }
+  }
+
   // ── Unmet need: indication lookup ────────────────────────────────────────────
   if (!asset.unmetNeed || asset.unmetNeed.trim() === "") {
     const ind = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
@@ -1247,6 +1543,24 @@ export function applyRulesToAsset(asset: {
     }
   }
 
+  // ── Target class: groups target into functional category for landscape grid ───
+  if (!asset.targetClass) {
+    const tgt = (fields.target ?? asset.target ?? "").trim();
+    if (tgt && tgt !== "unknown") {
+      const cls = TARGET_CLASS[tgt];
+      if (cls) { fields.targetClass = cls; provenance.targetClass = "rule:target"; }
+    }
+  }
+
+  // ── Unmet need severity: integer 1–5 from indication ─────────────────────────
+  if (asset.unmetNeedSeverity == null) {
+    const ind = (fields.indication ?? asset.indication ?? "").toLowerCase().trim();
+    if (ind && ind !== "unknown") {
+      const sev = INDICATION_UNMET_NEED_SEVERITY[ind];
+      if (sev !== undefined) { fields.unmetNeedSeverity = String(sev); provenance.unmetNeedSeverity = "rule:indication"; }
+    }
+  }
+
   // ── Modality normalizer: "device" → "medical device" ─────────────────────────
   // Catch-all that converts the bare "device" string (often from LLM output or
   // stale scraped data) to the canonical "medical device" label. Runs after all
@@ -1313,10 +1627,13 @@ export async function runRuleBasedFill(
     patent_status: string | null;
     mechanism_of_action: string | null;
     biology: string | null;
+    target_class: string | null;
+    unmet_need_severity: number | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
-           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology,
+           target_class, unmet_need_severity
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -1329,6 +1646,8 @@ export async function runRuleBasedFill(
         OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR unmet_need IS NULL OR unmet_need = ''
         OR biology IS NULL OR biology = ''
+        OR target_class IS NULL
+        OR unmet_need_severity IS NULL
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -1365,6 +1684,8 @@ export async function runRuleBasedFill(
       patentStatus: row.patent_status,
       mechanismOfAction: row.mechanism_of_action,
       biology: row.biology,
+      targetClass: row.target_class,
+      unmetNeedSeverity: row.unmet_need_severity,
     });
 
     if (Object.keys(fields).length > 0 || dataSparse) {
@@ -1398,6 +1719,8 @@ type RuleFillUpdateSet = {
   comparableDrugs?: string;
   unmetNeed?: string;
   biology?: string;
+  targetClass?: string;
+  unmetNeedSeverity?: number;
   enrichmentSources?: SQL;
 };
 
@@ -1418,6 +1741,8 @@ async function flushWrites(
       if (item.fields.comparableDrugs) updates.comparableDrugs = item.fields.comparableDrugs;
       if (item.fields.unmetNeed) updates.unmetNeed = item.fields.unmetNeed;
       if (item.fields.biology) updates.biology = item.fields.biology;
+      if (item.fields.targetClass) updates.targetClass = item.fields.targetClass;
+      if (item.fields.unmetNeedSeverity) updates.unmetNeedSeverity = parseInt(item.fields.unmetNeedSeverity, 10);
 
       if (fieldKeys.length > 0) {
         // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
@@ -1459,10 +1784,13 @@ export async function estimateRuleBasedFill(): Promise<{
     patent_status: string | null;
     mechanism_of_action: string | null;
     biology: string | null;
+    target_class: string | null;
+    unmet_need_severity: number | null;
   }>(sql`
     SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness,
            indication, modality, target, categories, human_verified, source_type, deep_enrich_attempts,
-           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology
+           comparable_drugs, unmet_need, patent_status, mechanism_of_action, biology,
+           target_class, unmet_need_severity
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -1475,6 +1803,8 @@ export async function estimateRuleBasedFill(): Promise<{
         OR comparable_drugs IS NULL OR comparable_drugs = ''
         OR unmet_need IS NULL OR unmet_need = ''
         OR biology IS NULL OR biology = ''
+        OR target_class IS NULL
+        OR unmet_need_severity IS NULL
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -1505,6 +1835,8 @@ export async function estimateRuleBasedFill(): Promise<{
       sourceType: row.source_type,
       deepEnrichAttempts: row.deep_enrich_attempts,
       biology: row.biology,
+      targetClass: row.target_class,
+      unmetNeedSeverity: row.unmet_need_severity,
     });
     if (Object.keys(fields).length > 0) fillable++;
     if (dataSparse) dataSparseCount++;
