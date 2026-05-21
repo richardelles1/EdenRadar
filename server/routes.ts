@@ -29,7 +29,7 @@ import { clusterAssets } from "./lib/pipeline/clusterAssets";
 import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreSearchRelevance, computeFitBonus, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
-import { isFatalOpenAIError } from "./lib/llm";
+import { isFatalOpenAIError, streamDossierNarrative } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "./lib/ingestion";
@@ -1985,6 +1985,37 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Dossier error:", err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
+  // SSE streaming dossier — mini by default, gpt-4o when fullModel=true
+  app.post("/api/dossier/stream", aiRateLimit, async (req, res) => {
+    try {
+      const body = z.object({ asset: z.any(), fullModel: z.boolean().optional() }).parse(req.body);
+      if (!body.asset) return res.status(400).json({ error: "Asset required" });
+      const asset = body.asset as ScoredAsset;
+      const fullModel = body.fullModel ?? false;
+
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      for await (const chunk of streamDossierNarrative(asset, fullModel)) {
+        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ done: true, generated_at: new Date().toISOString() })}\n\n`);
+      logAppEvent("dossier_opened", { institution: asset.institution ?? null, model: fullModel ? "gpt-4o" : "gpt-4o-mini" });
+      res.end();
+    } catch (err: any) {
+      console.error("Dossier stream error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: friendlyOpenAIError(err) });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: friendlyOpenAIError(err) })}\n\n`);
+        res.end();
+      }
     }
   });
 
