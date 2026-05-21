@@ -228,71 +228,75 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
       let removedCount = 0;
 
       const upsertLookup = new Map(toUpsert.map((u) => [u.fingerprint, u]));
-      classifyBatch(
-        newAssets.map((a) => {
-          const orig = upsertLookup.get(a.fingerprint);
-          return {
-            id: a.id,
-            title: a.assetName,
-            description: orig?.summary || a.assetName,
-            abstract: orig?.abstract || undefined,
-            ctx: {
-              categories: orig?.categories ?? null,
-              patentStatus: orig?.patentStatus ?? null,
-              licensingStatus: orig?.licensingStatus ?? null,
-              inventors: orig?.inventors ?? null,
-              sourceUrl: orig?.sourceUrl ?? null,
-            },
-          };
-        }),
-        30,
-        async (id, classification) => {
-          const orig = newAssets.find((na) => na.id === id);
-          const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
-          try {
-            if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
-              // Mark as irrelevant rather than deleting — keeps the fingerprint in the DB so
-              // future scans don't re-discover and re-enrich this asset endlessly.
-              await storage.markAsIrrelevant(id);
-              removedCount++;
-            } else if (!classification.biotechRelevant) {
-              await storage.addToReviewQueue(id, orig?.fingerprint || String(id), "low-confidence non-biotech classification");
-              classifiedCount++;
-            } else {
-              const score = computeCompletenessScore({
-                assetClass: classification.assetClass,
-                deviceAttributes: classification.deviceAttributes,
-                target: classification.target,
-                modality: classification.modality,
-                indication: classification.indication,
-                developmentStage: classification.developmentStage,
-                mechanismOfAction: classification.mechanismOfAction,
-                innovationClaim: classification.innovationClaim,
-                unmetNeed: classification.unmetNeed,
-                comparableDrugs: classification.comparableDrugs,
-                licensingReadiness: classification.licensingReadiness,
-                summary: origData?.summary,
-                abstract: origData?.abstract,
-                categories: classification.categories,
-                inventors: origData?.inventors,
-                patentStatus: origData?.patentStatus,
-                sourceType: origData?.sourceType ?? "tech_transfer",
-              });
-              await storage.updateIngestedAssetEnrichment(id, {
-                ...classification,
-                completenessScore: score,
-              });
-              classifiedCount++;
-            }
-          } catch (err: any) {
-            console.error(`[ingestion] Classification failed for id ${id}: ${err?.message}`);
+      const failedClassifyIds: number[] = [];
+      try {
+        await classifyBatch(
+          newAssets.map((a) => {
+            const orig = upsertLookup.get(a.fingerprint);
+            return {
+              id: a.id,
+              title: a.assetName,
+              description: orig?.summary || a.assetName,
+              abstract: orig?.abstract || undefined,
+              ctx: {
+                categories: orig?.categories ?? null,
+                patentStatus: orig?.patentStatus ?? null,
+                licensingStatus: orig?.licensingStatus ?? null,
+                inventors: orig?.inventors ?? null,
+                sourceUrl: orig?.sourceUrl ?? null,
+              },
+            };
+          }),
+          30,
+          async (id, classification) => {
+            const orig = newAssets.find((na) => na.id === id);
+            const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
             try {
-              await storage.addToReviewQueue(id, orig?.fingerprint || String(id), `classifier error: ${err?.message?.slice(0, 200)}`);
-            } catch {}
+              if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
+                // Mark as irrelevant rather than deleting — keeps the fingerprint in the DB so
+                // future scans don't re-discover and re-enrich this asset endlessly.
+                await storage.markAsIrrelevant(id);
+                removedCount++;
+              } else if (!classification.biotechRelevant) {
+                await storage.addToReviewQueue(id, orig?.fingerprint || String(id), "low-confidence non-biotech classification");
+                classifiedCount++;
+              } else {
+                const score = computeCompletenessScore({
+                  assetClass: classification.assetClass,
+                  deviceAttributes: classification.deviceAttributes,
+                  target: classification.target,
+                  modality: classification.modality,
+                  indication: classification.indication,
+                  developmentStage: classification.developmentStage,
+                  mechanismOfAction: classification.mechanismOfAction,
+                  innovationClaim: classification.innovationClaim,
+                  unmetNeed: classification.unmetNeed,
+                  comparableDrugs: classification.comparableDrugs,
+                  licensingReadiness: classification.licensingReadiness,
+                  summary: origData?.summary,
+                  abstract: origData?.abstract,
+                  categories: classification.categories,
+                  inventors: origData?.inventors,
+                  patentStatus: origData?.patentStatus,
+                  sourceType: origData?.sourceType ?? "tech_transfer",
+                });
+                await storage.updateIngestedAssetEnrichment(id, {
+                  ...classification,
+                  completenessScore: score,
+                });
+                classifiedCount++;
+              }
+            } catch (err: any) {
+              console.error(`[ingestion] Classification failed for id ${id}: ${err?.message}`);
+              failedClassifyIds.push(id);
+              try {
+                await storage.addToReviewQueue(id, orig?.fingerprint || String(id), `classifier error: ${err?.message?.slice(0, 200)}`);
+              } catch {}
+            }
+            enrichingCount = Math.max(0, enrichingCount - 1);
           }
-          enrichingCount = Math.max(0, enrichingCount - 1);
-        }
-      ).then(async () => {
+        );
+
         enrichingCount = 0;
         console.log(`[ingestion] Classification complete: ${classifiedCount} relevant, ${removedCount} removed`);
         try {
@@ -300,10 +304,86 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
         } catch (err: any) {
           console.error(`[ingestion] Failed to update relevantNewCount: ${err?.message}`);
         }
-      }).catch((err: any) => {
+
+        // Fix #6: One retry pass for assets whose classification failed due to transient errors
+        // (LLM timeout, rate-limit, etc.). Lower concurrency to be gentler on retry.
+        if (failedClassifyIds.length > 0) {
+          console.log(`[ingestion] Retrying ${failedClassifyIds.length} failed classifications...`);
+          let retryCount = 0;
+          try {
+            await classifyBatch(
+              failedClassifyIds.map((id) => {
+                const orig = newAssets.find((na) => na.id === id);
+                const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
+                return {
+                  id,
+                  title: orig?.assetName ?? String(id),
+                  description: origData?.summary ?? orig?.assetName ?? String(id),
+                  abstract: origData?.abstract ?? undefined,
+                  ctx: {
+                    categories: origData?.categories ?? null,
+                    patentStatus: origData?.patentStatus ?? null,
+                    licensingStatus: origData?.licensingStatus ?? null,
+                    inventors: origData?.inventors ?? null,
+                    sourceUrl: origData?.sourceUrl ?? null,
+                  },
+                };
+              }),
+              10,
+              async (id, classification) => {
+                if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
+                  await storage.markAsIrrelevant(id).catch(() => {});
+                } else if (classification.biotechRelevant) {
+                  const orig = newAssets.find((na) => na.id === id);
+                  const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
+                  const score = computeCompletenessScore({
+                    assetClass: classification.assetClass,
+                    deviceAttributes: classification.deviceAttributes,
+                    target: classification.target,
+                    modality: classification.modality,
+                    indication: classification.indication,
+                    developmentStage: classification.developmentStage,
+                    mechanismOfAction: classification.mechanismOfAction,
+                    innovationClaim: classification.innovationClaim,
+                    unmetNeed: classification.unmetNeed,
+                    comparableDrugs: classification.comparableDrugs,
+                    licensingReadiness: classification.licensingReadiness,
+                    summary: origData?.summary,
+                    abstract: origData?.abstract,
+                    categories: classification.categories,
+                    inventors: origData?.inventors,
+                    patentStatus: origData?.patentStatus,
+                    sourceType: origData?.sourceType ?? "tech_transfer",
+                  });
+                  await storage.updateIngestedAssetEnrichment(id, { ...classification, completenessScore: score })
+                    .catch((e: any) => console.error(`[ingestion] Retry write failed for ${id}: ${e?.message}`));
+                  retryCount++;
+                }
+              }
+            );
+            console.log(`[ingestion] Classification retry: ${retryCount}/${failedClassifyIds.length} recovered`);
+          } catch (err: any) {
+            console.error(`[ingestion] Classification retry failed (non-fatal): ${err?.message}`);
+          }
+        }
+
+        // Fix #1: Auto rule-based fill after every classification run.
+        // Deterministic rules catch fields the LLM missed, at zero cost.
+        // Non-fatal — a fill failure never blocks or rolls back ingestion.
+        try {
+          const { runRuleBasedFill } = await import("./pipeline/ruleBasedFill.js");
+          const fillSummary = await runRuleBasedFill();
+          if (fillSummary.filled > 0) {
+            console.log(`[ingestion] Auto rule-fill: ${fillSummary.filled} assets updated`);
+          }
+        } catch (err: any) {
+          console.error(`[ingestion] Auto rule-fill failed (non-fatal): ${err?.message}`);
+        }
+
+      } catch (err: any) {
         enrichingCount = 0;
         console.error(`[ingestion] Classification batch failed: ${err?.message}`);
-      });
+      }
     }
 
     if (newCount > 0) {
