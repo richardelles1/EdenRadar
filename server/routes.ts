@@ -26,7 +26,7 @@ import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreFit as scoreFitTTO, scoreSearchRelevance, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreSearchRelevance, computeFitBonus, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
@@ -844,18 +844,19 @@ export async function registerRoutes(
         const minR = Math.min(...vals);
         const rrfRange = maxR - minR || 1;
         for (const [id, h] of hybridScoreById) {
-          normalizedRrfById.set(id, Math.round(((h.rrfScore - minR) / rrfRange) * 100));
+          // [30, 100]: every result that appeared in search deserves at least 30
+          normalizedRrfById.set(id, 30 + Math.round(((h.rrfScore - minR) / rrfRange) * 70));
         }
       } else if (!runHybrid && trimmedQuery && results.length > 0) {
-        // Keyword-only path: textRelevance (ts_rank_cd) is already ordered high→low.
-        // Normalize it to [0, 100] so search_relevance contributes to score
-        // differentiation even when hybrid search is disabled.
+        // Keyword-only path: normalize textRelevance (ts_rank_cd) to [30, 100].
+        // Any result surfaced by the search engine is relevant; 0 implies "no match"
+        // which is wrong since FTS already pre-filtered for relevance.
         const textScores = results.map((r) => r.textRelevance ?? 0);
         const maxT = Math.max(...textScores);
         const minT = Math.min(...textScores);
         const textRange = maxT - minT || 1;
         for (const r of results) {
-          normalizedRrfById.set(r.id, Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 100));
+          normalizedRrfById.set(r.id, 30 + Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 70));
         }
       }
 
@@ -979,12 +980,13 @@ export async function registerRoutes(
       // No profile → scoutFitProfile remains undefined → scoreFit returns
       // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
 
-      // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
-      // Uses: Fit (75%, saved Deal Focus only), Record Quality (15%), Availability (10%)
-      // Replaces the 6-dimension legacy model which produced near-constant scores
-      // for TTO corpus (Licensability/Novelty/Competition don't differentiate).
+      // ── TTO scoring: relevance base + fit bonus ─────────────────────────────
+      // Base score (search_relevance 80%, record_quality 12%, availability 8%)
+      // drives ranking. Fit bonus (+0/+8/+15/+20) is added after — boosts
+      // thesis-aligned assets without penalising others for imperfect DB fields.
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
+          asset_name: r.assetName,
           development_stage: r.developmentStage,
           licensing_status: r.licensingReadiness ?? "unknown",
           owner_name: r.institution,
@@ -993,6 +995,7 @@ export async function registerRoutes(
           target: r.target ?? undefined,
           modality: r.modality ?? undefined,
           indication: r.indication ?? undefined,
+          summary: r.summary ?? undefined,
           matching_tags: [],
           evidence_count: 1,
           patent_status: "unknown",
@@ -1002,27 +1005,37 @@ export async function registerRoutes(
         };
 
         const searchRelevanceResult = scoreSearchRelevance(normalizedRrfById.get(r.id));
-        const fitRes             = scoreFitTTO(partialAsset, scoutFitProfile);
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
           search_relevance: searchRelevanceResult,
-          fit:              fitRes,
           record_quality:   completenessResult,
           availability:     availabilityResult,
         };
 
-        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
+        const { total: baseScore, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
+
+        // Fit bonus: soft full-text match, additive only, never penalises
+        const fitBonus = computeFitBonus({
+          asset_name: r.assetName,
+          indication: r.indication ?? undefined,
+          target: r.target ?? undefined,
+          modality: r.modality ?? undefined,
+          summary: r.summary ?? undefined,
+          biology: r.biology ?? undefined,
+          development_stage: r.developmentStage,
+        }, scoutFitProfile);
 
         const catConf = typeof r.categoryConfidence === "number"
           ? Math.max(0, Math.min(1, r.categoryConfidence))
           : undefined;
         const coverageNorm = signal_coverage / 100;
         const confidenceFactor = catConf !== undefined ? Math.min(catConf, coverageNorm) : coverageNorm;
-        const total = CONFIDENCE_AWARE
-          ? Math.max(0, Math.min(100, Math.round(rawTotal * (CONF_FLOOR + (1 - CONF_FLOOR) * confidenceFactor))))
-          : rawTotal;
+        const rawTotal = CONFIDENCE_AWARE
+          ? Math.max(0, Math.min(100, Math.round(baseScore * (CONF_FLOOR + (1 - CONF_FLOOR) * confidenceFactor))))
+          : baseScore;
+        const total = Math.max(0, Math.min(100, Math.round(rawTotal + fitBonus)));
         const confidence: "high" | "medium" | "low" =
           confidenceFactor >= 0.75 ? "high" : confidenceFactor >= 0.5 ? "medium" : "low";
 
@@ -1041,9 +1054,10 @@ export async function registerRoutes(
           score: total,
           score_breakdown: {
             search_relevance: searchRelevanceResult.score,
-            fit:            fitRes.score,
+            fit_bonus:      fitBonus,
             record_quality: completenessResult.score,
             availability:   availabilityResult.score,
+            fit:          0,
             novelty:      0,
             freshness:    0,
             readiness:    0,
@@ -1194,9 +1208,9 @@ export async function registerRoutes(
         const assetClass = typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null;
         const completenessScoreVal = r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null;
 
-        // TTO 3-dimension scoring (Task #980) — Fit (75%), Record Quality (15%), Availability (10%).
-        // This is a "what's new" feed so fit has no buyer profile; completeness and availability
-        // drive the score to maintain parity with the Scout search breakdown.
+        // Recently-added feed: no query, no buyer profile.
+        // Score = record quality (60%) + availability (40%) after weight redistribution
+        // (search_relevance hasData:false → its 80% redistributes to the other two).
         const partialAsset: Partial<ScoredAsset> = {
           development_stage: developmentStage,
           licensing_status: licensingReadiness ?? "unknown",
@@ -1213,14 +1227,13 @@ export async function registerRoutes(
           latest_signal_date: lastSeenAt ?? firstSeenAt ?? "",
         };
 
-        const fitResult          = scoreFitTTO(partialAsset, undefined);
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
-          fit:            fitResult,
-          record_quality: completenessResult,
-          availability:   availabilityResult,
+          search_relevance: scoreSearchRelevance(undefined),
+          record_quality:   completenessResult,
+          availability:     availabilityResult,
         };
 
         const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
@@ -1253,9 +1266,10 @@ export async function registerRoutes(
           first_seen_at: firstSeenAt,
           score: total,
           score_breakdown: {
-            fit:            fitResult.score,
             record_quality: completenessResult.score,
             availability:   availabilityResult.score,
+            fit:          0,
+            fit_bonus:    0,
             novelty:      0,
             freshness:    0,
             readiness:    0,
