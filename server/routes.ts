@@ -844,18 +844,18 @@ export async function registerRoutes(
         const minR = Math.min(...vals);
         const rrfRange = maxR - minR || 1;
         for (const [id, h] of hybridScoreById) {
-          normalizedRrfById.set(id, 20 + Math.round(((h.rrfScore - minR) / rrfRange) * 80));
+          normalizedRrfById.set(id, Math.round(((h.rrfScore - minR) / rrfRange) * 100));
         }
       } else if (!runHybrid && trimmedQuery && results.length > 0) {
         // Keyword-only path: textRelevance (ts_rank_cd) is already ordered high→low.
-        // Normalize it to the same [20, 100] range so search_relevance contributes
-        // to score differentiation even when hybrid search is disabled.
+        // Normalize it to [0, 100] so search_relevance contributes to score
+        // differentiation even when hybrid search is disabled.
         const textScores = results.map((r) => r.textRelevance ?? 0);
         const maxT = Math.max(...textScores);
         const minT = Math.min(...textScores);
         const textRange = maxT - minT || 1;
         for (const r of results) {
-          normalizedRrfById.set(r.id, 20 + Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 80));
+          normalizedRrfById.set(r.id, Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 100));
         }
       }
 
