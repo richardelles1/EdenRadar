@@ -1,4 +1,5 @@
 import { createTechPublisherScraper } from "./techpublisher";
+export { ntnuScraper } from "./ntnu";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
 import { fetchHtml, fetchJson, cleanText, SiteHttpError } from "./utils";
@@ -1496,7 +1497,7 @@ export const vuamsterdamScraper = createStubScraper("Vrije Universiteit Amsterda
 export const karolinskaScraper = createStubScraper("Karolinska Institutet");
 export const inven2Scraper = createStubScraper("University of Oslo");
 export const visScraper = createStubScraper("University of Bergen");
-export const ntnuScraper = createStubScraper("NTNU");
+// ntnuScraper — implemented in ntnu.ts (WP REST API, avada_portfolio CPT)
 export const ucphScraper = createStubScraper("University of Copenhagen");
 export const aarhusScraper = createStubScraper("Aarhus University");
 export const dtuScraper = createStubScraper("Technical University of Denmark");

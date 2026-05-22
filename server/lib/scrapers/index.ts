@@ -418,6 +418,8 @@ import {
   novaLisbonScraper,
   nusScraper,
   kyotoIcemsScraper,
+  // NTNU TTO — WP REST API (avada_portfolio CPT)
+  ntnuScraper,
 } from "./new-institutions";
 
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
@@ -1084,6 +1086,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   pekingUniversityScraper,        // Peking University — stub (no accessible English catalog)
   zhejiangUniversityScraper,      // Zhejiang University — stub (no accessible English catalog)
   shanghaiTechScraper,            // ShanghaiTech University — stub (no accessible English catalog)
+  // ── Nordic University TTO Scrapers ──────────────────────────────────────────
+  ntnuScraper,                    // NTNU (Norwegian Univ. of Science and Technology) — WP REST API avada_portfolio — ~14 techs
 ];
 
 // Stamp the tier field on every scraper object at startup so that
