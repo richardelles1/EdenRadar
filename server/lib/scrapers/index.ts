@@ -428,6 +428,7 @@ import {
 // ── New TTO scrapers (2026-05-21) ─────────────────────────────────────────────
 import { weillCornellScraper } from "./weillcornell";
 import { icgebScraper } from "./icgeb";
+import { epflScraper } from "./epfl";
 
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
 import { ostiScraper } from "./osti";
@@ -1100,6 +1101,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   templeScraper,                  // Temple University — Drupal 7 + DataTables, single page — ~40-45 techs
   weillCornellScraper,            // Weill Cornell Medicine — Drupal Views, paginated ~290 techs
   icgebScraper,                   // ICGEB (Italy/India/South Africa) — WordPress + Content Views Pro — ~31 techs
+  epflScraper,                    // EPFL TTO — WP SSR card deck, single page — ~80-120 techs
 ];
 
 // Stamp the tier field on every scraper object at startup so that
