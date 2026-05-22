@@ -25,6 +25,7 @@ const ALLOWED_ORIGINS = [
   "www.anl.gov",
   "availabletechnologies.pnl.gov",
   "www.pnnl.gov",
+  "otc.duke.edu",
 ];
 
 export default {
