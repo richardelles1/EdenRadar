@@ -22,7 +22,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -309,6 +309,7 @@ export default function Scout() {
   const [researchResults, setResearchResults] = useState<ScoredAsset[]>(() => ssGet("scout-research-results", []));
   const [patentResults, setPatentResults] = useState<ScoredAsset[]>(() => ssGet("scout-patent-results", []));
   const [hasSearched, setHasSearched] = useState<boolean>(() => ssGet("scout-has-searched", false));
+  const [profileBannerQuery, setProfileBannerQuery] = useState<string | null>(null);
   const [currentQuery, setCurrentQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [inputQuery, setInputQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [stageFilters, setStageFilters] = useState<string[]>([]);
@@ -378,6 +379,7 @@ export default function Scout() {
     const modalitiesParam = params.get("modalities");
     const stagesParam = params.get("stages");
     const institutionsParam = params.get("institutions");
+    const profileSearchParam = params.get("profileSearch");
 
     const parseList = (s: string | null) =>
       s ? s.split(",").map((v) => v.trim()).filter(Boolean) : [];
@@ -388,6 +390,10 @@ export default function Scout() {
 
     const q = (qParam ?? "").trim();
     const shouldRunSearch = !!q || hasStructuredFilters;
+
+    if (profileSearchParam === "1" && qParam) {
+      setProfileBannerQuery(qParam.trim());
+    }
 
     if (shouldRunSearch) {
       setInputQuery(q);
@@ -773,6 +779,7 @@ export default function Scout() {
   const handleSearch = (query: string) => {
     setCurrentQuery(query);
     setInputQuery(query);
+    setProfileBannerQuery(null);
     setResearchResults([]);
     setPatentResults([]);
     setTrialResults([]);
@@ -801,6 +808,7 @@ export default function Scout() {
   const handleClearSearch = () => {
     setCurrentQuery("");
     setInputQuery("");
+    setProfileBannerQuery(null);
     setSearchResults([]);
     setResearchResults([]);
     setPatentResults([]);
@@ -1483,6 +1491,22 @@ export default function Scout() {
                       </Button>
                     </div>
                   </>
+                )}
+
+                {profileBannerQuery && hasSearched && (
+                  <div className="flex items-center gap-3 px-4 py-2.5 mb-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm">
+                    <Sparkles className="w-4 h-4 shrink-0" />
+                    <span className="flex-1 min-w-0 text-xs">
+                      Showing results based on your therapeutic focus: <span className="font-semibold">{profileBannerQuery}</span>
+                    </span>
+                    <button
+                      onClick={() => setProfileBannerQuery(null)}
+                      className="shrink-0 p-0.5 rounded hover:bg-emerald-500/20 transition-colors"
+                      aria-label="Dismiss"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 )}
 
                 {hasSearched && filteredResults.length === 0 ? (

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useLocation, Link } from "wouter";
 import { IndustrySidebar } from "@/components/IndustrySidebar";
 import { IndustryOnboarding } from "@/components/IndustryOnboarding";
@@ -110,6 +110,18 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+
+  const handleOnboardingSave = useCallback(
+    (profile: { therapeuticAreas: string[]; modalities: string[]; dealStages: string[] }) => {
+      const firstArea = profile.therapeuticAreas[0];
+      if (firstArea) {
+        navigate(`/scout?q=${encodeURIComponent(firstArea)}&profileSearch=1`);
+      } else {
+        navigate("/scout");
+      }
+    },
+    [navigate],
+  );
   const { hydrated } = useIndustrySyncOnMount();
   const { data: org } = useOrg();
   const orgColor = org?.primaryColor ?? null;
@@ -221,6 +233,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         open={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
         initialCompanyName={org?.name}
+        onSave={handleOnboardingSave}
       />
     </div>
   );

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, X, CheckCircle2, Building2 } from "lucide-react";
-import { getIndustryProfile, saveIndustryProfile } from "@/hooks/use-industry";
+import { getIndustryProfile, saveIndustryProfile, type IndustryProfile } from "@/hooks/use-industry";
 
 const DEAL_STAGES = [
   "Discovery",
@@ -26,6 +26,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   initialCompanyName?: string;
+  onSave?: (profile: Pick<IndustryProfile, "therapeuticAreas" | "modalities" | "dealStages">) => void;
 }
 
 const MODALITIES = [
@@ -41,7 +42,7 @@ const MODALITIES = [
   "CRISPR",
 ];
 
-export function IndustryOnboarding({ open, onClose, initialCompanyName }: Props) {
+export function IndustryOnboarding({ open, onClose, initialCompanyName, onSave }: Props) {
   const saved = getIndustryProfile();
   const [companyName, setCompanyName] = useState(saved.companyName || initialCompanyName || "");
 
@@ -90,6 +91,7 @@ export function IndustryOnboarding({ open, onClose, initialCompanyName }: Props)
       modalities,
       onboardingDone: true,
     });
+    onSave?.({ therapeuticAreas, modalities, dealStages });
     onClose();
   }
 
