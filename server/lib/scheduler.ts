@@ -12,6 +12,7 @@ import {
 } from "./scraperState";
 import { storage } from "../storage";
 import { checkAndSendAlerts } from "./alertMailer";
+import { sendEmail, getAdminNotificationRecipients, FROM_DIGEST } from "../email";
 
 /** Skip an institution only if it was synced within this window AND found 0 new assets. */
 const FRESH_THRESHOLD_MS = 4 * 60 * 60 * 1000;  // 4 hours
@@ -42,6 +43,10 @@ export interface SchedulerStatus {
   tierOnly: number | null;
   /** True when the scheduler is running a staleness-first (oldest-synced-first) scan. */
   stalenessFirst: boolean;
+  /** True when the scheduler is running a Daily Sweep (staleness-ordered, T3-complex sub-phase, completion report). */
+  dailySweep: boolean;
+  /** True when the Daily Sweep has entered the T3-complex sub-phase (concurrency=1, 3 retries). */
+  dailySweepComplexPhase: boolean;
   /** Queue position at which the scheduler resumed mid-cycle after a restart.
    * Null when this is a fresh cycle start. */
   resumedAtPosition: number | null;
@@ -77,8 +82,44 @@ let stalenessFirstActive = false;
 let autoT4AfterCycle = false;
 /** Queue position at which the scheduler resumed mid-cycle (set on resume, null on fresh start). */
 let resumedAtPosition: number | null = null;
+/** True when running a Daily Sweep — staleness-ordered, T3-complex sub-phase, completion report. */
+let dailySweepActive = false;
+/** True when the Daily Sweep has transitioned to the T3-complex sub-phase (concurrency=1, 3 retries). */
+let dailySweepComplexPhase = false;
+/** Concurrency cap override for the current sweep phase. Null = use getMaxHttpConcurrent(). */
+let sweepConcurrencyOverride: number | null = null;
+
+/** Institutions that run in the Daily Sweep's T3-complex phase: large catalogs,
+ * slow detail-page fetching, or fragile ASP.NET pagination that warrants
+ * sequential (concurrency=1) dispatch with 3 retries instead of 1. */
+const COMPLEX_INSTITUTIONS = new Set<string>([
+  "MIT",
+  "Stanford University",
+  "Harvard University",
+  "UC Berkeley",
+  "UC San Diego",
+  "UC San Francisco",   // UCSF — createUCTechTransferScraper("SF", ...)
+]);
+
+/** Stats accumulated during a Daily Sweep for the completion report. */
+interface SweepStats {
+  startedAt: Date;
+  emptyResponse: string[];   // institutions that returned rawCount=0 with prior DB data
+  failed: string[];          // institutions that failed after all retries
+  newAssets: number;         // total new assets found across the sweep
+}
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
+let sweepStats: SweepStats | null = null;
+
+// Stamp complexity: "high" on scrapers in the COMPLEX_INSTITUTIONS set at module load.
+// Uses the startup-stamp pattern (same as tier assignment in index.ts) to avoid
+// mutating scraper definition files or adding build-time complexity.
+for (const s of ALL_SCRAPERS) {
+  if (COMPLEX_INSTITUTIONS.has(s.institution)) {
+    s.complexity = "high";
+  }
+}
 
 /** Timestamp of the last successful persistState DB write — used to throttle non-critical saves. */
 let _lastPersistAt = 0;
@@ -152,13 +193,19 @@ function buildTieredQueue(): string[] {
 
 /** Build a queue sorted by lastSuccessAt ASC — never-synced institutions (epoch 0) first,
  * then oldest-last-synced, up to the most recently synced.
+ * Playwright (T4) scrapers are excluded — they run as a dedicated auto-pass at cycle end
+ * and must not appear at random positions mid-queue (they require exclusive drain).
+ * Within identical timestamps (e.g., never-synced batch), tier ASC is used as a tiebreaker
+ * so T1 API scrapers dispatch before T3 HTML scrapers, filling concurrent slots efficiently.
  * Must be called AFTER the scraperHealthCache is freshly loaded. */
 function buildStalenessFirstQueue(): string[] {
   return [...ALL_SCRAPERS]
+    .filter((s) => s.scraperType !== "playwright")
     .sort((a, b) => {
       const aAt = scraperHealthCache.get(a.institution)?.lastSuccessAt?.getTime() ?? 0;
       const bAt = scraperHealthCache.get(b.institution)?.lastSuccessAt?.getTime() ?? 0;
-      return aAt - bAt;
+      if (aAt !== bAt) return aAt - bAt;
+      return getScraperTier(a.institution) - getScraperTier(b.institution);
     })
     .map((s) => s.institution);
 }
@@ -226,7 +273,10 @@ function buildStateSnapshot() {
     lastCycleCompletedAt,
     schedulerRunning: schedulerState === "running",
     tierOnly: tierOnlyActive,
-    stalenessFirst: stalenessFirstActive,
+    // Both stalenessFirst and dailySweep rebuild from queueIndex=0 on restart (queue
+    // order is in-memory only). The flag is persisted so the UI shows the correct mode
+    // after restart and the cycle-complete handler fires the sweep report.
+    stalenessFirst: stalenessFirstActive || dailySweepActive,
   };
 }
 
@@ -299,6 +349,8 @@ export function getSchedulerStatus(): SchedulerStatus {
     currentTier,
     tierOnly: tierOnlyActive,
     stalenessFirst: stalenessFirstActive,
+    dailySweep: dailySweepActive,
+    dailySweepComplexPhase,
     resumedAtPosition,
   };
 }
@@ -612,6 +664,83 @@ export async function startStalenessFirstScan(): Promise<{ ok: boolean; message:
   return { ok: true, message: `Staleness-first scan started — ${tieredQueue.length} institutions (oldest-synced first)` };
 }
 
+/** Start a Daily Sweep — the recommended mode for reliable daily operation.
+ *
+ * Phase ordering:
+ *   1. All T1+T2+T3 institutions sorted staleness-first (oldest-synced first), Playwright excluded.
+ *      Standard T3 institutions run at normal concurrency.
+ *   2. When the last non-complex institution is dispatched, sweepConcurrencyOverride drops to 1
+ *      and complex institutions (MIT, Stanford, Harvard, UC Berkeley, UC San Diego, UCSF) run
+ *      sequentially with 3 retries each (dailySweepComplexPhase = true).
+ *   3. T4 auto-pass fires 2 minutes after Phase 2 completes (existing auto-T4 logic).
+ *   4. On full cycle completion, sendDailySweepReport() fires to the admin email list.
+ *
+ * On server restart mid-sweep, rebuilds from queueIndex=0 (staleness-first queue is in-memory only).
+ */
+export async function startDailySweep(): Promise<{ ok: boolean; message: string }> {
+  if (isIngestionRunning()) {
+    return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
+  }
+  // Reload health data so the staleness sort reflects the latest DB state.
+  scraperHealthCache = await loadAllScraperHealth();
+
+  runGeneration++;
+  if (schedulerTimer) { clearTimeout(schedulerTimer); schedulerTimer = null; }
+
+  // Build queue: staleness-ordered, T4 excluded, complex institutions placed LAST within their
+  // staleness group so they naturally run after standard T3 (they also have the oldest timestamps,
+  // but the explicit separation ensures the concurrency override is applied correctly).
+  const standardQueue = buildStalenessFirstQueue().filter(
+    (inst) => !COMPLEX_INSTITUTIONS.has(inst)
+  );
+  const complexQueue = buildStalenessFirstQueue().filter(
+    (inst) => COMPLEX_INSTITUTIONS.has(inst)
+  );
+  tieredQueue = [...standardQueue, ...complexQueue];
+
+  queueIndex = 0;
+  completedThisCycle = 0;
+  failedThisCycle = 0;
+  skippedThisCycle = 0;
+  freshSkippedThisCycle = 0;
+  currentInstitutions = [];
+  lastActivityAt = null;
+  cycleStartedAt = new Date();
+  cycleCount++;
+  priorityQueue = [];
+  institutionDispatchedAt.clear();
+  schedulerState = "running";
+  tierOnlyActive = null;
+  stalenessFirstActive = false;
+  dailySweepActive = true;
+  dailySweepComplexPhase = false;
+  sweepConcurrencyOverride = null;
+  autoT4AfterCycle = false;
+  resumedAtPosition = null;
+  sweepStats = { startedAt: cycleStartedAt, emptyResponse: [], failed: [], newAssets: 0 };
+
+  persistState().catch(() => {});
+  console.log(
+    `[scheduler] Daily Sweep started (gen=${runGeneration}) — ` +
+    `${standardQueue.length} standard + ${complexQueue.length} complex institutions, oldest-synced first`
+  );
+  loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+  startWatchdog();
+  scheduleNext();
+
+  const capturedGen = runGeneration;
+  const priorActiveSyncs = getActiveSyncs().length;
+  if (priorActiveSyncs > 0) {
+    const pollForDrain = () => {
+      if (runGeneration !== capturedGen) return;
+      if (getActiveSyncs().length === 0) { scheduleNext(); } else { setTimeout(pollForDrain, 2_000); }
+    };
+    setTimeout(pollForDrain, 2_000);
+  }
+
+  return { ok: true, message: `Daily Sweep started — ${tieredQueue.length} institutions (${complexQueue.length} complex at end)` };
+}
+
 export function invalidateHealthCacheEntry(
   institution: string,
   successData?: { newCount?: number; rawCount?: number },
@@ -755,8 +884,20 @@ function scheduleNext(): void {
       break;
     }
 
+    // ── Daily Sweep: detect transition into T3-complex sub-phase ─────────────
+    // When we reach a complex institution for the first time, all standard institutions
+    // have been dispatched. Drop concurrency to 1 so complex scrapers run sequentially.
+    if (dailySweepActive && !dailySweepComplexPhase && COMPLEX_INSTITUTIONS.has(institution)) {
+      // Wait for all currently-running standard syncs to drain before starting complex phase.
+      if (liveCount > 0) break;
+      dailySweepComplexPhase = true;
+      sweepConcurrencyOverride = 1;
+      console.log(`[scheduler] Daily Sweep: entering T3-complex phase — ${COMPLEX_INSTITUTIONS.size} institutions, concurrency=1, 3 retries`);
+    }
+
     // ── Concurrent limit for HTTP/API scrapers ────────────────────────────────
-    if (liveCount >= getMaxHttpConcurrent()) break;
+    const effectiveConcurrency = sweepConcurrencyOverride ?? getMaxHttpConcurrent();
+    if (liveCount >= effectiveConcurrency) break;
 
     // ── Staleness gate ────────────────────────────────────────────────────────
     if (isFresh(institution)) {
@@ -777,7 +918,8 @@ function scheduleNext(): void {
     const syncStart = Date.now();
     currentInstitutions = [...currentInstitutions, institution];
     institutionDispatchedAt.set(institution, syncStart);
-    console.log(`[scheduler] [T${institutionTier}/${scraperType}] ${institution} (${queueIndex}/${queue.length})`);
+    const complexLabel = dailySweepComplexPhase ? " [complex]" : "";
+    console.log(`[scheduler] [T${institutionTier}/${scraperType}]${complexLabel} ${institution} (${queueIndex}/${queue.length})`);
 
     runOne(institution, gen).finally(() => {
       if (runGeneration !== gen) return;
@@ -808,15 +950,30 @@ function scheduleNext(): void {
       console.error(`[scheduler] Alert email error after cycle #${cycleCount}:`, err?.message);
     });
 
-    if (tierOnlyActive !== null || stalenessFirstActive) {
-      // ── Tier-only / staleness-first: check if this is an auto T4 pass ─────
+    if (tierOnlyActive !== null || stalenessFirstActive || dailySweepActive) {
+      // ── Tier-only / staleness-first / daily-sweep: check if this is an auto T4 pass ─
       const wasAutoT4 = tierOnlyActive === 4 && autoT4AfterCycle;
+      const wasDailySweep = dailySweepActive;
       autoT4AfterCycle = false;
       tierOnlyActive = null;
       stalenessFirstActive = false;
+      dailySweepActive = false;
+      dailySweepComplexPhase = false;
+      sweepConcurrencyOverride = null;
 
-      if (wasAutoT4) {
-        // Auto-T4 pass complete — start the next full T1-T3 cycle after a 2-min cooldown.
+      if (wasAutoT4 && wasDailySweep) {
+        // Daily Sweep T4 auto-pass complete — fire completion report, then go idle.
+        const capturedStats = sweepStats;
+        sweepStats = null;
+        schedulerState = "idle";
+        persistState(true).catch(() => {});
+        if (capturedStats) {
+          sendDailySweepReport(capturedStats).catch((err: any) => {
+            console.error(`[scheduler] Daily Sweep report email failed: ${err?.message}`);
+          });
+        }
+      } else if (wasAutoT4) {
+        // Regular auto-T4 pass complete — start the next full T1-T3 cycle after a 2-min cooldown.
         const capturedGenAfterT4 = runGeneration;
         tieredQueue = buildTieredQueue();
         queueIndex = 0;
@@ -829,13 +986,12 @@ function scheduleNext(): void {
         cycleCount++;
         console.log(`[scheduler] T4 auto-pass complete — starting T1-T3 cycle #${cycleCount} in 2 min (${tieredQueue.length} institutions)`);
         persistState(true).catch(() => {});
-        // Keep schedulerState = "running" (cooldown period)
         schedulerTimer = setTimeout(() => {
           if (runGeneration !== capturedGenAfterT4) return;
           scheduleNext();
         }, 2 * 60 * 1000);
       } else {
-        // Manual tier-only or staleness-first scan — go idle.
+        // Manual tier-only, staleness-first, or daily-sweep phase 1 complete — go idle.
         schedulerState = "idle";
         persistState(true).catch(() => {});
       }
@@ -843,6 +999,7 @@ function scheduleNext(): void {
       // ── Full T1-T3 cycle complete — trigger auto T4 pass, then next cycle ─
       const completedCycleNum = cycleCount;
       const capturedGenForT4 = runGeneration;
+      const wasDailySweepForT4 = dailySweepActive; // carry through to T4 completion handler
       autoT4AfterCycle = true;
       resumedAtPosition = null;
       console.log(
@@ -873,6 +1030,9 @@ function scheduleNext(): void {
         schedulerState = "running";
         tierOnlyActive = 4;
         stalenessFirstActive = false;
+        dailySweepActive = wasDailySweepForT4; // preserve so completion handler fires report
+        dailySweepComplexPhase = false;
+        sweepConcurrencyOverride = null;
         autoT4AfterCycle = true; // set AFTER startTierOnly-equivalent so it isn't cleared
         resumedAtPosition = null;
         persistState().catch(() => {});
@@ -928,6 +1088,63 @@ export function isTransientDbError(msg: string): boolean {
   );
 }
 
+async function sendDailySweepReport(stats: SweepStats): Promise<void> {
+  const recipients = getAdminNotificationRecipients();
+  if (recipients.length === 0) return;
+
+  const durationMs = Date.now() - stats.startedAt.getTime();
+  const durationHours = Math.floor(durationMs / 3_600_000);
+  const durationMins = Math.floor((durationMs % 3_600_000) / 60_000);
+  const durationLabel = durationHours > 0
+    ? `${durationHours}h ${durationMins}m`
+    : `${durationMins}m`;
+
+  const totalAttempted = completedThisCycle + failedThisCycle;
+  const subject = `EdenRadar Daily Sweep — ${completedThisCycle} synced, ${stats.emptyResponse.length} empty, ${stats.failed.length} failed`;
+
+  const emptyRows = stats.emptyResponse.length > 0
+    ? stats.emptyResponse.map((inst) => `<tr><td style="padding:4px 8px">⚠️</td><td style="padding:4px 8px">${inst}</td><td style="padding:4px 8px;color:#b45309">Empty response</td></tr>`).join("")
+    : `<tr><td colspan="3" style="padding:4px 8px;color:#6b7280">None</td></tr>`;
+
+  const failedRows = stats.failed.length > 0
+    ? stats.failed.map((inst) => `<tr><td style="padding:4px 8px">✗</td><td style="padding:4px 8px">${inst}</td><td style="padding:4px 8px;color:#dc2626">Failed</td></tr>`).join("")
+    : `<tr><td colspan="3" style="padding:4px 8px;color:#6b7280">None</td></tr>`;
+
+  const html = `
+<div style="font-family:sans-serif;max-width:600px;margin:0 auto">
+  <h2 style="color:#1d4ed8">EdenRadar Daily Sweep Complete</h2>
+  <p style="color:#6b7280;font-size:14px">Completed in ${durationLabel} · ${new Date().toUTCString()}</p>
+  <table style="width:100%;border-collapse:collapse;margin:16px 0;background:#f8fafc;border-radius:8px">
+    <tr>
+      <td style="padding:12px 16px;font-size:28px;font-weight:700;color:#16a34a">${completedThisCycle}</td>
+      <td style="padding:12px 16px;font-size:28px;font-weight:700;color:#b45309">${stats.emptyResponse.length}</td>
+      <td style="padding:12px 16px;font-size:28px;font-weight:700;color:#dc2626">${stats.failed.length}</td>
+      <td style="padding:12px 16px;font-size:28px;font-weight:700;color:#7c3aed">${stats.newAssets.toLocaleString()}</td>
+    </tr>
+    <tr>
+      <td style="padding:0 16px 12px;font-size:12px;color:#6b7280">Synced</td>
+      <td style="padding:0 16px 12px;font-size:12px;color:#6b7280">Empty response</td>
+      <td style="padding:0 16px 12px;font-size:12px;color:#6b7280">Failed</td>
+      <td style="padding:0 16px 12px;font-size:12px;color:#6b7280">New assets</td>
+    </tr>
+  </table>
+  <h3 style="margin-top:24px;color:#374151">Needs attention</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    ${emptyRows}${failedRows}
+  </table>
+  <p style="margin-top:24px;font-size:12px;color:#9ca3af">
+    Backoff-skipped: ${skippedThisCycle} · Fresh-skipped: ${freshSkippedThisCycle} · Total attempted: ${totalAttempted}
+  </p>
+</div>`;
+
+  for (const recipient of recipients) {
+    await sendEmail(recipient, subject, html, FROM_DIGEST).catch((err: any) => {
+      console.error(`[scheduler] Sweep report email to ${recipient} failed: ${err?.message}`);
+    });
+  }
+  console.log(`[scheduler] Daily Sweep report sent to ${recipients.length} admin(s)`);
+}
+
 async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
@@ -946,21 +1163,31 @@ async function runOne(institution: string, gen: number): Promise<void> {
   let result: Awaited<ReturnType<typeof runInstitutionSync>> | null = null;
   let finalErr: any = null;
 
+  // Complex institutions in a Daily Sweep get 3 total attempts (2 retries) instead of 1.
+  const maxRetries = dailySweepComplexPhase && COMPLEX_INSTITUTIONS.has(institution) ? 2 : 1;
+  let attemptsLeft = maxRetries;
+
   try {
     result = await attemptSync();
   } catch (firstErr: any) {
     const firstMsg = firstErr?.message ?? "";
-    // Auto-retry once after a short pause. This handles transient failures:
-    // server restart mid-sync, momentary network blip, or load-induced timeout.
-    console.log(`[scheduler] ${institution} failed on first attempt (${firstMsg}) — retrying in 15s...`);
+    console.log(`[scheduler] ${institution} failed on attempt 1/${maxRetries + 1} (${firstMsg}) — retrying in 15s...`);
     await new Promise((r) => setTimeout(r, 15_000));
-    // Only retry if we are still in the same scheduler generation.
     if (runGeneration === gen) {
-      try {
-        result = await attemptSync();
-        console.log(`[scheduler] ${institution} retry succeeded`);
-      } catch (retryErr: any) {
-        finalErr = retryErr;
+      while (attemptsLeft > 0 && result === null && finalErr === null) {
+        attemptsLeft--;
+        try {
+          result = await attemptSync();
+          console.log(`[scheduler] ${institution} retry succeeded (${maxRetries - attemptsLeft}/${maxRetries})`);
+        } catch (retryErr: any) {
+          if (attemptsLeft > 0) {
+            console.log(`[scheduler] ${institution} retry failed — ${attemptsLeft} attempt(s) remaining`);
+            await new Promise((r) => setTimeout(r, 30_000));
+            if (runGeneration !== gen) return;
+          } else {
+            finalErr = retryErr;
+          }
+        }
       }
     } else {
       // Generation changed during the retry wait — abandon quietly.
@@ -974,13 +1201,21 @@ async function runOne(institution: string, gen: number): Promise<void> {
       completedThisCycle++;
       if (result.rawCount === 0) {
         console.warn(`[scheduler] WARNING: ${institution} returned 0 raw listings — site may be rate-limiting or unreachable (${result.newCount} new, ${result.relevantCount} relevant)`);
+        // Accumulate into sweep stats for the completion report.
+        // Only flag as suspicious if the institution has prior successful syncs —
+        // an institution that has never synced before returning 0 is expected.
+        if (sweepStats) {
+          const hasPriorData = scraperHealthCache.get(institution)?.lastSuccessAt != null;
+          if (hasPriorData) sweepStats.emptyResponse.push(institution);
+        }
       } else {
         console.log(`[scheduler] ${institution} complete — ${result.rawCount} scraped, ${result.newCount} new, ${result.relevantCount} relevant`);
+        if (sweepStats) sweepStats.newAssets += result.newCount;
       }
     }
     await updateScraperHealth(institution, true, undefined, result.newCount, result.rawCount);
-    // Determine if this is a full T1-T3 cycle run (vs tier-only or staleness-first).
-    const isFullCycleRun = !tierOnlyActive && !stalenessFirstActive;
+    // Determine if this is a full T1-T3 cycle run (vs tier-only or staleness-first or daily sweep).
+    const isFullCycleRun = !tierOnlyActive && !stalenessFirstActive && !dailySweepActive;
     const newCompletedCycle = isFullCycleRun ? cycleCount : (scraperHealthCache.get(institution)?.lastCompletedCycle ?? null);
     scraperHealthCache.set(institution, {
       institution,
@@ -1009,7 +1244,10 @@ async function runOne(institution: string, gen: number): Promise<void> {
         if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
       } else {
         failedThisCycle++;
-        console.log(`[scheduler] ${institution} failed after retry: ${msg}`);
+        console.log(`[scheduler] ${institution} failed after ${maxRetries + 1} attempt(s): ${msg}`);
+        if (sweepStats && !sweepStats.failed.includes(institution)) {
+          sweepStats.failed.push(institution);
+        }
       }
     }
 
