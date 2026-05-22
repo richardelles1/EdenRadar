@@ -81,7 +81,7 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure";
+type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure" | "empty_response";
 
 type ErrorType = "all" | "Timeout" | "Blocked" | "Network" | "Parsing" | "Unknown";
 
@@ -167,6 +167,7 @@ function HealthDot({ health }: { health: HealthStatus }) {
   if (health === "blocked") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-blocked" />;
   if (health === "network_blocked") return <AlertTriangle className="h-4 w-4 text-orange-500" data-testid="health-network-blocked" />;
   if (health === "parser_failure") return <XCircle className="h-4 w-4 text-red-500" data-testid="health-parser-failure" />;
+  if (health === "empty_response") return <AlertTriangle className="h-4 w-4 text-yellow-500" data-testid="health-empty-response" />;
   if (health === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-500" data-testid="health-warning" />;
   if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
   if (health === "stale") return <AlertCircle className="h-4 w-4 text-orange-500" data-testid="health-stale" />;
@@ -182,6 +183,7 @@ function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "blocked") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Blocked / WAF</span>;
   if (health === "network_blocked") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Network blocked</span>;
   if (health === "parser_failure") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Parser failure</span>;
+  if (health === "empty_response") return <span className="text-yellow-600 dark:text-yellow-400 text-xs font-medium">Empty response</span>;
   if (health === "warning") return <span className="text-yellow-600 dark:text-yellow-400 text-xs font-medium">Warning</span>;
   if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
   if (health === "stale") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Stale</span>;
@@ -3281,6 +3283,49 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     refetchInterval: 5000,
   });
 
+  const [confirming, setConfirming] = useState(false);
+  const [embedConfirming, setEmbedConfirming] = useState(false);
+
+  const { data: embedStatus } = useQuery<{ running: boolean; processed: number; total: number }>({
+    queryKey: ["/api/admin/eden/embed/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/embed/status", { headers: pw ? { Authorization: `Bearer ${pw}` } : {} });
+      if (!res.ok) throw new Error("Failed to load embed status");
+      return res.json();
+    },
+    refetchInterval: 3000,
+  });
+
+  const startEdenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setConfirming(false); toast({ title: "EDEN Deep Enrichment started", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` }); refetchEdenStats(); refetchEdenStatus(); },
+    onError: (e: Error) => { setConfirming(false); toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" }); },
+  });
+
+  const stopEdenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/stop", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
+      return res.json();
+    },
+    onSuccess: () => { toast({ title: "Stop signal sent", description: "EDEN Deep Enrichment will halt after the current batch finishes" }); refetchEdenStatus(); },
+    onError: (e: Error) => toast({ title: "Failed to stop", description: e.message, variant: "destructive" }),
+  });
+
+  const embedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/embed", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to start embedding"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setEmbedConfirming(false); toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets` }); refetchEdenStats(); },
+    onError: (e: Error) => { setEmbedConfirming(false); toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" }); },
+  });
+
   const edenWasRunningRef = useRef(false);
   useEffect(() => {
     const nowRunning = edenStatus?.running ?? false;
@@ -4019,6 +4064,106 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
               <div className="text-xs text-muted-foreground mt-0.5">Completion Rate</div>
             </div>
           </div>
+
+          {/* EDEN Corpus Coverage */}
+          {(edenStats?.coverage || edenStats?.embeddingCoverage) && (() => {
+            const cov = edenStats?.coverage;
+            const emb = edenStats?.embeddingCoverage;
+            const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
+            const embPct2 = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
+            const edenRemaining = cov ? cov.totalRelevant - cov.deepEnriched : 0;
+            const estCostUsd = edenRemaining > 0 ? (edenRemaining * 0.01).toFixed(2) : "0.00";
+            const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
+            const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
+            const edenLive = edenStatus?.running ? edenStatus : edenStats?.live ? { running: true, processed: edenStats.live.processed, total: edenStats.live.total } : null;
+            const edenPct = edenLive && edenLive.total > 0 ? Math.round((edenLive.processed / edenLive.total) * 100) : null;
+            const embedLive = embedStatus?.running ? embedStatus : null;
+            const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
+            return (
+              <div className="border border-border rounded-xl bg-muted/5 overflow-hidden" data-testid="card-eden-coverage">
+                <div className="px-4 py-2.5 border-b border-border bg-muted/20 flex items-center gap-2">
+                  <BrainCircuit className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <span className="text-sm font-semibold text-foreground">EDEN Corpus Coverage</span>
+                  {embPct2 >= 100 && deepPct >= 90
+                    ? <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 ml-1"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"/>Active</span>
+                    : <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-1"><span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block"/>Indexing</span>
+                  }
+                </div>
+                <div className="p-4 space-y-4">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                    <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Corpus</p><p className="text-xl font-bold text-foreground mt-0.5">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">relevant assets</p></div>
+                    <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Enriched</p><p className="text-xl font-bold text-emerald-600 mt-0.5">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">{deepPct}% with GPT-4o</p></div>
+                    <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Embedded</p><p className="text-xl font-bold text-violet-600 mt-0.5">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">{embPct2}% vectorized</p></div>
+                    <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">With MoA</p><p className="text-xl font-bold text-foreground mt-0.5">{cov?.withMoa?.toLocaleString() ?? "—"}</p><p className="text-[11px] text-muted-foreground">mechanism of action</p></div>
+                    <div className="rounded-lg border border-border bg-muted/20 p-3"><p className="text-[11px] text-muted-foreground uppercase tracking-wide">Completeness</p><p className="text-xl font-bold text-foreground mt-0.5">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}` : "—"}</p><p className="text-[11px] text-muted-foreground">avg / 100 pts</p></div>
+                  </div>
+                  <div className="space-y-2">
+                    <div><div className="flex justify-between text-xs text-muted-foreground mb-1"><span>Deep Enrichment</span><span>{deepPct}%</span></div><Progress value={deepPct} className="h-1.5" /></div>
+                    <div><div className="flex justify-between text-xs text-muted-foreground mb-1"><span>Vector Embeddings</span><span>{embPct2}%</span></div><Progress value={embPct2} className="h-1.5" /></div>
+                  </div>
+                  {edenLive && (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 flex items-center gap-3">
+                      <Loader2 className="h-4 w-4 text-emerald-500 animate-spin shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Deep Enrichment running</span>
+                          <span className="text-xs font-bold text-emerald-600">{edenPct}%</span>
+                          <Button variant="ghost" size="sm" onClick={() => stopEdenMutation.mutate()} disabled={stopEdenMutation.isPending} className="ml-auto h-6 px-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30">Stop</Button>
+                        </div>
+                        <Progress value={edenPct ?? 0} className="h-1 mt-1" />
+                      </div>
+                    </div>
+                  )}
+                  {embedLive && (
+                    <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 flex items-center gap-3">
+                      <Loader2 className="h-4 w-4 text-violet-500 animate-spin shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-violet-700 dark:text-violet-400">Embedding running</span>
+                          <span className="ml-auto text-xs font-bold text-violet-600">{embedPct}%</span>
+                        </div>
+                        <Progress value={embedPct ?? 0} className="h-1 mt-1" />
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment (GPT-4o)</h4>
+                      <p className="text-xs text-muted-foreground mb-2">{edenRemaining.toLocaleString()} assets queued · ~${estCostUsd} est.</p>
+                      {!confirming ? (
+                        <Button size="sm" onClick={() => setConfirming(true)} disabled={edenLive != null || edenRemaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs w-full" data-testid="button-eden-run">
+                          <PlayCircle className="h-3.5 w-3.5 mr-1.5" />{edenRemaining === 0 ? "All Enriched" : `Enrich ${edenRemaining.toLocaleString()}`}
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => startEdenMutation.mutate()} disabled={startEdenMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs flex-1">
+                            {startEdenMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}~${estCostUsd} confirm
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setConfirming(false)} className="h-7 text-xs">Cancel</Button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-foreground mb-1">Vector Embeddings</h4>
+                      <p className="text-xs text-muted-foreground mb-2">{embRemaining.toLocaleString()} assets queued · ~${embEstCost} est.</p>
+                      {!embedConfirming ? (
+                        <Button size="sm" onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white h-7 text-xs w-full" data-testid="button-embed-run">
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />{embRemaining === 0 ? "All Embedded" : `Embed ${embRemaining.toLocaleString()}`}
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white h-7 text-xs flex-1">
+                            {embedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}~${embEstCost} confirm
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setEmbedConfirming(false)} className="h-7 text-xs">Cancel</Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Step 1: Rule-Based Fill */}
           <div className="border border-emerald-200 dark:border-emerald-900 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 overflow-hidden">
@@ -6408,6 +6553,19 @@ function PotentialDuplicates({ pw }: { pw: string }) {
       }).then((r) => r.json()),
   });
 
+  const { data: edenStats } = useQuery<{ embeddingCoverage?: { totalEmbedded: number; totalRelevant: number } }>({
+    queryKey: ["/api/admin/eden/stats", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/stats", { headers: pw ? { Authorization: `Bearer ${pw}` } : {} });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30_000,
+  });
+  const embPct = edenStats?.embeddingCoverage?.totalRelevant
+    ? Math.round((edenStats.embeddingCoverage.totalEmbedded / edenStats.embeddingCoverage.totalRelevant) * 100)
+    : null;
+
   const runDetectionMutation = useMutation({
     mutationFn: () =>
       fetch(`/api/admin/duplicate-detection/run`, {
@@ -6447,14 +6605,21 @@ function PotentialDuplicates({ pw }: { pw: string }) {
           <p className="text-xs text-muted-foreground mt-0.5">
             Semantic near-duplicates detected via embedding similarity (threshold: 92%). Run scan to update.
           </p>
+          {embPct !== null && (
+            <div className={`mt-2 flex items-center gap-1.5 text-xs ${embPct < 90 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
+              <span className={`h-1.5 w-1.5 rounded-full inline-block ${embPct < 90 ? "bg-amber-400" : "bg-emerald-500"}`} />
+              {embPct}% embedded
+              {embPct < 90 && <span className="text-muted-foreground ml-1">— scan results are partial until ≥90%</span>}
+            </div>
+          )}
         </div>
         <button
           data-testid="button-run-dedup-scan"
           onClick={() => runDetectionMutation.mutate()}
-          disabled={runDetectionMutation.isPending}
+          disabled={runDetectionMutation.isPending || (embPct !== null && embPct < 90)}
           className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
         >
-          {runDetectionMutation.isPending ? "Scanning..." : "Run Scan"}
+          {runDetectionMutation.isPending ? "Scanning..." : (embPct !== null && embPct < 90) ? `Run Scan (${embPct}% embedded)` : "Run Scan"}
         </button>
       </div>
 
@@ -8677,6 +8842,13 @@ function MiniBackfillButton({ pw, onDone }: { pw: string; onDone: () => void }) 
 
 function AdminInner() {
   const [activeTab, setActiveTab] = useState("data-pipeline");
+  const [navOpen, setNavOpen] = useState<Record<string, boolean>>({
+    dataControls: true,
+    productControls: true,
+    adminControls: false,
+    edenmarket: false,
+    outbound: false,
+  });
   const { theme, setTheme } = useTheme();
   const { session, signOut, sendPasswordReset } = useAuth();
   const { toast } = useToast();
@@ -8710,6 +8882,8 @@ function AdminInner() {
       setTheme={setTheme}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
+      navOpen={navOpen}
+      setNavOpen={setNavOpen}
       onChangePassword={onChangePassword}
       adminEmail={session?.user?.email ?? ""}
     />
@@ -11849,9 +12023,8 @@ function DataQualityTab({ pw }: { pw: string }) {
     <div className="space-y-6" data-testid="data-quality-tab">
       <Enrichment pw={pw} initialGaveUpFilter={gaveUpTrigger} />
       <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpTrigger(v => v + 1)} />
-      <EdenReadinessPanel pw={pw} />
-      <RelevancePanel pw={pw} />
       <PotentialDuplicates pw={pw} />
+      <CollapsibleRelevancePanel pw={pw} />
     </div>
   );
 }
@@ -11877,6 +12050,43 @@ type RelevanceMetricsResp = {
 function fmtPct(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return "—";
   return `${(v * 100).toFixed(1)}%`;
+}
+
+function CollapsibleRelevancePanel({ pw }: { pw: string }) {
+  const [open, setOpen] = useState(false);
+  const evalQ = useQuery<{ holdoutSize: number }>({
+    queryKey: ["/api/admin/relevance/eval", pw],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/relevance/eval", { headers: pw ? { Authorization: `Bearer ${pw}` } : {} });
+      if (!r.ok) throw new Error("Eval failed");
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  return (
+    <div className="bg-card rounded-xl border border-border overflow-hidden" data-testid="collapsible-relevance-panel">
+      <button
+        className="w-full flex items-center justify-between px-5 py-3 hover:bg-muted/40 transition-colors"
+        onClick={() => setOpen(v => !v)}
+        data-testid="button-toggle-relevance"
+      >
+        <div className="flex items-center gap-2">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          <span className="text-sm font-semibold text-foreground">Feedback-Driven Relevance</span>
+          <span className="text-xs text-muted-foreground">Model tuning · holdout eval</span>
+          {evalQ.data?.holdoutSize === 0 && (
+            <span className="text-[11px] text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2 py-0.5">No holdout</span>
+          )}
+        </div>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${open ? "" : "-rotate-90"}`} />
+      </button>
+      {open && (
+        <div className="border-t border-border">
+          <RelevancePanel pw={pw} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 function RelevancePanel({ pw }: { pw: string }) {
@@ -12540,13 +12750,15 @@ function ExportLogTable({ pw }: { pw: string }) {
   );
 }
 
-function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, onChangePassword, adminEmail }: {
+function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, navOpen, setNavOpen, onChangePassword, adminEmail }: {
   pw: string;
   setAuthed: (v: boolean) => void;
   theme: string;
   setTheme: (v: "light" | "dark") => void;
   activeTab: string;
   setActiveTab: (v: string) => void;
+  navOpen: Record<string, boolean>;
+  setNavOpen: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   onChangePassword?: () => void | Promise<void>;
   adminEmail?: string;
 }) {
@@ -12619,216 +12831,264 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
           <nav className="flex flex-row overflow-x-auto gap-1 p-2 lg:flex-col lg:overflow-x-visible lg:p-4 lg:gap-0">
 
             {/* ── DATA CONTROLS ── */}
-            <div className="hidden lg:block pt-1 pb-1.5" data-testid="nav-section-data-controls">
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Data Controls</p>
+            <div className="hidden lg:block pt-1 pb-1.5">
+              <button
+                onClick={() => setNavOpen(o => ({ ...o, dataControls: !o.dataControls }))}
+                className="w-full flex items-center justify-between px-3 py-0.5 group"
+              >
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">Data Controls</p>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${navOpen.dataControls ? "" : "-rotate-90"}`} />
+              </button>
             </div>
-            <button
-              onClick={() => setActiveTab("data-pipeline")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "data-pipeline" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-data-pipeline"
-            >
-              <Activity className="h-4 w-4" />
-              Data Pipeline
-            </button>
-            <button
-              onClick={() => setActiveTab("data-quality")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "data-quality" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-data-quality"
-            >
-              <Database className="h-4 w-4" />
-              Data Quality
-            </button>
-            <button
-              onClick={() => setActiveTab("manual-import")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "manual-import" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-manual-import"
-            >
-              <PackagePlus className="h-4 w-4" />
-              Manual Import
-            </button>
-            <button
-              onClick={() => setActiveTab("pipeline-review")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "pipeline-review" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-pipeline-review"
-            >
-              <ClipboardList className="h-4 w-4" />
-              Pipeline Review
-            </button>
-            <button
-              onClick={() => setActiveTab("new-arrivals")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "new-arrivals" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-new-arrivals"
-            >
-              <Inbox className="h-4 w-4" />
-              Indexing Queue
-            </button>
-            <button
-              onClick={() => setActiveTab("dispatch")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "dispatch" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-dispatch"
-            >
-              <Send className="h-4 w-4" />
-              Dispatch
-            </button>
+            {navOpen.dataControls && (
+              <>
+                <button
+                  onClick={() => setActiveTab("data-pipeline")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "data-pipeline" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-data-pipeline"
+                >
+                  <Activity className="h-4 w-4" />
+                  Data Pipeline
+                </button>
+                <button
+                  onClick={() => setActiveTab("data-quality")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "data-quality" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-data-quality"
+                >
+                  <Database className="h-4 w-4" />
+                  Data Quality
+                </button>
+                <button
+                  onClick={() => setActiveTab("manual-import")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "manual-import" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-manual-import"
+                >
+                  <PackagePlus className="h-4 w-4" />
+                  Manual Import
+                </button>
+                <button
+                  onClick={() => setActiveTab("pipeline-review")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "pipeline-review" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-pipeline-review"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Pipeline Review
+                </button>
+                <button
+                  onClick={() => setActiveTab("new-arrivals")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "new-arrivals" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-new-arrivals"
+                >
+                  <Inbox className="h-4 w-4" />
+                  Indexing Queue
+                </button>
+                <button
+                  onClick={() => setActiveTab("dispatch")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "dispatch" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-dispatch"
+                >
+                  <Send className="h-4 w-4" />
+                  Dispatch
+                </button>
+              </>
+            )}
 
             {/* ── PRODUCT CONTROLS ── */}
-            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-product-controls">
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Product Controls</p>
+            <div className="hidden lg:block border-t border-border mt-3 pt-1 pb-1.5">
+              <button
+                onClick={() => setNavOpen(o => ({ ...o, productControls: !o.productControls }))}
+                className="w-full flex items-center justify-between px-3 py-0.5 group"
+              >
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">Product Controls</p>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${navOpen.productControls ? "" : "-rotate-90"}`} />
+              </button>
             </div>
-            <div className="hidden lg:block h-2" />
-            <button
-              onClick={() => setActiveTab("research-queue")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "research-queue" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-research-queue"
-            >
-              <Microscope className="h-4 w-4" />
-              <span>Discovery Cards Review</span>
-              {pendingCount > 0 && (
-                <span className="ml-auto text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center" data-testid="badge-pending-count">
-                  {pendingCount}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setActiveTab("concept-queue")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "concept-queue" ? "bg-amber-500/10 text-amber-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-concept-queue"
-            >
-              <Lightbulb className="h-4 w-4" />
-              Concept Review
-            </button>
-            <button
-              onClick={() => setActiveTab("edenlab-review")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "edenlab-review" ? "bg-violet-500/10 text-violet-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-edenlab-review"
-            >
-              <FlaskConical className="h-4 w-4" />
-              Research Projects Review
-            </button>
-            <button
-              onClick={() => setActiveTab("eden")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "eden" ? "bg-emerald-500/10 text-emerald-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-eden"
-            >
-              <BrainCircuit className="h-4 w-4" />
-              EDEN
-            </button>
+            {navOpen.productControls && (
+              <>
+                <button
+                  onClick={() => setActiveTab("research-queue")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "research-queue" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-research-queue"
+                >
+                  <Microscope className="h-4 w-4" />
+                  <span>Discovery Cards Review</span>
+                  {pendingCount > 0 && (
+                    <span className="ml-auto text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center" data-testid="badge-pending-count">
+                      {pendingCount}
+                    </span>
+                  )}
+                </button>
+                <button
+                  onClick={() => setActiveTab("concept-queue")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "concept-queue" ? "bg-amber-500/10 text-amber-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-concept-queue"
+                >
+                  <Lightbulb className="h-4 w-4" />
+                  Concept Review
+                </button>
+                <button
+                  onClick={() => setActiveTab("edenlab-review")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "edenlab-review" ? "bg-violet-500/10 text-violet-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-edenlab-review"
+                >
+                  <FlaskConical className="h-4 w-4" />
+                  Research Projects Review
+                </button>
+                <button
+                  onClick={() => setActiveTab("eden")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "eden" ? "bg-emerald-500/10 text-emerald-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-eden"
+                >
+                  <BrainCircuit className="h-4 w-4" />
+                  EDEN
+                </button>
+              </>
+            )}
 
             {/* ── ADMIN CONTROLS ── */}
-            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-admin-controls">
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Admin Controls</p>
+            <div className="hidden lg:block border-t border-border mt-3 pt-1 pb-1.5">
+              <button
+                onClick={() => setNavOpen(o => ({ ...o, adminControls: !o.adminControls }))}
+                className="w-full flex items-center justify-between px-3 py-0.5 group"
+              >
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">Admin Controls</p>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${navOpen.adminControls ? "" : "-rotate-90"}`} />
+              </button>
             </div>
-            <div className="hidden lg:block h-2" />
-            <button
-              onClick={() => setActiveTab("account-center")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "account-center" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-account-center"
-            >
-              <Users className="h-4 w-4" />
-              Account Center
-            </button>
-            <button
-              onClick={() => setActiveTab("organizations")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "organizations" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-organizations"
-            >
-              <Building2 className="h-4 w-4" />
-              Organizations
-            </button>
-            <button
-              onClick={() => setActiveTab("subscription-data")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "subscription-data" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-subscription-data"
-            >
-              <CreditCard className="h-4 w-4" />
-              Subscription Data
-            </button>
-            <button
-              onClick={() => setActiveTab("platform-info")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "platform-info" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-platform-info"
-            >
-              <Server className="h-4 w-4" />
-              Platform Info
-            </button>
-            <button
-              onClick={() => setActiveTab("analytics")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "analytics" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-analytics"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Analytics
-            </button>
-            <button
-              onClick={() => setActiveTab("impersonation")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "impersonation" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-impersonation"
-            >
-              <Eye className="h-4 w-4" />
-              Impersonation
-            </button>
+            {navOpen.adminControls && (
+              <>
+                <button
+                  onClick={() => setActiveTab("account-center")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "account-center" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-account-center"
+                >
+                  <Users className="h-4 w-4" />
+                  Account Center
+                </button>
+                <button
+                  onClick={() => setActiveTab("organizations")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "organizations" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-organizations"
+                >
+                  <Building2 className="h-4 w-4" />
+                  Organizations
+                </button>
+                <button
+                  onClick={() => setActiveTab("subscription-data")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "subscription-data" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-subscription-data"
+                >
+                  <CreditCard className="h-4 w-4" />
+                  Subscription Data
+                </button>
+                <button
+                  onClick={() => setActiveTab("platform-info")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "platform-info" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-platform-info"
+                >
+                  <Server className="h-4 w-4" />
+                  Platform Info
+                </button>
+                <button
+                  onClick={() => setActiveTab("analytics")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "analytics" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-analytics"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Analytics
+                </button>
+                <button
+                  onClick={() => setActiveTab("impersonation")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "impersonation" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-impersonation"
+                >
+                  <Eye className="h-4 w-4" />
+                  Impersonation
+                </button>
+              </>
+            )}
 
             {/* ── EDENMARKET ── */}
-            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-edenmarket">
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">EdenMarket</p>
+            <div className="hidden lg:block border-t border-border mt-3 pt-1 pb-1.5">
+              <button
+                onClick={() => setNavOpen(o => ({ ...o, edenmarket: !o.edenmarket }))}
+                className="w-full flex items-center justify-between px-3 py-0.5 group"
+              >
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">EdenMarket</p>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${navOpen.edenmarket ? "" : "-rotate-90"}`} />
+              </button>
             </div>
-            <button
-              onClick={() => setActiveTab("edenmarket")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "edenmarket" ? "bg-indigo-500/10 text-indigo-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-edenmarket"
-            >
-              <Globe className="h-4 w-4" />
-              EdenMarket
-            </button>
+            {navOpen.edenmarket && (
+              <>
+                <button
+                  onClick={() => setActiveTab("edenmarket")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "edenmarket" ? "bg-indigo-500/10 text-indigo-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-edenmarket"
+                >
+                  <Globe className="h-4 w-4" />
+                  EdenMarket
+                </button>
+              </>
+            )}
 
-            {/* ── DOCUMENTS ── */}
-            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-documents">
-              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Outbound</p>
+            {/* ── OUTBOUND ── */}
+            <div className="hidden lg:block border-t border-border mt-3 pt-1 pb-1.5">
+              <button
+                onClick={() => setNavOpen(o => ({ ...o, outbound: !o.outbound }))}
+                className="w-full flex items-center justify-between px-3 py-0.5 group"
+              >
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">Outbound</p>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${navOpen.outbound ? "" : "-rotate-90"}`} />
+              </button>
             </div>
-            <button
-              onClick={() => setActiveTab("documents")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "documents" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-documents"
-            >
-              <ClipboardList className="h-4 w-4" />
-              Export Log
-            </button>
+            {navOpen.outbound && (
+              <>
+                <button
+                  onClick={() => setActiveTab("documents")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "documents" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-documents"
+                >
+                  <ClipboardList className="h-4 w-4" />
+                  Export Log
+                </button>
+              </>
+            )}
           </nav>
         </aside>
 

@@ -20,6 +20,12 @@ export const pool = new Pool({
   connectionTimeoutMillis: 10_000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
+  // Hard cap on individual SQL statements — prevents a slow FTS/vector query
+  // from hanging the scout search indefinitely when Supabase is under load.
+  // PostgreSQL options format: -c param=value
+  // Note: Supabase Supavisor strips unrecognised options so this only takes
+  // effect on direct connections, but it's correct and harmless otherwise.
+  options: "-c statement_timeout=15000",
 });
 
 // Without this, a FATAL error from Supabase on any background connection

@@ -163,12 +163,34 @@ function watchdogTick() {
     const maxMs = WATCHDOG_EVICT_MS[scraperType] ?? WATCHDOG_EVICT_MS.http;
     const elapsedMin = Math.round((now - dispatchedAt) / 60000);
     if (now - dispatchedAt > maxMs) {
+      const reason = `watchdog eviction after ${elapsedMin}min (${scraperType} limit: ${maxMs / 60000}min)`;
       console.warn(`[scheduler] WATCHDOG: ${institution} stuck for ${elapsedMin} min (limit ${maxMs / 60000} min) — force-evicting`);
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       institutionDispatchedAt.delete(institution);
       releaseSyncLock(institution);
       failedThisCycle++;
       evicted = true;
+      // Update in-memory health cache so the UI reflects the eviction immediately.
+      // Do NOT fire updateScraperHealth() here — runOne's async promise is still in
+      // flight and will write the DB record when it settles. Writing from both paths
+      // would double-increment consecutiveFailures.
+      const current = scraperHealthCache.get(institution);
+      const newFailures = (current?.consecutiveFailures ?? 0) + 1;
+      scraperHealthCache.set(institution, {
+        institution,
+        consecutiveFailures: newFailures,
+        lastFailureReason: reason,
+        lastFailureAt: new Date(),
+        lastSuccessAt: current?.lastSuccessAt ?? null,
+        backoffUntil: newFailures >= 12 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) :
+                     newFailures >= 8  ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) :
+                     newFailures >= 5  ? new Date(Date.now() + 24 * 60 * 60 * 1000) :
+                     newFailures >= 3  ? new Date(Date.now() + 6 * 60 * 60 * 1000) :
+                     (current?.backoffUntil ?? null),
+        lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
+        lastSuccessRawCount: current?.lastSuccessRawCount ?? null,
+        lastCompletedCycle: current?.lastCompletedCycle ?? null,
+      });
     }
   }
   if (evicted) scheduleNext();
@@ -806,6 +828,13 @@ function scheduleNext(): void {
   // ── Priority queue: fill available slots from priority queue first ─────────
   while (priorityQueue.length > 0) {
     const institution = priorityQueue[0];
+
+    // Skip institutions already running — drop silently rather than spin.
+    if (currentInstitutions.includes(institution)) {
+      priorityQueue.shift();
+      continue;
+    }
+
     const scraperType = getScraperType(institution);
     const institutionTier = getScraperTier(institution);
     const liveCount = getActiveSyncs().length;
@@ -1149,9 +1178,11 @@ async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
-    console.log(`[scheduler] Lock unavailable for ${institution} — requeueing`);
+    // Another sync for this institution is already in flight — do NOT requeue to priority
+    // (that creates a tight spin loop). The in-flight sync will complete normally and the
+    // health cache will be updated. Simply count it as skipped and move on.
+    console.log(`[scheduler] Lock unavailable for ${institution} — already running, skipping`);
     if (runGeneration === gen) {
-      if (!priorityQueue.includes(institution)) priorityQueue.unshift(institution);
       skippedThisCycle++;
     }
     return;
@@ -1240,8 +1271,14 @@ async function runOne(institution: string, gen: number): Promise<void> {
 
     if (runGeneration === gen) {
       if (transient) {
-        console.log(`[scheduler] ${institution} skipped (DB connection blip, not a scraper fault): ${msg}`);
-        if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
+        console.log(`[scheduler] ${institution} skipped (DB connection blip, not a scraper fault): ${msg} — will retry in 60s`);
+        // Delay before requeueing to avoid a spin loop if the DB stays down.
+        const capturedGen = gen;
+        setTimeout(() => {
+          if (runGeneration !== capturedGen) return;
+          if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
+          scheduleNext();
+        }, 60_000);
       } else {
         failedThisCycle++;
         console.log(`[scheduler] ${institution} failed after ${maxRetries + 1} attempt(s): ${msg}`);

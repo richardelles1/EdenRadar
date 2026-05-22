@@ -414,6 +414,7 @@ import {
   auaScraper,
   burgosScraper,
   cuhkOrktsScraper,
+  insermTransfertScraper,
   // Task #717 — Restored scrapers for orphaned institutions
   novaLisbonScraper,
   nusScraper,
@@ -1077,6 +1078,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nrcCanadaScraper,               // National Research Council Canada — stub (generic gov navigation)
   fraunhoferScraper,              // Fraunhofer Society — stub (institute group listing, no unified IP catalog)
   ceaScraper,                     // CEA (France) — stub (713 bytes, geo-blocked or JS-only)
+  insermTransfertScraper,         // Inserm Transfert (France) — sitemap + HTML (~1001 listings, probed 2026-05-21)
   tecnaliaScraper,                // Tecnalia — stub (86KB, no enumerable catalog)
   vttScraper,                     // VTT Technical Research Centre of Finland — stub (service areas, not IPs)
   sintefScraper,                  // SINTEF — stub (7KB, 0 tech links)

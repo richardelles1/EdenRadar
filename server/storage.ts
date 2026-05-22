@@ -3714,11 +3714,20 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void> {
+  async createEdenMessageFeedback(
+    sessionId: string,
+    messageIndex: number,
+    sentiment: string,
+    meta?: { userId?: string; assetIds?: number[]; queryText?: string }
+  ): Promise<void> {
     await db.execute(sql`
-      INSERT INTO eden_message_feedback (session_id, message_index, sentiment)
-      VALUES (${sessionId}, ${messageIndex}, ${sentiment})
-      ON CONFLICT (session_id, message_index) DO UPDATE SET sentiment = EXCLUDED.sentiment
+      INSERT INTO eden_message_feedback (session_id, message_index, sentiment, user_id, asset_ids, query_text)
+      VALUES (${sessionId}, ${messageIndex}, ${sentiment}, ${meta?.userId ?? null}, ${meta?.assetIds ?? null}, ${meta?.queryText ?? null})
+      ON CONFLICT (session_id, message_index) DO UPDATE SET
+        sentiment = EXCLUDED.sentiment,
+        user_id = COALESCE(EXCLUDED.user_id, eden_message_feedback.user_id),
+        asset_ids = COALESCE(EXCLUDED.asset_ids, eden_message_feedback.asset_ids),
+        query_text = COALESCE(EXCLUDED.query_text, eden_message_feedback.query_text)
     `);
   }
 

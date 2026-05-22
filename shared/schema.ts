@@ -642,6 +642,9 @@ export const edenMessageFeedback = pgTable("eden_message_feedback", {
   sessionId: text("session_id").notNull(),
   messageIndex: integer("message_index").notNull(),
   sentiment: text("sentiment").notNull(),
+  userId: text("user_id"),
+  assetIds: integer("asset_ids").array(),
+  queryText: text("query_text"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type EdenMessageFeedback = typeof edenMessageFeedback.$inferSelect;
@@ -675,6 +678,7 @@ export type ManualInstitution = typeof manualInstitutions.$inferSelect;
 export const edenSessions = pgTable("eden_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),
+  userId: text("user_id"),
   focusContext: jsonb("focus_context").$type<Record<string, unknown>>(),
   messages: jsonb("messages").$type<Array<{
     role: "user" | "assistant";

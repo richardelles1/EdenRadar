@@ -1,0 +1,121 @@
+  Best-in-class daily sweep architecture
+
+  The core problem with the current model
+
+  You're running a general-purpose scheduler with a daily cadence bolted on manually. The
+  staleness-first mode exists but isn't the default — you trigger it by hand and manage it
+  by watching the UI. The complex institutions (MIT, Stanford, Harvard, TechLink, UC system)
+   get the same treatment as a simple RSS feed, with the same retry budget and concurrency.
+
+  What the ideal system looks like
+
+  One named mode: "Daily Sweep"
+
+  Not a full-cycle mode, not a staleness-first mode, not a tier-only mode. One operation
+  with a defined contract: every institution gets attempted once, in staleness order, with
+  tier concurrency, complex institutions handled with more care, and a completion report at
+  the end.
+
+  Daily Sweep
+  ├── Phase 1: T1 + T2 (concurrent, staleness-ordered)     ~45 min
+  ├── Phase 2: T3 standard (concurrent=3, staleness-ordered) ~2 hrs
+  ├── Phase 3: T3 complex (concurrent=1, 3 retries)         ~1 hr
+  │   MIT, Stanford, Harvard, TechLink, UC system
+  └── Phase 4: T4 auto-pass (Playwright, sequential)        ~30 min
+                                                      ─────────────
+                                          Total target:     ~4.5 hrs
+
+  ---
+  The five specific changes
+
+  1. "Complex institution" flag in the scraper registry
+
+  Add a complexity: "high" field to ALL_SCRAPERS entries for MIT, Stanford, Harvard,
+  TechLink, UC system. This unlocks:
+  - Dedicated sub-queue in Phase 3 (runs after standard T3, at concurrency=1)
+  - 3 retries instead of 1 (currently everyone gets 1 retry at 15s)
+  - Longer watchdog tolerance (already partly done for Stanford's 20-min timeout)
+  - Separate health section in the admin panel ("Watchlist")
+
+  2. Staleness-first becomes the default sweep ordering, with T4 excluded
+
+  buildStalenessFirstQueue currently:
+  - Includes T4 Playwright institutions (creates random stalls mid-sweep when one appears)
+  - Has no secondary sort (unstable when many institutions have identical timestamps)
+
+  Fix: exclude T4, secondary sort by tier ASC within the same timestamp group. Result:
+  never-synced T1s always dispatch before never-synced T3s, T4s run clean at the end.
+
+  3. Zero-return turns into an alert, not just a visual
+
+  The empty_response status we added shows amber in the UI. It should also fire an email via
+   checkAndSendAlerts at cycle end. The check is simple: any institution that completed with
+   rawCount=0 AND has historical data should appear in the daily report as a line item, not
+  just a color.
+
+  4. Cycle completion report
+
+  Right now the cycle-complete log line is: Cycle #N complete — X ok, Y failed, Z
+  fresh-skipped. That disappears into server logs. At the end of a Daily Sweep, send a
+  structured summary:
+
+  Daily Sweep complete (4h 23m)
+  ─────────────────────────────
+  ✓  218  synced successfully
+  ⚠   4   empty response (check: MIT, Stanford, UC Davis, TechLink)
+  ✗   2   failed (Harvard, CNRS)
+  ↷  12   skipped (backoff)
+  +  847  new assets found
+
+  This is what you show Clarivate. It's proof of operation.
+
+  5. Watchlist panel in admin
+
+  A dedicated section for the 5-8 complex institutions showing: last sync result, last
+  rawCount, consecutive failures, next retry window. Not mixed into the general
+  200-institution health grid — surfaced by name so you can see at a glance whether MIT came
+   back green today.
+
+  ---
+  What this looks like operationally
+
+  You hit "Start Daily Sweep" once. It runs T1/T2 concurrently, then T3 standard, then T3
+  complex institutions one at a time with 3 retries each, then T4. When it finishes you get
+  a completion email with the summary table. If any complex institution returns 0 listings,
+  that's flagged as a line item in the email — not a surprise discovered by checking the UI.
+
+  The admin panel shows sweep progress in real-time: current phase, institutions remaining,
+  any zero-returns or failures so far. You can intervene mid-sweep if you need to (bump an
+  institution, check health) without stopping the sweep.
+
+  ---
+  What this is NOT
+
+  - Not always-on (agreed, detection risk)
+  - Not autonomous beyond a single sweep
+  - Not touching any scraper logic — only the scheduler orchestration, the ALL_SCRAPERS
+  registry metadata, and the alert mailer
+
+  ---
+  Sequencing of work
+
+  ┌──────────┬──────────────────────────────────────────────┬────────────────────────────┐
+  │ Priority │                    Change                    │            Risk            │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 1        │ Fix T4 exclusion from staleness sort         │ Zero — pure scheduling     │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 2        │ Secondary tier sort in staleness queue       │ Zero                       │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 3        │ Watchdog cache fix (missed from previous PR) │ Very low                   │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 4        │ Complex institution flag + Phase 3 sub-queue │ Low — additive             │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 5        │ Cycle completion email report                │ Low — outbound only        │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 6        │ Zero-return email alert                      │ Low — existing alert infra │
+  ├──────────┼──────────────────────────────────────────────┼────────────────────────────┤
+  │ 7        │ Watchlist panel in admin UI                  │ Low — display only         │
+  └──────────┴──────────────────────────────────────────────┴────────────────────────────┘
+
+  Want me to start at 1 and work through? I'd do 1-3 in a single commit (pure scheduler
+  fixes), then 4-6 in a second commit (the "Daily Sweep" concept), then 7 separately (UI).

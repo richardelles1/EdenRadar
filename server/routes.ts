@@ -26,10 +26,10 @@ import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreFit as scoreFitTTO, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, scoreSearchRelevance, computeFitBonus, computeTotal, TTO_WEIGHTS, CONFIDENCE_AWARE_RANKING_ENABLED, CONFIDENCE_FLOOR } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
-import { isFatalOpenAIError } from "./lib/llm";
+import { isFatalOpenAIError, streamDossierNarrative } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "./lib/ingestion";
@@ -38,7 +38,7 @@ import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from ".
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
 import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import {
@@ -668,8 +668,9 @@ export async function registerRoutes(
         limit: z.number().int().min(1).max(200).default(100),
         since: z.string().optional(),
         before: z.string().optional(),
+        buyerProfile: buyerProfileSchema,
       });
-      const { query, minSimilarity, modality, stage, indication, institution, biology, biologies, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
+      const { query, minSimilarity, modality, stage, indication, institution, biology, biologies, modalities, stages, institutions, limit, since, before, buyerProfile: sessionBuyerProfile } = schema.parse(req.body);
       const hasAnyFilter = !!(modality || stage || indication || institution || biology || since || before
         || (biologies && biologies.length) || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
       if (!query.trim() && !hasAnyFilter) {
@@ -828,6 +829,37 @@ export async function registerRoutes(
         }
       }
 
+      // Normalize query relevance scores to [20, 100] for the search_relevance
+      // dimension. Last-place gets 20 so a single-retrieval-path match isn't
+      // penalised; best match gets 100. Two paths:
+      //  - Hybrid (both keyword + vector): normalize RRF scores
+      //  - Keyword-only (hybrid disabled, common in prod): normalize textRelevance
+      // When no query was issued (filter-only browse), the map stays empty and
+      // scoreSearchRelevance returns hasData:false — computeTotal auto-redistributes
+      // the 45% weight to the remaining dimensions.
+      const normalizedRrfById = new Map<number, number>();
+      if (runHybrid && hybridScoreById.size > 0) {
+        const vals = [...hybridScoreById.values()].map((h) => h.rrfScore);
+        const maxR = Math.max(...vals);
+        const minR = Math.min(...vals);
+        const rrfRange = maxR - minR || 1;
+        for (const [id, h] of hybridScoreById) {
+          // [30, 100]: every result that appeared in search deserves at least 30
+          normalizedRrfById.set(id, 30 + Math.round(((h.rrfScore - minR) / rrfRange) * 70));
+        }
+      } else if (!runHybrid && trimmedQuery && results.length > 0) {
+        // Keyword-only path: normalize textRelevance (ts_rank_cd) to [30, 100].
+        // Any result surfaced by the search engine is relevant; 0 implies "no match"
+        // which is wrong since FTS already pre-filtered for relevance.
+        const textScores = results.map((r) => r.textRelevance ?? 0);
+        const maxT = Math.max(...textScores);
+        const minT = Math.min(...textScores);
+        const textRange = maxT - minT || 1;
+        for (const r of results) {
+          normalizedRrfById.set(r.id, 30 + Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 70));
+        }
+      }
+
       // Debug surface (#761 step 5): when an internal flag/header is set,
       // surface the synonym expansion so we can verify which groups fired.
       // Off by default so the production payload is unchanged.
@@ -885,11 +917,10 @@ export async function registerRoutes(
         }
       }
 
-      // Default policy: ON in non-prod, OFF in prod unless flag explicitly set.
+      // Require explicit opt-in only — never default ON (was !_isProd which crushed
+      // all scores to 4–7 in non-prod due to low category_confidence).
       const _flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
-      const _isProd = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
-      const CONFIDENCE_AWARE =
-        _flagRaw === "true" ? true : _flagRaw === "false" ? false : !_isProd;
+      const CONFIDENCE_AWARE = _flagRaw === "true";
       const CONF_FLOOR = 0.4;
       const LOW_CONF = 0.5;
 
@@ -924,35 +955,38 @@ export async function registerRoutes(
         }
       }
 
-      // Step 2: build fit profile solely from the user's saved Deal Focus thesis.
-      // The search query already determines which assets surface via text ranking.
-      // Using it a second time for fit scoring penalises assets whose stored modality
-      // field doesn't literally match the query string — even when they are clearly
-      // relevant — because normalised DB values ("Cell Therapy") never substring-match
-      // the query term ("car-t"). Fit should only be a boost for matching the saved
-      // thesis, not a structural penalty on every general search.
+      // Step 2: build fit profile. Prefer the session buyerProfile (has full
+      // criteria: stages, keywords, excluded stages) over the DB-only profile
+      // (therapeutic_areas + modalities only). The search query already drives
+      // which assets surface via text ranking — fit is an additional boost for
+      // thesis alignment, not a search signal.
       let scoutFitProfile: import("./lib/types").BuyerProfile | undefined;
-      if (savedFitBasis && (savedFitBasis.therapeutic_areas.length > 0 || savedFitBasis.modalities.length > 0)) {
+      const sessionHasCriteria = !!(sessionBuyerProfile && (
+        (sessionBuyerProfile.therapeutic_areas?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.modalities?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.preferred_stages?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.indication_keywords?.length ?? 0) > 0 ||
+        (sessionBuyerProfile.target_keywords?.length ?? 0) > 0
+      ));
+      if (sessionHasCriteria && sessionBuyerProfile) {
+        scoutFitProfile = { ...DEFAULT_BUYER_PROFILE, ...sessionBuyerProfile };
+      } else if (savedFitBasis && (savedFitBasis.therapeutic_areas.length > 0 || savedFitBasis.modalities.length > 0)) {
         scoutFitProfile = {
           ...DEFAULT_BUYER_PROFILE,
           therapeutic_areas:   savedFitBasis.therapeutic_areas,
           modalities:          savedFitBasis.modalities,
-          preferred_stages:    [],
-          excluded_stages:     [],
-          indication_keywords: [],
-          target_keywords:     [],
-          owner_type_preference: "any",
         };
       }
-      // No saved profile → scoutFitProfile remains undefined → scoreFit returns
+      // No profile → scoutFitProfile remains undefined → scoreFit returns
       // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
 
-      // ── TTO 3-dimension scoring (Task #980) ────────────────────────────────
-      // Uses: Fit (75%, saved Deal Focus only), Record Quality (15%), Availability (10%)
-      // Replaces the 6-dimension legacy model which produced near-constant scores
-      // for TTO corpus (Licensability/Novelty/Competition don't differentiate).
+      // ── TTO scoring: relevance base + fit bonus ─────────────────────────────
+      // Base score (search_relevance 80%, record_quality 12%, availability 8%)
+      // drives ranking. Fit bonus (+0/+8/+15/+20) is added after — boosts
+      // thesis-aligned assets without penalising others for imperfect DB fields.
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
+          asset_name: r.assetName,
           development_stage: r.developmentStage,
           licensing_status: r.licensingReadiness ?? "unknown",
           owner_name: r.institution,
@@ -961,6 +995,7 @@ export async function registerRoutes(
           target: r.target ?? undefined,
           modality: r.modality ?? undefined,
           indication: r.indication ?? undefined,
+          summary: r.summary ?? undefined,
           matching_tags: [],
           evidence_count: 1,
           patent_status: "unknown",
@@ -969,26 +1004,38 @@ export async function registerRoutes(
           latest_signal_date: r.lastSeenAt ?? "",
         };
 
-        const fitRes             = scoreFitTTO(partialAsset, scoutFitProfile);
+        const searchRelevanceResult = scoreSearchRelevance(normalizedRrfById.get(r.id));
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
-          fit:            fitRes,
-          record_quality: completenessResult,
-          availability:   availabilityResult,
+          search_relevance: searchRelevanceResult,
+          record_quality:   completenessResult,
+          availability:     availabilityResult,
         };
 
-        const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
+        const { total: baseScore, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
+
+        // Fit bonus: soft full-text match, additive only, never penalises
+        const fitBonus = computeFitBonus({
+          asset_name: r.assetName,
+          indication: r.indication ?? undefined,
+          target: r.target ?? undefined,
+          modality: r.modality ?? undefined,
+          summary: r.summary ?? undefined,
+          biology: r.biology ?? undefined,
+          development_stage: r.developmentStage,
+        }, scoutFitProfile);
 
         const catConf = typeof r.categoryConfidence === "number"
           ? Math.max(0, Math.min(1, r.categoryConfidence))
           : undefined;
         const coverageNorm = signal_coverage / 100;
         const confidenceFactor = catConf !== undefined ? Math.min(catConf, coverageNorm) : coverageNorm;
-        const total = CONFIDENCE_AWARE
-          ? Math.max(0, Math.min(100, Math.round(rawTotal * (CONF_FLOOR + (1 - CONF_FLOOR) * confidenceFactor))))
-          : rawTotal;
+        const rawTotal = CONFIDENCE_AWARE
+          ? Math.max(0, Math.min(100, Math.round(baseScore * (CONF_FLOOR + (1 - CONF_FLOOR) * confidenceFactor))))
+          : baseScore;
+        const total = Math.max(0, Math.min(100, Math.round(rawTotal + fitBonus)));
         const confidence: "high" | "medium" | "low" =
           confidenceFactor >= 0.75 ? "high" : confidenceFactor >= 0.5 ? "medium" : "low";
 
@@ -1006,9 +1053,11 @@ export async function registerRoutes(
           source_types: ["tech_transfer"],
           score: total,
           score_breakdown: {
-            fit:            fitRes.score,
+            search_relevance: searchRelevanceResult.score,
+            fit_bonus:      fitBonus,
             record_quality: completenessResult.score,
             availability:   availabilityResult.score,
+            fit:          0,
             novelty:      0,
             freshness:    0,
             readiness:    0,
@@ -1019,6 +1068,8 @@ export async function registerRoutes(
             scored_dimensions,
             dimension_basis,
             confidence_factor: Math.round(confidenceFactor * 100) / 100,
+            confidence_aware_enabled: CONFIDENCE_AWARE,
+            raw_total: rawTotal,
             ...(catConf !== undefined ? { category_confidence: catConf } : {}),
             ...(typeof r.textRelevance === "number" ? { text_relevance: Math.round(r.textRelevance * 1000) / 1000 } : {}),
             ...(hybridScoreById.has(r.id)
@@ -1064,13 +1115,12 @@ export async function registerRoutes(
       const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
       const completenessOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.completeness ?? 0;
       const recencyOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.recencyMs ?? 0;
-      // TTO fit-first sort (Task #980):
+      // TTO score sort (4-dimension model):
       //   1. Exact-name matches pinned to top.
-      //   2. Score (fit-weighted) is the primary order — the new 3-dimension model
-      //      already encodes query fit (75%), so score IS the fit signal.
-      //   3. For queried searches, text_relevance / RRF acts as a secondary
-      //      tiebreaker to keep strong text-match assets from being buried behind
-      //      same-scoring records that happen to have a marginally better fit.
+      //   2. Score is the primary order. The 4-dimension model weights:
+      //      search_relevance 45%, fit 35%, record_quality 12%, availability 8%
+      //      — so score already IS the combined relevance+fit signal.
+      //   3. RRF / text_relevance as secondary tiebreaker between equal scores.
       //   4. Completeness → recency as final tiebreakers.
       assets.sort((a, b) => {
         const ax = isExact(a) ? 1 : 0;
@@ -1160,9 +1210,9 @@ export async function registerRoutes(
         const assetClass = typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null;
         const completenessScoreVal = r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null;
 
-        // TTO 3-dimension scoring (Task #980) — Fit (75%), Record Quality (15%), Availability (10%).
-        // This is a "what's new" feed so fit has no buyer profile; completeness and availability
-        // drive the score to maintain parity with the Scout search breakdown.
+        // Recently-added feed: no query, no buyer profile.
+        // Score = record quality (60%) + availability (40%) after weight redistribution
+        // (search_relevance hasData:false → its 80% redistributes to the other two).
         const partialAsset: Partial<ScoredAsset> = {
           development_stage: developmentStage,
           licensing_status: licensingReadiness ?? "unknown",
@@ -1179,14 +1229,13 @@ export async function registerRoutes(
           latest_signal_date: lastSeenAt ?? firstSeenAt ?? "",
         };
 
-        const fitResult          = scoreFitTTO(partialAsset, undefined);
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
         const dimResults = {
-          fit:            fitResult,
-          record_quality: completenessResult,
-          availability:   availabilityResult,
+          search_relevance: scoreSearchRelevance(undefined),
+          record_quality:   completenessResult,
+          availability:     availabilityResult,
         };
 
         const { total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults, TTO_WEIGHTS);
@@ -1219,9 +1268,10 @@ export async function registerRoutes(
           first_seen_at: firstSeenAt,
           score: total,
           score_breakdown: {
-            fit:            fitResult.score,
             record_quality: completenessResult.score,
             availability:   availabilityResult.score,
+            fit:          0,
+            fit_bonus:    0,
             novelty:      0,
             freshness:    0,
             readiness:    0,
@@ -1352,7 +1402,7 @@ export async function registerRoutes(
     type RangeOpt = typeof validRanges[number];
     const rangeParam = (req.query.range as string) || "all";
     const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
-    const CACHE_KEY = `intelligence:market:v5:${range}`;
+    const CACHE_KEY = `intelligence:market:v6:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
@@ -1362,7 +1412,7 @@ export async function registerRoutes(
       const dfWhere = days !== null ? sql.raw(`WHERE first_seen_at >= NOW() - INTERVAL '${days} days' AND`) : sql.raw("WHERE");
 
       const deltaDays = days ?? 90;
-      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow, breadthRows] = await Promise.all([
+      const [biologyRows, whitespaceRows, modalityRows, weeklyRows, velocityRows, totalRow, stageFunnelRows, opportunityRows, risingRows, instPipelineRows] = await Promise.all([
         db.execute(sql`
           SELECT biology,
             COUNT(*)::int AS count,
@@ -1377,6 +1427,7 @@ export async function registerRoutes(
           FROM ingested_assets
           WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
             AND modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+            AND modality NOT IN ('other', 'medical device', 'research tool', 'biologic')
           ${df}
           GROUP BY biology, modality
         `),
@@ -1386,6 +1437,7 @@ export async function registerRoutes(
             COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '90 days')::int AS recent_delta
           FROM ingested_assets
           ${dfWhere} modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+            AND modality NOT IN ('other', 'medical device', 'research tool', 'biologic')
           GROUP BY modality ORDER BY total DESC LIMIT 12
         `),
         db.execute(sql`
@@ -1414,23 +1466,67 @@ export async function registerRoutes(
         `),
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
         db.execute(sql`
+          SELECT development_stage AS stage, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE relevant = true
+            AND development_stage IS NOT NULL AND development_stage != '' AND development_stage != 'unknown'
+          ${df}
+          GROUP BY development_stage
+        `),
+        db.execute(sql`
+          SELECT biology,
+            COUNT(*)::int AS asset_count,
+            ROUND(AVG(unmet_need_severity)::numeric, 2)::float AS avg_unmet_need
+          FROM ingested_assets
+          WHERE relevant = true
+            AND biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+            AND unmet_need_severity IS NOT NULL
+          ${df}
+          GROUP BY biology
+          HAVING COUNT(*) >= 5
+          ORDER BY avg_unmet_need DESC, asset_count ASC
+          LIMIT 20
+        `),
+        db.execute(sql`
+          SELECT id, asset_name, institution, biology, modality, development_stage,
+            LEAST(100,
+              CASE WHEN stage_changed_at >= NOW() - INTERVAL '30 days' THEN 40
+                   WHEN stage_changed_at >= NOW() - INTERVAL '60 days' THEN 30
+                   WHEN stage_changed_at >= NOW() - INTERVAL '90 days' THEN 20
+                   WHEN stage_changed_at >= NOW() - INTERVAL '180 days' THEN 10
+                   ELSE 0 END +
+              CASE WHEN last_content_change_at >= NOW() - INTERVAL '30 days' THEN 20
+                   WHEN last_content_change_at >= NOW() - INTERVAL '60 days' THEN 15
+                   WHEN last_content_change_at >= NOW() - INTERVAL '90 days' THEN 10
+                   WHEN last_content_change_at >= NOW() - INTERVAL '180 days' THEN 5
+                   ELSE 0 END +
+              CASE WHEN first_seen_at >= NOW() - INTERVAL '14 days' THEN 20
+                   WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 15
+                   WHEN first_seen_at >= NOW() - INTERVAL '60 days' THEN 10
+                   WHEN first_seen_at >= NOW() - INTERVAL '90 days' THEN 5
+                   ELSE 0 END
+            ) AS momentum_score
+          FROM ingested_assets
+          WHERE relevant = true
+          ORDER BY momentum_score DESC
+          LIMIT 15
+        `),
+        db.execute(sql`
           WITH top_insts AS (
             SELECT institution
             FROM ingested_assets
-            ${dfWhere} institution IS NOT NULL AND institution != ''
-            GROUP BY institution
-            ORDER BY COUNT(*) DESC
-            LIMIT 20
+            WHERE relevant = true AND institution IS NOT NULL AND institution != ''
+            ${df}
+            GROUP BY institution ORDER BY COUNT(*) DESC LIMIT 10
           )
-          SELECT ia.institution,
-            COUNT(*)::int AS total,
-            COUNT(DISTINCT ia.biology)::int AS bio_breadth,
-            COUNT(DISTINCT ia.modality)::int AS mod_breadth
+          SELECT ia.institution, ia.development_stage AS stage, COUNT(*)::int AS count
           FROM ingested_assets ia
-          INNER JOIN top_insts ON ia.institution = top_insts.institution
-          ${dfWhere} ia.institution IS NOT NULL AND ia.institution != ''
-          GROUP BY ia.institution
-          ORDER BY COUNT(DISTINCT ia.biology) + COUNT(DISTINCT ia.modality) DESC
+          INNER JOIN top_insts ti ON ia.institution = ti.institution
+          WHERE ia.relevant = true
+            AND ia.development_stage IS NOT NULL
+            AND ia.development_stage != '' AND ia.development_stage != 'unknown'
+          ${df}
+          GROUP BY ia.institution, ia.development_stage
         `),
       ]);
 
@@ -1476,21 +1572,55 @@ export async function registerRoutes(
       }));
 
       const totalAssetsIndexed = Number((totalRow.rows[0] as Record<string, unknown>)?.total ?? 0);
-
-      // recentDeltaWindow: the period label for `recentDelta` on each modality entry.
-      // For range=all: "90d" (backend computes delta as last 90 days vs all-time total).
-      // For specific ranges: the range itself (e.g. "30d") — delta = total for that window.
       const recentDeltaWindow: string = range === "all" ? "90d" : range;
 
-      const institutionBreadth = (breadthRows.rows as Record<string, unknown>[]).map((r) => ({
-        institution: String(r.institution ?? ""),
-        total: Number(r.total ?? 0),
-        bioBreadth: Number(r.bio_breadth ?? 0),
-        modBreadth: Number(r.mod_breadth ?? 0),
-        breadthScore: Number(r.bio_breadth ?? 0) + Number(r.mod_breadth ?? 0),
+      const stageFunnel = (stageFunnelRows.rows as Record<string, unknown>[]).map((r) => ({
+        stage: String(r.stage ?? ""),
+        count: Number(r.count ?? 0),
       }));
 
-      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow, institutionBreadth };
+      const whitespaceOpportunity = (opportunityRows.rows as Record<string, unknown>[]).map((r) => ({
+        biology: String(r.biology ?? ""),
+        assetCount: Number(r.asset_count ?? 0),
+        avgUnmetNeed: Number(r.avg_unmet_need ?? 0),
+      }));
+
+      const risingAssets = (risingRows.rows as Record<string, unknown>[]).map((r) => ({
+        id: Number(r.id ?? 0),
+        title: String(r.asset_name ?? ""),
+        institution: String(r.institution ?? ""),
+        biology: String(r.biology ?? ""),
+        modality: String(r.modality ?? ""),
+        developmentStage: String(r.development_stage ?? ""),
+        momentumScore: Number(r.momentum_score ?? 0),
+      }));
+
+      const instStageMap = new Map<string, { institution: string; stages: Record<string, number>; total: number }>();
+      for (const r of instPipelineRows.rows as Record<string, unknown>[]) {
+        const inst = String(r.institution ?? "");
+        const stage = String(r.stage ?? "");
+        const count = Number(r.count ?? 0);
+        if (!instStageMap.has(inst)) instStageMap.set(inst, { institution: inst, stages: {}, total: 0 });
+        const entry = instStageMap.get(inst)!;
+        entry.stages[stage] = count;
+        entry.total += count;
+      }
+      const institutionPipeline = [...instStageMap.values()]
+        .sort((a, b) => b.total - a.total)
+        .map((e) => ({
+          institution: e.institution.length > 28 ? e.institution.slice(0, 28) + "…" : e.institution,
+          total: e.total,
+          discovery: e.stages["discovery"] ?? 0,
+          earlyStage: e.stages["early stage"] ?? 0,
+          preclinical: e.stages["preclinical"] ?? 0,
+          phase1: e.stages["phase 1"] ?? 0,
+          phase2: e.stages["phase 2"] ?? 0,
+          phase3: e.stages["phase 3"] ?? 0,
+          approved: e.stages["approved"] ?? 0,
+          commercial: e.stages["commercial"] ?? 0,
+        }));
+
+      const result = { biologyLandscape, whitespaceMatrix, modalityMomentum, weeklyTrend, institutionVelocity, totalAssetsIndexed, recentDeltaWindow, stageFunnel, whitespaceOpportunity, risingAssets, institutionPipeline };
       cacheSet(CACHE_KEY, result, TTL_MS);
       return res.json(result);
     } catch (err: any) {
@@ -1857,6 +1987,37 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Dossier error:", err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
+  // SSE streaming dossier — mini by default, gpt-4o when fullModel=true
+  app.post("/api/dossier/stream", aiRateLimit, async (req, res) => {
+    try {
+      const body = z.object({ asset: z.any(), fullModel: z.boolean().optional() }).parse(req.body);
+      if (!body.asset) return res.status(400).json({ error: "Asset required" });
+      const asset = body.asset as ScoredAsset;
+      const fullModel = body.fullModel ?? false;
+
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+
+      for await (const chunk of streamDossierNarrative(asset, fullModel)) {
+        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+      }
+      res.write(`data: ${JSON.stringify({ done: true, generated_at: new Date().toISOString() })}\n\n`);
+      logAppEvent("dossier_opened", { institution: asset.institution ?? null, model: fullModel ? "gpt-4o" : "gpt-4o-mini" });
+      res.end();
+    } catch (err: any) {
+      console.error("Dossier stream error:", err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: friendlyOpenAIError(err) });
+      } else {
+        res.write(`data: ${JSON.stringify({ error: friendlyOpenAIError(err) })}\n\n`);
+        res.end();
+      }
     }
   });
 
@@ -3510,7 +3671,7 @@ export async function registerRoutes(
         const scraperHealth = scraperHealthMap.get(name);
         const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure";
+        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure" | "empty_response";
 
         function classifyByError(errMsg: string | null | undefined): HealthStatus {
           if (!errMsg) return "parser_failure";
@@ -3537,10 +3698,13 @@ export async function registerRoutes(
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           if ((session.rawCount ?? 0) === 0) {
-            // No error message + existing DB records = sitemap-based scraper found nothing new.
-            // That is healthy ("index is current"), not a parser failure.
-            if (!session.errorMessage && totalInDb > 0) {
-              health = "ok";
+            if (session.errorMessage) {
+              health = classifyByError(session.errorMessage);
+            } else if (totalInDb > 0) {
+              // rawCount=0 with no error message: could be a legitimately empty sitemap diff
+              // OR a silent block (Cloudflare, rate-limit with no HTTP error). Flag as
+              // empty_response so the admin can see it, rather than showing false green.
+              health = "empty_response";
             } else {
               health = classifyByError(session.errorMessage);
             }
@@ -4309,6 +4473,104 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
     }
+  });
+
+  // ── Rescore All Assets ────────────────────────────────────────────────────
+  // Re-computes completeness_score for every TTO asset using the current
+  // field weights in computeCompletenessScore. Run this after bulk field
+  // updates (MOA fill, biology fill, etc.) to apply the new weights.
+  let rescoreRunning = false;
+  let rescoreProcessed = 0;
+  let rescoreTotal = 0;
+  let rescoreUpdated = 0;
+  let rescoreElapsedMs = 0;
+  let rescoreStartedAt = 0;
+  let rescoreLastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null = null;
+
+  app.get("/api/admin/enrichment/rescore/status", async (_req, res) => {
+    res.json({
+      running: rescoreRunning,
+      processed: rescoreProcessed,
+      total: rescoreTotal,
+      updated: rescoreUpdated,
+      elapsedMs: rescoreRunning ? Date.now() - rescoreStartedAt : rescoreElapsedMs,
+      lastSummary: rescoreLastSummary,
+    });
+  });
+
+  app.post("/api/admin/enrichment/rescore", async (req, res) => {
+    if (rescoreRunning) {
+      return res.status(409).json({ error: "Rescore already running" });
+    }
+    rescoreRunning = true;
+    rescoreProcessed = 0;
+    rescoreTotal = 0;
+    rescoreUpdated = 0;
+    rescoreStartedAt = Date.now();
+    res.json({ started: true });
+
+    (async () => {
+      try {
+        const countResult = await db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE relevant = true`);
+        rescoreTotal = Number((countResult.rows[0] as any)?.n ?? 0);
+
+        const BATCH = 100;
+        let offset = 0;
+        let updated = 0;
+
+        while (rescoreRunning) {
+          const rows = await db.execute(sql`
+            SELECT id, indication, modality, development_stage, summary,
+                   mechanism_of_action, ip_type, patent_status, source_type, biology
+            FROM ingested_assets
+            WHERE relevant = true
+            ORDER BY id
+            LIMIT ${BATCH} OFFSET ${offset}
+          `);
+          if (rows.rows.length === 0) break;
+
+          for (const row of rows.rows as Record<string, unknown>[]) {
+            const newScore = computeCompletenessScore({
+              indication:       row.indication != null ? String(row.indication) : undefined,
+              modality:         row.modality != null ? String(row.modality) : undefined,
+              developmentStage: row.development_stage != null ? String(row.development_stage) : undefined,
+              summary:          row.summary != null ? String(row.summary) : undefined,
+              mechanismOfAction: row.mechanism_of_action != null ? String(row.mechanism_of_action) : undefined,
+              ipType:           row.ip_type != null ? String(row.ip_type) : undefined,
+              patentStatus:     row.patent_status != null ? String(row.patent_status) : undefined,
+              sourceType:       row.source_type != null ? String(row.source_type) : undefined,
+              biology:          row.biology != null ? String(row.biology) : undefined,
+            });
+            if (newScore != null) {
+              await db.execute(sql`UPDATE ingested_assets SET completeness_score = ${newScore} WHERE id = ${Number(row.id)}`);
+              updated++;
+            }
+            rescoreProcessed++;
+          }
+
+          offset += BATCH;
+          if (rows.rows.length < BATCH) break;
+        }
+
+        const durationMs = Date.now() - rescoreStartedAt;
+        rescoreElapsedMs = durationMs;
+        rescoreUpdated = updated;
+        rescoreLastSummary = { updated, total: rescoreProcessed, durationMs, completedAt: new Date().toISOString() };
+        console.log(`[rescore] Done — ${updated}/${rescoreProcessed} updated in ${Math.round(durationMs / 1000)}s`);
+      } catch (err: any) {
+        console.error("[rescore] Error:", err.message);
+      } finally {
+        rescoreRunning = false;
+      }
+    })();
+  });
+
+  app.post("/api/admin/enrichment/rescore/stop", async (_req, res) => {
+    if (!rescoreRunning) {
+      return res.json({ stopped: false, reason: "No rescore running" });
+    }
+    rescoreRunning = false;
+    res.json({ stopped: true });
   });
 
   // ── Modality Rule-Fill ────────────────────────────────────────────────────
@@ -6843,7 +7105,32 @@ Do not respond with anything else.`;
           return undefined;
         }),
       ]);
-      const history = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
+      const allMessages = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
+
+      // ── Session summarization: at turn 8, compress older turns into a context note ──
+      // Keeps the last 4 turns fresh and prepends a summary of everything prior,
+      // effectively tripling usable context without growing token cost.
+      const assistantTurnCount = allMessages.filter((m) => m.role === "assistant").length;
+      const storedSummary = session.focusContext?._summary as string | undefined;
+      let history: typeof allMessages;
+      if (assistantTurnCount >= 8 && storedSummary) {
+        history = [
+          { role: "user" as const, content: `[Prior conversation summary]\n${storedSummary}` },
+          { role: "assistant" as const, content: "Understood. Continuing from there." },
+          ...allMessages.slice(-4),
+        ];
+      } else {
+        history = allMessages.slice(-6);
+      }
+      // Trigger async summarization once we hit turn 8 (fire-and-forget, stores in focusContext._summary)
+      if (assistantTurnCount === 8 && !storedSummary) {
+        summarizeSession(allMessages).then(async (summary) => {
+          if (summary) {
+            const updatedFocus = { ...(session.focusContext ?? {}), _summary: summary } as SessionFocusContext;
+            await persistSessionFocus(sid, updatedFocus).catch(() => {});
+          }
+        });
+      }
 
       // ── Seed in-memory focus from DB on first message of this server process ──
       seedSessionFocusFromDb(sid, session.focusContext);
@@ -7337,9 +7624,9 @@ Do not respond with anything else.`;
       ].slice(0, 15);
 
       // Derive engagement signals from session message history (includes back-refs
-      // and follow-up turns already persisted to DB) then rerank with profile + adaptive tiers.
+      // and follow-up turns already persisted to DB) then rerank with profile + adaptive + biology tiers.
       const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
-      const retrieved = rerankAssets(merged, ctx, engagementSignals);
+      const retrieved = rerankAssets(merged, ctx, engagementSignals, focusContext?.biology);
 
       const assetPayload = retrieved.map((a) => ({
         id: a.id, assetName: a.assetName, institution: a.institution,
@@ -7386,7 +7673,21 @@ Do not respond with anything else.`;
       return res.status(400).json({ error: "sessionId, messageIndex, and sentiment (up|down) required" });
     }
     try {
-      await storage.createEdenMessageFeedback(sessionId, messageIndex, sentiment);
+      // Enrich feedback with user_id, rated asset IDs, and the query that generated the response.
+      // All three are derivable server-side from auth + session history — no client change needed.
+      const userId = (req as any).userId ?? null;
+      let assetIds: number[] | undefined;
+      let queryText: string | undefined;
+      try {
+        const sess = await storage.getOrCreateEdenSession(sessionId);
+        const msgs = sess.messages ?? [];
+        const assistantMsg = msgs[messageIndex];
+        if (assistantMsg?.assetIds?.length) assetIds = assistantMsg.assetIds;
+        // The user turn immediately preceding the assistant response
+        const userMsg = msgs[messageIndex - 1];
+        if (userMsg?.role === "user") queryText = userMsg.content.slice(0, 500);
+      } catch { /* non-fatal — still record the sentiment */ }
+      await storage.createEdenMessageFeedback(sessionId, messageIndex, sentiment, { userId, assetIds, queryText });
       return res.json({ ok: true });
     } catch (err) {
       console.error("[EDEN feedback]", err);

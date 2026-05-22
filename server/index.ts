@@ -8,7 +8,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { storage } from "./storage";
-import { db } from "./db";
+import { db, pool } from "./db";
 import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
@@ -567,6 +567,10 @@ async function runStartupMigrations() {
       CREATE UNIQUE INDEX IF NOT EXISTS eden_message_feedback_session_msg_uidx
       ON eden_message_feedback(session_id, message_index)
     `);
+    await mdb.execute(sql`ALTER TABLE eden_message_feedback ADD COLUMN IF NOT EXISTS user_id text`);
+    await mdb.execute(sql`ALTER TABLE eden_message_feedback ADD COLUMN IF NOT EXISTS asset_ids integer[]`);
+    await mdb.execute(sql`ALTER TABLE eden_message_feedback ADD COLUMN IF NOT EXISTS query_text text`);
+    await mdb.execute(sql`ALTER TABLE eden_sessions ADD COLUMN IF NOT EXISTS user_id text`);
     log("[startup] eden_message_feedback table ready", "startup");
   } catch (err: any) {
     log(`[startup] eden_message_feedback migration failed: ${err?.message}`, "startup");
@@ -1360,6 +1364,39 @@ async function ensureScoutSearchIndexes() {
     log("[startup] scout search FTS index ensured", "startup");
   } catch (err: any) {
     log(`[startup] scout search FTS ensure failed — FTS disabled, falling back to exact-name + structured filters: ${err?.message}`, "startup");
+  }
+
+  // ── pgvector ANN index (IVFFlat) ─────────────────────────────────────────
+  // Without this, scoutVectorSearch does a full O(n) sequential scan over
+  // every embedded row, which is the primary cause of slow hybrid search.
+  // IVFFlat (lists=100) turns it into a fast approximate-nearest-neighbour
+  // lookup. The partial index mirrors the WHERE clause in scoutVectorSearch
+  // so Postgres can use it for filtered queries.
+  //
+  // maintenance_work_mem must be bumped on the same connection before
+  // CREATE INDEX — the default 64 MB is 1 MB short of what IVFFlat needs
+  // for 1536-dim vectors at lists=100. We acquire a dedicated client so
+  // the SET persists for the CREATE INDEX statement.
+  try {
+    const ivfClient = await pool.connect();
+    try {
+      // Disable the pool-level statement_timeout for this client — index builds
+      // on large tables can take 60–120 s, far longer than the 15 s query cap.
+      // maintenance_work_mem is already set to 128 MB via pool startup options.
+      await ivfClient.query("SET statement_timeout = 0");
+      await ivfClient.query(`
+        CREATE INDEX IF NOT EXISTS ingested_assets_embedding_cosine_idx
+        ON ingested_assets
+        USING ivfflat (embedding vector_cosine_ops)
+        WITH (lists = 50)
+        WHERE embedding IS NOT NULL AND relevant = true
+      `);
+      log("[startup] embedding IVFFlat index ensured (vector search ANN-enabled)", "startup");
+    } finally {
+      ivfClient.release();
+    }
+  } catch (err: any) {
+    log(`[startup] embedding IVFFlat index skipped (vector search will use seq-scan): ${err?.message}`, "startup");
   }
 
   // ── Trigram path (independent) ────────────────────────────────────────────

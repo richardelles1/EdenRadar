@@ -28,9 +28,12 @@ export interface ScoreBreakdown {
   licensability: number;
   fit: number;
   competition: number;
-  /** TTO 3-dimension model (Task #980). Present when the new TTO weights are used. */
+  /** TTO model. Present when TTO weights are used. */
+  search_relevance?: number;
   record_quality?: number;
   availability?: number;
+  /** Additive fit bonus (0 / +8 / +15 / +20). Applied after base score, never penalises. */
+  fit_bonus?: number;
   total: number;
   signal_coverage?: number;
   scored_dimensions?: string[];

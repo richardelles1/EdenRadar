@@ -21,13 +21,16 @@ const WEIGHTS: Record<string, number> = {
   competition: 0.10,
 };
 
-// TTO 3-dimension model (Task #980): used for tech_transfer assets in Scout.
-// Licensability/Novelty/Competition are near-constants for TTO corpus (~95/90/80)
-// so they produce zero differentiation. Fit is the reason a buyer opens Scout.
+// TTO base score: 3 dimensions, fit removed from the weighted sum.
+// Fit is applied as a separate additive bonus (+0/+8/+15/+20) after the base
+// score so it boosts thesis-aligned assets without ever penalising others.
+// search_relevance carries the primary weight so query match drives ranking.
+// When no query is present (filter-only browse), search_relevance returns
+// hasData:false and its weight auto-redistributes to quality + availability.
 export const TTO_WEIGHTS: Record<string, number> = {
-  fit: 0.75,
-  record_quality: 0.15,
-  availability: 0.10,
+  search_relevance: 0.80,  // query relevance — primary ranking driver
+  record_quality:   0.12,  // data completeness — tiebreaker
+  availability:     0.08,  // portal confirmation recency — tiebreaker
 };
 
 // ─── Confidence-aware ranking (Task #693) ─────────────────────────────────────
@@ -35,11 +38,9 @@ export const CONFIDENCE_FLOOR = 0.4;
 export const LOW_CONFIDENCE_THRESHOLD = 0.5;
 const isProdEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
 const flagRaw = (process.env.EDEN_CONFIDENCE_AWARE_RANKING ?? "").toLowerCase();
-export const CONFIDENCE_AWARE_RANKING_ENABLED = flagRaw === "true"
-  ? true
-  : flagRaw === "false"
-    ? false
-    : !isProdEnv;
+// Require explicit opt-in; never default ON in non-prod (was !isProdEnv which
+// caused all scores to be crushed to 4–7 in dev due to low category_confidence).
+export const CONFIDENCE_AWARE_RANKING_ENABLED = flagRaw === "true";
 
 /** Stable re-order: keep score order, but push assets with confidence_factor
  *  below `LOW_CONFIDENCE_THRESHOLD` out of the top 5 whenever 5+ higher-
@@ -210,105 +211,137 @@ export function scoreLicensability(asset: Partial<ScoredAsset>): DimensionResult
   return { score: clamp(score), hasData: true, basis };
 }
 
-// ─── scoreFit (TTO-aware, Task #980) ─────────────────────────────────────────
-// Sub-criteria rebalance vs old model:
-//   - Removed: owner_type_preference (always "university" for TTO — wasted slot)
-//   - Therapeutic area: 40 pts (was 30)
-//   - Modality: 30 pts (was 25)
-//   - Keywords: 30 pts (was 25)
-//   - Stage: +20 bonus if buyer specified stages AND asset matches
-//             (not a miss-penalty — early-stage TTO assets are valid targets)
-//   - excluded_stages: -50 hard penalty (unchanged)
-// Scoring baseline 25 when criteria are set (vs 50 neutral for no profile).
+// ─── Legacy scoreFit — used by the 6-dimension non-TTO model only ─────────────
+// Kept for the /api/search path (papers, patents, clinical trials).
+// TTO scoring uses computeFitBonus instead.
 export function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): DimensionResult {
   if (!buyerProfile) {
-    // No profile = unknown fit, not bad fit.  Return neutral (50) with hasData:true
-    // so this dimension is counted in signal_coverage.  Without this, signal_coverage
-    // collapses from 100% to 25% (only record_quality+availability) and the
-    // CONFIDENCE_AWARE multiplier cascades all scores down to 4–7.
-    return { score: 50, hasData: true, basis: "No buyer profile — all assets treated equally" };
+    return { score: 50, hasData: false, basis: "No buyer profile — fit not scored" };
   }
-
   const hasCriteria =
     buyerProfile.therapeutic_areas.length > 0 ||
     buyerProfile.modalities.length > 0 ||
     buyerProfile.preferred_stages.length > 0 ||
     buyerProfile.indication_keywords.length > 0 ||
     buyerProfile.target_keywords.length > 0;
-
   if (!hasCriteria) {
-    return { score: 50, hasData: true, basis: "Buyer profile has no criteria set — all assets treated equally" };
+    return { score: 50, hasData: false, basis: "No criteria set" };
   }
-
   let score = 0;
   let checks = 0;
   const matched: string[] = [];
-  const missed: string[] = [];
+  if (buyerProfile.therapeutic_areas.length > 0) {
+    const text = `${asset.indication ?? ""} ${asset.target ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
+    const hit = buyerProfile.therapeutic_areas.some((ta) => text.includes(ta.toLowerCase()));
+    score += hit ? 40 : 0; checks++;
+    if (hit) matched.push("therapeutic area");
+  }
+  if (buyerProfile.modalities.length > 0) {
+    const hit = buyerProfile.modalities.some((m) => (asset.modality ?? "").toLowerCase().includes(m.toLowerCase()));
+    score += hit ? 30 : 0; checks++;
+    if (hit) matched.push("modality");
+  }
+  const kwAll = [...buyerProfile.indication_keywords, ...buyerProfile.target_keywords];
+  if (kwAll.length > 0) {
+    const text = `${asset.indication ?? ""} ${asset.target ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
+    const hits = kwAll.filter((kw) => text.includes(kw.toLowerCase())).length;
+    score += (hits / kwAll.length) * 30; checks++;
+    if (hits > 0) matched.push(`${hits}/${kwAll.length} keywords`);
+  }
+  if (buyerProfile.preferred_stages.length > 0) {
+    const hit = buyerProfile.preferred_stages.some((ps) => (asset.development_stage ?? "").toLowerCase().includes(ps.toLowerCase()));
+    checks++;
+    if (hit) { score += 20; matched.push("stage"); }
+  }
+  if (buyerProfile.excluded_stages.some((es) => (asset.development_stage ?? "").toLowerCase().includes(es.toLowerCase()))) {
+    score -= 50;
+  }
+  const total = checks === 0 ? 50 : clamp(25 + score);
+  return { score: total, hasData: true, basis: matched.length > 0 ? `Matches: ${matched.join(", ")}` : "No criteria matched" };
+}
+
+// ─── TTO fit bonus (boost-only, replaces scoreFit for TTO assets) ─────────────
+// Returns an additive points bonus: 0 / +8 / +15 / +20.
+// Never subtracts from the base score — a non-matching asset keeps its
+// relevance-based score rather than being penalised for imperfect DB fields.
+//
+// Uses FULL-TEXT soft matching across name + indication + target + modality +
+// summary + biology, not just the structured DB columns. A CAR-T asset whose
+// modality column reads "biologic" still matches "cell therapy" if the summary
+// or asset name contains "chimeric antigen receptor T-cell".
+//
+// Excluded stages are the ONE hard stop: they suppress the bonus but don't
+// subtract — the base score is unchanged.
+export type FitBonusAsset = {
+  asset_name?: string;
+  indication?: string;
+  target?: string;
+  modality?: string;
+  summary?: string;
+  biology?: string;
+  matching_tags?: string[];
+  development_stage?: string;
+};
+
+export function computeFitBonus(asset: FitBonusAsset, buyerProfile?: BuyerProfile): number {
+  if (!buyerProfile) return 0;
+
+  const hasCriteria =
+    buyerProfile.therapeutic_areas.length > 0 ||
+    buyerProfile.modalities.length > 0 ||
+    (buyerProfile.preferred_stages?.length ?? 0) > 0 ||
+    (buyerProfile.indication_keywords?.length ?? 0) > 0 ||
+    (buyerProfile.target_keywords?.length ?? 0) > 0;
+
+  if (!hasCriteria) return 0;
+
+  // Excluded stages: suppress bonus (but don't penalise base score)
+  const assetStage = (asset.development_stage ?? "").toLowerCase();
+  if (buyerProfile.excluded_stages?.length > 0) {
+    if (buyerProfile.excluded_stages.some((es) => assetStage.includes(es.toLowerCase()))) return 0;
+  }
+
+  // Full text — catches semantic meaning regardless of how ingestion structured the fields
+  const fullText = [
+    asset.asset_name,
+    asset.indication,
+    asset.target,
+    asset.modality,
+    asset.summary,
+    asset.biology,
+    ...(asset.matching_tags ?? []),
+  ].filter(Boolean).join(" ").toLowerCase();
+
+  let hits = 0;
+  let checks = 0;
 
   if (buyerProfile.therapeutic_areas.length > 0) {
-    const assetText = `${asset.indication ?? ""} ${asset.biology ?? ""} ${asset.target ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
-    const hit = buyerProfile.therapeutic_areas.some((ta) => assetText.includes(ta.toLowerCase()));
-    score += hit ? 40 : 0;
     checks++;
-    if (hit) matched.push("therapeutic area");
-    else missed.push("therapeutic area");
+    if (buyerProfile.therapeutic_areas.some((ta) => fullText.includes(ta.toLowerCase()))) hits++;
   }
 
   if (buyerProfile.modalities.length > 0) {
-    const hit = buyerProfile.modalities.some((m) =>
-      (asset.modality ?? "").toLowerCase().includes(m.toLowerCase())
-    );
-    score += hit ? 30 : 0;
     checks++;
-    if (hit) matched.push("modality");
-    else missed.push("modality");
+    if (buyerProfile.modalities.some((m) => fullText.includes(m.toLowerCase()))) hits++;
   }
 
-  const kwAll = [...buyerProfile.indication_keywords, ...buyerProfile.target_keywords];
+  const kwAll = [...(buyerProfile.indication_keywords ?? []), ...(buyerProfile.target_keywords ?? [])];
   if (kwAll.length > 0) {
-    const keywordText = `${asset.indication ?? ""} ${asset.target ?? ""} ${asset.matching_tags?.join(" ") ?? ""}`.toLowerCase();
-    const hits = kwAll.filter((kw) => keywordText.includes(kw.toLowerCase())).length;
-    score += (hits / kwAll.length) * 30;
     checks++;
-    if (hits > 0) matched.push(`${hits}/${kwAll.length} keywords`);
-    else missed.push("keywords");
+    if (kwAll.some((kw) => fullText.includes(kw.toLowerCase()))) hits++;
   }
 
-  // Stage: bonus boost when buyer specified stages and asset matches.
-  // No penalty when stage doesn't match — early-stage assets are valid TTO targets.
-  if (buyerProfile.preferred_stages.length > 0) {
-    const hit = buyerProfile.preferred_stages.some((ps) =>
-      (asset.development_stage ?? "").toLowerCase().includes(ps.toLowerCase())
-    );
+  if ((buyerProfile.preferred_stages?.length ?? 0) > 0) {
     checks++;
-    if (hit) {
-      score += 20;
-      matched.push("stage");
-    }
-    // Deliberate: no `else missed.push("stage")` — stage mismatch is not a miss in TTO context
+    if (buyerProfile.preferred_stages.some((ps) => assetStage.includes(ps.toLowerCase()))) hits++;
   }
 
-  // Excluded stages: hard penalty (buyer explicitly does not want these)
-  if (
-    buyerProfile.excluded_stages.some((es) =>
-      (asset.development_stage ?? "").toLowerCase().includes(es.toLowerCase())
-    )
-  ) {
-    score -= 50;
-  }
-
-  // Scoring baseline: 25 when criteria are set but nothing matches.
-  // (Old model used 50, which felt neutral when the asset actually doesn't fit.)
-  const total = checks === 0 ? 50 : clamp(25 + score);
-  let basis: string;
-  if (matched.length === 0) {
-    basis = `No thesis criteria matched (${checks} checked)`;
-  } else {
-    basis = `Matches: ${matched.join(", ")}`;
-    if (missed.length > 0) basis += ` · Misses: ${missed.join(", ")}`;
-  }
-
-  return { score: total, hasData: true, basis };
+  if (checks === 0) return 0;
+  const ratio = hits / checks;
+  if (ratio >= 0.75) return 20;  // strong match — most criteria confirmed
+  if (ratio >= 0.50) return 15;  // good match
+  if (ratio > 0)     return 8;   // partial match — at least one criterion confirmed
+  return 0;
 }
 
 export function scoreCompetition(asset: Partial<ScoredAsset>): DimensionResult {
@@ -402,6 +435,27 @@ export function scoreAvailability(asset: Partial<ScoredAsset>): DimensionResult 
 
   return { score, hasData: true, basis };
 }
+
+// ─── TTO-specific dimension: Search Relevance ─────────────────────────────────
+// Derived from the hybrid RRF score, normalized to [0,100] by the caller
+// (routes.ts). When no query is present (filter-only browse) the caller passes
+// undefined and this returns hasData:false — its 45% weight is auto-
+// redistributed to the remaining dimensions by computeTotal, so filter-only
+// results are still ranked by fit + quality + availability.
+export function scoreSearchRelevance(normalizedScore?: number): DimensionResult {
+  if (normalizedScore == null) {
+    return { score: 50, hasData: false, basis: "No query — relevance not applicable" };
+  }
+  const s = Math.max(0, Math.min(100, Math.round(normalizedScore)));
+  let basis: string;
+  if (s >= 80) basis = `Strong query match (relevance: ${s}/100)`;
+  else if (s >= 55) basis = `Good query match (relevance: ${s}/100)`;
+  else if (s >= 30) basis = `Moderate query match (relevance: ${s}/100)`;
+  else basis = `Weak query match (relevance: ${s}/100)`;
+  return { score: s, hasData: true, basis };
+}
+
+
 
 // ─── computeTotal ─────────────────────────────────────────────────────────────
 // Accepts an optional `weights` override so the TTO model can supply
@@ -501,31 +555,41 @@ export async function scoreAssets(
     let score_breakdown_dims: Partial<ScoreBreakdown>;
 
     if (tto) {
-      // ── TTO 3-dimension model ───────────────────────────────────────────
-      const fitResult       = scoreFit(asset, buyerProfile);
+      // ── TTO base score: relevance + quality + availability ──────────────
+      // Fit is applied separately as an additive bonus after this block.
+      // search_relevance has no normalized score in batch context (no per-query
+      // RRF) — hasData:false causes its 80% weight to redistribute to quality
+      // and availability, which is correct for non-search (admin/pipeline) use.
+      const searchRelResult    = scoreSearchRelevance(undefined);
       const completenessResult = scoreCompleteness(asset);
       const availabilityResult = scoreAvailability(asset);
 
       const dimResults: Record<string, DimensionResult> = {
-        fit:          fitResult,
-        record_quality: completenessResult,
-        availability: availabilityResult,
+        search_relevance: searchRelResult,
+        record_quality:   completenessResult,
+        availability:     availabilityResult,
       };
 
-      ({ total: rawTotal, signal_coverage, scored_dimensions, dimension_basis } =
+      let baseTotal: number;
+      ({ total: baseTotal, signal_coverage, scored_dimensions, dimension_basis } =
         computeTotal(dimResults, TTO_WEIGHTS));
 
+      const fitBonus = computeFitBonus(asset, buyerProfile);
+      rawTotal = clamp(baseTotal + fitBonus);
+
       score_breakdown_dims = {
-        fit:            fitResult.score,
-        record_quality: completenessResult.score,
-        availability:   availabilityResult.score,
+        search_relevance: searchRelResult.score,
+        record_quality:   completenessResult.score,
+        availability:     availabilityResult.score,
+        fit_bonus:        fitBonus,
         // Zero out legacy fields so the breakdown object is well-formed
+        fit:          0,
         novelty:      0,
         freshness:    0,
         readiness:    0,
         licensability: 0,
         competition:  0,
-      };
+      } as Partial<ScoreBreakdown>;
     } else {
       // ── Legacy 6-dimension model (non-TTO: papers, patents, trials) ─────
       const freshnessResult    = scoreFreshness(asset);
