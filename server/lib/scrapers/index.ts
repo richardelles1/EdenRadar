@@ -419,7 +419,15 @@ import {
   novaLisbonScraper,
   nusScraper,
   kyotoIcemsScraper,
+  // NTNU TTO — WP REST API (avada_portfolio CPT)
+  ntnuScraper,
+  // Temple University — Drupal 7 + DataTables, single-page
+  templeScraper,
 } from "./new-institutions";
+
+// ── New TTO scrapers (2026-05-21) ─────────────────────────────────────────────
+import { weillCornellScraper } from "./weillcornell";
+import { icgebScraper } from "./icgeb";
 
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
 import { ostiScraper } from "./osti";
@@ -1086,6 +1094,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   pekingUniversityScraper,        // Peking University — stub (no accessible English catalog)
   zhejiangUniversityScraper,      // Zhejiang University — stub (no accessible English catalog)
   shanghaiTechScraper,            // ShanghaiTech University — stub (no accessible English catalog)
+  // ── Nordic University TTO Scrapers ──────────────────────────────────────────
+  ntnuScraper,                    // NTNU (Norwegian Univ. of Science and Technology) — WP REST API avada_portfolio — ~14 techs
+  // ── New TTO scrapers (2026-05-21) ────────────────────────────────────────────
+  templeScraper,                  // Temple University — Drupal 7 + DataTables, single page — ~40-45 techs
+  weillCornellScraper,            // Weill Cornell Medicine — Drupal Views, paginated ~290 techs
+  icgebScraper,                   // ICGEB (Italy/India/South Africa) — WordPress + Content Views Pro — ~31 techs
 ];
 
 // Stamp the tier field on every scraper object at startup so that
