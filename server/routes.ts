@@ -9394,6 +9394,26 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // ── JARVIS SQL Pad ────────────────────────────────────────────────────────────
+  // Read-only SQL execution for admin operator use. Blocks anything that isn't
+  // a SELECT statement to prevent accidental writes via the UI.
+  app.post("/api/admin/jarvis/sql", requireAdmin, async (req, res) => {
+    const { query } = req.body as { query?: string };
+    if (!query || typeof query !== "string") {
+      return res.status(400).json({ error: "query is required" });
+    }
+    const trimmed = query.trim().replace(/;+$/, "");
+    if (!/^SELECT\b/i.test(trimmed)) {
+      return res.status(400).json({ error: "Only SELECT statements are allowed" });
+    }
+    try {
+      const result = await db.execute(sql.raw(trimmed));
+      res.json({ rows: result.rows, rowCount: result.rows.length });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Query failed" });
+    }
+  });
+
   app.get("/api/admin/users", async (req, res) => {
     try {
       if (!supabaseServiceRoleKey || !supabaseUrl) {
