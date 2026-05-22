@@ -429,6 +429,7 @@ import {
 import { weillCornellScraper } from "./weillcornell";
 import { icgebScraper } from "./icgeb";
 import { epflScraper } from "./epfl";
+import { kaistScraper } from "./kaist";
 
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
 import { ostiScraper } from "./osti";
@@ -1102,6 +1103,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   weillCornellScraper,            // Weill Cornell Medicine — Drupal Views, paginated ~290 techs
   icgebScraper,                   // ICGEB (Italy/India/South Africa) — WordPress + Content Views Pro — ~31 techs
   epflScraper,                    // EPFL TTO — WP SSR card deck, single page — ~80-120 techs
+  kaistScraper,                   // KAIST TLO — paginated patent portfolio, English, ~7,340 patents
 ];
 
 // Stamp the tier field on every scraper object at startup so that

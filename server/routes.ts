@@ -2154,6 +2154,8 @@ export async function registerRoutes(
               contactEmail: enrichedRecord.contactEmail,
               categoryConfidence: enrichedRecord.categoryConfidence,
               assetClass: enrichedRecord.assetClass,
+              enrichmentSources: enrichedRecord.enrichmentSources as Record<string, string> | null,
+              humanVerified: enrichedRecord.humanVerified as Record<string, boolean> | null,
             }
           : null,
         competingAssets: competingAssets.map((a) => ({

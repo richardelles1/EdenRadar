@@ -91,6 +91,8 @@ type IntelligenceData = {
     contactEmail: string | null;
     categoryConfidence?: number | null;
     assetClass?: string | null;
+    enrichmentSources?: Record<string, string> | null;
+    humanVerified?: Record<string, boolean> | null;
   } | null;
   competingAssets: Array<{
     fingerprint: string;
@@ -141,13 +143,46 @@ function extractSuggestedNextStep(narrative: string): string | null {
   return match ? match[1].trim() : null;
 }
 
-function InfoRow({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+function getProvenanceLabel(
+  fieldKey: string,
+  enrichmentSources: Record<string, string> | null | undefined,
+  humanVerified: Record<string, boolean> | null | undefined,
+): string | null {
+  if (humanVerified?.[fieldKey] === true) return "Human verified";
+  const src = enrichmentSources?.[fieldKey];
+  if (!src) return null;
+  if (src === "gpt-4o") return "AI inferred · GPT-4o";
+  if (src === "gpt-4o-mini" || src === "mini") return "AI inferred · GPT-4o mini";
+  if (src === "rule" || src === "regex") return "Rule-based extraction";
+  if (src === "rule:tto_source") return "Sourced from TTO listing";
+  if (src === "rule:patent_text_extraction") return "Extracted from patent text";
+  if (src === "rule:uspto_jaccard") return "Matched via USPTO";
+  if (src === "llm") return "AI inferred";
+  return null;
+}
+
+function InfoRow({ label, value, accent, provenanceLabel }: {
+  label: string; value: string; accent?: boolean; provenanceLabel?: string | null;
+}) {
   if (!value || value === "unknown") return null;
-  return (
+  const inner = (
     <div className="flex flex-col gap-0.5">
       <span className="text-[11px] uppercase tracking-wide font-semibold text-foreground/50">{label}</span>
       <span className={`text-sm font-medium ${accent ? "text-primary" : "text-foreground"}`}>{value}</span>
     </div>
+  );
+  if (!provenanceLabel) return inner;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="cursor-default">{inner}</div>
+        </TooltipTrigger>
+        <TooltipContent side="top" className="text-xs max-w-[180px]">
+          {provenanceLabel}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -508,6 +543,24 @@ export default function AssetDossier() {
                 Listed in EdenMarket
               </a>
             )}
+            {intelligence?.assetRecord?.dataSparse && (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="inline-flex items-center gap-1 text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-md px-2.5 py-1 font-semibold cursor-default"
+                      data-testid="dossier-limited-data-badge"
+                    >
+                      <Eye className="w-3 h-3" />
+                      Limited data available
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[240px]">
+                    This asset has limited public information available. EdenRadar will update it automatically as new data appears.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            )}
           </div>
 
           {/* Score verdict + asset name */}
@@ -536,9 +589,12 @@ export default function AssetDossier() {
 
           {/* Primary metadata — always visible */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-4 border-y border-primary/10">
-            <InfoRow label="Target"   value={asset.target} />
-            <InfoRow label="Modality" value={asset.modality} />
-            <InfoRow label="Stage"    value={asset.development_stage} />
+            <InfoRow label="Target"   value={asset.target}
+              provenanceLabel={getProvenanceLabel("target", enriched?.enrichmentSources, enriched?.humanVerified)} />
+            <InfoRow label="Modality" value={asset.modality}
+              provenanceLabel={getProvenanceLabel("modality", enriched?.enrichmentSources, enriched?.humanVerified)} />
+            <InfoRow label="Stage"    value={asset.development_stage}
+              provenanceLabel={getProvenanceLabel("development_stage", enriched?.enrichmentSources, enriched?.humanVerified)} />
             <InfoRow label="Owner"    value={asset.owner_name} />
           </div>
 
@@ -613,22 +669,29 @@ export default function AssetDossier() {
               {asset.institution !== asset.owner_name && (
                 <InfoRow label="Institution" value={asset.institution} />
               )}
-              <InfoRow label="Licensing" value={enriched?.licensingStatus ?? asset.licensing_status} accent={licensingAvailable} />
-              <InfoRow label="Patent"    value={enriched?.patentStatus ?? asset.patent_status} />
+              <InfoRow label="Licensing" value={enriched?.licensingStatus ?? asset.licensing_status} accent={licensingAvailable}
+                provenanceLabel={getProvenanceLabel("licensing_readiness", enriched?.enrichmentSources, enriched?.humanVerified)} />
+              <InfoRow label="Patent"    value={enriched?.patentStatus ?? asset.patent_status}
+                provenanceLabel={getProvenanceLabel("patent_status", enriched?.enrichmentSources, enriched?.humanVerified)} />
               {asset.biology && asset.biology !== "unknown" && (
-                <InfoRow label="Biology"  value={asset.biology} />
+                <InfoRow label="Biology"  value={asset.biology}
+                  provenanceLabel={getProvenanceLabel("biology", enriched?.enrichmentSources, enriched?.humanVerified)} />
               )}
               {enriched?.mechanismOfAction && (
-                <InfoRow label="Mechanism of Action" value={enriched.mechanismOfAction} />
+                <InfoRow label="Mechanism of Action" value={enriched.mechanismOfAction}
+                  provenanceLabel={getProvenanceLabel("mechanism_of_action", enriched.enrichmentSources, enriched.humanVerified)} />
               )}
               {enriched?.ipType && (
-                <InfoRow label="IP Type" value={enriched.ipType} />
+                <InfoRow label="IP Type" value={enriched.ipType}
+                  provenanceLabel={getProvenanceLabel("ip_type", enriched.enrichmentSources, enriched.humanVerified)} />
               )}
               {enriched?.licensingReadiness && (
-                <InfoRow label="Licensing Readiness" value={enriched.licensingReadiness} />
+                <InfoRow label="Licensing Readiness" value={enriched.licensingReadiness}
+                  provenanceLabel={getProvenanceLabel("licensing_readiness", enriched.enrichmentSources, enriched.humanVerified)} />
               )}
               {(enriched?.inventors?.length ?? 0) > 0 && (
-                <InfoRow label="Inventors" value={enriched!.inventors!.join(", ")} />
+                <InfoRow label="Inventors" value={enriched!.inventors!.join(", ")}
+                  provenanceLabel={getProvenanceLabel("inventors", enriched?.enrichmentSources, enriched?.humanVerified)} />
               )}
               {enriched?.contactEmail && (
                 <div className="flex flex-col gap-0.5">
@@ -646,18 +709,46 @@ export default function AssetDossier() {
             </div>
           )}
 
-          {/* Sources */}
+          {/* Sources + evidence strength */}
           {asset.source_types?.length > 0 && (
             <div className="mt-4 flex flex-wrap items-center gap-2 pt-3 border-t border-primary/10">
               <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Sources:</span>
               {asset.source_types.map((st) => (
                 <SourceBadge key={st} sourceType={st} />
               ))}
-              {asset.evidence_count > 0 && (
+              {asset.source_types.length >= 4 ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400 cursor-default">
+                        <Activity className="w-2.5 h-2.5" />
+                        Multi-source corroborated
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs max-w-[220px]">
+                      This asset is supported by {asset.source_types.length} distinct source types — the strongest evidence tier.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : asset.source_types.length >= 2 ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200/70 dark:border-amber-700/40 text-amber-600 dark:text-amber-400 cursor-default">
+                        <Activity className="w-2.5 h-2.5" />
+                        Corroborated
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs max-w-[220px]">
+                      This asset appears in {asset.source_types.length} source types. Multi-source assets carry stronger signal.
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : asset.evidence_count > 0 ? (
                 <span className="text-[11px] text-muted-foreground ml-1">
                   {asset.evidence_count} signal{asset.evidence_count !== 1 ? "s" : ""}
                 </span>
-              )}
+              ) : null}
             </div>
           )}
 

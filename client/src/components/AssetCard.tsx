@@ -446,6 +446,25 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   </TooltipContent>
                 </Tooltip>
               )}
+              {(asset.source_types?.length ?? 0) >= 2 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full select-none cursor-default ${
+                        (asset.source_types?.length ?? 0) >= 4
+                          ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400"
+                          : "bg-sky-50 dark:bg-sky-900/20 border border-sky-200/70 dark:border-sky-700/40 text-sky-600 dark:text-sky-400"
+                      }`}
+                      data-testid={`pill-multisource-${asset.id}`}
+                    >
+                      {asset.source_types!.length} sources
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs max-w-[220px]">
+                    Corroborated across {asset.source_types!.length} source types — stronger evidence signal
+                  </TooltipContent>
+                </Tooltip>
+              )}
             </div>
           )}
 
