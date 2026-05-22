@@ -232,6 +232,57 @@ export function extractList($: cheerio.CheerioAPI, selectors: string[]): string[
  * server/lib/scrapers/cloudflare-proxy/worker.js before running these scrapers.
  */
 let _proxyWarnedOnce = false;
+
+/**
+ * Fetch a JSON endpoint through the egress proxy defined by SCRAPER_PROXY_URL.
+ * Used for sites whose JSON APIs (e.g. WP REST API) are IP-blocked from Replit.
+ * Returns null if SCRAPER_PROXY_URL is not configured.
+ */
+export async function fetchJsonViaProxy<T = unknown>(
+  url: string,
+  timeoutMs = 15_000,
+  externalSignal?: AbortSignal,
+): Promise<T | null> {
+  const proxyBase = process.env.SCRAPER_PROXY_URL?.trim();
+
+  if (!proxyBase) {
+    if (!_proxyWarnedOnce) {
+      console.warn(`[scraper] SCRAPER_PROXY_URL not configured — proxy-required scrapers will return 0 results.`);
+      _proxyWarnedOnce = true;
+    }
+    return null;
+  }
+
+  const proxyUrl = `${proxyBase}?url=${encodeURIComponent(url)}`;
+
+  try {
+    const { signal, cleanup } = combineSignal(timeoutMs, externalSignal);
+    try {
+      const res = await fetch(proxyUrl, {
+        signal,
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "application/json, */*",
+        },
+      });
+      cleanup();
+      if (!res.ok) {
+        console.warn(`[scraper] Proxy returned HTTP ${res.status} for ${url}`);
+        return null;
+      }
+      const text = await res.text();
+      return JSON.parse(text) as T;
+    } catch (err: any) {
+      cleanup();
+      throw err;
+    }
+  } catch (err: any) {
+    console.warn(`[scraper] Proxy JSON fetch failed for ${url}: ${err?.message ?? err}`);
+    return null;
+  }
+}
+
 export async function fetchHtmlViaProxy(
   url: string,
   timeoutMs = 15_000,

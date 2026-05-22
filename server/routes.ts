@@ -33,7 +33,7 @@ import { isFatalOpenAIError, streamDossierNarrative } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, startStalenessFirstScan, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, startStalenessFirstScan, startDailySweep, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
@@ -3881,6 +3881,15 @@ export async function registerRoutes(
       res.json({ ...result, status: getSchedulerStatus() });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to start staleness-first scan" });
+    }
+  });
+
+  app.post("/api/ingest/scheduler/daily-sweep", requireAdmin, async (req, res) => {
+    try {
+      const result = await startDailySweep();
+      res.json({ ...result, status: getSchedulerStatus() });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to start daily sweep" });
     }
   });
 
