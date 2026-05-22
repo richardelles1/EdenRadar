@@ -1384,6 +1384,48 @@ function DataHealth({ pw }: { pw: string }) {
   const [stalenessFirstConfirm, setStalenessFirstConfirm] = useState(false);
   const stalenessFirstConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [dailySweepConfirm, setDailySweepConfirm] = useState(false);
+  const dailySweepConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedulerDailySweepMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/daily-sweep", {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      setDailySweepConfirm(false);
+      if (d.ok) {
+        toast({ title: "Daily sweep started", description: d.message });
+      } else {
+        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      setDailySweepConfirm(false);
+      toast({ title: "Daily sweep failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleDailySweepClick = () => {
+    if (!dailySweepConfirm) {
+      setDailySweepConfirm(true);
+      if (dailySweepConfirmTimer.current) clearTimeout(dailySweepConfirmTimer.current);
+      dailySweepConfirmTimer.current = setTimeout(() => setDailySweepConfirm(false), 4000);
+    } else {
+      if (dailySweepConfirmTimer.current) clearTimeout(dailySweepConfirmTimer.current);
+      schedulerDailySweepMutation.mutate();
+      setDailySweepConfirm(false);
+    }
+  };
+
   const schedulerStalenessFirstMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/ingest/scheduler/stale-first", {
@@ -1859,6 +1901,39 @@ function DataHealth({ pw }: { pw: string }) {
                 Pause T{sched.tierOnly}
               </Button>
             )}
+          </div>
+
+          {/* ── Daily Sweep button ───────────────────────────── */}
+          <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-border/40 flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium flex-shrink-0 mr-0.5">Daily Sweep:</span>
+            {(() => {
+              const anyRunning = schedRunning || schedulerDailySweepMutation.isPending;
+              return (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={`h-7 text-xs font-medium px-3 transition-colors ${
+                    schedulerDailySweepMutation.isPending
+                      ? "border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                      : dailySweepConfirm
+                      ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                  }`}
+                  onClick={handleDailySweepClick}
+                  disabled={anyRunning}
+                  data-testid="button-daily-sweep"
+                  title="Run a full daily sweep: all standard institutions staleness-ordered, then complex institutions sequentially"
+                >
+                  {schedulerDailySweepMutation.isPending ? (
+                    <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Sweep running</>
+                  ) : dailySweepConfirm ? (
+                    "Confirm Daily Sweep?"
+                  ) : (
+                    "Daily Sweep"
+                  )}
+                </Button>
+              );
+            })()}
           </div>
 
           {/* ── Staleness-first scan button ──────────────────── */}
