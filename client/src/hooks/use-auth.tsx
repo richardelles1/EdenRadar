@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { getImpersonationToken } from "@/lib/queryClient";
@@ -25,6 +25,9 @@ interface AuthContextValue {
   impersonation: ImpersonationState | null;
   isPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
+  /** True when the session expired unexpectedly (not via explicit sign-out). */
+  sessionExpired: boolean;
+  clearSessionExpired: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, role: "industry" | "researcher" | "concept" | null, metadata?: Record<string, string>) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
@@ -54,6 +57,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(isRecoveryUrl);
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const signingOutRef = useRef(false);
+  const wasSignedIn = useRef(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -62,10 +68,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted) return;
       setSession(s);
       setUser(s?.user ?? null);
+      if (s?.user) wasSignedIn.current = true;
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "SIGNED_OUT" && wasSignedIn.current && !signingOutRef.current) {
+        setSessionExpired(true);
+      }
+      if (s?.user) wasSignedIn.current = true;
+
       if (event === "PASSWORD_RECOVERY") {
         setIsPasswordRecovery(true);
         // Route to the correct password-set page regardless of what Supabase resolved
@@ -166,6 +178,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     : user;
 
+  function clearSessionExpired() {
+    setSessionExpired(false);
+  }
+
   function clearPasswordRecovery() {
     setIsPasswordRecovery(false);
     const url = new URL(window.location.href);
@@ -197,6 +213,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    signingOutRef.current = true;
+    wasSignedIn.current = false;
     sessionStorage.removeItem("edenradar_welcomed");
     const userSpecificKeys = [
       "eden-industry-profile",
@@ -211,14 +229,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
+    signingOutRef.current = false;
   }
 
   async function sendPasswordReset(email: string) {
-    // Admins click the email link and land on /admin/reset-password where they
-    // set a new password via supabase.auth.updateUser. Non-admin users still
-    // complete the flow there (the page just calls updateUser).
+    // Send all users to /set-password. The onAuthStateChange PASSWORD_RECOVERY
+    // handler then routes admins to /admin/reset-password and industry users stay
+    // on /set-password. This avoids non-admins briefly seeing the admin page.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/admin/reset-password`,
+      redirectTo: `${window.location.origin}/set-password`,
     });
     return { error: error?.message ?? null };
   }
@@ -238,6 +257,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user: effectiveUser, session, loading, role,
       realRole, isImpersonating: !!impersonation, impersonation,
       isPasswordRecovery, clearPasswordRecovery,
+      sessionExpired, clearSessionExpired,
       signIn, signUp, signInWithGoogle, signOut, sendPasswordReset, updatePassword, updateRole,
     }}>
       {children}

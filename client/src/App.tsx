@@ -82,6 +82,7 @@ import Unsubscribe from "@/pages/Unsubscribe";
 import { EdenWidget } from "@/components/EdenWidget";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction } from "@/components/ui/alert-dialog";
 
 function ThemeInit() {
   useEffect(() => {
@@ -436,6 +437,34 @@ function Router() {
   );
 }
 
+function SessionExpiredGuard() {
+  const { sessionExpired, clearSessionExpired } = useAuth();
+  const [, navigate] = useLocation();
+
+  function handleSignInAgain() {
+    clearSessionExpired();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <AlertDialog open={sessionExpired}>
+      <AlertDialogContent data-testid="dialog-session-expired">
+        <AlertDialogHeader>
+          <AlertDialogTitle>Session expired</AlertDialogTitle>
+          <AlertDialogDescription>
+            Your session has expired. Please sign in again to continue where you left off.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogAction onClick={handleSignInAgain} data-testid="button-session-expired-signin">
+            Sign in again
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
@@ -445,6 +474,7 @@ function App() {
           <Toaster />
           <SiteGate>
             <ImpersonationBanner />
+            <SessionExpiredGuard />
             <Router />
             <EdenWidget />
           </SiteGate>

@@ -39,7 +39,7 @@ import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
-import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
+import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser, getAdminEmails } from "./lib/supabaseAuth";
 import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import {
   getEffectiveMarketAccess,
@@ -646,9 +646,20 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/scout/search", async (req, res) => {
+  app.post("/api/scout/search", verifyAnyAuth, async (req, res) => {
     try {
-      const scoutUserId = await tryGetUserId(req);
+      const scoutUserId = req.headers["x-user-id"] as string;
+      // Server-side plan enforcement — mirrors ScoutGate client check so the
+      // API cannot be called directly to bypass the paywall.
+      const userEmail = (req.headers["x-user-email"] as string ?? "").toLowerCase();
+      const isAdminUser = getAdminEmails().includes(userEmail);
+      if (!isAdminUser) {
+        const PAID_PLANS = ["individual", "team5", "team10", "enterprise"];
+        const membership = await storage.getOrgPlanByMembership(scoutUserId);
+        if (!membership?.planTier || !PAID_PLANS.includes(membership.planTier)) {
+          return res.status(403).json({ error: "Scout subscription required", code: "SCOUT_PLAN_REQUIRED" });
+        }
+      }
       const schema = z.object({
         // Allow empty query when at least one filter is provided (e.g. browsing
         // by modality/stage/institution from an Alerts "Explore matches" link).
@@ -3212,6 +3223,13 @@ export async function registerRoutes(
           readOnly: body.readOnly,
         });
         if ("error" in result) return res.status(result.status).json({ error: result.error });
+        await storage.insertAdminEvent({
+          adminUserId: adminId, adminEmail,
+          action: "impersonation_start",
+          targetUserId: result.session.targetUserId,
+          targetEmail: result.session.targetEmail,
+          payload: { readOnly: result.session.readOnly, sessionId: result.session.id },
+        });
         res.json({
           token: result.token,
           session: {
@@ -9367,6 +9385,15 @@ If a field cannot be determined, use "N/A".`
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
 
+  app.get("/api/admin/events", requireAdmin, async (_req, res) => {
+    try {
+      const events = await storage.getAdminEvents(200);
+      res.json({ events });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/users", async (req, res) => {
     try {
       if (!supabaseServiceRoleKey || !supabaseUrl) {
@@ -9480,6 +9507,15 @@ If a field cannot be determined, use "N/A".`
         user_metadata: { role },
       });
       if (error) return res.status(500).json({ error: error.message });
+      const adminUser = await getAdminUser(req);
+      if (adminUser) {
+        await storage.insertAdminEvent({
+          adminUserId: adminUser.id, adminEmail: adminUser.email,
+          action: "role_change", targetUserId: id,
+          targetEmail: data.user.email ?? "",
+          payload: { newRole: role },
+        });
+      }
       res.json({
         id: data.user.id,
         email: data.user.email ?? "",
@@ -9771,7 +9807,10 @@ If a field cannot be determined, use "N/A".`
             await storage.updateOrganization(userOrg.id, { stripeStatus: "canceled" });
             console.log(`[delete-account] Canceled Stripe subscription ${userOrg.stripeSubscriptionId} for org ${userOrg.id}`);
           } else {
-            console.warn(`[delete-account] BILLING LEAK RISK: org ${userOrg.id} has subscription ${userOrg.stripeSubscriptionId} but Stripe client is unavailable (STRIPE_SECRET_KEY missing) — subscription was NOT canceled`);
+            // Abort deletion to prevent orphaned billable subscriptions.
+            return res.status(503).json({
+              error: "Cannot delete account: an active subscription exists but the payment system is temporarily unavailable. Please try again or contact support@edennx.com.",
+            });
           }
         }
       } catch (stripeErr: any) {
@@ -9786,6 +9825,17 @@ If a field cannot be determined, use "N/A".`
       }
       // Auth account removed — now clean up DB records
       await storage.deleteUserAccount(userId);
+
+      // Audit log — best-effort, do not block response
+      const deletingAdmin = await getAdminUser(req).catch(() => null);
+      if (deletingAdmin) {
+        await storage.insertAdminEvent({
+          adminUserId: deletingAdmin.id, adminEmail: deletingAdmin.email,
+          action: "user_delete", targetUserId: userId,
+          targetEmail: deletedEmail ?? "",
+          payload: { name: deletedName ?? null },
+        });
+      }
 
       if (deletedEmail) {
         await sendAccountDeletionEmail(deletedEmail, deletedName ?? "").catch((err) =>

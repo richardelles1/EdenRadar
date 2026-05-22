@@ -1,10 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/lib/supabase";
 import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2, Mail, X } from "lucide-react";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
+
+function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string } {
+  if (pwd.length < 8) return { score: 0, label: "Too short" };
+  let pts = 0;
+  if (pwd.length >= 12) pts++;
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) pts++;
+  if (/[0-9!@#$%^&*_\-]/.test(pwd)) pts++;
+  if (pts <= 1) return { score: 0, label: "Weak" };
+  if (pts === 2) return { score: 1, label: "Fair" };
+  return { score: 2, label: "Strong" };
+}
+
+const STRENGTH_COLORS = ["#ef4444", "#f59e0b", "#10b981"] as const;
 
 const PORTAL_STYLES = {
   amber:   { iconBg: "bg-amber-500",   text: "text-amber-500 dark:text-amber-400"   },
@@ -70,6 +83,7 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const signupPasswordStrength = useMemo(() => getPasswordStrength(password), [password]);
 
   const [resetEmail, setResetEmail] = useState("");
   const [resetLoading, setResetLoading] = useState(false);
@@ -79,6 +93,7 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [setPasswordLoading, setSetPasswordLoading] = useState(false);
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null);
+  const newPasswordStrength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
 
   const [pickRoleLoading, setPickRoleLoading] = useState(false);
   const [pickRoleError, setPickRoleError] = useState<string | null>(null);
@@ -411,6 +426,26 @@ export default function Login() {
                     className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
                   />
                 </div>
+                {newPassword.length > 0 && (
+                  <div className="space-y-1 -mt-1">
+                    <div className="flex gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="h-1 flex-1 rounded-full transition-colors"
+                          style={{
+                            background: i <= newPasswordStrength.score
+                              ? STRENGTH_COLORS[newPasswordStrength.score]
+                              : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-[10px]" style={{ color: STRENGTH_COLORS[newPasswordStrength.score] }}>
+                      {newPasswordStrength.label}
+                    </p>
+                  </div>
+                )}
                 <div className={`${inputBase} ${inputBorder}`}>
                   <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
                     <path d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z" fill={inputIconColor}/>
@@ -581,11 +616,32 @@ export default function Login() {
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
-                    minLength={6}
                     data-testid="input-password"
                     className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
                   />
                 </div>
+
+                {/* Password strength meter (signup only) */}
+                {mode === "signup" && password.length > 0 && (
+                  <div className="space-y-1 -mt-1">
+                    <div className="flex gap-1">
+                      {[0, 1, 2].map((i) => (
+                        <div
+                          key={i}
+                          className="h-1 flex-1 rounded-full transition-colors"
+                          style={{
+                            background: i <= signupPasswordStrength.score
+                              ? STRENGTH_COLORS[signupPasswordStrength.score]
+                              : isDark ? "rgba(255,255,255,0.1)" : "rgba(0,0,0,0.1)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <p className="text-[10px]" style={{ color: STRENGTH_COLORS[signupPasswordStrength.score] }}>
+                      {signupPasswordStrength.label}
+                    </p>
+                  </div>
+                )}
 
                 {/* Forgot password link */}
                 {mode === "signin" && (

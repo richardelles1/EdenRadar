@@ -43,6 +43,7 @@ import {
   enrichmentRunLog,
   institutionQualitySnapshots,
   assetSignalEvents,
+  adminEvents, type AdminEvent, type InsertAdminEvent,
 } from "@shared/schema";
 import { computeMomentumScore } from "./lib/pipeline/computeMomentumScore";
 import { db } from "./db";
@@ -5375,6 +5376,20 @@ function scoreAssetAgainstProfile(
     }
   }
   return { assetId: asset.id, score, matchedFields };
+}
+
+// ── Admin Audit Log ────────────────────────────────────────────────────────────
+
+export async function insertAdminEvent(event: InsertAdminEvent): Promise<void> {
+  try {
+    await db.insert(adminEvents).values(event);
+  } catch (err) {
+    console.warn("[admin-events] Failed to write audit event:", err instanceof Error ? err.message : err);
+  }
+}
+
+export async function getAdminEvents(limit = 100): Promise<AdminEvent[]> {
+  return db.select().from(adminEvents).orderBy(desc(adminEvents.createdAt)).limit(limit);
 }
 
 export const storage = new DatabaseStorage();

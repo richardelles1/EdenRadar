@@ -17,7 +17,7 @@ export const IMPERSONATION_TOKEN_KEY = "eden-impersonation-token";
 
 export function getImpersonationToken(): string | null {
   try {
-    return localStorage.getItem(IMPERSONATION_TOKEN_KEY);
+    return sessionStorage.getItem(IMPERSONATION_TOKEN_KEY);
   } catch {
     return null;
   }
@@ -25,8 +25,8 @@ export function getImpersonationToken(): string | null {
 
 export function setImpersonationToken(token: string | null) {
   try {
-    if (token) localStorage.setItem(IMPERSONATION_TOKEN_KEY, token);
-    else localStorage.removeItem(IMPERSONATION_TOKEN_KEY);
+    if (token) sessionStorage.setItem(IMPERSONATION_TOKEN_KEY, token);
+    else sessionStorage.removeItem(IMPERSONATION_TOKEN_KEY);
   } catch {}
   // Notify listeners (banner, hooks) — storage events don't fire in the same tab.
   try {
