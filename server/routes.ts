@@ -6010,8 +6010,8 @@ export async function registerRoutes(
 
   // ── Classify Unclassified (Step 2b) ──────────────────────────────────────
   // Targets all relevant assets where asset_class IS NULL (never deep-enriched).
-  // deepEnrichBatch routes thin-text (40-119 chars) to gpt-4o-mini automatically;
-  // thick-text (>=120 chars) goes to gpt-4o. Skips assets < 40 chars (too thin).
+  // deepEnrichBatch model routing: <40 chars → skip; 40–119 → gpt-4o-mini lite;
+  // 120–599 → gpt-4o-mini full; ≥600 → gpt-4o (abstracts only).
 
   let classifyRunning = false;
   let classifyProcessed = 0;
