@@ -699,6 +699,13 @@ function scheduleNext(): void {
   // ── Priority queue: fill available slots from priority queue first ─────────
   while (priorityQueue.length > 0) {
     const institution = priorityQueue[0];
+
+    // Skip institutions already running — drop silently rather than spin.
+    if (currentInstitutions.includes(institution)) {
+      priorityQueue.shift();
+      continue;
+    }
+
     const scraperType = getScraperType(institution);
     const institutionTier = getScraperTier(institution);
     const liveCount = getActiveSyncs().length;
@@ -954,9 +961,11 @@ async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
-    console.log(`[scheduler] Lock unavailable for ${institution} — requeueing`);
+    // Another sync for this institution is already in flight — do NOT requeue to priority
+    // (that creates a tight spin loop). The in-flight sync will complete normally and the
+    // health cache will be updated. Simply count it as skipped and move on.
+    console.log(`[scheduler] Lock unavailable for ${institution} — already running, skipping`);
     if (runGeneration === gen) {
-      if (!priorityQueue.includes(institution)) priorityQueue.unshift(institution);
       skippedThisCycle++;
     }
     return;
@@ -1027,8 +1036,14 @@ async function runOne(institution: string, gen: number): Promise<void> {
 
     if (runGeneration === gen) {
       if (transient) {
-        console.log(`[scheduler] ${institution} skipped (DB connection blip, not a scraper fault): ${msg}`);
-        if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
+        console.log(`[scheduler] ${institution} skipped (DB connection blip, not a scraper fault): ${msg} — will retry in 60s`);
+        // Delay before requeueing to avoid a spin loop if the DB stays down.
+        const capturedGen = gen;
+        setTimeout(() => {
+          if (runGeneration !== capturedGen) return;
+          if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
+          scheduleNext();
+        }, 60_000);
       } else {
         failedThisCycle++;
         console.log(`[scheduler] ${institution} failed after retry: ${msg}`);
