@@ -51,11 +51,15 @@ export default {
       return new Response(`Origin not allowlisted: ${target.hostname}`, { status: 403 });
     }
 
+    // Forward Accept header from the incoming request so JSON endpoints
+    // (e.g. Duke WP REST API) get the right response format.
+    const incomingAccept = request.headers.get("accept") ?? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+
     const upstream = await fetch(target.toString(), {
       headers: {
         "User-Agent":
           "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        Accept: incomingAccept,
         "Accept-Language": "en-US,en;q=0.9",
         Referer: "https://www.google.com/",
       },
@@ -67,7 +71,8 @@ export default {
     return new Response(body, {
       status: upstream.status,
       headers: {
-        "Content-Type": "text/html; charset=utf-8",
+        // Pass through the upstream Content-Type so JSON endpoints are parsed correctly.
+        "Content-Type": upstream.headers.get("content-type") ?? "text/html; charset=utf-8",
         "Access-Control-Allow-Origin": "*",
         "X-Proxied-Status": String(upstream.status),
         "X-Proxied-URL": target.toString(),

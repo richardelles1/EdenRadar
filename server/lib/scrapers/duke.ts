@@ -1,4 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { fetchJsonViaProxy } from "./utils";
 
 const INST = "Duke University";
 const BASE = "https://otc.duke.edu";
@@ -31,36 +32,12 @@ function cleanHtml(html: string): string {
 //
 // WP REST API is ready to go at /wp-json/wp/v2/technologies — scraper is fully written
 // below and will activate automatically once a residential proxy is wired into
-// fetchWpPageViaProxy(). Estimated yield: ~400 listings.
+// fetchJsonViaProxy(). Estimated yield: ~400 listings.
 // ──────────────────────────────────────────────────────────────────────────────
 
-async function fetchWpPageViaProxy(page: number): Promise<WpPost[]> {
-  const proxyBase = process.env.SCRAPER_PROXY_URL?.trim();
-  if (!proxyBase) return [];
-
-  const targetUrl = `${WP_API}?per_page=${PER_PAGE}&page=${page}&_fields=id,title,link,excerpt`;
-  const proxyUrl = `${proxyBase}?url=${encodeURIComponent(targetUrl)}`;
-
-  try {
-    const res = await fetch(proxyUrl, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Accept: "application/json",
-      },
-      signal: AbortSignal.timeout(20_000),
-    });
-    if (!res.ok) return [];
-    const text = await res.text();
-    if (text.trimStart().startsWith("<")) {
-      // WAF bot-challenge HTML — datacenter proxy is insufficient, needs residential proxy
-      console.warn(`[scraper] ${INST}: WAF bot-challenge detected via proxy — residential proxy required`);
-      return [];
-    }
-    const posts: WpPost[] = JSON.parse(text);
-    return Array.isArray(posts) ? posts : [];
-  } catch {
-    return [];
-  }
+async function fetchWpPageViaProxy(page: number): Promise<WpPost[] | null> {
+  const url = `${WP_API}?per_page=${PER_PAGE}&page=${page}&_fields=id,title,link,excerpt`;
+  return fetchJsonViaProxy<WpPost[]>(url, 15_000);
 }
 
 export const dukeScraper: InstitutionScraper = {
@@ -68,6 +45,7 @@ export const dukeScraper: InstitutionScraper = {
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
     const posts = await fetchWpPageViaProxy(1);
+    if (!posts) return [];
     return posts.slice(0, maxResults).map((p) => ({
       title: cleanHtml(p.title.rendered),
       description: cleanHtml(p.excerpt?.rendered ?? ""),
@@ -82,6 +60,8 @@ export const dukeScraper: InstitutionScraper = {
 
     for (let page = 1; page <= 50; page++) {
       const posts = await fetchWpPageViaProxy(page);
+      if (!posts || posts.length === 0) break;
+
       for (const p of posts) {
         const title = cleanHtml(p.title.rendered);
         if (title.length > 3) {
@@ -93,7 +73,8 @@ export const dukeScraper: InstitutionScraper = {
           });
         }
       }
-      if (posts.length === 0 || posts.length < PER_PAGE) break;
+
+      if (posts.length < PER_PAGE) break;
     }
 
     if (results.length > 0) {

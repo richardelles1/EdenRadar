@@ -294,3 +294,31 @@ export const nevadaNSSVipsScraper = createVipsScraper(
   ["Nevada National Security Site"],
   "Nevada National Security Site"
 );
+
+// ── Task #121 recovery — labs previously excluded as "already covered" ────────
+// The dedicated proxy-HTML scrapers for these three labs were never implemented
+// beyond stubs. VIPS covers them via the same API path as the 11 labs above.
+
+/** Oak Ridge National Laboratory — replaces stub; ~130+ VIPS records */
+export const ornlVipsScraper = createVipsScraper(
+  ["Oak Ridge National Laboratory"],
+  "Oak Ridge National Laboratory"
+);
+
+/** Argonne National Laboratory — replaces stub; ~180+ VIPS records */
+export const argonneVipsScraper = createVipsScraper(
+  ["Argonne National Laboratory"],
+  "Argonne National Laboratory"
+);
+
+/** Pacific Northwest National Laboratory — replaces stub; ~140+ VIPS records */
+export const pnnlVipsScraper = createVipsScraper(
+  ["Pacific Northwest National Laboratory"],
+  "Pacific Northwest National Laboratory"
+);
+
+/** Idaho National Laboratory — not previously covered; ~90+ VIPS records */
+export const inlVipsScraper = createVipsScraper(
+  ["Idaho National Laboratory"],
+  "Idaho National Laboratory"
+);

@@ -1595,6 +1595,9 @@ function DataHealth({ pw }: { pw: string }) {
       setSortKey(key);
       setSortDir("asc");
     }
+    // Clear freeze ref so the new sort applies immediately even during an active sync.
+    // Without this, the sort arrow updates but the table stays frozen until sync ends.
+    lastStableOrder.current = [];
   }
 
   function exportCsv() {

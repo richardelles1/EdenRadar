@@ -62,10 +62,6 @@ import {
   waterlooScraper,
   mcmasterScraper,
   calgaryScraper,
-  // DOE Labs — proxy-routed
-  ornlScraper,
-  argonneScraper,
-  pnnlScraper,
   // Task #364 — Recovered Flintbox scrapers + updated stubs
   texasTechScraper,
   brandeisScraper,
@@ -444,6 +440,11 @@ import {
   y12VipsScraper,
   ppplVipsScraper,
   nevadaNSSVipsScraper,
+  // Task #121 recovery — previously excluded stubs now backed by VIPS
+  ornlVipsScraper,
+  argonneVipsScraper,
+  pnnlVipsScraper,
+  inlVipsScraper,
 } from "./vips";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -569,6 +570,11 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "Brandeis University",          // brandeis.flintbox.com — orgId=43 — 95 techs confirmed
   // Task #1051 — FLC (Federal Laboratory Consortium) — Flintbox API (orgId=139, 4915 listings confirmed 2026-05-19)
   "FLC (Federal Laboratory Consortium)",
+  // Task #121 recovery — VIPS API scrapers
+  "Oak Ridge National Laboratory",
+  "Argonne National Laboratory",
+  "Pacific Northwest National Laboratory",
+  "Idaho National Laboratory",
 ]);
 
 const TIER2_INSTITUTIONS = new Set<string>([
@@ -633,7 +639,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   harvardScraper,
   ucsfScraper,
   jhuScraper,
-  dukeScraper,                   // confirmed-active — WP REST API
+  dukeScraper,                   // Duke University — WP REST API via Cloudflare proxy (SCRAPER_PROXY_URL required)
   columbiaScraper,
   upennScraper,
   northwesternScraper,
@@ -983,12 +989,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   waterlooScraper,                // University of Waterloo — HTML catalog (uwaterloo.ca/watco)
   mcmasterScraper,                // McMaster University — HTML listing (research.mcmaster.ca)
   calgaryScraper,                 // University of Calgary — Flintbox (calgary.flintbox.com)
-  // ── DOE National Labs — Proxy-Routed (Task #121) ─────────────────────────
-  // Require SCRAPER_PROXY_URL env secret (Cloudflare Worker).
-  // Deploy server/lib/scrapers/cloudflare-proxy/worker.js to unlock.
-  ornlScraper,                    // Oak Ridge National Laboratory — proxy-routed — ~120+ techs
-  argonneScraper,                 // Argonne National Laboratory — proxy-routed — ~200+ techs
-  pnnlScraper,                    // Pacific Northwest National Laboratory — proxy-routed — ~150+ techs
+  // ── DOE National Labs — VIPS API (Task #121 recovery) ───────────────────────
+  // Stubs replaced by VIPS API scrapers (no proxy required, already working).
+  ornlVipsScraper,                // Oak Ridge National Laboratory — VIPS API
+  argonneVipsScraper,             // Argonne National Laboratory — VIPS API
+  pnnlVipsScraper,                // Pacific Northwest National Laboratory — VIPS API
+  inlVipsScraper,                 // Idaho National Laboratory — VIPS API (new, previously uncovered)
   // ── Tradespace (Tasks #271, this session) ─────────────────────────────────
   gladstoneScraper,               // Gladstone Institutes — Tradespace Playwright — ~60+ techs
   utepScraper,                    // University of Texas El Paso — Tradespace Playwright — confirmed live
