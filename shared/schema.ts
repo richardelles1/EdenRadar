@@ -887,6 +887,22 @@ export const insertStripeBillingEventSchema = createInsertSchema(stripeBillingEv
 export type InsertStripeBillingEvent = z.infer<typeof insertStripeBillingEventSchema>;
 export type StripeBillingEvent = typeof stripeBillingEvents.$inferSelect;
 
+// ── Admin Audit Events ──────────────────────────────────────────────────────────
+// Immutable log of admin actions (role changes, user deletion, impersonation, invites).
+
+export const adminEvents = pgTable("admin_events", {
+  id: serial("id").primaryKey(),
+  adminUserId: text("admin_user_id").notNull(),
+  adminEmail: text("admin_email").notNull(),
+  action: text("action").notNull(), // role_change | user_delete | impersonation_start | impersonation_end | user_invite | plan_change | market_access_change
+  targetUserId: text("target_user_id"),
+  targetEmail: text("target_email"),
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type AdminEvent = typeof adminEvents.$inferSelect;
+export type InsertAdminEvent = typeof adminEvents.$inferInsert;
+
 // ── App Events (usage analytics) ──────────────────────────────────────────────
 
 export const APP_EVENT_TYPES = [

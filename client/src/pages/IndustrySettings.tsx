@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -45,6 +45,17 @@ import { cn } from "@/lib/utils";
 import { useOrg, planTierLabel, billingMethodLabel } from "@/hooks/use-org";
 import { getIndustryProfile } from "@/hooks/use-industry";
 
+function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string; color: string } {
+  if (pwd.length < 8) return { score: 0, label: "Too short", color: "#ef4444" };
+  let pts = 0;
+  if (pwd.length >= 12) pts++;
+  if (/[A-Z]/.test(pwd) && /[a-z]/.test(pwd)) pts++;
+  if (/[0-9!@#$%^&*_\-]/.test(pwd)) pts++;
+  if (pts <= 1) return { score: 0, label: "Weak", color: "#ef4444" };
+  if (pts === 2) return { score: 1, label: "Fair", color: "#f59e0b" };
+  return { score: 2, label: "Strong", color: "#10b981" };
+}
+
 type Frequency = "realtime" | "daily" | "weekly";
 
 const FREQUENCY_OPTIONS: { value: Frequency; label: string; description: string }[] = [
@@ -80,6 +91,7 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
+  const strength = useMemo(() => getPasswordStrength(newPassword), [newPassword]);
 
   function reset() {
     setNewPassword("");
@@ -120,6 +132,17 @@ function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => 
             <Label htmlFor="new-password" className="text-xs text-muted-foreground">New password</Label>
             <Input id="new-password" type="password" placeholder="Min. 8 characters" value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)} data-testid="input-new-password" autoFocus />
+            {newPassword.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <div className="flex gap-1">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} className="h-1 flex-1 rounded-full transition-colors"
+                      style={{ background: i <= strength.score ? strength.color : "hsl(var(--border))" }} />
+                  ))}
+                </div>
+                <p className="text-[10px]" style={{ color: strength.color }}>{strength.label}</p>
+              </div>
+            )}
           </div>
           <div className="space-y-1">
             <Label htmlFor="confirm-password" className="text-xs text-muted-foreground">Confirm new password</Label>
