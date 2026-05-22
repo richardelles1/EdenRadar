@@ -1,5 +1,6 @@
 import { createTechPublisherScraper } from "./techpublisher";
 export { ntnuScraper } from "./ntnu";
+export { templeScraper } from "./temple";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
 import { fetchHtml, fetchJson, cleanText, SiteHttpError } from "./utils";
@@ -1347,7 +1348,7 @@ export const udelScraper = createFlintboxScraper(
   { slug: "udel", orgId: 93, accessKey: "b3c809cf-2bd5-4b78-8f50-1cac404a5dba" },
   "University of Delaware"
 );
-export const templeScraper = createStubScraper("Temple University");
+// templeScraper — implemented in temple.ts (Drupal 7 + DataTables, single-page)
 export const drexelScraper = createTechPublisherScraper("drexelotc", "Drexel University", { maxPg: 50 });
 export const bucknellScraper = createStubScraper("Bucknell University");
 export const sunyalbanyScraper = createStubScraper("SUNY Albany");
