@@ -26,6 +26,9 @@ const ALLOWED_ORIGINS = [
   "availabletechnologies.pnl.gov",
   "www.pnnl.gov",
   "otc.duke.edu",
+  "technology.ox.ac.uk",
+  "isis.ox.ac.uk",
+  "ott.caltech.edu",
 ];
 
 export default {
