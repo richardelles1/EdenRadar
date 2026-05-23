@@ -1,0 +1,38 @@
+What I'd push back on:
+
+  1. Everything is the same color and the same visual weight
+  Every card, every section header, every bar uses the same green primary + muted-foreground palette.
+  There's no hierarchy — the stats grid looks identical to the recent searches list, which looks
+  identical to the institutions grid. The only visual break is the orange Flame icon on Converging
+  Areas. The email template has stage-colored badges (blue Phase 2, purple Phase 1, amber preclinical)
+   — that logic exists but isn't used anywhere on the dashboard. Even just coloring the stat card
+  borders or using those stage colors on the ticker would break the visual monotony.
+
+  2. The four stat cards describe the corpus, not the user
+  "Assets Indexed: 47,000", "Top Modality: Small Molecule" — these are the same for every user. They
+  tell a new buyer nothing about their own situation. More useful at a glance: active alerts, pipeline
+   items, new assets matching their focus since last login, or days since last enrichment run. The
+  corpus stats belong on the Admin page or a "Market Overview" panel, not as the hero stats.
+
+  3. The rotating ticker is undersized for what it represents
+  NewlyIndexedCard and NewAlertsCard are in a 2-col grid at the bottom, min-h-[200px], and show one
+  asset at a time with a 1×1px dot indicator. These are actually the highest-signal content on the
+  page — what just came in — but they're given less visual presence than the modality bar chart. The
+  ticker concept is right but the card should probably be taller, the asset name larger, and the
+  institution treatment more prominent.
+
+  4. The subtitle "Your TTO asset intelligence dashboard" is dead weight
+  It's below the greeting on every single load. Users know where they are. Replace it with something
+  live: "4 new assets indexed since your last visit" or "2 alerts active · last match 3 hours ago" —
+  something that makes the page feel like a real-time pulse rather than a static header.
+
+  5. The 10px text is borderline
+  text-[10px] appears in therapy area pills, convergence signal metadata, ticker dot labels,
+  institution card counts. That's rendering at ~10px, which at normal display density is right at the
+  edge of legibility and will look thin on non-retina screens. Bumping these to text-xs (12px)
+  consistently would feel more substantial without breaking the layout.
+
+  Overall: the page looks like a well-built internal tool, but not yet like a premium intelligence
+  product. The fix isn't a redesign — it's: personalize the hero stats, give the ticker cards more
+  presence, and introduce one or two more accent colors so the eye has somewhere to land. The bones
+  are there.
