@@ -145,14 +145,23 @@ export async function deepEnrichBatch(
         continue;
       }
 
-      // Route thin-text assets (MIN_THIN_CHARS <= chars < MIN_CONTENT_CHARS) to gpt-4o-mini
-      // for a lite classification pass: sets assetClass, developmentStage, modality, indication,
-      // ipType, licensingReadiness. Avoids skipping 66%+ of the corpus entirely.
+      // Model routing:
+      //   < MIN_THIN_CHARS   → skipped above (no usable text)
+      //   < MIN_CONTENT_CHARS → gpt-4o-mini lite (thin text, structural fields only)
+      //   < GPT4O_THRESHOLD  → gpt-4o-mini full (most TTO summaries; model is not the
+      //                        bottleneck below this length — content quality is)
+      //   ≥ GPT4O_THRESHOLD  → gpt-4o (abstracts and rich descriptions where the more
+      //                        capable model meaningfully improves MOA/mechanism quality)
+      const GPT4O_THRESHOLD = 600;
       const useLitePass = combinedLength < MIN_CONTENT_CHARS;
-      const model: "gpt-4o" | "gpt-4o-mini" = useLitePass ? "gpt-4o-mini" : "gpt-4o";
+      const model: "gpt-4o" | "gpt-4o-mini" = (!useLitePass && combinedLength >= GPT4O_THRESHOLD) ? "gpt-4o" : "gpt-4o-mini";
       if (useLitePass) {
         console.log(
           `[deepEnrich] Lite pass (gpt-4o-mini) for asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — ${combinedLength} chars`,
+        );
+      } else if (model === "gpt-4o-mini") {
+        console.log(
+          `[deepEnrich] Mini pass (gpt-4o-mini) for asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — ${combinedLength} chars < ${GPT4O_THRESHOLD}`,
         );
       }
 

@@ -58,10 +58,10 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string; co
 
 type Frequency = "realtime" | "daily" | "weekly";
 
-const FREQUENCY_OPTIONS: { value: Frequency; label: string; description: string }[] = [
-  { value: "realtime", label: "Real-time", description: "As new matching assets are indexed" },
-  { value: "daily", label: "Daily digest", description: "Summary once per day" },
-  { value: "weekly", label: "Weekly digest", description: "Summary once per week" },
+const FREQUENCY_OPTIONS: { value: Frequency; label: string; description: string; badge?: string }[] = [
+  { value: "realtime", label: "Real-time", description: "Within minutes of new assets being indexed — no time window restriction", badge: "Fastest" },
+  { value: "daily", label: "Daily digest", description: "Once per day, delivered between 6am–10pm ET" },
+  { value: "weekly", label: "Weekly digest", description: "Once per week, delivered between 6am–10pm ET" },
 ];
 
 function SectionHeader({
@@ -568,7 +568,14 @@ export default function IndustrySettings() {
                           : "border-border text-muted-foreground hover:border-emerald-500/20 hover:text-foreground"
                       )}>
                       <span className="flex flex-col">
-                        <span className="text-sm font-medium">{opt.label}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-sm font-medium">{opt.label}</span>
+                          {opt.badge && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-semibold tracking-wide leading-none">
+                              {opt.badge}
+                            </span>
+                          )}
+                        </span>
                         <span className="text-xs text-muted-foreground">{opt.description}</span>
                       </span>
                       {frequency === opt.value && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}

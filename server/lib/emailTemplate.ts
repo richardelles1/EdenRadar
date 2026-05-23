@@ -277,7 +277,7 @@ export function renderDispatchEmail(opts: {
         <tr>
           <td style="background:#f0fdf4;border-bottom:1px solid #d1fae5;padding:8px 32px;">
             <p style="margin:0;font-size:12px;color:#166534;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-              <span style="color:#4b7a60;">Window:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}
+              <span style="color:#4b7a60;">Alert:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}
             </p>
           </td>
         </tr>`;
@@ -315,7 +315,7 @@ export function renderDispatchEmail(opts: {
         <tr>
           <td style="background:${G_MID};padding:9px 32px;">
             <p style="margin:0;font-size:12px;color:#6bac88;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-              <span style="color:#3a6650;">Window:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}
+              <span style="color:#3a6650;">Alert:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}
             </p>
           </td>
         </tr>`;
@@ -349,7 +349,7 @@ export function renderDispatchEmail(opts: {
         <tr>
           <td style="padding:28px 32px 8px 32px;">
             <p style="margin:0 0 22px 0;font-size:14px;color:#374151;line-height:1.75;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-              Here are the latest licensable TTO assets discovered across <strong style="color:#0a1a0f;">${byInstitution.size}&nbsp;institution${byInstitution.size !== 1 ? "s" : ""}</strong> during the <strong style="color:#0a1a0f;">${escapeHtml(windowLabel.toLowerCase())}</strong>. Each listing is sourced directly from institutional technology transfer offices.
+              Here are the latest licensable TTO assets discovered across <strong style="color:#0a1a0f;">${byInstitution.size}&nbsp;institution${byInstitution.size !== 1 ? "s" : ""}</strong>. Each listing is sourced directly from institutional technology transfer offices.
             </p>
 
             <!-- Green divider -->

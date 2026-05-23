@@ -6010,8 +6010,8 @@ export async function registerRoutes(
 
   // ── Classify Unclassified (Step 2b) ──────────────────────────────────────
   // Targets all relevant assets where asset_class IS NULL (never deep-enriched).
-  // deepEnrichBatch routes thin-text (40-119 chars) to gpt-4o-mini automatically;
-  // thick-text (>=120 chars) goes to gpt-4o. Skips assets < 40 chars (too thin).
+  // deepEnrichBatch model routing: <40 chars → skip; 40–119 → gpt-4o-mini lite;
+  // 120–599 → gpt-4o-mini full; ≥600 → gpt-4o (abstracts only).
 
   let classifyRunning = false;
   let classifyProcessed = 0;
@@ -9391,6 +9391,26 @@ If a field cannot be determined, use "N/A".`
       res.json({ events });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── JARVIS SQL Pad ────────────────────────────────────────────────────────────
+  // Read-only SQL execution for admin operator use. Blocks anything that isn't
+  // a SELECT statement to prevent accidental writes via the UI.
+  app.post("/api/admin/jarvis/sql", requireAdmin, async (req, res) => {
+    const { query } = req.body as { query?: string };
+    if (!query || typeof query !== "string") {
+      return res.status(400).json({ error: "query is required" });
+    }
+    const trimmed = query.trim().replace(/;+$/, "");
+    if (!/^SELECT\b/i.test(trimmed)) {
+      return res.status(400).json({ error: "Only SELECT statements are allowed" });
+    }
+    try {
+      const result = await db.execute(sql.raw(trimmed));
+      res.json({ rows: result.rows, rowCount: result.rows.length });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Query failed" });
     }
   });
 
