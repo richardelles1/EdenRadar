@@ -13015,6 +13015,16 @@ function JarvisTab({ pw }: { pw: string }) {
     onSuccess: (data) => toast({ title: "USPTO Cross-ref started", description: data.message ?? "" }),
     onError: (err: Error) => toast({ title: "USPTO Cross-ref failed", description: err.message, variant: "destructive" }),
   });
+  const ruleFillMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill", { method: "POST", headers: { Authorization: `Bearer ${pw}` } });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "Failed");
+      return json;
+    },
+    onSuccess: () => toast({ title: "Rule Fill started", description: "Filling fields via regex rules — no AI cost" }),
+    onError: (err: Error) => toast({ title: "Rule Fill failed", description: err.message, variant: "destructive" }),
+  });
 
   // SQL pad
   const [sql, setSql] = useState("SELECT id, asset_name, institution, completeness_score\nFROM ingested_assets\nWHERE relevant = true\nORDER BY completeness_score DESC NULLS LAST\nLIMIT 20");
@@ -13048,6 +13058,7 @@ function JarvisTab({ pw }: { pw: string }) {
   const shortcuts: { label: string; desc: string; mut: ReturnType<typeof useMutation>; color: string }[] = [
     { label: "Daily Sweep",    desc: "Full staleness-ordered institution sweep",  mut: sweepMut,     color: "border-emerald-700 hover:bg-emerald-950 text-emerald-400" },
     { label: "Staleness Scan", desc: "Oldest-synced institutions first",           mut: stalenessMut, color: "border-sky-700 hover:bg-sky-950 text-sky-400" },
+    { label: "Rule Fill",      desc: "Regex rules for MoA, target, indication — free",  mut: ruleFillMut,  color: "border-teal-700 hover:bg-teal-950 text-teal-400" },
     { label: "Deep Enrich",    desc: "Run gpt-4o enrichment on Bucket A queue",   mut: enrichMut,    color: "border-violet-700 hover:bg-violet-950 text-violet-400" },
     { label: "USPTO Cross-ref",desc: "Fill IP fields from patent database",        mut: usptoMut,     color: "border-amber-700 hover:bg-amber-950 text-amber-400" },
   ];
@@ -13136,7 +13147,7 @@ function JarvisTab({ pw }: { pw: string }) {
       {/* Pipeline Shortcuts */}
       <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-5 space-y-3">
         <p className="text-[10px] uppercase tracking-widest text-zinc-500">Pipeline Shortcuts</p>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
           {shortcuts.map(s => (
             <button
               key={s.label}
