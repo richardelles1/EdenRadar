@@ -56,7 +56,7 @@ const HARDCODED_PAGES: Array<{ url: string; category: string }> = [
 // Path patterns that are known-non-tech pages — excluded from dynamic discovery.
 const EXCLUDE_PATHS = [
   /^\/$/,
-  /\/(about|contact|press|events|resources|privacy|terms|careers|sitemap|feed|author|tag|category)\b/i,
+  /\/(about|contact|press|news|events|resources|privacy|terms|careers|sitemap|feed|author|tag|category)\b/i,
   /\/wp-(admin|content|includes|json|login)\b/,
   /\.(jpg|jpeg|png|gif|svg|pdf|zip|mp4)(\?|$)/i,
   // Confirmed image/redirect URLs from manual audit
@@ -64,6 +64,10 @@ const EXCLUDE_PATHS = [
   /\/technology-licensing\/?$/,
   // Generic page number slugs
   /\/page\/\d+/,
+  // Editorial / general-topic pages confirmed non-tech (manual audit + observed results).
+  // These are promotional essays, not per-asset licensable technology profiles.
+  /\/(evolving|spotlight|cures?|examples?|know-how|cancer-screening|vaccine-efforts)\b/i,
+  /\/impact-stories\/(cologuard|spotlight|evolving|vaccine|cancer|examples?|cures?)\b/i,
 ];
 
 function isLikelyTechUrl(url: string): boolean {
@@ -232,8 +236,7 @@ export function parseIndividualTechPage(
 ): ScrapedListing | null {
   const $ = cheerio.load(html);
 
-  // Title preference: og:title (cleaned of "- Mayo Clinic Business Development" suffix)
-  // → first <h1> → <title> tag.
+  // Title preference: og:title (cleaned of site-name suffix) → h1 → <title>.
   let title = $('meta[property="og:title"]').attr("content") || "";
   title = title.replace(/\s*[-|]\s*Mayo Clinic.*$/i, "").trim();
   if (!title) title = $("h1").first().text().trim();
@@ -244,6 +247,11 @@ export function parseIndividualTechPage(
   }
   title = cleanText(title);
   if (!title || title.length < 5) return null;
+
+  // Reject breadcrumb-style og:titles that WordPress sets as "Section | Page | Site".
+  // Real technology page titles never contain " | " — that pattern means the og:title
+  // still encodes site navigation (e.g. "Innovation | Vaccine Efforts", "Impact Story | Cologuard").
+  if (title.includes(" | ")) return null;
 
   // Description: prefer the longest text-editor widget body (real prose),
   // fall back to og:description / meta description.
@@ -265,7 +273,9 @@ export function parseIndividualTechPage(
   const fallback = cleanText(ogDesc || metaDesc);
 
   const description = (bestBody || fallback || "").slice(0, 1000);
-  if (description.length < 20) return null;
+  // Require meaningful description — rules out thin marketing pages that have
+  // a title but only a tagline or navigation text as body content.
+  if (description.length < 80) return null;
 
   return {
     title,

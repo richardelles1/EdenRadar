@@ -271,7 +271,9 @@ export const princetonScraper = createTechPublisherScraper(
   { maxPg: 80 }
 );
 
-export const uclaScraper = createUCTechTransferScraper("LA", "UCLA");
+// UCLA uses TechPublisher (1,695 listings) not the UC portal (515) —
+// the portal only surfaces a subset of the UCLA IP portfolio.
+export const uclaScraper = createTechPublisherScraper("ucla", "UCLA", { maxPg: 100 });
 
 export const brownScraper = createTechPublisherScraper(
   "brown",
