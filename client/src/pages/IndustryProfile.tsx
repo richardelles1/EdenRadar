@@ -409,16 +409,17 @@ export default function IndustryProfile() {
 
           {subscribedToDigest && (
             <div className="flex items-center gap-3 pt-1 border-t border-card-border">
-              <p className="text-sm text-muted-foreground">Send at most:</p>
+              <p className="text-sm text-muted-foreground">Frequency:</p>
               <Select
                 value={frequency}
                 onValueChange={(v) => frequencyMutation.mutate(v)}
                 disabled={frequencyMutation.isPending}
               >
-                <SelectTrigger className="w-28 h-8 text-sm" data-testid="select-alert-frequency">
+                <SelectTrigger className="w-36 h-8 text-sm" data-testid="select-alert-frequency">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  <SelectItem value="realtime">Real-time</SelectItem>
                   <SelectItem value="daily">Once daily</SelectItem>
                   <SelectItem value="weekly">Once weekly</SelectItem>
                 </SelectContent>

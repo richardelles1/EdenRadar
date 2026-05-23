@@ -311,8 +311,8 @@ async function evaluateAlerts(): Promise<void> {
       `My Alert — ${new Date(alert.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     const totalCount = matched.length;
     const sampleAssets = matched.slice(0, DIGEST_SAMPLE_LIMIT);
-    const subject = `EdenRadar: ${totalCount} new match${totalCount !== 1 ? "es" : ""} — ${alertName}`;
-    const windowLabel = `${frequencyLabel(frequency)} Alert: ${alertName} · ${totalCount} new asset${totalCount !== 1 ? "s" : ""}`;
+    const subject = `${totalCount} new asset${totalCount !== 1 ? "s" : ""}: ${alertName} — EdenRadar`;
+    const windowLabel = `${alertName} · ${frequencyLabel(frequency)}`;
     const appBaseUrl = process.env.APP_BASE_URL ?? process.env.APP_URL ?? "https://edenradar.com";
     const unsubscribeUrl = unsubscribeUrlFor(alert.userId);
 
