@@ -426,6 +426,8 @@ import {
 } from "./new-institutions";
 
 // ── New TTO scrapers (2026-05-21) ─────────────────────────────────────────────
+import { sjuScraper } from "./sju";
+import { villanovaScraper } from "./villanova";
 import { weillCornellScraper } from "./weillcornell";
 import { icgebScraper } from "./icgeb";
 import { epflScraper } from "./epfl";
@@ -1110,6 +1112,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   icgebScraper,                   // ICGEB (Italy/India/South Africa) — WordPress + Content Views Pro — ~31 techs
   epflScraper,                    // EPFL TTO — WP SSR card deck, single page — ~80-120 techs
   kaistScraper,                   // KAIST TLO — paginated patent portfolio, English, ~7,340 patents
+  sjuScraper,                     // Saint Joseph's University — static Drupal listing, ~18 techs
+  villanovaScraper,               // Villanova University — single-page listing, ~16 techs (PDF links)
 ];
 
 // Stamp the tier field on every scraper object at startup so that
