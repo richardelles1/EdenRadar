@@ -183,6 +183,26 @@ function getDominantLabel(assets: BrowseAsset[]): string | null {
   return entries[0][0];
 }
 
+function stageAccentColor(stage: string | null | undefined): string {
+  const s = (stage ?? "").toLowerCase();
+  if (s.includes("phase 3") || s.includes("approved")) return "#059669";
+  if (s.includes("phase 2")) return "#2563eb";
+  if (s.includes("phase 1")) return "#7c3aed";
+  if (s.includes("preclinical")) return "#d97706";
+  return "";
+}
+
+function modalityBadgeClasses(modality: string | null | undefined): string {
+  const m = (modality ?? "").toLowerCase();
+  if (m.includes("gene") || m.includes("cell") || m.includes("car-t") || m.includes("viral vector"))
+    return "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20";
+  if (m.includes("antibod") || m.includes("biologic") || m.includes("bispecific") || m.includes("protein"))
+    return "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20";
+  if (m.includes("rna") || m.includes("mrna") || m.includes("oligo") || m.includes("nucleic"))
+    return "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20";
+  return "bg-primary/10 text-primary border-primary/15";
+}
+
 type MarketIntelligenceData = {
   biologyLandscape: { biology: string; count: number }[];
   weeklyTrend: { week: string; count: number }[];
@@ -521,7 +541,7 @@ function KpiCard({
         <p className="text-xl font-bold text-foreground tabular-nums leading-tight mt-0.5">
           {typeof value === "number" ? value.toLocaleString() : value}
         </p>
-        {sub && <p className="text-[10px] text-muted-foreground mt-0.5">{sub}</p>}
+        {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
       </div>
     </div>
   );
@@ -870,40 +890,40 @@ export default function IndustryDashboard() {
           }}
           data-testid="dashboard-platform-snapshot"
         >
-          <SectionHeader title="Network Coverage" icon={Globe} muted />
+          <SectionHeader title="At a Glance" icon={Radar} muted />
 
-          {isLoading ? (
+          {isLoading || pipelineLoading ? (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="dashboard-kpi-row">
               <KpiCard
-                icon={Package}
-                label="TTO Assets"
-                value={stats?.total ?? 0}
-                sub="indexed across network"
-                iconColor="text-primary"
-                bgColor="bg-primary/10"
-                href="/scout"
-              />
-              <KpiCard
-                icon={Building2}
-                label="Institutions"
-                value={institutionCount}
-                sub="universities and TTOs"
-                iconColor="text-blue-500"
-                bgColor="bg-blue-500/10"
-                href="/institutions"
-              />
-              <KpiCard
                 icon={TrendingUp}
                 label="New This Week"
                 value={weeklyNew}
-                sub="assets added recently"
+                sub="assets indexed recently"
                 iconColor="text-emerald-500"
                 bgColor="bg-emerald-500/10"
                 href="/industry/new-arrivals"
+              />
+              <KpiCard
+                icon={Layers}
+                label="Saved Assets"
+                value={pipelineData?.totalSavedAssets ?? 0}
+                sub="across your pipelines"
+                iconColor="text-blue-500"
+                bgColor="bg-blue-500/10"
+                href="/assets"
+              />
+              <KpiCard
+                icon={Bell}
+                label="Alert Matches"
+                value={deltaTotal}
+                sub="since your last visit"
+                iconColor="text-primary"
+                bgColor="bg-primary/10"
+                href="/alerts"
               />
             </div>
           )}
@@ -962,22 +982,22 @@ export default function IndustryDashboard() {
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
-                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
                       data-testid={`dashboard-new-asset-${asset.id}`}
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
                           {asset.assetName}
                         </p>
-                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.institution}</p>
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">{asset.institution}</p>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         {asset.modality && asset.modality !== "unknown" && (
-                          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize hidden sm:inline-block">
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full border capitalize hidden sm:inline-block ${modalityBadgeClasses(asset.modality)}`}>
                             {asset.modality}
                           </span>
                         )}
-                        <span className="text-[10px] text-muted-foreground/60 tabular-nums">
+                        <span className="text-xs text-muted-foreground/60 tabular-nums">
                           {timeAgo(asset.firstSeenAt)}
                         </span>
                       </div>
@@ -1024,26 +1044,30 @@ export default function IndustryDashboard() {
                     <p className="text-xs text-muted-foreground">No assets indexed yet.</p>
                   </div>
                 ) : (
-                  visibleExploreAssets.map((asset) => (
-                    <button
-                      key={asset.id}
-                      onClick={() => navigate(`/asset/${asset.id}`)}
-                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
-                      data-testid={`dashboard-explore-asset-${asset.id}`}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                          {asset.assetName}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.institution}</p>
-                      </div>
-                      {asset.completenessScore !== null && asset.completenessScore > 0 && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 tabular-nums shrink-0 hidden sm:inline-block">
-                          {Math.round(asset.completenessScore)}%
-                        </span>
-                      )}
-                    </button>
-                  ))
+                  visibleExploreAssets.map((asset) => {
+                    const accent = stageAccentColor(asset.developmentStage);
+                    return (
+                      <button
+                        key={asset.id}
+                        onClick={() => navigate(`/asset/${asset.id}`)}
+                        className={`w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group${accent ? " border-l-2" : ""}`}
+                        style={accent ? { borderLeftColor: accent } : undefined}
+                        data-testid={`dashboard-explore-asset-${asset.id}`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                            {asset.assetName}
+                          </p>
+                          <p className="text-xs text-muted-foreground truncate mt-0.5">{asset.institution}</p>
+                        </div>
+                        {asset.completenessScore !== null && asset.completenessScore > 0 && (
+                          <span className="text-xs px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/60 tabular-nums shrink-0 hidden sm:inline-block">
+                            {Math.round(asset.completenessScore)}%
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })
                 )}
               </div>
 
@@ -1108,7 +1132,7 @@ export default function IndustryDashboard() {
                             {pl.name}
                           </span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                        <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
                           {pl.assetCount} asset{pl.assetCount !== 1 ? "s" : ""}
                         </span>
                       </div>
@@ -1166,15 +1190,15 @@ export default function IndustryDashboard() {
                   <>
                     <div className="grid grid-cols-3 gap-2">
                       <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
-                        <span className="text-[10px] text-muted-foreground">TTO Assets</span>
+                        <span className="text-xs text-muted-foreground">TTO Assets</span>
                         <span className="text-base font-bold text-foreground tabular-nums">{ttoCount}</span>
                       </div>
                       <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-institutions">
-                        <span className="text-[10px] text-muted-foreground">Institutions</span>
+                        <span className="text-xs text-muted-foreground">Institutions</span>
                         <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.institutionCount ?? 0}</span>
                       </div>
                       <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-pipelines">
-                        <span className="text-[10px] text-muted-foreground">Pipelines</span>
+                        <span className="text-xs text-muted-foreground">Pipelines</span>
                         <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
                       </div>
                     </div>
@@ -1182,15 +1206,15 @@ export default function IndustryDashboard() {
                     {allSaved.length > 0 && (
                       <div className="grid grid-cols-3 gap-2">
                         <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-patents">
-                          <span className="text-[10px] text-muted-foreground">Patents</span>
+                          <span className="text-xs text-muted-foreground">Patents</span>
                           <span className="text-base font-bold text-foreground tabular-nums">{patentCount}</span>
                         </div>
                         <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-research-studies">
-                          <span className="text-[10px] text-muted-foreground">Research Studies</span>
+                          <span className="text-xs text-muted-foreground">Research Studies</span>
                           <span className="text-base font-bold text-foreground tabular-nums">{researchCount}</span>
                         </div>
                         <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-clinical-trials">
-                          <span className="text-[10px] text-muted-foreground">Clinical Trials</span>
+                          <span className="text-xs text-muted-foreground">Clinical Trials</span>
                           <span className="text-base font-bold text-foreground tabular-nums">{trialCount}</span>
                         </div>
                       </div>
@@ -1242,7 +1266,7 @@ export default function IndustryDashboard() {
                       <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
                         {asset.assetName}
                       </p>
-                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">{timeAgo(asset.savedAt)}</p>
+                      <p className="text-xs text-muted-foreground/60 mt-0.5">{timeAgo(asset.savedAt)}</p>
                     </button>
                     <StatusBadge status={asset.status ?? null} onCycle={() => cycleStatus(asset)} />
                   </div>
@@ -1340,7 +1364,7 @@ export default function IndustryDashboard() {
                           )}
                         </p>
                       </div>
-                      <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+                      <span className="text-xs text-muted-foreground/60 shrink-0 tabular-nums">
                         {timeAgo(item.createdAt)}
                       </span>
                     </div>
