@@ -36,8 +36,16 @@ function extractViewState(html: string): Record<string, string> {
 }
 
 function extractTotalPages(html: string, maxPages: number): number {
+  // Primary: ASP.NET WebForms control span (id contains "lblTotalPages")
   const m = html.match(/lblTotalPages[^>]*>(\d+)<\/span>/i);
-  return m ? Math.min(parseInt(m[1], 10), maxPages) : 1;
+  if (m) return Math.min(parseInt(m[1], 10), maxPages);
+  // Fallback: "1 of N" pagination text rendered as plain text or aria-label
+  const m2 = html.match(/\bPage\s+1\s+of\s+(\d+)\b|\b1\s+of\s+(\d+)\b/i);
+  if (m2) {
+    const n = parseInt(m2[1] ?? m2[2], 10);
+    return Math.min(n, maxPages);
+  }
+  return 1;
 }
 
 // Node 18+ / undici 5.x exposes getSetCookie() which returns each Set-Cookie
