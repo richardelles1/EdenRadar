@@ -1345,6 +1345,91 @@ const INDICATION_RULES: Array<{ pattern: RegExp; value: string }> = [
   { pattern: /\bosteoarthritis\b/i, value: "osteoarthritis" },
 ];
 
+// ── Mechanism of action rules ─────────────────────────────────────────────────
+// Pattern-match title + summary for specific MoA strings.
+// Only fires when mechanismOfAction is null/empty and asset is therapeutic.
+const MOA_RULES: Array<{ pattern: RegExp; value: string }> = [
+  // Kinase inhibitors
+  { pattern: /\bPARP\s*(?:1\/2\s+)?inhibitor/i, value: "PARP inhibitor" },
+  { pattern: /\bCDK\s*4\s*[/,&]\s*6\s+inhibitor/i, value: "CDK4/6 inhibitor" },
+  { pattern: /\bCDK\s*9\s+inhibitor/i, value: "CDK9 inhibitor" },
+  { pattern: /\bCDK\s*2\s+inhibitor/i, value: "CDK2 inhibitor" },
+  { pattern: /\bEGFR\s+(?:tyrosine\s+kinase\s+)?inhibitor|\bEGFR[\s-]TKI\b/i, value: "EGFR tyrosine kinase inhibitor" },
+  { pattern: /\banti-HER2\b|\bHER2[\s-]targeted|\bHER2\s+(?:targeted\s+)?inhibitor/i, value: "HER2-targeted therapy" },
+  { pattern: /\bBRAF\s+(?:V600[A-Z]\s+)?inhibitor/i, value: "BRAF inhibitor" },
+  { pattern: /\bMEK\s*(?:1\/2\s+)?inhibitor/i, value: "MEK inhibitor" },
+  { pattern: /\bERK\s*(?:1\/2\s+)?inhibitor/i, value: "ERK inhibitor" },
+  { pattern: /\bPI3K\s*(?:[αβδγ/]*\s*)?inhibitor|\bPI3K[/\s]AKT\s+inhibitor/i, value: "PI3K inhibitor" },
+  { pattern: /\bmTOR\s+inhibitor|\brapalog\b/i, value: "mTOR inhibitor" },
+  { pattern: /\bAKT\s+inhibitor/i, value: "AKT inhibitor" },
+  { pattern: /\banti-VEGF\b|\bVEGF(?:R)?\s+inhibitor|\bVEGF\s+(?:pathway\s+)?blockade/i, value: "VEGF/VEGFR inhibitor" },
+  { pattern: /\bJAK\s*[1-3]?\s+inhibitor|\bJanus\s+kinase\s+inhibitor/i, value: "JAK inhibitor" },
+  { pattern: /\bBTK\s+inhibitor/i, value: "BTK inhibitor" },
+  { pattern: /\bFLT3\s+inhibitor/i, value: "FLT3 inhibitor" },
+  { pattern: /\bALK\s+(?:tyrosine\s+kinase\s+)?inhibitor/i, value: "ALK inhibitor" },
+  { pattern: /\bRET\s+(?:tyrosine\s+kinase\s+)?inhibitor/i, value: "RET inhibitor" },
+  { pattern: /\bMET\s+(?:tyrosine\s+kinase\s+)?inhibitor/i, value: "MET inhibitor" },
+  { pattern: /\bKIT\s+(?:tyrosine\s+kinase\s+)?inhibitor/i, value: "KIT inhibitor" },
+  { pattern: /\bSRC\s+(?:kinase\s+)?inhibitor/i, value: "SRC kinase inhibitor" },
+  { pattern: /\bLRRK2\s+(?:kinase\s+)?inhibitor/i, value: "LRRK2 kinase inhibitor" },
+  { pattern: /\bWEE1\s+inhibitor/i, value: "WEE1 inhibitor" },
+  { pattern: /\bATR\s+inhibitor/i, value: "ATR inhibitor" },
+  { pattern: /\bATM\s+inhibitor/i, value: "ATM inhibitor" },
+  { pattern: /\bCHK1\s+inhibitor/i, value: "CHK1 inhibitor" },
+  // Checkpoint / immune therapy
+  { pattern: /\banti.PD.1\b|\bPD.1\s+(?:antibody|blockade|checkpoint\s+inhibitor|inhibitor)/i, value: "anti-PD-1 checkpoint inhibitor" },
+  { pattern: /\banti.PD.L1\b|\bPD.L1\s+(?:antibody|blockade|checkpoint\s+inhibitor|inhibitor)/i, value: "anti-PD-L1 checkpoint inhibitor" },
+  { pattern: /\banti.CTLA.4\b|\bCTLA.4\s+(?:antibody|blockade|inhibitor)/i, value: "anti-CTLA-4 checkpoint inhibitor" },
+  { pattern: /\bimmune\s+checkpoint\s+(?:blockade|inhibitor|therapy)|\bcheckpoint\s+inhibitor/i, value: "immune checkpoint inhibitor" },
+  // Apoptosis
+  { pattern: /\bBCL.2\s+inhibitor|\bBCL.XL\s+inhibitor|\bMCL.1\s+inhibitor|\bBH3\s+mimetic/i, value: "BCL-2 family inhibitor" },
+  { pattern: /\bMDM2\s+inhibitor|\bMDM2\/p53\s+(?:inhibitor|antagonist)/i, value: "MDM2/p53 inhibitor" },
+  // Epigenetic
+  { pattern: /\bHDAC\s+inhibitor|\bhistone\s+deacetylase\s+inhibitor/i, value: "HDAC inhibitor" },
+  { pattern: /\bBET\s+(?:bromodomain\s+)?inhibitor|\bBRD4\s+inhibitor/i, value: "BET/BRD4 inhibitor" },
+  { pattern: /\bEZH2\s+inhibitor/i, value: "EZH2 inhibitor" },
+  { pattern: /\bDNMT\s+inhibitor|\bDNA\s+methyltransferase\s+inhibitor/i, value: "DNMT inhibitor" },
+  { pattern: /\bLSD1\s+inhibitor/i, value: "LSD1 inhibitor" },
+  { pattern: /\bDOT1L\s+inhibitor/i, value: "DOT1L inhibitor" },
+  // Antibody formats
+  { pattern: /\bbispecific\s+(?:T.cell\s+)?(?:antibody|engager)|\bBiTE\b/i, value: "bispecific antibody" },
+  { pattern: /\bantibody.drug\s+conjugate|\bADC\b/i, value: "antibody-drug conjugate" },
+  { pattern: /\bCAR.T\s+cell|\bchimeric\s+antigen\s+receptor\s+T/i, value: "CAR-T cell therapy" },
+  { pattern: /\bCAR.NK\b/i, value: "CAR-NK cell therapy" },
+  { pattern: /\bmonoclonal\s+antibody|\bhumanized\s+(?:\w+\s+)?antibody/i, value: "monoclonal antibody" },
+  // Protein degradation
+  { pattern: /\bPROTAC\b|\btargeted\s+protein\s+degradation|\bprotein\s+degrader/i, value: "targeted protein degradation (PROTAC)" },
+  { pattern: /\bmolecular\s+glue\b/i, value: "molecular glue degrader" },
+  // Oncogenic drivers
+  { pattern: /\bKRAS\s+(?:G12[A-Z]\s+)?inhibitor|\bRAS\s+(?:pathway\s+)?inhibitor|\bRAS.MAPK\s+inhibitor/i, value: "KRAS/RAS inhibitor" },
+  // Gene / RNA therapy
+  { pattern: /\bgene\s+replacement\s+therap|\bgene\s+correction(?!\s+factor)/i, value: "gene replacement therapy" },
+  { pattern: /\bCRISPR.Cas\s*(?:9|12|13)?\b|\bgene\s+editing/i, value: "CRISPR gene editing" },
+  { pattern: /\bsiRNA\b|\bRNAi\b|\bRNA\s+interference/i, value: "RNA interference (siRNA)" },
+  { pattern: /\bantisense\s+oligonucleotide|\bASO\b|\bgapmer/i, value: "antisense oligonucleotide (ASO)" },
+  { pattern: /\bmRNA\s+(?:therap|vaccine|platform)/i, value: "mRNA therapy" },
+  // Inflammation / cytokine
+  { pattern: /\banti.TNF.?\b|\bTNF.?\s+(?:inhibitor|blockade|neutralization)/i, value: "anti-TNF therapy" },
+  { pattern: /\bIL.6\s+(?:receptor\s+)?(?:inhibitor|antagonist|blockade)|\banti.IL.6/i, value: "IL-6/IL-6R inhibitor" },
+  { pattern: /\bIL.17\s+(?:inhibitor|antagonist|blockade)|\banti.IL.17/i, value: "IL-17 inhibitor" },
+  { pattern: /\bIL.23\s+(?:inhibitor|antagonist|blockade)|\banti.IL.23/i, value: "IL-23 inhibitor" },
+  { pattern: /\bIL.1\s*[Bβ]?\s+(?:inhibitor|antagonist|blockade)|\banti.IL.1\b|\bIL.1\s+receptor\s+antagonist/i, value: "IL-1 inhibitor" },
+  { pattern: /\bcomplement\s+(?:system\s+)?inhibitor|\bC[35]\s+inhibitor|\bfactor\s+[BD]\s+inhibitor/i, value: "complement inhibitor" },
+  // Metabolism
+  { pattern: /\bGLP.1\s+(?:receptor\s+)?agonist|\bincretin\s+mimetic/i, value: "GLP-1 receptor agonist" },
+  { pattern: /\bPCSK9\s+inhibitor|\banti.PCSK9/i, value: "PCSK9 inhibitor" },
+  { pattern: /\bPPAR.?\s+(?:agonist|modulator)/i, value: "PPAR agonist" },
+  // Neurodegeneration
+  { pattern: /\banti.amyloid|\bamyloid.?\s+(?:clearance|antibody|targeting)\b/i, value: "amyloid-targeting antibody" },
+  { pattern: /\btau\s+(?:aggregation\s+)?inhibitor|\banti.tau\b/i, value: "tau aggregation inhibitor" },
+  { pattern: /\bdopamine\s+(?:D[12]\s+)?(?:agonist|receptor\s+agonist)|dopaminergic\s+agonist/i, value: "dopamine receptor agonist" },
+  // Antiviral / antimicrobial
+  { pattern: /\bviral\s+protease\s+inhibitor|\bNS3\s+protease|\bHCV\s+protease/i, value: "viral protease inhibitor" },
+  { pattern: /\bnucleos(?:ide|otide)\s+(?:analog|reverse\s+transcriptase\s+)?inhibitor|\bNRTI\b|\bNNRTI\b/i, value: "nucleoside reverse transcriptase inhibitor" },
+  { pattern: /\bneuraminidase\s+inhibitor/i, value: "neuraminidase inhibitor" },
+  { pattern: /\bintegrase\s+inhibitor/i, value: "integrase inhibitor" },
+];
+
 // Heuristic: does the text look like it describes a drug/biologic?
 const DRUG_SIGNALS = /\bdrug\b|\btherapeu\w+\b|\btreatment\b|\btherapy\b|\bclinical\s+trial\b|\bIND\b|\bsmall\s+molecule\b|\bantibody\b|\bbiologic\b|\bvaccine\b|\bRNAi\b|\bsiRNA\b|\bgene\s+therapy\b|\bcell\s+therapy\b|\bCAR.T\b|\bmodality\b|\bpharmaceu\w+\b/i;
 
@@ -1483,6 +1568,16 @@ export function applyRulesToAsset(asset: {
       if (!isNonTherapeutic) {
         const val = applyRules(TARGET_RULES, text);
         if (val) fields.target = val;
+      }
+    }
+
+    // ── Mechanism of action: text pattern matching ──────────────────────────────
+    if (!humanV.mechanismOfAction && (!asset.mechanismOfAction || asset.mechanismOfAction.trim() === "")) {
+      const effectiveMod = (fields.modality ?? asset.modality ?? "").toLowerCase();
+      const isNonTherapeuticMod = /^(diagnostic|medical device|software\/algorithm|research tool|platform technology|other)$/.test(effectiveMod);
+      if (!isNonTherapeuticMod) {
+        const val = applyRules(MOA_RULES, text);
+        if (val) { fields.mechanismOfAction = val; provenance.mechanismOfAction = "rule"; }
       }
     }
   }
@@ -1679,6 +1774,7 @@ export async function runRuleBasedFill(
         OR target_class IS NULL
         OR unmet_need_severity IS NULL
         OR data_sparse IS NULL
+        OR (mechanism_of_action IS NULL AND modality NOT IN ('diagnostic','medical device','software/algorithm','research tool','platform technology','other'))
       )
     ORDER BY id ASC
   `);
@@ -1751,6 +1847,7 @@ type RuleFillUpdateSet = {
   biology?: string;
   targetClass?: string;
   unmetNeedSeverity?: number;
+  mechanismOfAction?: string;
   enrichmentSources?: SQL;
 };
 
@@ -1773,6 +1870,7 @@ async function flushWrites(
       if (item.fields.biology) updates.biology = item.fields.biology;
       if (item.fields.targetClass) updates.targetClass = item.fields.targetClass;
       if (item.fields.unmetNeedSeverity) updates.unmetNeedSeverity = parseInt(item.fields.unmetNeedSeverity, 10);
+      if (item.fields.mechanismOfAction) updates.mechanismOfAction = item.fields.mechanismOfAction;
 
       if (fieldKeys.length > 0) {
         // Use per-field provenance when available (e.g. "rule:tto_source"), fall back to "rule"
@@ -1836,6 +1934,7 @@ export async function estimateRuleBasedFill(): Promise<{
         OR target_class IS NULL
         OR unmet_need_severity IS NULL
         OR data_sparse IS NULL
+        OR (mechanism_of_action IS NULL AND modality NOT IN ('diagnostic','medical device','software/algorithm','research tool','platform technology','other'))
       )
     ORDER BY id ASC
   `);
