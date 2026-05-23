@@ -42,10 +42,15 @@ function parseRow($: ReturnType<typeof Object.create>, row: any, $row: any): Scr
   const colText = cells.eq(1).find(".Column1").text();
   const description = extractSection(colText, "About", "Proposed Use");
 
+  // Use anchor URL so each listing gets a unique sourceUrl — the ingest pipeline
+  // deduplicates by sourceUrl within a batch, which would collapse all 58 rows to
+  // one if they all point to the same listing page.
+  const listingUrl = technologyId ? `${LISTING_URL}#${technologyId}` : LISTING_URL;
+
   return {
     title,
     description,
-    url: LISTING_URL,
+    url: listingUrl,
     institution: INST,
     ...(technologyId ? { technologyId } : {}),
   };
