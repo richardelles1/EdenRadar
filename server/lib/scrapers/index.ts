@@ -647,7 +647,6 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   stanfordScraper,
   mitScraper,
   harvardScraper,
-  ucsfScraper,
   jhuScraper,
   dukeScraper,                   // Duke University — WP REST API via Cloudflare proxy (SCRAPER_PROXY_URL required)
   columbiaScraper,
@@ -693,7 +692,6 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   fsuScraper,
   // ── TechPublisher (verified working slugs) ────────────────────────────────
   princetonScraper,
-  uclaScraper,
   brownScraper,
   rochesterScraper,
   tuftsScraper,
@@ -708,6 +706,9 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   njitScraper,
   calPolyScraper,
   sluScraper,
+  // ── UC system (techtransfer.universityofcalifornia.edu) — all use shared factory
+  ucsfScraper,
+  uclaScraper,
   ucDavisScraper,
   ucIrvineScraper,
   ucRiversideScraper,
