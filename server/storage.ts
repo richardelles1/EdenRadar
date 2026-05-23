@@ -469,7 +469,7 @@ export interface IStorage {
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
   claimOrgsForTrialReminder(windowHours: number): Promise<Organization[]>;
-  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }, eventType?: string): Promise<Organization | undefined>;
+  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null; billingEmail?: string }, eventType?: string): Promise<Organization | undefined>;
   logBillingEvent(data: InsertStripeBillingEvent): Promise<StripeBillingEvent>;
   getBillingHistory(orgId: number): Promise<StripeBillingEvent[]>;
   markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean>;
@@ -4254,7 +4254,7 @@ export class DatabaseStorage implements IStorage {
 
   async applyStripeSubscription(
     orgId: number,
-    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null },
+    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null; billingEmail?: string },
     eventType: string = "subscription_updated",
   ): Promise<Organization | undefined> {
     return db.transaction(async (tx) => {

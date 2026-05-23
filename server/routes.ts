@@ -12450,9 +12450,19 @@ If multiple assets appear, return each as a separate array item.`;
       const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
       const baseUrl = origin || `https://${req.headers.host}`;
 
+      // Pre-fill email: use billingEmail if set, otherwise fall through to
+      // whatever Stripe collected on the customer record. This surfaces the
+      // correct email in the Stripe checkout form without overriding a
+      // previously-verified billing address.
+      const checkoutEmail = org.billingEmail ?? undefined;
+
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
+        ...(checkoutEmail ? { customer_email: undefined } : {}), // customer already has email; don't double-set
         mode: "subscription",
+        // ACH bank account listed first — at these price points ($1,999–$16,999/mo)
+        // card fees (2.9%) are $58–$493/month per customer vs $5 flat for ACH.
+        // Plaid instant verification (financial_connections below) eliminates most ACH friction.
         payment_method_types: ["us_bank_account", "card"],
         payment_method_options: {
           us_bank_account: {
@@ -12460,6 +12470,7 @@ If multiple assets appear, return each as a separate array item.`;
             financial_connections: { permissions: ["payment_method"] },
           },
         },
+        allow_promotion_codes: true,
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/pricing`,
@@ -12611,7 +12622,8 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
-  // POST /api/stripe/upgrade-plan — upgrade a team5 subscription to team10 mid-cycle with proration
+  // POST /api/stripe/upgrade-plan — change plan mid-cycle with proration (any direction)
+  // Body: { targetPlanId: "individual" | "team5" | "team10" }
   app.post("/api/stripe/upgrade-plan", verifyAnyAuth, async (req, res) => {
     const stripe = getStripe();
     if (!stripe) return res.status(503).json({ error: "Stripe is not configured on this server yet" });
@@ -12620,37 +12632,41 @@ If multiple assets appear, return each as a separate array item.`;
       const userId = req.headers["x-user-id"] as string;
       if (!userId) return res.status(400).json({ error: "Missing user id" });
 
+      const rawTargetPlanId = String(req.body?.targetPlanId ?? "");
+      if (!isStripePlanId(rawTargetPlanId)) {
+        return res.status(400).json({ error: "targetPlanId must be individual | team5 | team10" });
+      }
+      const targetPlanId: StripePlanId = rawTargetPlanId;
+
       const org = await storage.getOrgForUser(userId);
       if (!org) return res.status(404).json({ error: "No organisation found for this user" });
 
-      // Verify caller is an owner of the org
+      // Only the org owner can change the plan
       const members = await storage.getOrgMembers(org.id);
       const callerMember = members.find((m) => m.userId === userId);
       if (!callerMember || callerMember.role !== "owner") {
-        return res.status(403).json({ error: "Only the org owner can upgrade the plan" });
-      }
-
-      if (org.planTier !== "team5") {
-        return res.status(400).json({ error: "Only team5 subscriptions can be upgraded to team10 via this endpoint" });
+        return res.status(403).json({ error: "Only the org owner can change the plan" });
       }
 
       if (!org.stripeSubscriptionId) {
-        return res.status(400).json({ error: "No active Stripe subscription found for this organisation" });
+        return res.status(400).json({ error: "No active Stripe subscription found — use checkout to subscribe first" });
       }
 
-      const newPriceId = STRIPE_PRICE_MAP["team10"];
+      if (org.planTier === targetPlanId) {
+        return res.status(400).json({ error: `Already on the ${targetPlanId} plan` });
+      }
+
+      const newPriceId = STRIPE_PRICE_MAP[targetPlanId];
       if (!newPriceId) {
-        return res.status(503).json({ error: "STRIPE_PRICE_TEAM10 env var not set" });
+        return res.status(503).json({ error: `STRIPE_PRICE_${targetPlanId.toUpperCase()} env var not set` });
       }
 
-      // Retrieve the current subscription to get the subscription item ID
       const currentSub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
       const itemId = currentSub.items?.data?.[0]?.id;
       if (!itemId) {
         return res.status(500).json({ error: "Could not find subscription item to update" });
       }
 
-      // Swap the price with proration
       const updatedSub = await stripe.subscriptions.update(org.stripeSubscriptionId, {
         items: [{ id: itemId, price: newPriceId }],
         proration_behavior: "create_prorations",
@@ -12659,20 +12675,19 @@ If multiple assets appear, return each as a separate array item.`;
       const newStripePriceId = updatedSub.items?.data?.[0]?.price?.id ?? newPriceId;
       const newStatus = updatedSub.status ?? "active";
 
-      // Persist the plan change to the DB immediately
       await storage.updateOrganization(org.id, {
-        planTier: "team10",
-        seatLimit: PLAN_SEAT_MAP["team10"],
+        planTier: PLAN_TIER_MAP[targetPlanId],
+        seatLimit: PLAN_SEAT_MAP[targetPlanId],
         stripePriceId: newStripePriceId,
         stripeStatus: newStatus,
       });
 
-      console.log(`[stripe/upgrade-plan] Org ${org.id} upgraded from team5 → team10 (sub ${org.stripeSubscriptionId})`);
+      console.log(`[stripe/upgrade-plan] Org ${org.id}: ${org.planTier} → ${targetPlanId} (sub ${org.stripeSubscriptionId})`);
 
-      return res.json({ ok: true, planTier: "team10", seatLimit: PLAN_SEAT_MAP["team10"] });
+      return res.json({ ok: true, planTier: PLAN_TIER_MAP[targetPlanId], seatLimit: PLAN_SEAT_MAP[targetPlanId] });
     } catch (err: any) {
       console.error("[stripe/upgrade-plan]", err?.message);
-      return res.status(500).json({ error: err.message ?? "Failed to upgrade plan" });
+      return res.status(500).json({ error: err.message ?? "Failed to change plan" });
     }
   });
 
@@ -12739,6 +12754,9 @@ If multiple assets appear, return each as a separate array item.`;
           const planTierC = PLAN_TIER_MAP[planIdC];
           const customerC = stripeId(sess["customer"] as string | { id: string } | null);
           const subC = stripeId(sess["subscription"] as string | { id: string } | null);
+          // Capture billing email from Stripe's collected customer_details so
+          // renewal and payment-failure emails always have a delivery address.
+          const collectedEmail = (sess["customer_details"] as Record<string, unknown> | null)?.["email"] as string | undefined;
           // Derive status: if payment_status is "no_payment_required" the subscription is in trial
           const paymentStatusC = String(sess["payment_status"] ?? "paid");
           const initialStripeStatus = paymentStatusC === "no_payment_required" ? "trialing" : "active";
@@ -12770,6 +12788,8 @@ If multiple assets appear, return each as a separate array item.`;
               stripePriceId: resolvedPriceId,
               planTier: planTierC,
               ...(seatLimitC !== undefined ? { seatLimit: seatLimitC } : {}),
+              // Persist the email Stripe collected so renewal/failure emails always resolve
+              ...(collectedEmail ? { billingEmail: collectedEmail } : {}),
             }, "checkout_completed");
             console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}, priceId=${resolvedPriceId}`);
 
