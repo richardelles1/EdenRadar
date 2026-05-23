@@ -110,6 +110,13 @@ type IntelligenceData = {
     date: string;
     source_type: string;
   }>;
+  clinicalTrials: Array<{
+    nctId: string;
+    title: string;
+    phase: string;
+    status: string;
+    url: string;
+  }>;
 };
 
 function parseMarkdown(text: string): React.ReactNode[] {
@@ -256,6 +263,28 @@ export default function AssetDossier() {
     enabled: !!fingerprint,
     staleTime: 5 * 60 * 1000,
   });
+
+  const { data: regulatoryData } = useQuery<{
+    designations: Array<{
+      id: number;
+      applicationNumber: string | null;
+      sponsorName: string | null;
+      genericName: string | null;
+      brandName: string | null;
+      indication: string;
+      sourceUrl: string | null;
+      similarity: number;
+    }>;
+  }>({
+    queryKey: ["/api/assets", fingerprint, "regulatory"],
+    queryFn: () =>
+      fetch(`/api/assets/${encodeURIComponent(fingerprint)}/regulatory`).then((r) =>
+        r.ok ? r.json() : { designations: [] },
+      ),
+    enabled: !!fingerprint,
+    staleTime: 60 * 60 * 1000,
+  });
+  const orphanDesignations = regulatoryData?.designations ?? [];
 
   const { data: marketListingData } = useQuery<{
     listing: { id: number; therapeuticArea: string; modality: string; stage: string; assetName: string | null; blind: boolean; engagementStatus: string } | null;
@@ -1086,6 +1115,114 @@ export default function AssetDossier() {
                       <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Related Clinical Trials ── */}
+        {(intelligence?.clinicalTrials?.length ?? 0) > 0 && (
+          <div
+            className="rounded-xl border border-border bg-card p-5"
+            style={{ animation: "dash-fade-up 400ms ease 340ms both" }}
+            data-testid="clinical-trials-panel"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <FlaskConical className="w-4 h-4 text-muted-foreground" />
+              <h2 className="text-sm font-semibold text-foreground">Related Clinical Trials</h2>
+              <Badge variant="secondary" className="text-xs">
+                {intelligence!.clinicalTrials.length} found
+              </Badge>
+            </div>
+            <div className="space-y-2">
+              {intelligence!.clinicalTrials.map((trial) => (
+                <div
+                  key={trial.nctId}
+                  className="flex items-start gap-3 p-3 rounded-lg bg-background/50 border border-border/60 hover:border-primary/30 hover:bg-primary/5 transition-all"
+                >
+                  <Badge
+                    variant="outline"
+                    className="text-xs shrink-0 mt-0.5 bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20"
+                  >
+                    {trial.phase || "Trial"}
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground line-clamp-2">{trial.title}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <p className="text-xs text-muted-foreground font-mono">{trial.nctId}</p>
+                      {trial.status && (
+                        <span className="text-xs text-muted-foreground">· {trial.status}</span>
+                      )}
+                    </div>
+                  </div>
+                  <a
+                    href={trial.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="shrink-0 text-primary hover:text-primary/80 transition-colors"
+                    data-testid={`trial-link-${trial.nctId}`}
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Orphan Drug Designations ── */}
+        {orphanDesignations.length > 0 && (
+          <div
+            className="rounded-xl border border-border bg-card p-5"
+            style={{ animation: "dash-fade-up 400ms ease 360ms both" }}
+            data-testid="orphan-designations-panel"
+          >
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="w-4 h-4 text-amber-500" />
+              <h2 className="text-sm font-semibold text-foreground">FDA Orphan Drug Designations</h2>
+              <Badge variant="secondary" className="text-xs">
+                {orphanDesignations.length} matched
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Related Orphan Drug designations from FDA's drug application database, matched by indication similarity.
+            </p>
+            <div className="space-y-2">
+              {orphanDesignations.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-start gap-3 p-3 rounded-lg bg-background/50 border border-border/60 hover:border-amber-500/30 hover:bg-amber-500/5 transition-all"
+                >
+                  <Badge
+                    variant="outline"
+                    className="text-xs shrink-0 mt-0.5 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20"
+                  >
+                    Orphan
+                  </Badge>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground line-clamp-1">
+                      {d.genericName || d.brandName || d.applicationNumber || "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{d.indication}</p>
+                    {d.sponsorName && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{d.sponsorName}</p>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    {d.sourceUrl && (
+                      <a
+                        href={d.sourceUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-primary hover:text-primary/80 transition-colors"
+                        data-testid={`orphan-link-${d.id}`}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">{d.similarity}% match</span>
+                  </div>
                 </div>
               ))}
             </div>
