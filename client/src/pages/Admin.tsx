@@ -3811,16 +3811,23 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     const prev = prevStatusRef.current;
     prevStatusRef.current = status?.status;
     if (status?.status === "running" && !polling) setPolling(true);
-    if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
+    const isTerminal = (s?: string) => s === "done" || s === "error" || s === "interrupted";
+    if (prev === "running" && isTerminal(status?.status)) {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/dataset-quality"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/institution-queues"] });
-      if (status.status === "done") {
+      if (status?.status === "done") {
         const costStr = status.tokenCost != null && status.tokenCost > 0 ? ` · $${status.tokenCost.toFixed(3)} spent` : "";
         toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed${costStr}` });
+      } else if (status?.status === "interrupted") {
+        toast({ title: "Enrichment interrupted", description: "Server restarted mid-run. Check progress and restart if needed.", variant: "destructive" });
       } else {
-        toast({ title: "Enrichment failed", description: status.error ?? "Unknown error", variant: "destructive" });
+        toast({ title: "Enrichment failed", description: status?.error ?? "Unknown error", variant: "destructive" });
       }
+    }
+    // Safety catch-all: stop polling whenever job is in any terminal state (handles fast completions and server restart races)
+    if (polling && isTerminal(status?.status)) {
+      setPolling(false);
     }
   }, [status?.status]);
 

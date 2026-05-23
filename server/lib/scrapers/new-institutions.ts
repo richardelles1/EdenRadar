@@ -481,7 +481,9 @@ export const arizonaScraper: InstitutionScraper = {
       };
       nbPages = data.nbPages;
       for (const hit of data.hits) {
-        if (!hit.title || !hit.Url) continue;
+        if (!hit.title) continue;
+        // Construct URL from title slug when Algolia omits hit.Url (older entries)
+        const url = hit.Url ?? `https://arizona.technologypublisher.com/tech/${hit.title.replace(/\s+/g, '_')}`;
         const categories = hit.finalPathCategories
           ? hit.finalPathCategories.split(",").map((c) => c.trim().split(" > ").pop() ?? c.trim())
           : undefined;
@@ -491,7 +493,7 @@ export const arizonaScraper: InstitutionScraper = {
         results.push({
           title: hit.title,
           description: hit.descriptionFull ?? hit.descriptionTruncated ?? "",
-          url: hit.Url,
+          url,
           institution: "University of Arizona",
           technologyId: hit.techID,
           categories,
@@ -3317,10 +3319,14 @@ export const ncatsScraper: InstitutionScraper = {
           const title = (hit.title ?? "").trim();
           if (!title || title.length < 5) continue;
           const rawUrl: string = hit.url ?? "";
+          // Drupal node URL fallback: objectID = "entity:node/12345:en" → /node/12345
+          const nodeMatch = String(hit.objectID ?? "").match(/entity:node\/(\d+)/);
           const url = rawUrl.startsWith("http")
             ? rawUrl
             : rawUrl.startsWith("/")
             ? `${NCATS_BASE_URL}${rawUrl}`
+            : nodeMatch
+            ? `${NCATS_BASE_URL}/node/${nodeMatch[1]}`
             : "";
           if (!url) continue;
           const dedupKey: string = hit.objectID || url || title;

@@ -117,10 +117,15 @@ export default function Login() {
   // should land on /market instead of being treated as "no role" errors.
   const _marketEnt = (user?.user_metadata as Record<string, unknown> | undefined)?.marketEntitlement as { active?: boolean } | undefined;
   const _marketOnly = !role && _marketEnt?.active === true;
+  // Admin users (is_admin flag in Supabase user_metadata) always go to /admin,
+  // not their portal role destination.
+  const _isAdmin = (user?.user_metadata as Record<string, unknown> | undefined)?.is_admin === true;
 
   useEffect(() => {
     if (!authLoading && session && !isPasswordRecovery && (view === "auth" || view === "pick-role")) {
-      if (role) {
+      if (_isAdmin) {
+        navigate(_redirectParam || "/admin", { replace: true });
+      } else if (role) {
         const dest = (view === "auth" && _redirectParam)
           ? _redirectParam
           : (
@@ -133,9 +138,9 @@ export default function Login() {
         navigate(_redirectParam || "/market", { replace: true });
       }
     }
-  }, [authLoading, session, role, _marketOnly, isPasswordRecovery, navigate, view]);
+  }, [authLoading, session, role, _marketOnly, _isAdmin, isPasswordRecovery, navigate, view]);
 
-  if (!authLoading && session && (role || _marketOnly) && !isPasswordRecovery && (view === "auth" || view === "pick-role")) return null;
+  if (!authLoading && session && (_isAdmin || role || _marketOnly) && !isPasswordRecovery && (view === "auth" || view === "pick-role")) return null;
 
   function redirectByRole(r: "industry" | "researcher" | "concept") {
     navigate(
@@ -162,7 +167,12 @@ export default function Login() {
       const { error: err } = await signIn(email, password);
       if (err) { setError(err); setLoading(false); return; }
       const { data } = await supabase.auth.getUser();
-      const r = data.user?.user_metadata?.role;
+      const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
+      if (meta?.is_admin === true) {
+        navigate(_redirectParam || "/admin", { replace: true });
+        return;
+      }
+      const r = meta?.role;
       if (r === "industry" || r === "researcher" || r === "concept") {
         redirectAfterSignIn(r);
       } else {
@@ -254,11 +264,16 @@ export default function Login() {
     }
     clearPasswordRecovery();
     const { data } = await supabase.auth.getUser();
-    const r = data.user?.user_metadata?.role;
-    if (r === "industry" || r === "researcher" || r === "concept") {
-      redirectByRole(r);
+    const meta = data.user?.user_metadata as Record<string, unknown> | undefined;
+    if (meta?.is_admin === true) {
+      navigate("/admin", { replace: true });
     } else {
-      setView("auth");
+      const r = meta?.role;
+      if (r === "industry" || r === "researcher" || r === "concept") {
+        redirectByRole(r);
+      } else {
+        setView("auth");
+      }
     }
   }
 

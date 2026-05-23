@@ -1094,15 +1094,23 @@ export class DatabaseStorage implements IStorage {
     }
 
     // First-time hash population: write hash to establish baseline, no enrichedAt reset.
+    // Also heal sourceUrl here — a row needing both hash-baseline AND URL fill lands in this
+    // branch (needsUrlHeal check is only reached when contentHash is already populated).
     if (hashHealFps.length > 0) {
       console.log(`[storage] Populating content_hash baseline for ${hashHealFps.length} legacy assets (no enrichedAt reset)`);
       for (let i = 0; i < hashHealFps.length; i += CHUNK) {
         const chunk = hashHealFps.slice(i, i + CHUNK);
         const chunkListings = existingListings.filter((l) => chunk.includes(l.fingerprint));
         for (const listing of chunkListings) {
+          const existing = existingSet.get(listing.fingerprint);
           await db
             .update(ingestedAssets)
-            .set({ lastSeenAt: now, runId, contentHash: listing.contentHash })
+            .set({
+              lastSeenAt: now,
+              runId,
+              contentHash: listing.contentHash,
+              ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
+            })
             .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
         }
       }
