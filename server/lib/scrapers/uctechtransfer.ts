@@ -151,20 +151,22 @@ export function createUCTechTransferScraper(
           }
         }
 
-        // Force detail fetch for ALL listings: the list page only provides a short
-        // snippet from .tech-info p — we always want the full NCD detail-page content.
-        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages, fetching NCD detail descriptions (all)...`);
+        // Enrich listings that have no useful description from the list-page snippet.
+        // Cap at 300 to prevent timeouts on large campuses (Berkeley/UCSD/UCSF can
+        // have 400+ listings; 300 detail fetches at 5 concurrent ≈ 3-4 minutes max).
+        const PRE_ENRICH_THIN = allResults.filter(l => !l.description || l.description.length < 30).length;
+        console.log(`[scraper] ${institution}: ${allResults.length} listings across ${totalPages} pages (${PRE_ENRICH_THIN} thin), fetching NCD detail descriptions...`);
         await enrichWithDetailPages(allResults, {
           description: [
-            ".ncd-data",               // UC TechTransfer portal — data block (tech-ID + Summary text, excludes page title)
-            ".middle-content-sub-block", // broader fallback (includes title noise but covers all sections)
+            ".ncd-data",               // UC TechTransfer portal — data block (tech-ID + Summary text)
+            ".middle-content-sub-block",
             ".middle-content",
             ".tech-description",
             "main p",
           ],
-        }, 9999, undefined, 9999);
+        }, 300);
         const enrichedCount = allResults.filter(l => (l.description?.length ?? 0) >= 50).length;
-        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount} of ${allResults.length} enriched`);
+        console.log(`[scraper] ${institution}: detail fetch complete: ${enrichedCount}/${allResults.length} with ≥50 chars`);
         const sample = allResults.find(l => (l.description?.length ?? 0) > 200);
         if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
         return allResults;
