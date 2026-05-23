@@ -656,7 +656,7 @@ export async function registerRoutes(
       if (!isAdminUser) {
         const PAID_PLANS = ["individual", "team5", "team10", "enterprise"];
         const membership = await storage.getOrgPlanByMembership(scoutUserId);
-        if (!membership?.planTier || !PAID_PLANS.includes(membership.planTier)) {
+        if (!membership?.plan || !PAID_PLANS.includes(membership.plan)) {
           return res.status(403).json({ error: "Scout subscription required", code: "SCOUT_PLAN_REQUIRED" });
         }
       }
