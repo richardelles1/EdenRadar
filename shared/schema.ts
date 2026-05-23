@@ -1392,3 +1392,25 @@ export const assetSignalEvents = pgTable("asset_signal_events", {
 
 export type AssetSignalEvent = typeof assetSignalEvents.$inferSelect;
 export type InsertAssetSignalEvent = typeof assetSignalEvents.$inferInsert;
+
+// ── Regulatory Designations (FDA Orphan Drug) ─────────────────────────────────
+// Synced weekly from openFDA's drugsfda endpoint (search=openfda.orphan_designation:*).
+// Each row = one designation (a single drug may have multiple indications designated).
+// The fingerprint is a stable dedup key so re-syncs are idempotent upserts.
+// Surfaced in the asset dossier via trigram similarity on the indication field.
+export const regulatoryDesignations = pgTable("regulatory_designations", {
+  id: serial("id").primaryKey(),
+  fingerprint: text("fingerprint").notNull().unique(),
+  applicationNumber: text("application_number"),
+  sponsorName: text("sponsor_name"),
+  designationType: text("designation_type").notNull().default("orphan_drug"),
+  genericName: text("generic_name"),
+  brandName: text("brand_name"),
+  indication: text("indication").notNull(),
+  sourceUrl: text("source_url"),
+  importedAt: timestamp("imported_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type RegulatoryDesignation = typeof regulatoryDesignations.$inferSelect;
+export type InsertRegulatoryDesignation = typeof regulatoryDesignations.$inferInsert;

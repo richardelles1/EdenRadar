@@ -2101,6 +2101,8 @@ export async function registerRoutes(
       }
 
       let literature: Array<{ title: string; url: string; date: string; source_type: string }> = [];
+      let clinicalTrials: Array<{ nctId: string; title: string; phase: string; status: string; url: string }> = [];
+
       if (enrichedRecord) {
         const searchTerms = [
           enrichedRecord.target !== "unknown" ? enrichedRecord.target : null,
@@ -2108,26 +2110,42 @@ export async function registerRoutes(
         ].filter(Boolean).join(" ");
 
         if (searchTerms) {
-          try {
-            const pubmedSource = dataSources["pubmed" as SourceKey];
-            const biorxivSource = dataSources["biorxiv" as SourceKey];
-            const signals: RawSignal[] = [];
-            if (pubmedSource) {
-              const ps = await pubmedSource.search(searchTerms, 3);
-              signals.push(...ps);
-            }
-            if (biorxivSource) {
-              const bs = await biorxivSource.search(searchTerms, 2);
-              signals.push(...bs);
-            }
-            literature = signals.map((s) => ({
+          // Literature (PubMed + bioRxiv) and clinical trials run in parallel
+          const [litResult, trialResult] = await Promise.allSettled([
+            (async () => {
+              const pubmedSource = dataSources["pubmed" as SourceKey];
+              const biorxivSource = dataSources["biorxiv" as SourceKey];
+              const signals: RawSignal[] = [];
+              if (pubmedSource) signals.push(...await pubmedSource.search(searchTerms, 3));
+              if (biorxivSource) signals.push(...await biorxivSource.search(searchTerms, 2));
+              return signals;
+            })(),
+            searchClinicalTrials(searchTerms, 5),
+          ]);
+
+          if (litResult.status === "fulfilled") {
+            literature = litResult.value.map((s) => ({
               title: s.title,
               url: s.url,
               date: s.date,
               source_type: s.source_type,
             }));
-          } catch (err) {
-            console.error("[intelligence] Literature fetch error:", err);
+          } else {
+            console.error("[intelligence] Literature fetch error:", litResult.reason);
+          }
+
+          if (trialResult.status === "fulfilled") {
+            clinicalTrials = trialResult.value
+              .filter((s) => s.metadata?.nct_id)
+              .map((s) => ({
+                nctId: String(s.metadata!.nct_id),
+                title: s.title,
+                phase: String(s.metadata?.phase ?? ""),
+                status: String(s.metadata?.status ?? ""),
+                url: s.url,
+              }));
+          } else {
+            console.error("[intelligence] Clinical trials fetch error:", trialResult.reason);
           }
         }
       }
@@ -2180,11 +2198,92 @@ export async function registerRoutes(
           completenessScore: a.completenessScore,
         })),
         literature,
+        clinicalTrials,
       });
       logAppEvent("intelligence_fetched", { institution: enrichedRecord?.institution ?? null });
     } catch (err: any) {
       console.error("[intelligence] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
+    }
+  });
+
+  // GET /api/assets/:fingerprint/regulatory — Orphan Drug designations matched to this asset
+  app.get("/api/assets/:fingerprint/regulatory", async (req, res) => {
+    try {
+      const { fingerprint } = req.params;
+      const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
+
+      // Resolve the asset's indication for matching
+      const where = /^\d+$/.test(fingerprintStr)
+        ? eq(ingestedAssets.id, parseInt(fingerprintStr, 10))
+        : eq(ingestedAssets.fingerprint, fingerprintStr);
+
+      const [rec] = await db
+        .select({ indication: ingestedAssets.indication, target: ingestedAssets.target })
+        .from(ingestedAssets)
+        .where(where)
+        .limit(1);
+
+      if (!rec || !rec.indication || rec.indication === "unknown") {
+        return res.json({ designations: [] });
+      }
+
+      // Trigram similarity match on the indication field.
+      // Threshold 0.25 is permissive enough to catch partial matches (e.g.
+      // "acute myeloid leukemia" ↔ "leukemia") while filtering noise.
+      const rows = await db.execute<{
+        id: number;
+        application_number: string | null;
+        sponsor_name: string | null;
+        generic_name: string | null;
+        brand_name: string | null;
+        indication: string;
+        source_url: string | null;
+        sim: number;
+      }>(sql`
+        SELECT
+          id,
+          application_number,
+          sponsor_name,
+          generic_name,
+          brand_name,
+          indication,
+          source_url,
+          similarity(indication, ${rec.indication}) AS sim
+        FROM regulatory_designations
+        WHERE similarity(indication, ${rec.indication}) > 0.25
+        ORDER BY sim DESC
+        LIMIT 5
+      `);
+
+      return res.json({
+        designations: (rows as any[]).map((r) => ({
+          id: r.id,
+          applicationNumber: r.application_number,
+          sponsorName: r.sponsor_name,
+          genericName: r.generic_name,
+          brandName: r.brand_name,
+          indication: r.indication,
+          sourceUrl: r.source_url,
+          similarity: Math.round(Number(r.sim) * 100),
+        })),
+      });
+    } catch (err: any) {
+      // Table may not exist yet during first boot — return empty gracefully
+      console.error("[regulatory] Error:", err?.message);
+      return res.json({ designations: [] });
+    }
+  });
+
+  // POST /api/admin/regulatory/sync — manual trigger for the weekly FDA sync
+  app.post("/api/admin/regulatory/sync", requireAdmin, async (_req, res) => {
+    try {
+      const { syncRegulatoryDesignations } = await import("./lib/regulatorySync");
+      const result = await syncRegulatoryDesignations();
+      return res.json(result);
+    } catch (err: any) {
+      console.error("[regulatory] Manual sync error:", err?.message);
+      return res.status(500).json({ error: err.message ?? "Sync failed" });
     }
   });
 

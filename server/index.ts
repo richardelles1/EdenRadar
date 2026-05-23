@@ -18,6 +18,7 @@ import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAc
 import { startWeeklyRecapScheduler, backfillLatestRecaps } from "./lib/weeklyRecap";
 import { sendTrialEndingEmail } from "./email";
 import { checkAndSendAlerts } from "./lib/alertMailer";
+import { syncRegulatoryDesignations, getRegulatoryDesignationCount } from "./lib/regulatorySync";
 import pg from "pg";
 
 const app = express();
@@ -1274,6 +1275,59 @@ function scheduleTrialReminderCheck() {
 // ~5 minutes of firstSeenAt. The isEvaluating guard inside checkAndSendAlerts
 // prevents concurrent runs; the lastAlertSentAt watermark prevents double-sends.
 // ── Weekly relevance-metrics aggregation (Task #694) ──────────────────────────
+// ── Regulatory Designations table + weekly sync ───────────────────────────────
+async function ensureRegulatoryDesignationsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS regulatory_designations (
+        id               SERIAL PRIMARY KEY,
+        fingerprint      TEXT NOT NULL UNIQUE,
+        application_number TEXT,
+        sponsor_name     TEXT,
+        designation_type TEXT NOT NULL DEFAULT 'orphan_drug',
+        generic_name     TEXT,
+        brand_name       TEXT,
+        indication       TEXT NOT NULL,
+        source_url       TEXT,
+        imported_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    // Trigram index for fast similarity-based matching in dossier queries
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS regulatory_designations_indication_trgm_idx
+        ON regulatory_designations USING gin (indication gin_trgm_ops)
+    `);
+    log("[startup] regulatory_designations table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] regulatory_designations table check: ${err?.message}`, "startup");
+  }
+}
+
+function scheduleRegulatorySync() {
+  const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+  // Delay first check by 90 s to let the DB pool settle on cold boot
+  setTimeout(async () => {
+    try {
+      const count = await getRegulatoryDesignationCount();
+      if (count === 0) {
+        log("[regulatorySync] Table empty — running initial orphan drug sync", "startup");
+        syncRegulatoryDesignations().catch((err: any) =>
+          log(`[regulatorySync] Initial sync failed: ${err?.message}`, "startup"));
+      } else {
+        log(`[regulatorySync] Table has ${count} designations — weekly sync scheduled`, "startup");
+      }
+    } catch (err: any) {
+      log(`[regulatorySync] Pre-check failed: ${err?.message}`, "startup");
+    }
+    // Weekly re-sync regardless of initial state
+    setInterval(() => {
+      syncRegulatoryDesignations().catch((err: any) =>
+        log(`[regulatorySync] Weekly sync failed: ${err?.message}`, "startup"));
+    }, WEEK_MS);
+  }, 90_000);
+}
+
 function scheduleRelevanceMetricsAggregation() {
   const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
   setTimeout(async () => {
@@ -1848,6 +1902,8 @@ async function migrateAssetStatusValues() {
       backfillSavedAssetSourceNames().catch(() => {});
       // ── Backfill individual org names from profile company name ─────────
       backfillIndividualOrgNames().catch(() => {});
+      // ── Ensure regulatory_designations table exists + schedule weekly sync ─
+      ensureRegulatoryDesignationsTable().then(() => scheduleRegulatorySync()).catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────
       // Runs 5 seconds after startup. Cleans old rows in small LIMIT batches,
       // then calls ensureStagingIndexes once the table is smaller.
