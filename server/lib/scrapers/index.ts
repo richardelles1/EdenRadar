@@ -585,6 +585,8 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "Argonne National Laboratory",
   "Pacific Northwest National Laboratory",
   "Idaho National Laboratory",
+  // REST API scrapers added 2026-05
+  "Purdue University",             // licensing.prf.org REST API (/client/products/search)
 ]);
 
 const TIER2_INSTITUTIONS = new Set<string>([
@@ -630,6 +632,9 @@ const TIER2_INSTITUTIONS = new Set<string>([
   "North Carolina A&T", "Morgan State University", "Howard University",
   "UNC Chapel Hill", "PR Science Trust", "UMass Amherst", "University of South Alabama",
   "UMBC", "Boston College",
+  // Fast single-pass HTTP scrapers added 2026-05 (no Playwright)
+  "EPFL",                          // single-page WP SSR card deck
+  "Temple University",             // single-page Drupal 7 + DataTables
 ]);
 
 export function getScraperTier(institution: string): 1 | 2 | 3 | 4 {
