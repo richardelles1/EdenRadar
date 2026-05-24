@@ -31,6 +31,7 @@ import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError, streamDossierNarrative } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
+import { requireApiKey } from "./lib/apiKeyAuth";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "./lib/ingestion";
 import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, startStalenessFirstScan, startDailySweep, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
@@ -16041,6 +16042,20 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     } catch (err: any) {
       res.status(500).json({ error: err?.message ?? "Purge failed" });
     }
+  });
+
+  // ── Public V1 API ─────────────────────────────────────────────────────────────
+  // All /v1/* routes are authenticated via requireApiKey(scope).
+  // Step 1: health check (no scope required — confirms key is valid and active).
+
+  app.get("/v1/health", requireApiKey(), (req, res) => {
+    const key = req.apiKey!;
+    res.json({
+      status: "ok",
+      key: key.keyPrefix + "…",
+      tier: key.tier,
+      scopes: key.scopes,
+    });
   });
 
   // ── API Management (admin) ────────────────────────────────────────────────────
