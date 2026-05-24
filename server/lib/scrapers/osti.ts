@@ -298,8 +298,34 @@ export const ostiScraper: InstitutionScraper = {
       await fetchQuery(query, seen, results, signal);
     }
 
-    console.log(`[scraper] ${ADMIN_INST}: ${results.length} total listings across ${BIOTECH_QUERIES.length} queries`);
-    return results;
+    // Secondary dedup by patent_number — OSTI stores the same patent under
+    // multiple osti_ids (pre-publication, granted, continuation filings).
+    // Keep the record with the longer description (more complete content).
+    const seenPatents = new Map<string, number>(); // patent_number → index in results
+    const deduped: ScrapedListing[] = [];
+    for (const listing of results) {
+      const pn = listing.technologyId;
+      if (!pn || !pn.match(/^[A-Z]{2}\d/)) {
+        // No structured patent number — keep as-is
+        deduped.push(listing);
+        continue;
+      }
+      const existingIdx = seenPatents.get(pn);
+      if (existingIdx === undefined) {
+        seenPatents.set(pn, deduped.length);
+        deduped.push(listing);
+      } else {
+        // Keep whichever has the longer description
+        const existing = deduped[existingIdx];
+        if (existing && listing.description.length > existing.description.length) {
+          deduped[existingIdx] = listing;
+        }
+      }
+    }
+
+    const dupeCount = results.length - deduped.length;
+    console.log(`[scraper] ${ADMIN_INST}: ${deduped.length} listings (${dupeCount} patent-number dupes removed) across ${BIOTECH_QUERIES.length} queries`);
+    return deduped;
   },
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {

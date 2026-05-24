@@ -89,6 +89,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
     scoreMap.set(row.id, row.completenessScore ?? 0);
     if (row.duplicateOfId != null) {
       suppressedPairs.add(`${row.id}:${row.duplicateOfId}`);
+      suppressedPairs.add(`${row.duplicateOfId}:${row.id}`);
     }
   }
 
