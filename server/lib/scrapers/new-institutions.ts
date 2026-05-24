@@ -1118,7 +1118,10 @@ export const uhoustonScraper: InstitutionScraper = {
         .map((item) => ({
           title: cleanText(item.title),
           description: cleanText(item.description ?? ""),
-          url: `${BASE_URL}?id=${encodeURIComponent(item.case_id)}`,
+          // Hash fragment survives normalizeSourceUrl (which strips query params).
+          // Using ?id= would collapse all 296 items to the same normalized URL,
+          // causing existingUrls to block every future item from being isNew=true.
+          url: `${BASE_URL}#${encodeURIComponent(item.case_id)}`,
           institution: "University of Houston",
           technologyId: item.case_id,
         }));
@@ -7096,112 +7099,44 @@ export const astarScraper = createStubScraper(
 );
 
 // CSIRO (Commonwealth Scientific and Industrial Research Organisation) — Australia
-// /en/work-with-us/ip-and-licensing (previous URL) now returns HTTP 404.
-// Verified 2026-04-20: /en/work-with-us/ip-commercialisation/Marketplace is the live
-// IP Marketplace (200 OK, 109KB). Individual technology pages (Kebari, etc.) are
-// JS-rendered inside the Marketplace SPA. DOM fallback targets /ip-commercialisation/Marketplace/.
+// Previous Playwright XHR-intercept approach only captured the 12 "featured" items
+// surfaced in the initial SPA state. Full catalog = 53 items (verified 2026-05-24).
+// Root cause: the Sitecore Filter API (filter.min.js) returns HTML, not JSON, so the
+// JSON-only XHR intercept missed it. The API accepts a simple GET with start/count params.
+// API: GET /api/sitecore/Filter/GetItems?start=0&count=200&id=<page-guid>
+// Page GUID sourced from data-item attribute on #data-filter div in the Marketplace HTML.
 export const csiroScraper: InstitutionScraper = {
   institution: "CSIRO",
-  scraperType: "playwright",
-  async scrape(): Promise<ScrapedListing[]> {
+  scraperType: "http",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     const INST = "CSIRO";
     const BASE = "https://www.csiro.au";
-    // Commercialisation Marketplace — individual tech entries rendered by SPA
-    const LISTING_URL = `${BASE}/en/work-with-us/ip-commercialisation/Marketplace`;
+    const PAGE_GUID = "%7BA10577E0-3C97-4252-931A-0EFFE1C2CC86%7D";
+    const API_URL = `${BASE}/api/sitecore/Filter/GetItems?start=0&count=200&id=${PAGE_GUID}`;
 
-    let browser: import("playwright").Browser | null = null;
-    try {
-      const { chromium } = await import("playwright");
-      browser = await chromium.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      });
-      const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-      });
+    const $ = await fetchHtml(API_URL, 20_000, signal, 2, true);
+    if (!$) return [];
 
-      // Intercept ALL JSON responses — CSIRO's SPA may use Sitecore fusion-search
-      // or a custom filter API fired by style.csiro.au/CSIRO2020/*/js/filter.min.js.
-      // We widen the URL filter to catch any JSON response that contains title/name arrays.
-      const apiItems: { title: string; description: string; url: string }[] = [];
-      page.on("response", async (resp) => {
-        try {
-          const ct = resp.headers()["content-type"] ?? "";
-          if (!ct.includes("json")) return;
-          const data = await resp.json().catch(() => null);
-          if (!data || typeof data !== "object") return;
-          // Try to find an array of technology records anywhere in the response
-          const candidates: unknown[] = Array.isArray(data) ? data
-            : (data.data ?? data.items ?? data.results ?? data.technologies
-              ?? data.Documents ?? data.documents ?? data.hits ?? []);
-          if (!Array.isArray(candidates) || candidates.length === 0) return;
-          for (const item of candidates) {
-            const i = item as Record<string, unknown>;
-            const meta = (i.MetaData ?? {}) as Record<string, unknown>;
-            const title = String(
-              i.title ?? i.Title ?? i.name ?? i.Name ?? meta.Title ?? ""
-            ).trim();
-            if (!title || title.length < 5) continue;
-            const slug = String(i.slug ?? i.id ?? i.Id ?? i.url ?? i.Url ?? "").trim();
-            const techUrl = slug.startsWith("http") ? slug
-              : slug ? `${BASE}/en/work-with-us/ip-commercialisation/Marketplace/${slug}` : LISTING_URL;
-            const desc = String(
-              i.description ?? i.Description ?? i.summary ?? i.Summary ?? ""
-            ).slice(0, 500);
-            apiItems.push({ title, description: desc, url: techUrl });
-          }
-        } catch { /* ignore */ }
-      });
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
 
-      await page.goto(LISTING_URL, { timeout: 60_000, waitUntil: "networkidle" });
-      // Allow SPA JavaScript time to fire its catalog API requests
-      await page.waitForTimeout(8_000);
-      // Scroll to trigger any lazy-load or pagination-trigger
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(3_000);
-      // Scroll back to top and wait once more (some SPAs reload on scroll-back)
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await page.waitForTimeout(2_000);
+    $("a.nested-link--main.teaser__link").each((_i, el) => {
+      const href = $(el).attr("href") ?? "";
+      const cleanHref = href.split("?")[0];
+      if (!cleanHref.includes("/ip-commercialisation/Marketplace/")) return;
+      const url = cleanHref.startsWith("http") ? cleanHref : `${BASE}${cleanHref}`;
+      if (seen.has(url)) return;
+      seen.add(url);
 
-      if (apiItems.length > 0) {
-        const seen = new Set<string>();
-        const results = apiItems.filter(({ title }) => {
-          if (seen.has(title)) return false;
-          seen.add(title);
-          return true;
-        }).map(({ title, description, url }) => ({ title, description, url, institution: INST }));
-        console.log(`[scraper] ${INST}: ${results.length} listings (Playwright XHR intercept)`);
-        return results;
-      }
+      const title = cleanText($(el).find(".has-arrow__text").text());
+      const description = cleanText($(el).find(".teaser__text").text());
+      if (!title || title.length < 3) return;
 
-      // Fallback: extract from rendered DOM
-      const seen = new Set<string>();
-      const results: ScrapedListing[] = [];
-      const links = await page.$$eval("a[href]", (els) =>
-        els.map((el) => ({ href: (el as HTMLAnchorElement).href, text: el.textContent?.trim() ?? "" }))
-      );
-      for (const { href, text } of links) {
-        if (!href || seen.has(href)) continue;
-        // CSIRO individual tech pages live under /ip-commercialisation/Marketplace/
-        if (!href.includes("/ip-commercialisation/Marketplace/")) continue;
-        if (href === LISTING_URL || href === LISTING_URL + "/") continue;
-        const title = text.replace(/\s+/g, " ").trim();
-        if (!title || title.length < 5) continue;
-        seen.add(href);
-        results.push({ title, description: "", url: href, institution: INST });
-      }
+      results.push({ title, description, url, institution: INST });
+    });
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright DOM)`);
-      return results;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
-      return [];
-    } finally {
-      await browser?.close();
-    }
+    console.log(`[scraper] ${INST}: ${results.length} listings (Sitecore GetItems API)`);
+    return results;
   },
 };
 

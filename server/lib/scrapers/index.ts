@@ -1084,7 +1084,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   burnetInstituteScraper,         // Burnet Institute — stub (single-technology page only)
   // International institutions
   astarScraper,                   // A*STAR — stub (ERR_NAME_NOT_RESOLVED via Playwright; astar.edu.sg DNS geo-restricted to Singapore)
-  csiroScraper,                   // CSIRO — Playwright (JS-rendered IP catalog; XHR intercept + DOM fallback)
+  csiroScraper,                   // CSIRO — HTTP (Sitecore GetItems API; 53 listings, replaces Playwright XHR which only caught 12 featured items)
   nrcCanadaScraper,               // National Research Council Canada — stub (generic gov navigation)
   fraunhoferScraper,              // Fraunhofer Society — stub (institute group listing, no unified IP catalog)
   ceaScraper,                     // CEA (France) — stub (713 bytes, geo-blocked or JS-only)
