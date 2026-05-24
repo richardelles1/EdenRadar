@@ -940,7 +940,7 @@ export async function registerRoutes(
       const tieBreakById = new Map<number, { completeness: number; recencyMs: number }>();
       for (const r of results) {
         const completeness = typeof r.completenessScore === "number" ? r.completenessScore : 0;
-        const recencyMs = r.stageChangedAt instanceof Date ? r.stageChangedAt.getTime() : 0;
+        const recencyMs = r.lastSeenAt ? new Date(r.lastSeenAt).getTime() : (r.stageChangedAt instanceof Date ? r.stageChangedAt.getTime() : 0);
         tieBreakById.set(r.id, { completeness, recencyMs });
       }
 
@@ -12002,6 +12002,17 @@ If multiple assets appear, return each as a separate array item.`;
     } catch (err: any) {
       console.error("[duplicate-candidates/dismiss] Error:", err);
       res.status(500).json({ error: err.message ?? "Failed to dismiss duplicate" });
+    }
+  });
+
+  app.post("/api/admin/duplicate-candidates/dismiss-all", async (req, res) => {
+    try {
+      const institution = (req.body as any)?.institution as string | undefined;
+      const count = await storage.dismissAllDuplicateCandidates(institution);
+      res.json({ ok: true, dismissed: count });
+    } catch (err: any) {
+      console.error("[duplicate-candidates/dismiss-all] Error:", err);
+      res.status(500).json({ error: err.message ?? "Failed to bulk-dismiss duplicates" });
     }
   });
 

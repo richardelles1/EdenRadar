@@ -379,6 +379,7 @@ export interface IStorage {
     canonicalName: string | null; dedupeSimilarity: number | null;
   }>>;
   dismissDuplicateCandidate(id: number): Promise<void>;
+  dismissAllDuplicateCandidates(institution?: string): Promise<number>;
   runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{ embedded: number; flagged: number; pairs: number }>;
 
   getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }>;
@@ -3149,6 +3150,18 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ingestedAssets.id, id));
   }
 
+  async dismissAllDuplicateCandidates(institution?: string): Promise<number> {
+    const conditions = institution
+      ? and(eq(ingestedAssets.duplicateFlag, true), eq(ingestedAssets.institution, institution))
+      : eq(ingestedAssets.duplicateFlag, true);
+    const rows = await db
+      .update(ingestedAssets)
+      .set({ duplicateFlag: false })
+      .where(conditions)
+      .returning({ id: ingestedAssets.id });
+    return rows.length;
+  }
+
   async runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{ embedded: number; flagged: number; pairs: number }> {
     const { runNearDuplicateDetection: detect } = await import("./lib/pipeline/nearDuplicateDetection");
     const result = await detect(onProgress);
@@ -3206,10 +3219,10 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories, technology_id,
+        summary, categories, technology_id, last_seen_at, biology,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
-      WHERE embedding IS NOT NULL AND relevant = true
+      WHERE embedding IS NOT NULL AND relevant = true AND canonical_asset_id IS NULL
       ORDER BY embedding <=> ${vectorStr}::vector
       LIMIT ${limit}
     `);
@@ -3235,6 +3248,8 @@ export class DatabaseStorage implements IStorage {
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
+      lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
     }));
   }
 
@@ -3268,7 +3283,7 @@ export class DatabaseStorage implements IStorage {
   ): Promise<RetrievedAsset[]> {
     const vectorStr = `[${queryEmbedding.join(",")}]`;
     const filterConditions: ReturnType<typeof sql>[] = [
-      sql`embedding IS NOT NULL AND relevant = true`,
+      sql`embedding IS NOT NULL AND relevant = true AND canonical_asset_id IS NULL`,
     ];
     if (geoRegex) filterConditions.push(sql`institution ~* ${geoRegex}`);
     if (modality) filterConditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
@@ -3283,7 +3298,7 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories, technology_id,
+        summary, categories, technology_id, last_seen_at, biology,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -3312,6 +3327,8 @@ export class DatabaseStorage implements IStorage {
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
+      lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
     }));
   }
 
@@ -3361,6 +3378,13 @@ export class DatabaseStorage implements IStorage {
     if (institutions && institutions.length) filterConditions.push(sql`(${orEqLower(sql`LOWER(institution)`, institutions)})`);
     if (since) filterConditions.push(sql`first_seen_at >= ${since}`);
     if (before) filterConditions.push(sql`first_seen_at < ${before}`);
+    // Mirror the keyword path: suppress non-canonical cross-institution duplicates
+    // in general search so each technology appears only once. Skip when filtering
+    // by institution so institution-specific browsing returns all assets from
+    // that school (canonical or not).
+    if (!institution && !(institutions && institutions.length)) {
+      filterConditions.push(sql`canonical_asset_id IS NULL`);
+    }
 
     const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
 
@@ -3370,7 +3394,11 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
-        last_seen_at, biology,
+        data_sparse, category_confidence, asset_class, last_seen_at, biology,
+        cited_by_count, first_seen_at,
+        (SELECT COALESCE(array_agg(DISTINCT alt.institution ORDER BY alt.institution), ARRAY[]::text[])
+         FROM ingested_assets alt WHERE alt.canonical_asset_id = ingested_assets.id AND alt.relevant = true
+        ) AS alt_institutions,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -3403,6 +3431,11 @@ export class DatabaseStorage implements IStorage {
       similarity: parseFloat(String(r.similarity ?? 0)),
       lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
       biology: typeof r.biology === "string" && r.biology ? r.biology : null,
+      dataSparse: r.data_sparse === true,
+      categoryConfidence: r.category_confidence != null ? parseFloat(String(r.category_confidence)) : null,
+      assetClass: typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null,
+      citedByCount: r.cited_by_count != null ? Number(r.cited_by_count) : null,
+      altInstitutions: Array.isArray(r.alt_institutions) ? (r.alt_institutions as string[]).filter(Boolean) : [],
     }));
   }
 
@@ -3692,7 +3725,7 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories, technology_id,
+        summary, categories, technology_id, last_seen_at, biology,
         0.85 AS similarity
       FROM ingested_assets
       WHERE relevant = true AND source_type IN ('tech_transfer', 'researcher') AND LOWER(institution) LIKE ${pattern}
@@ -3720,6 +3753,8 @@ export class DatabaseStorage implements IStorage {
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       similarity: 0.85,
+      lastSeenAt: r.last_seen_at ? String(r.last_seen_at) : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
     }));
   }
 

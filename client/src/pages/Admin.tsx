@@ -6702,7 +6702,26 @@ function PotentialDuplicates({ pw }: { pw: string }) {
     onError: () => toast({ title: "Failed to dismiss", variant: "destructive" }),
   });
 
+  const dismissAllMutation = useMutation({
+    mutationFn: (institution?: string) =>
+      fetch(`/api/admin/duplicate-candidates/dismiss-all`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify(institution ? { institution } : {}),
+      }).then((r) => r.json()),
+    onSuccess: (result, institution) => {
+      toast({ title: `Dismissed ${result.dismissed} duplicate${result.dismissed === 1 ? "" : "s"}${institution ? ` from ${institution}` : ""}` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/duplicate-candidates", pw] });
+    },
+    onError: () => toast({ title: "Bulk dismiss failed", variant: "destructive" }),
+  });
+
   const candidates = data?.candidates ?? [];
+  const institutionCounts = candidates.reduce<Record<string, number>>((acc, c) => {
+    const inst = c.institution ?? "Unknown";
+    acc[inst] = (acc[inst] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
     <div className="bg-card border border-border rounded-xl p-6 mt-6">
@@ -6738,8 +6757,39 @@ function PotentialDuplicates({ pw }: { pw: string }) {
         </div>
       ) : (
         <div className="space-y-2 max-h-96 overflow-y-auto">
-          <div className="text-xs text-muted-foreground mb-3">
-            {candidates.length} flagged asset(s). Dismiss to keep both records.
+          <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">{candidates.length} flagged asset(s). Dismiss to keep both records.</span>
+            <div className="flex items-center gap-2 flex-wrap">
+              {Object.entries(institutionCounts).sort((a, b) => b[1] - a[1]).map(([inst, count]) => (
+                <button
+                  key={inst}
+                  onClick={() => {
+                    if (window.confirm(`Dismiss all ${count} duplicate(s) from "${inst}"?`)) {
+                      dismissAllMutation.mutate(inst);
+                    }
+                  }}
+                  disabled={dismissAllMutation.isPending}
+                  className="text-xs px-2 py-1 rounded-md border border-border bg-muted/40 hover:bg-muted/70 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  data-testid={`button-dismiss-all-${inst.replace(/\s+/g, "-").toLowerCase()}`}
+                >
+                  Dismiss all {inst} ({count})
+                </button>
+              ))}
+              {candidates.length > 1 && (
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Dismiss all ${candidates.length} duplicate candidates?`)) {
+                      dismissAllMutation.mutate(undefined);
+                    }
+                  }}
+                  disabled={dismissAllMutation.isPending}
+                  className="text-xs px-2 py-1 rounded-md border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors disabled:opacity-50"
+                  data-testid="button-dismiss-all"
+                >
+                  Dismiss all ({candidates.length})
+                </button>
+              )}
+            </div>
           </div>
           {candidates.map((c) => (
             <div
