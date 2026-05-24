@@ -34,8 +34,11 @@ import {
   Clock,
   Receipt,
   XCircle,
+  Copy,
+  Terminal,
+  RefreshCw,
 } from "lucide-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import type { StripeBillingEvent } from "@shared/schema";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -283,6 +286,64 @@ export default function IndustrySettings() {
   const [lastAlertSentAt, setLastAlertSentAt] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
   const [upgradeLoading, setUpgradeLoading] = useState(false);
+
+  // API key state
+  const [apiKeyNewRaw, setApiKeyNewRaw] = useState<string | null>(null);
+  const [apiKeyCopied, setApiKeyCopied] = useState(false);
+
+  const { data: apiKeyData, refetch: refetchApiKey } = useQuery<{
+    key: { id: number; prefix: string; tier: string; status: string; scopes: string[]; dailyLimit: number; callsToday: number; createdAt: string; lastUsedAt: string | null } | null;
+  }>({
+    queryKey: ["/api/user/api-key"],
+    queryFn: async () => {
+      const res = await fetch("/api/user/api-key", {
+        headers: { Authorization: `Bearer ${session?.access_token}`, "x-user-id": user?.id ?? "" },
+      });
+      return res.json();
+    },
+    enabled: !!session?.access_token && !!user?.id,
+  });
+
+  const generateKey = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/user/api-key", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session?.access_token}`, "x-user-id": user?.id ?? "", "x-user-email": user?.email ?? "" },
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      return res.json() as Promise<{ raw: string; prefix: string; tier: string; scopes: string[]; dailyLimit: number }>;
+    },
+    onSuccess: (data) => {
+      setApiKeyNewRaw(data.raw);
+      setApiKeyCopied(false);
+      refetchApiKey();
+    },
+    onError: () => toast({ title: "Could not generate key", variant: "destructive" }),
+  });
+
+  const revokeKey = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/user/api-key", {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session?.access_token}`, "x-user-id": user?.id ?? "" },
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchApiKey();
+      toast({ title: "API key revoked" });
+    },
+    onError: () => toast({ title: "Could not revoke key", variant: "destructive" }),
+  });
+
+  function handleCopyKey() {
+    if (!apiKeyNewRaw) return;
+    navigator.clipboard.writeText(apiKeyNewRaw).then(() => {
+      setApiKeyCopied(true);
+      setTimeout(() => setApiKeyCopied(false), 2000);
+    });
+  }
 
   // Team invite modal state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -584,6 +645,109 @@ export default function IndustrySettings() {
                 </div>
               </div>
             </>
+          )}
+        </div>
+      </div>
+
+      {/* API Access */}
+      <div className="rounded-xl border border-card-border bg-card p-5">
+        <SectionHeader icon={Terminal} title="API Access" description="Programmatic access to EdenRadar's asset corpus" />
+        <div className="space-y-4">
+          {apiKeyData?.key ? (
+            <>
+              <div className="rounded-lg border border-border bg-muted/30 p-3.5 space-y-3">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-foreground">eden_{apiKeyData.key.prefix}_••••••••••••••••</span>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 capitalize border-emerald-500/40 text-emerald-600 dark:text-emerald-400">
+                      {apiKeyData.key.tier}
+                    </Badge>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[10px] px-1.5 py-0 h-4 capitalize", apiKeyData.key.status === "active" ? "border-emerald-500/40 text-emerald-600 dark:text-emerald-400" : "border-red-500/40 text-red-600")}
+                  >
+                    {apiKeyData.key.status}
+                  </Badge>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <span>{apiKeyData.key.callsToday.toLocaleString()} / {apiKeyData.key.dailyLimit.toLocaleString()} calls today</span>
+                  {apiKeyData.key.lastUsedAt && (
+                    <span>Last used {formatRelativeTime(apiKeyData.key.lastUsedAt)}</span>
+                  )}
+                </div>
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className={cn("h-full rounded-full transition-all", apiKeyData.key.callsToday / apiKeyData.key.dailyLimit >= 0.9 ? "bg-red-500" : "bg-emerald-500")}
+                    style={{ width: `${Math.min(100, Math.round(apiKeyData.key.callsToday / apiKeyData.key.dailyLimit * 100))}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Show the new key once immediately after generation */}
+              {apiKeyNewRaw && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3.5 space-y-2">
+                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                    <TriangleAlert className="w-3.5 h-3.5" />
+                    Copy your key — it won't be shown again
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 font-mono text-xs bg-background border border-border rounded px-2.5 py-1.5 text-foreground break-all select-all">
+                      {apiKeyNewRaw}
+                    </code>
+                    <Button size="sm" variant="outline" className="shrink-0 gap-1.5 h-7 text-xs" onClick={handleCopyKey}>
+                      {apiKeyCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      {apiKeyCopied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Use this key in the <code className="font-mono">Authorization: Bearer &lt;key&gt;</code> header or as <code className="font-mono">X-Api-Key</code>.
+                  </p>
+                </div>
+              )}
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs"
+                  onClick={() => generateKey.mutate()}
+                  disabled={generateKey.isPending}
+                >
+                  {generateKey.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Regenerate key
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="gap-1.5 text-xs text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                  onClick={() => revokeKey.mutate()}
+                  disabled={revokeKey.isPending}
+                >
+                  {revokeKey.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
+                  Revoke
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="text-center py-6 space-y-3">
+              <div className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center mx-auto">
+                <Terminal className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">No API key</p>
+                <p className="text-xs text-muted-foreground mt-1">Generate a key to access the EdenRadar API from your own tools and workflows.</p>
+              </div>
+              <Button
+                size="sm"
+                className="gap-1.5"
+                onClick={() => generateKey.mutate()}
+                disabled={generateKey.isPending}
+              >
+                {generateKey.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                Generate API key
+              </Button>
+            </div>
           )}
         </div>
       </div>
