@@ -149,8 +149,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const isLimitedData = asset.dataSparse === true ||
     (asset.completeness_score !== null && asset.completeness_score !== undefined && asset.completeness_score <= 40);
 
-  const classUnknown =
-    !asset.asset_class || asset.asset_class === "other" || asset.asset_class === "unknown";
+  const classUnknown = false; // suppressed — fires on ~80% of cards, adds noise not signal
 
   const rawScore = isUnscored ? null : Math.round(asset.score);
 
@@ -166,8 +165,8 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
   const stageLabel = normalizePillValue(asset.development_stage);
   const modalityLabel = normalizePillValue(asset.modality);
-  const biologyLabel = asset.biology && asset.biology !== "unknown" ? asset.biology : null;
-  const hasPills = stageLabel || modalityLabel || biologyLabel || classUnknown;
+  const indicationLabel = asset.indication && asset.indication !== "unknown" ? asset.indication : null;
+  const hasPills = stageLabel || modalityLabel || classUnknown;
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
@@ -363,8 +362,17 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
           </h3>
 
+          {/* Indication — what disease this targets; content-level info, sits below title as text not a pill */}
+          {indicationLabel && (
+            <p
+              className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mt-1 line-clamp-1"
+              data-testid={`text-indication-${asset.id}`}
+            >
+              {indicationLabel}
+            </p>
+          )}
 
-          {/* Metadata pill row — stage + modality */}
+          {/* Metadata pill row — stage + modality + status signals */}
           {hasPills && (
             <div className="flex flex-wrap gap-1 mt-2">
               {stageLabel && (
@@ -393,14 +401,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   data-testid={`pill-modality-${asset.id}`}
                 >
                   {modalityLabel}
-                </span>
-              )}
-              {biologyLabel && (
-                <span
-                  className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-teal-50 dark:bg-teal-900/30 border border-teal-200/70 dark:border-teal-700/40 text-teal-700 dark:text-teal-400"
-                  data-testid={`pill-biology-${asset.id}`}
-                >
-                  {biologyLabel}
                 </span>
               )}
               {classUnknown && (

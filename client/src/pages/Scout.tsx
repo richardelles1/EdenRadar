@@ -1154,10 +1154,16 @@ export default function Scout() {
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} onClear={handleClearProfile} />
           </div>
 
-          {/* TTO loading indicator */}
+          {/* TTO loading skeleton — mirrors card layout so layout doesn't jump when results arrive */}
           {searchMutation.isPending && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-6 h-6 animate-spin text-primary opacity-60" />
+            <div className="px-4 sm:px-6">
+              <SearchResults
+                assets={[]}
+                isLoading={true}
+                hasSearched={true}
+                savedAssetIds={savedAssetIds}
+                onUnsave={handleUnsave}
+              />
             </div>
           )}
 
