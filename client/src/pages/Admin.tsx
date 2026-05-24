@@ -4120,6 +4120,31 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
         </div>
       </div>
 
+      {/* Pipeline Funnel — always visible */}
+      <div className="px-5 py-2.5 border-b border-border bg-background/60 flex items-center gap-1.5 flex-wrap" data-testid="pipeline-funnel">
+        {([
+          { label: "Collected", value: pipelineStats?.total, color: "text-foreground" },
+          { label: "Relevant", value: pipelineStats?.relevantAssets, color: "text-emerald-600 dark:text-emerald-400" },
+          { label: "Deep Enriched", value: edenStats?.coverage?.deepEnriched, color: "text-violet-600 dark:text-violet-400" },
+          { label: "Embedded", value: edenStats?.embeddingCoverage?.totalEmbedded, color: "text-purple-600 dark:text-purple-400" },
+        ] as const).map((stage, i, arr) => (
+          <React.Fragment key={stage.label}>
+            <div className="flex flex-col items-center shrink-0 min-w-[64px] text-center">
+              <span className={`text-sm font-bold tabular-nums ${stage.color}`}>
+                {stage.value != null ? stage.value.toLocaleString() : "—"}
+              </span>
+              <span className="text-[10px] text-muted-foreground leading-tight">{stage.label}</span>
+            </div>
+            {i < arr.length - 1 && <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />}
+          </React.Fragment>
+        ))}
+        {(pipelineStats?.unknownCount ?? 0) > 0 && (
+          <span className="ml-auto text-xs text-amber-600 dark:text-amber-400 shrink-0">
+            <span className="font-bold tabular-nums">{pipelineStats!.unknownCount.toLocaleString()}</span> unknown fields
+          </span>
+        )}
+      </div>
+
       {open && (
         <div className="px-5 py-4 space-y-5 border-t border-border">
 
@@ -4247,10 +4272,102 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             );
           })()}
 
-          {/* Step 1: Rule-Based Fill */}
+          {/* Step 1: Classify Unclassified Assets */}
+          <div className="border border-sky-200 dark:border-sky-900 rounded-xl bg-sky-50/50 dark:bg-sky-950/20 overflow-hidden" data-testid="card-classify-unclassified">
+            <div className="px-4 py-2.5 border-b border-sky-200 dark:border-sky-900 bg-sky-100/60 dark:bg-sky-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-sky-500 text-white text-xs font-bold shrink-0">1</span>
+              <span className="text-sm font-semibold text-sky-800 dark:text-sky-300">Classify Unclassified Assets</span>
+              <span className="ml-auto text-xs font-medium text-sky-700 dark:text-sky-400 flex items-center gap-1.5">
+                <span className="bg-sky-100 dark:bg-sky-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o + gpt-4o-mini</span>
+                {classifyCount && <span>~${classifyCount.estCost.toFixed(2)} est.</span>}
+              </span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Sets <span className="font-medium text-foreground">asset_class</span> on all {(classifyCount?.total ?? 28862).toLocaleString()} relevant assets that have never been deep-enriched.
+                Thick text (≥120 chars) uses <span className="font-mono text-[10px] bg-muted px-1 rounded">gpt-4o</span>; thin text (40–119 chars) uses <span className="font-mono text-[10px] bg-muted px-1 rounded">gpt-4o-mini</span> automatically.
+                Assets under 40 chars are skipped until re-scraped with more content.
+              </p>
+              {classifyCount && (
+                <div className="grid grid-cols-5 gap-2">
+                  {[
+                    { label: "Total", val: classifyCount.total, color: "sky" },
+                    { label: "GPT-4o (thick)", val: classifyCount.thick, color: "violet" },
+                    { label: "Mini (thin)", val: classifyCount.thin, color: "amber" },
+                    { label: "Too thin (skip)", val: classifyCount.tooThin, color: "muted" },
+                    { label: "Exhausted (≥3×)", val: classifyCount.exhausted ?? 0, color: "red" },
+                  ].map(f => (
+                    <div key={f.label} className="rounded-lg border border-sky-200 dark:border-sky-800 bg-background p-2 text-center">
+                      <div className={`text-base font-bold tabular-nums ${f.color === "red" && (classifyCount.exhausted ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-sky-700 dark:text-sky-400"}`}>{f.val.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{f.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {classifyStatus?.running && (
+                <div className="space-y-2 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40 p-3">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600" />
+                    <span className="text-xs font-medium text-sky-700 dark:text-sky-400">Classifying…</span>
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">{classifyStatus.processed.toLocaleString()}/{classifyStatus.total.toLocaleString()}</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopClassify.mutate()} disabled={stopClassify.isPending}
+                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-classify-stop">
+                      Stop
+                    </Button>
+                  </div>
+                  <div className="w-full bg-sky-100 dark:bg-sky-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
+                      style={{ width: `${classifyStatus.total > 0 ? Math.round((classifyStatus.processed / classifyStatus.total) * 100) : 0}%` }} />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                    <span>{classifyStatus.succeeded.toLocaleString()} classified · {classifyStatus.skipped.toLocaleString()} thin-skipped · {classifyStatus.failed.toLocaleString()} failed</span>
+                    <span className="font-medium text-sky-700 dark:text-sky-400">${classifyStatus.liveCostUsd.toFixed(4)} so far</span>
+                  </div>
+                </div>
+              )}
+              {!classifyStatus?.running && classifyStatus?.lastSummary && (
+                <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
+                      Last run: {classifyStatus.lastSummary.succeeded.toLocaleString()} classified, {classifyStatus.lastSummary.skipped} skipped, ${classifyStatus.lastSummary.costUsd.toFixed(2)} spent
+                    </span>
+                    <span className="text-[11px] text-muted-foreground ml-auto">{Math.round(classifyStatus.lastSummary.durationMs / 1000)}s</span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                {!classifyConfirm ? (
+                  <Button size="sm"
+                    onClick={() => setClassifyConfirm(true)}
+                    disabled={classifyStatus?.running || (classifyCount?.total ?? 0) === 0 || anyRunning}
+                    className="gap-1.5 bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-classify-run">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    Classify all unclassified ({(classifyCount?.total ?? 0).toLocaleString()}) · ~${(classifyCount?.estCost ?? 0).toFixed(2)}
+                  </Button>
+                ) : (
+                  <div className="flex items-center gap-2 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 px-3 py-2">
+                    <span className="text-xs text-sky-800 dark:text-sky-300 font-medium">
+                      Classify {(classifyCount?.total ?? 0).toLocaleString()} assets for ~${(classifyCount?.estCost ?? 0).toFixed(2)}?
+                    </span>
+                    <Button size="sm" onClick={() => runClassify.mutate()} disabled={runClassify.isPending}
+                      className="h-6 px-3 text-xs bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-classify-confirm">
+                      {runClassify.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setClassifyConfirm(false)}
+                      className="h-6 px-2 text-xs text-muted-foreground" data-testid="button-classify-cancel">
+                      Cancel
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2a: Rule-Based Fill */}
           <div className="border border-emerald-200 dark:border-emerald-900 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 overflow-hidden">
             <div className="px-4 py-2.5 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-100/60 dark:bg-emerald-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-xs font-bold shrink-0">1</span>
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-xs font-bold shrink-0">2a</span>
               <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Rule-Based Fill</span>
               <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
             </div>
@@ -4310,41 +4427,102 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
-          {/* Step 1b: Clear Data-Sparse Flags */}
-          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">1b</span>
-              <span className="text-sm font-semibold text-slate-800 dark:text-slate-300">Clear Data-Sparse Flags</span>
-              <span className="ml-auto text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+          {/* Step 2b: TTO Licensing Fill — structural source rule, zero cost */}
+          <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-tto-licensing-fill">
+            <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2b</span>
+              <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">TTO Licensing Availability Fill</span>
+              <span className="ml-auto text-xs font-medium text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
             </div>
             <div className="p-4 space-y-3">
               <p className="text-xs text-muted-foreground">
-                Unlocks assets that were previously flagged as data-sparse but have since gained enough text (≥ 150 chars combined title + summary + abstract).
-                Resets <em>enriched_at</em> so the AI enrichment queue picks them up again.
-                Run this after any retroactive refetch to maximize the deep-enrichment queue.
+                Sets <span className="font-medium text-foreground">licensing_readiness = 'available'</span> for all TTO assets where it is null or unknown.
+                Universities list technologies on TTO portals specifically because they want to license them — the listing itself is proof of availability.
+                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">rule:tto_source</span> so AI enrichment can still override.
               </p>
-              {clearSparse.isSuccess && (
-                <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30" data-testid="clear-sparse-result">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                    {(clearSparse.data?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
-                  </p>
+              {ttoLicensingFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400">{ttoLicensingFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">TTO assets with missing licensing_readiness</span>
+                </div>
+              )}
+              {runTtoLicensingFill.isPending && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" />
+                  <span className="text-xs text-teal-700 dark:text-teal-400 font-medium">Filling licensing_readiness…</span>
+                </div>
+              )}
+              {ttoLicensingFillDone && !runTtoLicensingFill.isPending && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/30" data-testid="tto-licensing-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400">Done — {ttoLicensingFillDone.filled.toLocaleString()} assets filled (was {ttoLicensingFillDone.beforeCount.toLocaleString()} missing)</p>
                 </div>
               )}
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => clearSparse.mutate()} disabled={clearSparse.isPending}
-                  className="gap-1.5 bg-slate-600 hover:bg-slate-700 text-white" data-testid="button-clear-sparse">
-                  {clearSparse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Clear Data-Sparse Flags
+                <Button size="sm" variant="outline" onClick={() => refetchTtoLicensingFillCount()}
+                  className="gap-1.5 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30" data-testid="button-tto-licensing-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runTtoLicensingFill.mutate()}
+                  disabled={runTtoLicensingFill.isPending || (ttoLicensingFillCount?.total ?? 1) === 0}
+                  className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-tto-licensing-fill">
+                  {runTtoLicensingFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Fill {ttoLicensingFillCount != null ? `(${ttoLicensingFillCount.total.toLocaleString()})` : ""}
                 </Button>
               </div>
             </div>
           </div>
 
-          {/* Step 1c: USPTO Patent Cross-Reference */}
+          {/* Step 2c: Modality Fill — rule-based, zero cost */}
+          <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-modality-fill">
+            <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2c</span>
+              <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">Modality Fill from Titles</span>
+              <span className="ml-auto text-xs font-medium text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Keyword pattern matching on asset titles and summaries fills <span className="font-medium text-foreground">modality</span> for assets where it is null or unknown — at zero API cost.
+                Detects antibody, small molecule, diagnostic, nanoparticle, gene therapy, mRNA, CAR-T, siRNA, vaccine, peptide, PROTAC, and more.
+                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">source: rule</span> so AI enrichment can later override with higher confidence.
+              </p>
+              {modalityFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400">{modalityFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">assets with detectable modality still unfilled</span>
+                </div>
+              )}
+              {runModalityFill.isPending && (
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" />
+                  <span className="text-xs text-teal-700 dark:text-teal-400 font-medium">Running keyword fill…</span>
+                </div>
+              )}
+              {modalityFillDone && !runModalityFill.isPending && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/30" data-testid="modality-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400">Done — {modalityFillDone.filled.toLocaleString()} modality fields written</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchModalityFillCount()}
+                  className="gap-1.5 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30" data-testid="button-modality-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                <Button size="sm" onClick={() => runModalityFill.mutate()}
+                  disabled={runModalityFill.isPending || (modalityFillCount?.total ?? 0) === 0}
+                  className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-modality-fill">
+                  {runModalityFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                  Fill {modalityFillCount != null ? `(${modalityFillCount.total.toLocaleString()})` : ""}
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2d: USPTO Patent Cross-Reference */}
           <div className="border border-blue-200 dark:border-blue-900 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden" data-testid="card-uspto-xref">
             <div className="px-4 py-2.5 border-b border-blue-200 dark:border-blue-900 bg-blue-100/60 dark:bg-blue-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold shrink-0">1c</span>
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-blue-500 text-white text-xs font-bold shrink-0">2d</span>
               <span className="text-sm font-semibold text-blue-800 dark:text-blue-300">USPTO Patent Cross-Reference</span>
               <span className="ml-auto text-xs font-medium text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
             </div>
@@ -4473,10 +4651,344 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
-          {/* Step 2: GPT-4o-mini Re-enrich */}
+          {/* Step 2e: Clear Data-Sparse Flags */}
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">2e</span>
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-300">Clear Data-Sparse Flags</span>
+              <span className="ml-auto text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Unlocks assets that were previously flagged as data-sparse but have since gained enough text (≥ 150 chars combined title + summary + abstract).
+                Resets <em>enriched_at</em> so the AI enrichment queue picks them up again.
+                Run this after any retroactive refetch to maximize the deep-enrichment queue.
+              </p>
+              {clearSparse.isSuccess && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30" data-testid="clear-sparse-result">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    {(clearSparse.data?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => clearSparse.mutate()} disabled={clearSparse.isPending}
+                  className="gap-1.5 bg-slate-600 hover:bg-slate-700 text-white" data-testid="button-clear-sparse">
+                  {clearSparse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Clear Data-Sparse Flags
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3a: Biology Fill — target-derived + rule-based + GPT fallback */}
+          <div className="border border-purple-200 dark:border-purple-900 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 overflow-hidden" data-testid="card-biology-fill">
+            <div className="px-4 py-2.5 border-b border-purple-200 dark:border-purple-900 bg-purple-100/60 dark:bg-purple-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-xs font-bold shrink-0">3a</span>
+              <span className="text-sm font-semibold text-purple-800 dark:text-purple-300">Biology Fill</span>
+              <span className="ml-auto text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 rounded-full">Tier A free · Tier B GPT-mini fallback</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fills the <span className="font-medium text-foreground">biology</span> field — the pathological mechanism between indication and target — using a 32-value closed taxonomy.
+                Three layers run in order: <span className="font-mono text-[10px] bg-muted px-1 rounded">target→biology derivation</span> (zero cost),
+                <span className="font-mono text-[10px] bg-muted px-1 rounded">regex rules</span> (zero cost),
+                then <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> fallback for unresolved assets.
+                Respects <span className="font-mono text-[10px] bg-muted px-1 rounded">enrichment_sources</span> provenance tracking.
+              </p>
+              {biologyFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-purple-700 dark:text-purple-400">{biologyFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">relevant assets without a biology value</span>
+                </div>
+              )}
+              {(biologyFillStatus?.running || runBiologyFill.isPending) && (() => {
+                const prog = biologyFillStatus?.progress;
+                const pct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
+                return (
+                  <div className="space-y-2 p-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
+                        <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">
+                          {prog ? prog.phase : "Starting…"}
+                        </span>
+                      </div>
+                      {prog && prog.total > 0 && (
+                        <span className="text-xs tabular-nums text-purple-600 dark:text-purple-400 font-mono">
+                          {prog.processed.toLocaleString()} / {prog.total.toLocaleString()} ({pct}%)
+                        </span>
+                      )}
+                    </div>
+                    {prog && prog.total > 0 && (
+                      <div className="w-full bg-purple-100 dark:bg-purple-900/40 rounded-full h-1.5">
+                        <div
+                          className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    )}
+                    {prog && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Target-derived</span>
+                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.targetDerived ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Rule-matched</span>
+                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.ruleMatched ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">GPT sent / resolved</span>
+                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.gptSent ?? 0).toLocaleString()} / {(prog.gptResolved ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Written to DB</span>
+                          <span className="tabular-nums font-mono font-semibold text-green-600 dark:text-green-400">{(prog.written ?? 0).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {biologyFillDone && !biologyFillStatus?.running && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30" data-testid="biology-fill-result">
+                  <CheckCircle2 className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
+                  <div className="text-xs font-medium text-purple-700 dark:text-purple-400 space-y-1">
+                    <p>Done — <strong className="text-green-600 dark:text-green-400">{biologyFillDone.totalUpdated.toLocaleString()}</strong> biology fields written</p>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                      <span className="text-purple-600/80 dark:text-purple-500/80">Target-derived: <strong>{biologyFillDone.targetDerived.toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80">Rule-matched: <strong>{biologyFillDone.ruleMatched.toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80">GPT sent: <strong>{(biologyFillDone.gptSent ?? 0).toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80">GPT resolved: <strong>{biologyFillDone.gptResolved.toLocaleString()}</strong></span>
+                      <span className="text-purple-600/80 dark:text-purple-500/80 col-span-2">Unresolved: <strong>{biologyFillDone.unresolved.toLocaleString()}</strong></span>
+                    </div>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchBiologyFillCount()}
+                  className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30" data-testid="button-biology-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                {biologyFillStatus?.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stopBiologyFill.mutate()}
+                    disabled={stopBiologyFill.isPending}
+                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-stop-biology-fill">
+                    <Square className="h-3.5 w-3.5 fill-current" />Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => runBiologyFill.mutate()}
+                    disabled={runBiologyFill.isPending || (biologyFillCount?.total ?? 0) === 0}
+                    className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-run-biology-fill">
+                    {runBiologyFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Fill {biologyFillCount != null ? `(${biologyFillCount.total.toLocaleString()})` : ""}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+
+          {/* Step 3b: MOA Fill — biology→MOA lookup + AI extraction */}
+          <div className="border border-cyan-200 dark:border-cyan-900 rounded-xl bg-cyan-50/50 dark:bg-cyan-950/20 overflow-hidden" data-testid="card-moa-fill">
+            <div className="px-4 py-2.5 border-b border-cyan-200 dark:border-cyan-900 bg-cyan-100/60 dark:bg-cyan-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-cyan-500 text-white text-xs font-bold shrink-0">3b</span>
+              <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-300">MOA Fill</span>
+              <span className="ml-auto text-xs font-medium text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/50 px-2 py-0.5 rounded-full">Pass 1 free · Pass 2 GPT-mini</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Fills the <span className="font-medium text-foreground">mechanism_of_action</span> field using two passes.
+                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 1</span> applies a deterministic biology→MOA lookup table (zero cost).
+                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 2</span> uses <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> to extract MOA from assets whose <span className="font-medium text-foreground">summary</span>, <span className="font-medium text-foreground">abstract</span>, or <span className="font-medium text-foreground">innovation_claim</span> provides &gt;200 chars of context.
+              </p>
+              {moaFillCount != null && (
+                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-background">
+                  <span className="text-lg font-bold tabular-nums text-cyan-700 dark:text-cyan-400">{moaFillCount.total.toLocaleString()}</span>
+                  <span className="text-xs text-muted-foreground">relevant assets without a MOA value</span>
+                </div>
+              )}
+              {(moaFillStatus?.running || runMoaFill.isPending) && (() => {
+                const prog = moaFillStatus?.progress;
+                const isPass1 = !prog || prog.phase === "pass1";
+                const processPct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
+                const totalProcessed = (prog?.pass1Filled ?? 0) + (prog?.aiFilled ?? 0) + (prog?.failed ?? 0);
+                const totalFilled = (prog?.pass1Filled ?? 0) + (prog?.aiFilled ?? 0);
+                const fillRate = totalProcessed > 0 ? Math.round((totalFilled / totalProcessed) * 100) : null;
+                return (
+                  <div className="space-y-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/60 dark:bg-cyan-950/30">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-600" />
+                        <span className="text-xs text-cyan-700 dark:text-cyan-400 font-medium">
+                          {prog ? (isPass1 ? "Pass 1 — biology → MOA lookup…" : `Pass 2 — AI extraction (${prog.processed.toLocaleString()} / ${prog.total.toLocaleString()})`) : "Starting…"}
+                        </span>
+                      </div>
+                      {prog && prog.total > 0 && !isPass1 && (
+                        <span className="text-xs tabular-nums text-cyan-600 dark:text-cyan-400 font-mono">
+                          {processPct}%
+                        </span>
+                      )}
+                    </div>
+                    {prog && prog.total > 0 && !isPass1 && (
+                      <div className="w-full bg-cyan-100 dark:bg-cyan-900/40 rounded-full h-1.5">
+                        <div
+                          className="bg-cyan-500 h-1.5 rounded-full transition-all duration-500"
+                          style={{ width: `${processPct}%` }}
+                        />
+                      </div>
+                    )}
+                    {prog && (
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Pass 1 filled</span>
+                          <span className="tabular-nums font-mono text-cyan-700 dark:text-cyan-400">{(prog.pass1Filled ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">AI filled</span>
+                          <span className="tabular-nums font-mono text-cyan-700 dark:text-cyan-400">{(prog.aiFilled ?? 0).toLocaleString()}</span>
+                        </div>
+                        <div className="flex justify-between text-[10px]">
+                          <span className="text-muted-foreground">Failed / unresolved</span>
+                          <span className="tabular-nums font-mono text-muted-foreground">{(prog.failed ?? 0).toLocaleString()}</span>
+                        </div>
+                        {fillRate !== null && (
+                          <div className="flex justify-between text-[10px]">
+                            <span className="text-muted-foreground">Fill rate so far</span>
+                            <span className="tabular-nums font-mono text-green-600 dark:text-green-400">{fillRate}%</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+              {moaFillDone && !moaFillStatus?.running && (() => {
+                const eligible = moaFillDone.pass1Total + moaFillDone.pass2Total;
+                const successRate = eligible > 0 ? Math.round((moaFillDone.totalWritten / eligible) * 100) : null;
+                return (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-900 bg-cyan-50 dark:bg-cyan-950/30" data-testid="moa-fill-result">
+                    <CheckCircle2 className="h-4 w-4 text-cyan-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 text-xs font-medium text-cyan-700 dark:text-cyan-400 space-y-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p>Done — <strong className="text-green-600 dark:text-green-400">{moaFillDone.totalWritten.toLocaleString()}</strong> MOA fields written
+                          {successRate !== null && <span className="ml-1 text-muted-foreground font-normal">({successRate}% fill rate)</span>}
+                        </p>
+                        <button
+                          onClick={() => setMoaFillDone(null)}
+                          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Dismiss"
+                          data-testid="button-dismiss-moa-fill"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                        <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 1 (biology lookup): <strong>{moaFillDone.pass1Filled.toLocaleString()}</strong> / {moaFillDone.pass1Total.toLocaleString()}</span>
+                        <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 2 (AI): <strong>{moaFillDone.aiFilled.toLocaleString()}</strong> / {moaFillDone.pass2Total.toLocaleString()}</span>
+                        <span className="text-cyan-600/80 dark:text-cyan-500/80 col-span-2">Failed / unresolved: <strong>{moaFillDone.failed.toLocaleString()}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => refetchMoaFillCount()}
+                  className="gap-1.5 border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/30" data-testid="button-moa-fill-count">
+                  <RefreshCw className="h-3.5 w-3.5" />Count
+                </Button>
+                {moaFillStatus?.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stopMoaFill.mutate()}
+                    disabled={stopMoaFill.isPending}
+                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-stop-moa-fill">
+                    <Square className="h-3.5 w-3.5 fill-current" />Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => runMoaFill.mutate()}
+                    disabled={runMoaFill.isPending || (moaFillCount?.total ?? 0) === 0}
+                    className="gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white" data-testid="button-run-moa-fill">
+                    {runMoaFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Fill {moaFillCount != null ? `(${moaFillCount.total.toLocaleString()})` : ""}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Deal Comparables — SEC EDGAR 8-K archive */}
+          <div className="border border-indigo-200 dark:border-indigo-900 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 overflow-hidden" data-testid="card-deal-comparables">
+            <div className="px-4 py-2.5 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/60 dark:bg-indigo-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500 text-white text-xs font-bold shrink-0">$</span>
+              <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">Deal Comparables (SEC EDGAR)</span>
+              <span className="ml-auto text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">Offline ingest script</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Archived biotech/pharma licensing deal records scraped from <span className="font-medium text-foreground">SEC 8-K Item 1.01 filings</span> (5-year window).
+                Deals are extracted via GPT-4o-mini and stored in <span className="font-mono text-[10px] bg-muted px-1 rounded">deal_comparables</span> for EdenMarket dossier panels.
+                Run the <span className="font-mono text-[10px] bg-muted px-1 rounded">ingest-deal-comparables</span> workflow to populate or refresh the archive.
+              </p>
+              {dealCompsStats != null && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-background">
+                    <span className="text-lg font-bold tabular-nums text-indigo-700 dark:text-indigo-400">{dealCompsStats.count.toLocaleString()}</span>
+                    <span className="text-xs text-muted-foreground">deals in archive</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-background">
+                    <span className="text-xs text-muted-foreground">
+                      {dealCompsStats.lastIngestedAt
+                        ? <>Last run: <span className="font-medium text-foreground">{new Date(dealCompsStats.lastIngestedAt).toLocaleDateString()}</span></>
+                        : <span className="text-amber-600 dark:text-amber-400 font-medium">Never run</span>
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
+              {dealCompsStatus?.running && (
+                <div className="space-y-2 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                    <span className="text-xs text-indigo-700 dark:text-indigo-400 font-medium truncate max-w-xs">
+                      {dealCompsStatus.lastLine || "Running…"}
+                    </span>
+                  </div>
+                </div>
+              )}
+              {!dealCompsStatus?.running && dealCompsStatus?.lastLine && dealCompsStatus.lastLine !== "" && (
+                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-900 bg-background" data-testid="deal-comps-last-line">
+                  <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0" />
+                  <p className="text-xs text-indigo-700 dark:text-indigo-400 truncate">{dealCompsStatus.lastLine}</p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => { refetchDealCompsStats(); refetchDealCompsStatus(); }}
+                  className="gap-1.5 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30" data-testid="button-deal-comps-refresh">
+                  <RefreshCw className="h-3.5 w-3.5" />Refresh
+                </Button>
+                {dealCompsStatus?.running ? (
+                  <Button size="sm" variant="outline" onClick={() => stopDealCompsIngest.mutate()}
+                    disabled={stopDealCompsIngest.isPending}
+                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-deal-comps-stop">
+                    <Square className="h-3.5 w-3.5 fill-current" />Stop
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => runDealCompsIngest.mutate()}
+                    disabled={runDealCompsIngest.isPending || dealCompsStatus?.running}
+                    className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="button-deal-comps-ingest">
+                    {runDealCompsIngest.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Run Ingest
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3c: GPT-4o-mini Re-enrich */}
           <div className="border border-amber-200 dark:border-amber-900 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
             <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">2</span>
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">3c</span>
               <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">GPT-4o-mini Re-enrich</span>
               <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
                 <span className="bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o-mini</span>
@@ -4766,497 +5278,10 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
-          {/* Step 2b: Classify Unclassified Assets */}
-          <div className="border border-sky-200 dark:border-sky-900 rounded-xl bg-sky-50/50 dark:bg-sky-950/20 overflow-hidden" data-testid="card-classify-unclassified">
-            <div className="px-4 py-2.5 border-b border-sky-200 dark:border-sky-900 bg-sky-100/60 dark:bg-sky-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-sky-500 text-white text-xs font-bold shrink-0">2b</span>
-              <span className="text-sm font-semibold text-sky-800 dark:text-sky-300">Classify Unclassified Assets</span>
-              <span className="ml-auto text-xs font-medium text-sky-700 dark:text-sky-400 flex items-center gap-1.5">
-                <span className="bg-sky-100 dark:bg-sky-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o + gpt-4o-mini</span>
-                {classifyCount && <span>~${classifyCount.estCost.toFixed(2)} est.</span>}
-              </span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Sets <span className="font-medium text-foreground">asset_class</span> on all {(classifyCount?.total ?? 28862).toLocaleString()} relevant assets that have never been deep-enriched.
-                Thick text (≥120 chars) uses <span className="font-mono text-[10px] bg-muted px-1 rounded">gpt-4o</span>; thin text (40–119 chars) uses <span className="font-mono text-[10px] bg-muted px-1 rounded">gpt-4o-mini</span> automatically.
-                Assets under 40 chars are skipped until re-scraped with more content.
-              </p>
-              {classifyCount && (
-                <div className="grid grid-cols-5 gap-2">
-                  {[
-                    { label: "Total", val: classifyCount.total, color: "sky" },
-                    { label: "GPT-4o (thick)", val: classifyCount.thick, color: "violet" },
-                    { label: "Mini (thin)", val: classifyCount.thin, color: "amber" },
-                    { label: "Too thin (skip)", val: classifyCount.tooThin, color: "muted" },
-                    { label: "Exhausted (≥3×)", val: classifyCount.exhausted ?? 0, color: "red" },
-                  ].map(f => (
-                    <div key={f.label} className="rounded-lg border border-sky-200 dark:border-sky-800 bg-background p-2 text-center">
-                      <div className={`text-base font-bold tabular-nums ${f.color === "red" && (classifyCount.exhausted ?? 0) > 0 ? "text-red-600 dark:text-red-400" : "text-sky-700 dark:text-sky-400"}`}>{f.val.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">{f.label}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {classifyStatus?.running && (
-                <div className="space-y-2 rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/40 p-3">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-600" />
-                    <span className="text-xs font-medium text-sky-700 dark:text-sky-400">Classifying…</span>
-                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">{classifyStatus.processed.toLocaleString()}/{classifyStatus.total.toLocaleString()}</span>
-                    <Button variant="ghost" size="sm" onClick={() => stopClassify.mutate()} disabled={stopClassify.isPending}
-                      className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-classify-stop">
-                      Stop
-                    </Button>
-                  </div>
-                  <div className="w-full bg-sky-100 dark:bg-sky-900/40 rounded-full h-1.5 overflow-hidden">
-                    <div className="bg-sky-500 h-1.5 rounded-full transition-all duration-500"
-                      style={{ width: `${classifyStatus.total > 0 ? Math.round((classifyStatus.processed / classifyStatus.total) * 100) : 0}%` }} />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-                    <span>{classifyStatus.succeeded.toLocaleString()} classified · {classifyStatus.skipped.toLocaleString()} thin-skipped · {classifyStatus.failed.toLocaleString()} failed</span>
-                    <span className="font-medium text-sky-700 dark:text-sky-400">${classifyStatus.liveCostUsd.toFixed(4)} so far</span>
-                  </div>
-                </div>
-              )}
-              {!classifyStatus?.running && classifyStatus?.lastSummary && (
-                <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-3 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
-                    <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">
-                      Last run: {classifyStatus.lastSummary.succeeded.toLocaleString()} classified, {classifyStatus.lastSummary.skipped} skipped, ${classifyStatus.lastSummary.costUsd.toFixed(2)} spent
-                    </span>
-                    <span className="text-[11px] text-muted-foreground ml-auto">{Math.round(classifyStatus.lastSummary.durationMs / 1000)}s</span>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                {!classifyConfirm ? (
-                  <Button size="sm"
-                    onClick={() => setClassifyConfirm(true)}
-                    disabled={classifyStatus?.running || (classifyCount?.total ?? 0) === 0 || anyRunning}
-                    className="gap-1.5 bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-classify-run">
-                    <Sparkles className="h-3.5 w-3.5" />
-                    Classify all unclassified ({(classifyCount?.total ?? 0).toLocaleString()}) · ~${(classifyCount?.estCost ?? 0).toFixed(2)}
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-2 rounded-lg border border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-950/40 px-3 py-2">
-                    <span className="text-xs text-sky-800 dark:text-sky-300 font-medium">
-                      Classify {(classifyCount?.total ?? 0).toLocaleString()} assets for ~${(classifyCount?.estCost ?? 0).toFixed(2)}?
-                    </span>
-                    <Button size="sm" onClick={() => runClassify.mutate()} disabled={runClassify.isPending}
-                      className="h-6 px-3 text-xs bg-sky-600 hover:bg-sky-700 text-white" data-testid="button-classify-confirm">
-                      {runClassify.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Confirm"}
-                    </Button>
-                    <Button size="sm" variant="ghost" onClick={() => setClassifyConfirm(false)}
-                      className="h-6 px-2 text-xs text-muted-foreground" data-testid="button-classify-cancel">
-                      Cancel
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2c: TTO Licensing Fill — structural source rule, zero cost */}
-          <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-tto-licensing-fill">
-            <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2c</span>
-              <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">TTO Licensing Availability Fill</span>
-              <span className="ml-auto text-xs font-medium text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Sets <span className="font-medium text-foreground">licensing_readiness = 'available'</span> for all TTO assets where it is null or unknown.
-                Universities list technologies on TTO portals specifically because they want to license them — the listing itself is proof of availability.
-                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">rule:tto_source</span> so AI enrichment can still override.
-              </p>
-              {ttoLicensingFillCount != null && (
-                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-background">
-                  <span className="text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400">{ttoLicensingFillCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">TTO assets with missing licensing_readiness</span>
-                </div>
-              )}
-              {runTtoLicensingFill.isPending && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" />
-                  <span className="text-xs text-teal-700 dark:text-teal-400 font-medium">Filling licensing_readiness…</span>
-                </div>
-              )}
-              {ttoLicensingFillDone && !runTtoLicensingFill.isPending && (
-                <div className="flex items-start gap-2 p-3 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/30" data-testid="tto-licensing-fill-result">
-                  <CheckCircle2 className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
-                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400">Done — {ttoLicensingFillDone.filled.toLocaleString()} assets filled (was {ttoLicensingFillDone.beforeCount.toLocaleString()} missing)</p>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => refetchTtoLicensingFillCount()}
-                  className="gap-1.5 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30" data-testid="button-tto-licensing-fill-count">
-                  <RefreshCw className="h-3.5 w-3.5" />Count
-                </Button>
-                <Button size="sm" onClick={() => runTtoLicensingFill.mutate()}
-                  disabled={runTtoLicensingFill.isPending || (ttoLicensingFillCount?.total ?? 1) === 0}
-                  className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-tto-licensing-fill">
-                  {runTtoLicensingFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                  Fill {ttoLicensingFillCount != null ? `(${ttoLicensingFillCount.total.toLocaleString()})` : ""}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2d: Modality Fill — rule-based, zero cost */}
-          <div className="border border-teal-200 dark:border-teal-900 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 overflow-hidden" data-testid="card-modality-fill">
-            <div className="px-4 py-2.5 border-b border-teal-200 dark:border-teal-900 bg-teal-100/60 dark:bg-teal-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-teal-500 text-white text-xs font-bold shrink-0">2c</span>
-              <span className="text-sm font-semibold text-teal-800 dark:text-teal-300">Modality Fill from Titles</span>
-              <span className="ml-auto text-xs font-medium text-teal-600 dark:text-teal-400 bg-teal-100 dark:bg-teal-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Keyword pattern matching on asset titles and summaries fills <span className="font-medium text-foreground">modality</span> for assets where it is null or unknown — at zero API cost.
-                Detects antibody, small molecule, diagnostic, nanoparticle, gene therapy, mRNA, CAR-T, siRNA, vaccine, peptide, PROTAC, and more.
-                Stamps <span className="font-mono text-[10px] bg-muted px-1 rounded">source: rule</span> so AI enrichment can later override with higher confidence.
-              </p>
-              {modalityFillCount != null && (
-                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-teal-200 dark:border-teal-800 bg-background">
-                  <span className="text-lg font-bold tabular-nums text-teal-700 dark:text-teal-400">{modalityFillCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">assets with detectable modality still unfilled</span>
-                </div>
-              )}
-              {runModalityFill.isPending && (
-                <div className="flex items-center gap-2">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-teal-600" />
-                  <span className="text-xs text-teal-700 dark:text-teal-400 font-medium">Running keyword fill…</span>
-                </div>
-              )}
-              {modalityFillDone && !runModalityFill.isPending && (
-                <div className="flex items-start gap-2 p-3 rounded-lg border border-teal-200 dark:border-teal-900 bg-teal-50 dark:bg-teal-950/30" data-testid="modality-fill-result">
-                  <CheckCircle2 className="h-4 w-4 text-teal-500 shrink-0 mt-0.5" />
-                  <p className="text-xs font-medium text-teal-700 dark:text-teal-400">Done — {modalityFillDone.filled.toLocaleString()} modality fields written</p>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => refetchModalityFillCount()}
-                  className="gap-1.5 border-teal-300 dark:border-teal-700 text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30" data-testid="button-modality-fill-count">
-                  <RefreshCw className="h-3.5 w-3.5" />Count
-                </Button>
-                <Button size="sm" onClick={() => runModalityFill.mutate()}
-                  disabled={runModalityFill.isPending || (modalityFillCount?.total ?? 0) === 0}
-                  className="gap-1.5 bg-teal-600 hover:bg-teal-700 text-white" data-testid="button-run-modality-fill">
-                  {runModalityFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                  Fill {modalityFillCount != null ? `(${modalityFillCount.total.toLocaleString()})` : ""}
-                </Button>
-              </div>
-            </div>
-          </div>
-
-          {/* Step 2e: Biology Fill — target-derived + rule-based + GPT fallback */}
-          <div className="border border-purple-200 dark:border-purple-900 rounded-xl bg-purple-50/50 dark:bg-purple-950/20 overflow-hidden" data-testid="card-biology-fill">
-            <div className="px-4 py-2.5 border-b border-purple-200 dark:border-purple-900 bg-purple-100/60 dark:bg-purple-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-purple-500 text-white text-xs font-bold shrink-0">2e</span>
-              <span className="text-sm font-semibold text-purple-800 dark:text-purple-300">Biology Fill</span>
-              <span className="ml-auto text-xs font-medium text-purple-600 dark:text-purple-400 bg-purple-100 dark:bg-purple-900/50 px-2 py-0.5 rounded-full">Tier A free · Tier B GPT-mini fallback</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Fills the <span className="font-medium text-foreground">biology</span> field — the pathological mechanism between indication and target — using a 32-value closed taxonomy.
-                Three layers run in order: <span className="font-mono text-[10px] bg-muted px-1 rounded">target→biology derivation</span> (zero cost),
-                <span className="font-mono text-[10px] bg-muted px-1 rounded">regex rules</span> (zero cost),
-                then <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> fallback for unresolved assets.
-                Respects <span className="font-mono text-[10px] bg-muted px-1 rounded">enrichment_sources</span> provenance tracking.
-              </p>
-              {biologyFillCount != null && (
-                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-purple-200 dark:border-purple-800 bg-background">
-                  <span className="text-lg font-bold tabular-nums text-purple-700 dark:text-purple-400">{biologyFillCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">relevant assets without a biology value</span>
-                </div>
-              )}
-              {(biologyFillStatus?.running || runBiologyFill.isPending) && (() => {
-                const prog = biologyFillStatus?.progress;
-                const pct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
-                return (
-                  <div className="space-y-2 p-3 rounded-lg border border-purple-200 dark:border-purple-800 bg-purple-50/60 dark:bg-purple-950/30">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-purple-600" />
-                        <span className="text-xs text-purple-700 dark:text-purple-400 font-medium">
-                          {prog ? prog.phase : "Starting…"}
-                        </span>
-                      </div>
-                      {prog && prog.total > 0 && (
-                        <span className="text-xs tabular-nums text-purple-600 dark:text-purple-400 font-mono">
-                          {prog.processed.toLocaleString()} / {prog.total.toLocaleString()} ({pct}%)
-                        </span>
-                      )}
-                    </div>
-                    {prog && prog.total > 0 && (
-                      <div className="w-full bg-purple-100 dark:bg-purple-900/40 rounded-full h-1.5">
-                        <div
-                          className="bg-purple-500 h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    )}
-                    {prog && (
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">Target-derived</span>
-                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.targetDerived ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">Rule-matched</span>
-                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.ruleMatched ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">GPT sent / resolved</span>
-                          <span className="tabular-nums font-mono text-purple-700 dark:text-purple-400">{(prog.gptSent ?? 0).toLocaleString()} / {(prog.gptResolved ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">Written to DB</span>
-                          <span className="tabular-nums font-mono font-semibold text-green-600 dark:text-green-400">{(prog.written ?? 0).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              {biologyFillDone && !biologyFillStatus?.running && (
-                <div className="flex items-start gap-2 p-3 rounded-lg border border-purple-200 dark:border-purple-900 bg-purple-50 dark:bg-purple-950/30" data-testid="biology-fill-result">
-                  <CheckCircle2 className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
-                  <div className="text-xs font-medium text-purple-700 dark:text-purple-400 space-y-1">
-                    <p>Done — <strong className="text-green-600 dark:text-green-400">{biologyFillDone.totalUpdated.toLocaleString()}</strong> biology fields written</p>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                      <span className="text-purple-600/80 dark:text-purple-500/80">Target-derived: <strong>{biologyFillDone.targetDerived.toLocaleString()}</strong></span>
-                      <span className="text-purple-600/80 dark:text-purple-500/80">Rule-matched: <strong>{biologyFillDone.ruleMatched.toLocaleString()}</strong></span>
-                      <span className="text-purple-600/80 dark:text-purple-500/80">GPT sent: <strong>{(biologyFillDone.gptSent ?? 0).toLocaleString()}</strong></span>
-                      <span className="text-purple-600/80 dark:text-purple-500/80">GPT resolved: <strong>{biologyFillDone.gptResolved.toLocaleString()}</strong></span>
-                      <span className="text-purple-600/80 dark:text-purple-500/80 col-span-2">Unresolved: <strong>{biologyFillDone.unresolved.toLocaleString()}</strong></span>
-                    </div>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => refetchBiologyFillCount()}
-                  className="gap-1.5 border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-950/30" data-testid="button-biology-fill-count">
-                  <RefreshCw className="h-3.5 w-3.5" />Count
-                </Button>
-                {biologyFillStatus?.running ? (
-                  <Button size="sm" variant="outline" onClick={() => stopBiologyFill.mutate()}
-                    disabled={stopBiologyFill.isPending}
-                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-stop-biology-fill">
-                    <Square className="h-3.5 w-3.5 fill-current" />Stop
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => runBiologyFill.mutate()}
-                    disabled={runBiologyFill.isPending || (biologyFillCount?.total ?? 0) === 0}
-                    className="gap-1.5 bg-purple-600 hover:bg-purple-700 text-white" data-testid="button-run-biology-fill">
-                    {runBiologyFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                    Fill {biologyFillCount != null ? `(${biologyFillCount.total.toLocaleString()})` : ""}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-
-          {/* Step 2f: MOA Fill — biology→MOA lookup + AI extraction */}
-          <div className="border border-cyan-200 dark:border-cyan-900 rounded-xl bg-cyan-50/50 dark:bg-cyan-950/20 overflow-hidden" data-testid="card-moa-fill">
-            <div className="px-4 py-2.5 border-b border-cyan-200 dark:border-cyan-900 bg-cyan-100/60 dark:bg-cyan-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-cyan-500 text-white text-xs font-bold shrink-0">2f</span>
-              <span className="text-sm font-semibold text-cyan-800 dark:text-cyan-300">MOA Fill</span>
-              <span className="ml-auto text-xs font-medium text-cyan-600 dark:text-cyan-400 bg-cyan-100 dark:bg-cyan-900/50 px-2 py-0.5 rounded-full">Pass 1 free · Pass 2 GPT-mini</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Fills the <span className="font-medium text-foreground">mechanism_of_action</span> field using two passes.
-                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 1</span> applies a deterministic biology→MOA lookup table (zero cost).
-                <span className="font-mono text-[10px] bg-muted px-1 rounded ml-1">Pass 2</span> uses <span className="font-mono text-[10px] bg-muted px-1 rounded">GPT-4o-mini</span> to extract MOA from assets whose <span className="font-medium text-foreground">summary</span>, <span className="font-medium text-foreground">abstract</span>, or <span className="font-medium text-foreground">innovation_claim</span> provides &gt;200 chars of context.
-              </p>
-              {moaFillCount != null && (
-                <div className="flex items-center gap-3 p-2.5 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-background">
-                  <span className="text-lg font-bold tabular-nums text-cyan-700 dark:text-cyan-400">{moaFillCount.total.toLocaleString()}</span>
-                  <span className="text-xs text-muted-foreground">relevant assets without a MOA value</span>
-                </div>
-              )}
-              {(moaFillStatus?.running || runMoaFill.isPending) && (() => {
-                const prog = moaFillStatus?.progress;
-                const isPass1 = !prog || prog.phase === "pass1";
-                const processPct = prog && prog.total > 0 ? Math.round((prog.processed / prog.total) * 100) : 0;
-                const totalProcessed = (prog?.pass1Filled ?? 0) + (prog?.aiFilled ?? 0) + (prog?.failed ?? 0);
-                const totalFilled = (prog?.pass1Filled ?? 0) + (prog?.aiFilled ?? 0);
-                const fillRate = totalProcessed > 0 ? Math.round((totalFilled / totalProcessed) * 100) : null;
-                return (
-                  <div className="space-y-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-800 bg-cyan-50/60 dark:bg-cyan-950/30">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-cyan-600" />
-                        <span className="text-xs text-cyan-700 dark:text-cyan-400 font-medium">
-                          {prog ? (isPass1 ? "Pass 1 — biology → MOA lookup…" : `Pass 2 — AI extraction (${prog.processed.toLocaleString()} / ${prog.total.toLocaleString()})`) : "Starting…"}
-                        </span>
-                      </div>
-                      {prog && prog.total > 0 && !isPass1 && (
-                        <span className="text-xs tabular-nums text-cyan-600 dark:text-cyan-400 font-mono">
-                          {processPct}%
-                        </span>
-                      )}
-                    </div>
-                    {prog && prog.total > 0 && !isPass1 && (
-                      <div className="w-full bg-cyan-100 dark:bg-cyan-900/40 rounded-full h-1.5">
-                        <div
-                          className="bg-cyan-500 h-1.5 rounded-full transition-all duration-500"
-                          style={{ width: `${processPct}%` }}
-                        />
-                      </div>
-                    )}
-                    {prog && (
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 pt-1">
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">Pass 1 filled</span>
-                          <span className="tabular-nums font-mono text-cyan-700 dark:text-cyan-400">{(prog.pass1Filled ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">AI filled</span>
-                          <span className="tabular-nums font-mono text-cyan-700 dark:text-cyan-400">{(prog.aiFilled ?? 0).toLocaleString()}</span>
-                        </div>
-                        <div className="flex justify-between text-[10px]">
-                          <span className="text-muted-foreground">Failed / unresolved</span>
-                          <span className="tabular-nums font-mono text-muted-foreground">{(prog.failed ?? 0).toLocaleString()}</span>
-                        </div>
-                        {fillRate !== null && (
-                          <div className="flex justify-between text-[10px]">
-                            <span className="text-muted-foreground">Fill rate so far</span>
-                            <span className="tabular-nums font-mono text-green-600 dark:text-green-400">{fillRate}%</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-              {moaFillDone && !moaFillStatus?.running && (() => {
-                const eligible = moaFillDone.pass1Total + moaFillDone.pass2Total;
-                const successRate = eligible > 0 ? Math.round((moaFillDone.totalWritten / eligible) * 100) : null;
-                return (
-                  <div className="flex items-start gap-2 p-3 rounded-lg border border-cyan-200 dark:border-cyan-900 bg-cyan-50 dark:bg-cyan-950/30" data-testid="moa-fill-result">
-                    <CheckCircle2 className="h-4 w-4 text-cyan-500 shrink-0 mt-0.5" />
-                    <div className="flex-1 text-xs font-medium text-cyan-700 dark:text-cyan-400 space-y-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p>Done — <strong className="text-green-600 dark:text-green-400">{moaFillDone.totalWritten.toLocaleString()}</strong> MOA fields written
-                          {successRate !== null && <span className="ml-1 text-muted-foreground font-normal">({successRate}% fill rate)</span>}
-                        </p>
-                        <button
-                          onClick={() => setMoaFillDone(null)}
-                          className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="Dismiss"
-                          data-testid="button-dismiss-moa-fill"
-                        >
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
-                        <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 1 (biology lookup): <strong>{moaFillDone.pass1Filled.toLocaleString()}</strong> / {moaFillDone.pass1Total.toLocaleString()}</span>
-                        <span className="text-cyan-600/80 dark:text-cyan-500/80">Pass 2 (AI): <strong>{moaFillDone.aiFilled.toLocaleString()}</strong> / {moaFillDone.pass2Total.toLocaleString()}</span>
-                        <span className="text-cyan-600/80 dark:text-cyan-500/80 col-span-2">Failed / unresolved: <strong>{moaFillDone.failed.toLocaleString()}</strong></span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })()}
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => refetchMoaFillCount()}
-                  className="gap-1.5 border-cyan-300 dark:border-cyan-700 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/30" data-testid="button-moa-fill-count">
-                  <RefreshCw className="h-3.5 w-3.5" />Count
-                </Button>
-                {moaFillStatus?.running ? (
-                  <Button size="sm" variant="outline" onClick={() => stopMoaFill.mutate()}
-                    disabled={stopMoaFill.isPending}
-                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-stop-moa-fill">
-                    <Square className="h-3.5 w-3.5 fill-current" />Stop
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => runMoaFill.mutate()}
-                    disabled={runMoaFill.isPending || (moaFillCount?.total ?? 0) === 0}
-                    className="gap-1.5 bg-cyan-600 hover:bg-cyan-700 text-white" data-testid="button-run-moa-fill">
-                    {runMoaFill.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                    Fill {moaFillCount != null ? `(${moaFillCount.total.toLocaleString()})` : ""}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Deal Comparables — SEC EDGAR 8-K archive */}
-          <div className="border border-indigo-200 dark:border-indigo-900 rounded-xl bg-indigo-50/50 dark:bg-indigo-950/20 overflow-hidden" data-testid="card-deal-comparables">
-            <div className="px-4 py-2.5 border-b border-indigo-200 dark:border-indigo-900 bg-indigo-100/60 dark:bg-indigo-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-indigo-500 text-white text-xs font-bold shrink-0">$</span>
-              <span className="text-sm font-semibold text-indigo-800 dark:text-indigo-300">Deal Comparables (SEC EDGAR)</span>
-              <span className="ml-auto text-xs font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-100 dark:bg-indigo-900/50 px-2 py-0.5 rounded-full">Offline ingest script</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Archived biotech/pharma licensing deal records scraped from <span className="font-medium text-foreground">SEC 8-K Item 1.01 filings</span> (5-year window).
-                Deals are extracted via GPT-4o-mini and stored in <span className="font-mono text-[10px] bg-muted px-1 rounded">deal_comparables</span> for EdenMarket dossier panels.
-                Run the <span className="font-mono text-[10px] bg-muted px-1 rounded">ingest-deal-comparables</span> workflow to populate or refresh the archive.
-              </p>
-              {dealCompsStats != null && (
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-background">
-                    <span className="text-lg font-bold tabular-nums text-indigo-700 dark:text-indigo-400">{dealCompsStats.count.toLocaleString()}</span>
-                    <span className="text-xs text-muted-foreground">deals in archive</span>
-                  </div>
-                  <div className="flex items-center gap-3 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-background">
-                    <span className="text-xs text-muted-foreground">
-                      {dealCompsStats.lastIngestedAt
-                        ? <>Last run: <span className="font-medium text-foreground">{new Date(dealCompsStats.lastIngestedAt).toLocaleDateString()}</span></>
-                        : <span className="text-amber-600 dark:text-amber-400 font-medium">Never run</span>
-                      }
-                    </span>
-                  </div>
-                </div>
-              )}
-              {dealCompsStatus?.running && (
-                <div className="space-y-2 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50/60 dark:bg-indigo-950/30">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
-                    <span className="text-xs text-indigo-700 dark:text-indigo-400 font-medium truncate max-w-xs">
-                      {dealCompsStatus.lastLine || "Running…"}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {!dealCompsStatus?.running && dealCompsStatus?.lastLine && dealCompsStatus.lastLine !== "" && (
-                <div className="flex items-center gap-2 p-2.5 rounded-lg border border-indigo-200 dark:border-indigo-900 bg-background" data-testid="deal-comps-last-line">
-                  <CheckCircle2 className="h-4 w-4 text-indigo-500 shrink-0" />
-                  <p className="text-xs text-indigo-700 dark:text-indigo-400 truncate">{dealCompsStatus.lastLine}</p>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => { refetchDealCompsStats(); refetchDealCompsStatus(); }}
-                  className="gap-1.5 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/30" data-testid="button-deal-comps-refresh">
-                  <RefreshCw className="h-3.5 w-3.5" />Refresh
-                </Button>
-                {dealCompsStatus?.running ? (
-                  <Button size="sm" variant="outline" onClick={() => stopDealCompsIngest.mutate()}
-                    disabled={stopDealCompsIngest.isPending}
-                    className="gap-1.5 border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-deal-comps-stop">
-                    <Square className="h-3.5 w-3.5 fill-current" />Stop
-                  </Button>
-                ) : (
-                  <Button size="sm" onClick={() => runDealCompsIngest.mutate()}
-                    disabled={runDealCompsIngest.isPending || dealCompsStatus?.running}
-                    className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="button-deal-comps-ingest">
-                    {runDealCompsIngest.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-                    Run Ingest
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Rescore All */}
+          {/* Step 4: Rescore All */}
           <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden" data-testid="card-rescore">
             <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-900/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">↺</span>
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">4</span>
               <span className="text-sm font-semibold text-slate-700 dark:text-slate-300">Rescore All Assets</span>
               <span className="ml-auto text-xs font-medium text-slate-500 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
             </div>
@@ -5301,10 +5326,10 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
-          {/* Step 3: GPT-4o Surgical Band Enrichment */}
+          {/* Step 5: GPT-4o Surgical Band Enrichment */}
           <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden" data-testid="card-band-enrichment">
             <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">3</span>
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">5</span>
               <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">GPT-4o Surgical Deep Pass</span>
               <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400">~$0.01/asset</span>
             </div>
@@ -12101,11 +12126,24 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
 
 function DataQualityTab({ pw }: { pw: string }) {
   const [gaveUpTrigger, setGaveUpTrigger] = useState(0);
+  const [qualityReportOpen, setQualityReportOpen] = useState(false);
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
-      <Enrichment pw={pw} initialGaveUpFilter={gaveUpTrigger} />
-      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => setGaveUpTrigger(v => v + 1)} />
+      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => { setGaveUpTrigger(v => v + 1); setQualityReportOpen(true); }} />
       <PotentialDuplicates pw={pw} />
+      <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="quality-report-panel">
+        <button
+          onClick={() => setQualityReportOpen(o => !o)}
+          className="w-full px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-3 hover:bg-muted/30 transition-colors text-left"
+          data-testid="button-toggle-quality-report"
+        >
+          <BarChart3 className="h-4 w-4 text-blue-500 shrink-0" />
+          <span className="text-sm font-semibold text-foreground">Quality Report</span>
+          <span className="text-xs text-muted-foreground ml-1">Field fill rates · Tiers · Institution breakdown</span>
+          <ChevronDown className={`h-3.5 w-3.5 ml-auto text-muted-foreground transition-transform duration-200 ${qualityReportOpen ? "rotate-180" : ""}`} />
+        </button>
+        {qualityReportOpen && <Enrichment pw={pw} initialGaveUpFilter={gaveUpTrigger} />}
+      </div>
       <CollapsibleRelevancePanel pw={pw} />
     </div>
   );
