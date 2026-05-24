@@ -610,7 +610,7 @@ export default function Pipeline() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
-  const { data, isLoading } = useQuery<SavedAssetsResponse>({
+  const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
@@ -879,9 +879,10 @@ export default function Pipeline() {
           </div>
         </div>
 
-        {/* Loading / retry / no-data-yet state — gate on data existence, not isLoading,
-            because isLoading drops to false between retry attempts even when data is still undefined */}
-        {(isLoading || !data) ? (
+        {/* Loading gate: show spinner while pending. On error, fall through to empty state
+            so the page is never stuck. isLoading = isPending && isFetching in TanStack v5
+            so we also check !data to cover the gap between retry attempts. */}
+        {isLoading && !isError ? (
           <div className="flex-1 flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>

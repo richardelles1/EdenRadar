@@ -9,7 +9,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -2418,7 +2418,9 @@ export async function registerRoutes(
         });
       }
 
-      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      // Return empty list for unauthenticated users — the client queryFn is set to
+      // "throw" on 401, which would leave the query in a permanent error state.
+      if (!userId) return res.json({ assets: [] });
 
       const rawPl = req.query.pipelineListId;
       let pipelineListId: number | null | undefined = undefined;
@@ -16346,6 +16348,160 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       res.json({ events });
     } catch (e) {
       res.json({ events: [] });
+    }
+  });
+
+  // ── User API key self-service ─────────────────────────────────────────────────
+
+  app.get("/api/user/api-key", verifyAnyAuth, async (req, res) => {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const rows = await db.select().from(apiKeys)
+        .where(and(eq(apiKeys.userId, userId), eq(apiKeys.status, "active")))
+        .orderBy(desc(apiKeys.createdAt))
+        .limit(1);
+      if (!rows.length) return res.json({ key: null });
+      const key = rows[0];
+      // Fetch today's usage from rate limit window
+      const today = new Date();
+      const todayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
+      const windowRows = await db.select().from(apiRateLimitWindows).where(eq(apiRateLimitWindows.keyId, key.id)).limit(1);
+      const window = windowRows[0];
+      const callsToday = (window && new Date(window.windowStart) >= todayStart) ? window.callCount : 0;
+      return res.json({
+        key: {
+          id: key.id,
+          prefix: key.keyPrefix,
+          tier: key.tier,
+          status: key.status,
+          scopes: key.scopes,
+          dailyLimit: key.limitOverride ?? key.dailyLimit,
+          callsToday,
+          createdAt: key.createdAt,
+          lastUsedAt: key.lastUsedAt,
+        },
+      });
+    } catch (err) {
+      console.error("[user/api-key GET]", err);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.post("/api/user/api-key", verifyAnyAuth, async (req, res) => {
+    const userId = req.headers["x-user-id"] as string;
+    const userEmail = req.headers["x-user-email"] as string | undefined;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      // Revoke any existing active keys for this user
+      await db.update(apiKeys)
+        .set({ status: "revoked", revokedAt: new Date(), revokedBy: userId })
+        .where(and(eq(apiKeys.userId, userId), eq(apiKeys.status, "active")));
+
+      // Generate new key: eden_<8-char prefix>_<32-char random>
+      const prefix = crypto.randomBytes(4).toString("hex");
+      const secret = crypto.randomBytes(16).toString("hex");
+      const raw = `eden_${prefix}_${secret}`;
+      const hash = crypto.createHash("sha256").update(raw).digest("hex");
+
+      // Default tier is starter; future: derive from plan
+      const tier = "starter";
+      const { dailyLimit, scopes } = API_TIER_CONFIG[tier];
+
+      const [inserted] = await db.insert(apiKeys).values({
+        keyHash: hash,
+        keyPrefix: prefix,
+        label: "My API Key",
+        userId,
+        userEmail: userEmail ?? null,
+        tier,
+        scopes: scopes as string[],
+        status: "active",
+        dailyLimit,
+      }).returning();
+
+      // Audit
+      await db.insert(apiKeyAuditLog).values({
+        action: "key_issued",
+        keyId: inserted.id,
+        keyPrefix: prefix,
+        actorId: userId,
+        actorType: "user",
+        targetUserId: userId,
+      }).catch(() => {});
+
+      return res.json({ raw, prefix, tier, scopes, dailyLimit });
+    } catch (err) {
+      console.error("[user/api-key POST]", err);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  app.delete("/api/user/api-key", verifyAnyAuth, async (req, res) => {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const result = await db.update(apiKeys)
+        .set({ status: "revoked", revokedAt: new Date(), revokedBy: userId })
+        .where(and(eq(apiKeys.userId, userId), eq(apiKeys.status, "active")))
+        .returning({ id: apiKeys.id, keyPrefix: apiKeys.keyPrefix });
+      if (!result.length) return res.status(404).json({ error: "No active key found" });
+      await db.insert(apiKeyAuditLog).values({
+        action: "key_revoked",
+        keyId: result[0].id,
+        keyPrefix: result[0].keyPrefix,
+        actorId: userId,
+        actorType: "user",
+        targetUserId: userId,
+      }).catch(() => {});
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[user/api-key DELETE]", err);
+      return res.status(500).json({ error: "Internal error" });
+    }
+  });
+
+  // Admin: issue a key on behalf of a user (access grants)
+  app.post("/api/admin/api-management/keys", requireAdmin, async (req, res) => {
+    const adminUser = await getAdminUser(req);
+    const { userId, userEmail, orgId, orgName, tier = "starter", label = "API Key", note } =
+      req.body as { userId: string; userEmail?: string; orgId?: number; orgName?: string; tier?: string; label?: string; note?: string };
+    if (!userId) return res.status(400).json({ error: "userId required" });
+    try {
+      const tierConfig = API_TIER_CONFIG[tier as keyof typeof API_TIER_CONFIG];
+      if (!tierConfig) return res.status(400).json({ error: "Invalid tier" });
+      const prefix = crypto.randomBytes(4).toString("hex");
+      const secret = crypto.randomBytes(16).toString("hex");
+      const raw = `eden_${prefix}_${secret}`;
+      const hash = crypto.createHash("sha256").update(raw).digest("hex");
+      const [inserted] = await db.insert(apiKeys).values({
+        keyHash: hash,
+        keyPrefix: prefix,
+        label,
+        userId,
+        userEmail: userEmail ?? null,
+        orgId: orgId ?? null,
+        orgName: orgName ?? null,
+        tier,
+        scopes: tierConfig.scopes as string[],
+        status: "active",
+        dailyLimit: tierConfig.dailyLimit,
+        grantedByAdmin: adminUser?.email ?? "admin",
+        accessGrantNote: note ?? null,
+      }).returning();
+      await db.insert(apiKeyAuditLog).values({
+        action: "access_granted",
+        keyId: inserted.id,
+        keyPrefix: prefix,
+        actorId: adminUser?.id ?? null,
+        actorType: "admin",
+        targetUserId: userId,
+        payload: { tier, label, note },
+      }).catch(() => {});
+      return res.json({ ok: true, prefix, raw });
+    } catch (err) {
+      console.error("[admin/api-management/keys POST]", err);
+      return res.status(500).json({ error: "Internal error" });
     }
   });
 
