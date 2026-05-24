@@ -19,6 +19,7 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Scout from "@/pages/Scout";
 import Assets from "@/pages/Assets";
+import Pipeline from "@/pages/Pipeline";
 import AssetDossier from "@/pages/AssetDossier";
 import Report from "@/pages/Report";
 import Reports from "@/pages/Reports";
@@ -184,7 +185,7 @@ function Router() {
       <Route path="/assets">
         <DashboardLayout>
           <ScoutGate>
-            <Assets />
+            <Pipeline />
           </ScoutGate>
         </DashboardLayout>
       </Route>
