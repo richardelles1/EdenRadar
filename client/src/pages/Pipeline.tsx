@@ -573,7 +573,9 @@ function KanbanColumn({ col, decks, onDelete, onCardClick }: {
   );
 }
 
-// ── AssetDrawer — right-side drawer with Overview / CRM / Notes tabs ──────────
+// ── AssetDrawer — Overview (metadata + signals) / Activity (stage + notes) ─────
+
+const TAB_TRIGGER_CLS = "text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none";
 
 function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }: {
   asset: PipelineAsset | null;
@@ -594,21 +596,24 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
     if (asset) { setLocalStatus(asset.status ?? null); setNoteText(""); setActiveTab("overview"); }
   }, [asset?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { data: notesData } = useQuery<NotesResponse>({
+  // Fetch eagerly on drawer open so the count badge matches the visible list
+  const { data: notesData, isLoading: notesLoading } = useQuery<NotesResponse>({
     queryKey: ["/api/saved-assets", asset?.id, "notes"],
     queryFn: async () => {
       const res = await fetch(`/api/saved-assets/${asset!.id}/notes?limit=50`);
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
-    enabled: !!asset && activeTab === "notes",
-    staleTime: 10000,
+    enabled: !!asset,
+    staleTime: 30000,
   });
   const notes = notesData?.notes ?? [];
 
   useEffect(() => {
-    if (notesEndRef.current) notesEndRef.current.scrollIntoView({ behavior: "smooth" });
-  }, [notes.length]);
+    if (notesEndRef.current && activeTab === "activity") {
+      notesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [notes.length, activeTab]);
 
   const statusMutation = useMutation<unknown, Error, string | null, { prev: string | null }>({
     mutationFn: async (status) => {
@@ -642,11 +647,12 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
   const tint = SCOUT_CARD_TINTS[getSourceCategory(asset.sourceName)];
   const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
   const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""];
-  const noteCount = asset.noteCount ?? 0;
+  const noteCount = notes.length;
 
   return (
     <Sheet open={!!asset} onOpenChange={(o) => { if (!o) onClose(); }}>
       <SheetContent className="w-full sm:max-w-md flex flex-col p-0 gap-0 overflow-hidden" side="right">
+
         {/* Header */}
         <div className="shrink-0 border-b border-border px-5 py-4" style={{ borderTop: `3px solid ${tint.stripColor}` }}>
           <div className="flex items-start justify-between gap-3">
@@ -669,40 +675,58 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
           <TabsList className="w-full rounded-none border-b border-border bg-transparent h-10 px-5 justify-start gap-6 shrink-0">
-            <TabsTrigger value="overview" className="text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none">
-              Overview
+            <TabsTrigger value="overview" className={TAB_TRIGGER_CLS}>
+              Overview{signals.length > 0 ? ` (${signals.length})` : ""}
             </TabsTrigger>
-            <TabsTrigger value="crm" className="text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none">
-              CRM{signals.length > 0 ? ` (${signals.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="notes" className="text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none">
-              Notes{noteCount > 0 ? ` (${noteCount})` : ""}
+            <TabsTrigger value="activity" className={TAB_TRIGGER_CLS}>
+              Activity{noteCount > 0 ? ` (${noteCount})` : ""}
             </TabsTrigger>
           </TabsList>
 
-          {/* Overview */}
-          <TabsContent value="overview" className="flex-1 overflow-y-auto px-5 py-5 space-y-5 m-0">
+          {/* ── Overview: metadata + signals + action links ── */}
+          <TabsContent value="overview" className="flex-1 overflow-y-auto px-5 py-5 m-0 flex flex-col gap-5">
+
+            {/* Metadata grid */}
             <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
               {asset.target && asset.target !== "unknown" && (
-                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Target</p><p className="text-foreground font-medium">{asset.target}</p></div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Target</p>
+                  <p className="text-foreground font-medium">{asset.target}</p>
+                </div>
               )}
               {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disease</p><p className="text-foreground font-medium">{asset.diseaseIndication}</p></div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disease</p>
+                  <p className="text-foreground font-medium">{asset.diseaseIndication}</p>
+                </div>
               )}
               {asset.modality && asset.modality !== "unknown" && (
-                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Modality</p><p className="text-foreground font-medium">{asset.modality}</p></div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Modality</p>
+                  <p className="text-foreground font-medium">{asset.modality}</p>
+                </div>
               )}
               {asset.developmentStage && asset.developmentStage !== "unknown" && (
-                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Dev Stage</p><p className="text-foreground font-medium">{asset.developmentStage}</p></div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Stage</p>
+                  <p className="text-foreground font-medium">{asset.developmentStage}</p>
+                </div>
               )}
               {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                <div className="col-span-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Institution</p><p className="text-foreground font-medium">{toTitleCase(asset.sourceJournal)}</p></div>
+                <div className="col-span-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Institution</p>
+                  <p className="text-foreground font-medium">{toTitleCase(asset.sourceJournal)}</p>
+                </div>
               )}
               {asset.publicationYear && (
-                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Year</p><p className="text-foreground font-medium">{asset.publicationYear}</p></div>
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Year</p>
+                  <p className="text-foreground font-medium">{asset.publicationYear}</p>
+                </div>
               )}
             </div>
 
+            {/* Summary */}
             {asset.summary && (
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
@@ -710,6 +734,25 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
               </div>
             )}
 
+            {/* Supporting signals */}
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
+              </p>
+              {signals.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic leading-relaxed">
+                  No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {signals.map((sig) => (
+                    <SignalMiniCard key={sig.id} signal={sig} draggable onDetach={() => onDetachSignal(sig.id)} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Action links */}
             <div className="flex flex-col gap-2.5 pt-1 border-t border-border">
               {asset.sourceUrl && (
                 <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
@@ -730,15 +773,17 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
             </div>
           </TabsContent>
 
-          {/* CRM */}
-          <TabsContent value="crm" className="flex-1 overflow-y-auto px-5 py-5 space-y-6 m-0">
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">Deal Stage</p>
+          {/* ── Activity: deal stage (fixed top) + notes feed + input (pinned bottom) ── */}
+          <TabsContent value="activity" className="flex-1 flex flex-col min-h-0 m-0">
+
+            {/* Deal stage — compact, fixed */}
+            <div className="shrink-0 px-5 pt-4 pb-3 border-b border-border">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">Deal Stage</p>
               <div className="flex flex-wrap gap-1.5">
                 <button
                   onClick={() => statusMutation.mutate(null)}
                   disabled={statusMutation.isPending}
-                  className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${localStatus === null ? "bg-muted text-foreground border-muted-foreground/30 font-semibold" : "border-border text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground"}`}
+                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${localStatus === null ? "bg-muted text-foreground border-muted-foreground/30 font-semibold" : "border-border text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground"}`}
                 >
                   None
                 </button>
@@ -749,7 +794,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
                       key={s}
                       onClick={() => statusMutation.mutate(s)}
                       disabled={statusMutation.isPending}
-                      className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${localStatus === s ? `${cfg.pill} font-semibold` : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
+                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${localStatus === s ? `${cfg.pill} font-semibold` : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
                     >
                       {cfg?.label ?? s}
                     </button>
@@ -758,54 +803,46 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
               </div>
             </div>
 
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
-              </p>
-              {signals.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic leading-relaxed">
-                  No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
+            {/* Notes feed — scrollable */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+              {notesLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                </div>
+              ) : notes.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-6 italic">
+                  No activity yet — log a call, add context, or update the deal stage above.
                 </p>
               ) : (
-                <div className="flex flex-col gap-2">
-                  {signals.map((sig) => (
-                    <SignalMiniCard
-                      key={sig.id}
-                      signal={sig}
-                      draggable
-                      onDetach={() => onDetachSignal(sig.id)}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Notes */}
-          <TabsContent value="notes" className="flex-1 flex flex-col min-h-0 m-0">
-            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
-              {notes.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-6">No notes yet. Add one below.</p>
-              ) : (
                 notes.map((note) => (
-                  <div key={note.id} className={`flex gap-2.5 ${note.isSystemEvent ? "opacity-60" : ""}`}>
-                    {!note.isSystemEvent && (
-                      <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5">{getInitials(note.authorName)}</div>
-                    )}
-                    <div className={`flex-1 min-w-0 ${note.isSystemEvent ? "pl-7" : ""}`}>
-                      {!note.isSystemEvent && (
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] font-semibold text-foreground">{note.authorName}</span>
-                          <span className="text-[10px] text-muted-foreground">{timeAgo(note.createdAt)}</span>
+                  <div key={note.id}>
+                    {note.isSystemEvent ? (
+                      <div className="flex items-center gap-2 py-0.5">
+                        <div className="h-px flex-1 bg-border" />
+                        <span className="text-[10px] text-muted-foreground whitespace-nowrap shrink-0">{note.content}</span>
+                        <div className="h-px flex-1 bg-border" />
+                      </div>
+                    ) : (
+                      <div className="flex gap-2.5">
+                        <div className="w-6 h-6 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5">
+                          {getInitials(note.authorName)}
                         </div>
-                      )}
-                      <p className="text-xs text-foreground leading-relaxed break-words">{note.content}</p>
-                    </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[10px] font-semibold text-foreground">{note.authorName}</span>
+                            <span className="text-[10px] text-muted-foreground">{timeAgo(note.createdAt)}</span>
+                          </div>
+                          <p className="text-xs text-foreground leading-relaxed break-words">{note.content}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))
               )}
               <div ref={notesEndRef} />
             </div>
+
+            {/* Note input — pinned to bottom */}
             <div className="shrink-0 border-t border-border px-5 py-3 flex gap-2">
               <input
                 value={noteText}
