@@ -383,6 +383,14 @@ async function runStartupMigrations() {
     log(`[startup] impersonation table migration failed: ${err?.message}`, "startup");
   }
 
+  // ── saved_assets parent_saved_asset_id (signal stacking) ─────────────────
+  try {
+    await mdb.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS parent_saved_asset_id INTEGER REFERENCES saved_assets(id) ON DELETE SET NULL`);
+    log("[startup] saved_assets parent_saved_asset_id column ready", "startup");
+  } catch (err: any) {
+    log(`[startup] saved_assets parent_saved_asset_id migration failed: ${err?.message}`, "startup");
+  }
+
   // ── saved_assets status column ────────────────────────────────────────────
   try {
     await mdb.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);

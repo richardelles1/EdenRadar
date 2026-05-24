@@ -253,6 +253,7 @@ const dossierBodySchema = z.object({
 const saveAssetBodySchema = z.object({
   ingested_asset_id: z.number().int().optional(),
   pipeline_list_id: z.number().int().optional().nullable(),
+  parent_saved_asset_id: z.number().int().optional().nullable(),
   asset_name: z.string(),
   target: z.string(),
   modality: z.string(),
@@ -2464,6 +2465,7 @@ export async function registerRoutes(
       const asset = await storage.createSavedAsset({
         ingestedAssetId: body.ingested_asset_id ?? null,
         pipelineListId: body.pipeline_list_id ?? null,
+        parentSavedAssetId: body.parent_saved_asset_id ?? null,
         assetName: body.asset_name,
         target: body.target,
         modality: body.modality,
@@ -2678,6 +2680,27 @@ export async function registerRoutes(
       res.json({ asset });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to update status" });
+    }
+  });
+
+  app.patch("/api/saved-assets/:id/parent", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const { parent_saved_asset_id } = z.object({
+        parent_saved_asset_id: z.number().int().positive().nullable(),
+      }).parse(req.body);
+      const userId = await tryGetUserId(req);
+      const before = await storage.getSavedAsset(id);
+      if (!before) return res.status(404).json({ error: "Asset not found" });
+      if (!await canAccessSavedAsset(before, userId ?? null)) return res.status(403).json({ error: "Access denied" });
+      // Prevent circular references and self-parenting
+      if (parent_saved_asset_id === id) return res.status(400).json({ error: "Asset cannot be its own parent" });
+      const asset = await storage.updateSavedAssetParent(id, parent_saved_asset_id);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      res.json({ asset });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to update parent" });
     }
   });
 

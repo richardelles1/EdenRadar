@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Bookmark, Layers, Plus, Check, ChevronDown, Loader2, Trash2 } from "lucide-react";
+import { Bookmark, Layers, Plus, Check, ChevronDown, Loader2, Trash2, Link2, X } from "lucide-react";
 import type { ScoredAsset } from "@/lib/types";
 import { useOrg } from "@/hooks/use-org";
 
@@ -48,11 +48,20 @@ type SavedAssetSummary = {
   pmid?: string | null;
   assetName: string;
   pipelineListId?: number | null;
+  sourceName?: string | null;
+  parentSavedAssetId?: number | null;
 };
 
 type SavedAssetsResponse = {
   assets: SavedAssetSummary[];
 };
+
+const NON_TTO_SOURCES = ["patent", "clinical_trial", "pubmed", "biorxiv", "medrxiv", "literature", "arxiv", "preprint", "paper"];
+function isNonTtoSource(sourceName?: string | null) {
+  if (!sourceName) return false;
+  const sn = sourceName.toLowerCase();
+  return NON_TTO_SOURCES.some((s) => sn.includes(s));
+}
 
 type Props = {
   payload?: PipelinePickerPayload;
@@ -87,6 +96,8 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createShared, setCreateShared] = useState(false);
+  const [parentSearch, setParentSearch] = useState("");
+  const [selectedParentId, setSelectedParentId] = useState<number | null>(null);
 
   const effectivePayload = payload ?? (asset ? buildPayload(asset) : null);
 
@@ -115,6 +126,15 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
 
   const isSaved = alreadySaved !== undefined ? alreadySaved : !!savedAsset;
   const currentPipelineListId = savedAsset?.pipelineListId ?? null;
+
+  // Detect if this is a non-TTO asset (patent, trial, literature)
+  const thisIsNonTto = isNonTtoSource(effectivePayload?.source_name);
+  // TTO assets available to link to
+  const ttoAssets = savedAssets.filter((a) => !isNonTtoSource(a.sourceName));
+  const filteredTtoAssets = parentSearch.trim()
+    ? ttoAssets.filter((a) => a.assetName.toLowerCase().includes(parentSearch.toLowerCase()))
+    : ttoAssets;
+  const selectedParent = ttoAssets.find((a) => a.id === selectedParentId) ?? null;
 
   type SaveMutationResult = { moved: boolean };
   const saveMutation = useMutation<SaveMutationResult, Error, { pipelineListId: number | null; pipelineId?: number }>({
@@ -151,6 +171,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
           pmid: effectivePayload.pmid ?? undefined,
           ingested_asset_id: effectivePayload.ingested_asset_id ?? undefined,
           pipeline_list_id: pipelineListId,
+          parent_saved_asset_id: selectedParentId ?? undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to save asset");
@@ -234,6 +255,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
           source_url: effectivePayload.source_url ?? undefined,
           pmid: effectivePayload.pmid ?? undefined,
           ingested_asset_id: effectivePayload.ingested_asset_id ?? undefined,
+          parent_saved_asset_id: selectedParentId ?? undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to save asset");
@@ -294,7 +316,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setSelectedParentId(null); setParentSearch(""); } }}>
       <PopoverTrigger asChild>
         {variant === "button" ? (
           <Button
@@ -354,6 +376,53 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         collisionPadding={12}
         data-testid="pipeline-picker-popover"
       >
+        {/* Link to TTO Asset — only for patents, trials, research */}
+        {thisIsNonTto && (
+          <div className="mb-2 pb-2 border-b border-border">
+            <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1 flex items-center gap-1">
+              <Link2 className="w-2.5 h-2.5" />
+              Link to TTO Asset
+            </div>
+            {selectedParent ? (
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 mx-0.5">
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium flex-1 truncate">{selectedParent.assetName}</span>
+                <button onClick={() => setSelectedParentId(null)} className="shrink-0 text-emerald-600 hover:text-emerald-500">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="px-1 mb-1">
+                  <Input
+                    value={parentSearch}
+                    onChange={(e) => setParentSearch(e.target.value)}
+                    placeholder="Search saved TTO assets…"
+                    className="h-6 text-[11px]"
+                  />
+                </div>
+                {ttoAssets.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground px-2 py-1 italic">No saved TTO assets yet</p>
+                ) : (
+                  <div className="max-h-24 overflow-y-auto">
+                    {filteredTtoAssets.slice(0, 8).map((a) => (
+                      <button
+                        key={a.id}
+                        onClick={() => { setSelectedParentId(a.id); setParentSearch(""); }}
+                        className="w-full text-left px-2 py-1 text-[11px] hover:bg-muted/50 rounded truncate"
+                      >
+                        {a.assetName}
+                      </button>
+                    ))}
+                    {filteredTtoAssets.length === 0 && (
+                      <p className="text-[10px] text-muted-foreground px-2 py-1 italic">No matches</p>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">
           {isSaved ? "Move to pipeline" : "Save to pipeline"}
         </div>

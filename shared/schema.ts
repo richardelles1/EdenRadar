@@ -99,6 +99,7 @@ export const savedAssets = pgTable("saved_assets", {
   sourceUrl: text("source_url"),
   pmid: text("pmid"),
   status: text("status"),
+  parentSavedAssetId: integer("parent_saved_asset_id"),
   savedAt: timestamp("saved_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
