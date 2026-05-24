@@ -8,7 +8,7 @@ import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-import { storage, type EnrichFilter } from "./storage";
+import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
@@ -3388,7 +3388,7 @@ export async function registerRoutes(
           readOnly: body.readOnly,
         });
         if ("error" in result) return res.status(result.status).json({ error: result.error });
-        await storage.insertAdminEvent({
+        await insertAdminEvent({
           adminUserId: adminId, adminEmail,
           action: "impersonation_start",
           targetUserId: result.session.targetUserId,
@@ -9552,7 +9552,7 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/events", requireAdmin, async (_req, res) => {
     try {
-      const events = await storage.getAdminEvents(200);
+      const events = await getAdminEvents(200);
       res.json({ events });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -9694,7 +9694,7 @@ If a field cannot be determined, use "N/A".`
       if (error) return res.status(500).json({ error: error.message });
       const adminUser = await getAdminUser(req);
       if (adminUser) {
-        await storage.insertAdminEvent({
+        await insertAdminEvent({
           adminUserId: adminUser.id, adminEmail: adminUser.email,
           action: "role_change", targetUserId: id,
           targetEmail: data.user.email ?? "",
@@ -9807,6 +9807,10 @@ If a field cannot be determined, use "N/A".`
     try {
       const data = orgBodySchema.parse(req.body);
       const org = await storage.createOrganization(data);
+      const adminUser = await getAdminUser(req);
+      if (adminUser) {
+        await insertAdminEvent({ adminUserId: adminUser.id, adminEmail: adminUser.email, action: "org_created", targetOrgId: org.id, payload: { name: org.name, planTier: org.planTier } });
+      }
       res.json(org);
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
@@ -9816,9 +9820,16 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/admin/organizations/:id", async (req, res) => {
     try {
+      const orgId = Number(req.params.id);
       const data = orgBodySchema.partial().parse(req.body);
-      const org = await storage.updateOrganization(Number(req.params.id), data);
+      const before = await storage.getOrganization(orgId);
+      const org = await storage.updateOrganization(orgId, data);
       if (!org) return res.status(404).json({ error: "Not found" });
+      const adminUser = await getAdminUser(req);
+      if (adminUser) {
+        const action = data.planTier && data.planTier !== before?.planTier ? "org_plan_change" : "org_updated";
+        await insertAdminEvent({ adminUserId: adminUser.id, adminEmail: adminUser.email, action, targetOrgId: orgId, payload: { changes: data, prevPlanTier: before?.planTier } });
+      }
       res.json(org);
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
@@ -9828,7 +9839,13 @@ If a field cannot be determined, use "N/A".`
 
   app.delete("/api/admin/organizations/:id", async (req, res) => {
     try {
-      await storage.deleteOrganization(Number(req.params.id));
+      const orgId = Number(req.params.id);
+      const org = await storage.getOrganization(orgId);
+      await storage.deleteOrganization(orgId);
+      const adminUser = await getAdminUser(req);
+      if (adminUser) {
+        await insertAdminEvent({ adminUserId: adminUser.id, adminEmail: adminUser.email, action: "org_deleted", targetOrgId: orgId, payload: { name: org?.name } });
+      }
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -9910,6 +9927,11 @@ If a field cannot be determined, use "N/A".`
         console.error("[email] Team invite email failed:", err)
       );
 
+      const inviteAdmin = await getAdminUser(req);
+      if (inviteAdmin) {
+        await insertAdminEvent({ adminUserId: inviteAdmin.id, adminEmail: inviteAdmin.email, action: "org_member_added", targetUserId: userId, targetEmail: email, targetOrgId: orgId, payload: { role, memberName: fullName } });
+      }
+
       res.json({ member, user: { id: userId, email: userData.user.email, fullName } });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
@@ -9922,7 +9944,13 @@ If a field cannot be determined, use "N/A".`
     try {
       const orgId = Number(req.params.id);
       const { userId } = req.params;
+      const members = await storage.getOrgMembers(orgId);
+      const member = members.find((m) => m.userId === userId);
       await storage.removeOrgMember(orgId, userId);
+      const removeAdmin = await getAdminUser(req);
+      if (removeAdmin) {
+        await insertAdminEvent({ adminUserId: removeAdmin.id, adminEmail: removeAdmin.email, action: "org_member_removed", targetUserId: userId, targetEmail: member?.email ?? "", targetOrgId: orgId, payload: { memberName: member?.memberName } });
+      }
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10014,7 +10042,7 @@ If a field cannot be determined, use "N/A".`
       // Audit log — best-effort, do not block response
       const deletingAdmin = await getAdminUser(req).catch(() => null);
       if (deletingAdmin) {
-        await storage.insertAdminEvent({
+        await insertAdminEvent({
           adminUserId: deletingAdmin.id, adminEmail: deletingAdmin.email,
           action: "user_delete", targetUserId: userId,
           targetEmail: deletedEmail ?? "",
@@ -10040,8 +10068,170 @@ If a field cannot be determined, use "N/A".`
       const { role } = z.object({ role: z.enum(["owner", "admin", "member"]) }).parse(req.body);
       const orgId = Number(req.params.id);
       const { userId } = req.params;
+      const members = await storage.getOrgMembers(orgId);
+      const member = members.find((m) => m.userId === userId);
       await storage.updateOrgMemberRole(orgId, userId, role);
+      const roleAdmin = await getAdminUser(req);
+      if (roleAdmin) {
+        await insertAdminEvent({ adminUserId: roleAdmin.id, adminEmail: roleAdmin.email, action: "org_member_role_change", targetUserId: userId, targetEmail: member?.email ?? "", targetOrgId: orgId, payload: { prevRole: member?.role, newRole: role } });
+      }
       res.json({ ok: true });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── User Account Status ────────────────────────────────────────────────────────
+  // PATCH /api/admin/users/:userId/status — set account status (active|suspended|deactivated)
+  // Also updates Supabase user_metadata.account_status so auth middleware can enforce it
+  // without an extra DB call on every request.
+  app.patch("/api/admin/users/:userId/status", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { status, note } = z.object({
+        status: z.enum(["active", "suspended", "deactivated"]),
+        note: z.string().max(500).optional(),
+      }).parse(req.body);
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const adminUser = await getAdminUser(req);
+      if (!adminUser) return res.status(401).json({ error: "Admin authentication required" });
+
+      // Persist in our DB (source of truth)
+      await setIndustryProfileStatus(userId, status, adminUser.id, note);
+
+      // Propagate to Supabase user_metadata so auth middleware can block on next request
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { error: supabaseError } = await adminSupabase.auth.admin.updateUserById(userId, {
+        user_metadata: { account_status: status === "active" ? null : status },
+      });
+      if (supabaseError) {
+        console.warn("[user-status] Supabase metadata update failed:", supabaseError.message);
+      }
+
+      await insertAdminEvent({
+        adminUserId: adminUser.id, adminEmail: adminUser.email,
+        action: "user_status_change", targetUserId: userId,
+        payload: { newStatus: status, note: note ?? null },
+      });
+
+      res.json({ ok: true, status });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/users/:userId/status — get current account status
+  app.get("/api/admin/users/:userId/status", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const profile = await storage.getIndustryProfileByUserId(userId);
+      res.json({
+        status: profile?.status ?? "active",
+        statusChangedAt: profile?.statusChangedAt ?? null,
+        statusChangedBy: profile?.statusChangedBy ?? null,
+        statusNote: profile?.statusNote ?? null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Plan Entitlements ──────────────────────────────────────────────────────────
+  // GET /api/admin/entitlements — all plan entitlements (optionally filter by planTier)
+  app.get("/api/admin/entitlements", async (req, res) => {
+    try {
+      const planTier = typeof req.query.planTier === "string" ? req.query.planTier : undefined;
+      const entitlements = await getPlanEntitlements(planTier);
+      res.json({ entitlements });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/organizations/:id/entitlements — plan defaults + org overrides merged
+  app.get("/api/admin/organizations/:id/entitlements", async (req, res) => {
+    try {
+      const orgId = Number(req.params.id);
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Not found" });
+      const [planDefaults, overrides] = await Promise.all([
+        getPlanEntitlements(org.planTier),
+        getOrgEntitlementOverrides(orgId),
+      ]);
+      const overrideMap = new Map(overrides.map((o) => [o.featureKey, o]));
+      const merged = planDefaults.map((e) => ({
+        ...e,
+        override: overrideMap.get(e.featureKey) ?? null,
+        effectiveValue: overrideMap.get(e.featureKey)?.overrideValue ?? e.limitValue,
+        effectiveEnabled: overrideMap.get(e.featureKey)?.enabled ?? e.enabled,
+      }));
+      res.json({ planTier: org.planTier, entitlements: merged });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/admin/organizations/:id/entitlements/:featureKey — set or clear override
+  app.patch("/api/admin/organizations/:id/entitlements/:featureKey", async (req, res) => {
+    try {
+      const orgId = Number(req.params.id);
+      const { featureKey } = req.params;
+      const bodySchema = z.object({
+        overrideValue: z.number().int().nullable().optional(),
+        enabled: z.boolean().nullable().optional(),
+        note: z.string().max(500).optional(),
+        remove: z.boolean().optional(), // true = delete the override row
+      });
+      const { overrideValue = null, enabled = null, note, remove } = bodySchema.parse(req.body);
+      const adminUser = await getAdminUser(req);
+      if (!adminUser) return res.status(401).json({ error: "Admin authentication required" });
+
+      if (remove) {
+        await deleteOrgEntitlementOverride(orgId, featureKey);
+        await insertAdminEvent({ adminUserId: adminUser.id, adminEmail: adminUser.email, action: "entitlement_override_removed", targetOrgId: orgId, payload: { featureKey } });
+        return res.json({ ok: true, removed: true });
+      }
+
+      const override = await upsertOrgEntitlementOverride(orgId, featureKey, overrideValue, enabled, adminUser.id, note);
+      await insertAdminEvent({ adminUserId: adminUser.id, adminEmail: adminUser.email, action: "entitlement_override_set", targetOrgId: orgId, payload: { featureKey, overrideValue, enabled, note } });
+      res.json({ ok: true, override });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Individual → Org Upgrade ──────────────────────────────────────────────────
+  // POST /api/admin/users/:userId/upgrade-to-org — convert a no-org individual user
+  // into an org owner. Creates an org, migrates their pipeline lists, and links their profile.
+  app.post("/api/admin/users/:userId/upgrade-to-org", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { orgName } = z.object({ orgName: z.string().min(1).max(200) }).parse(req.body);
+
+      // Check user isn't already in an org
+      const profile = await storage.getIndustryProfileByUserId(userId);
+      if (profile?.orgId) {
+        return res.status(400).json({ error: "User is already a member of an organization." });
+      }
+
+      const adminUser = await getAdminUser(req);
+      if (!adminUser) return res.status(401).json({ error: "Admin authentication required" });
+
+      const org = await upgradeIndividualToOrg(userId, orgName);
+
+      await insertAdminEvent({
+        adminUserId: adminUser.id, adminEmail: adminUser.email,
+        action: "org_created", targetUserId: userId, targetOrgId: org.id,
+        payload: { name: org.name, source: "individual_upgrade" },
+      });
+
+      res.json({ ok: true, org });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
       res.status(500).json({ error: err.message });
@@ -16466,6 +16656,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         label: "My API Key",
         userId,
         userEmail: userEmail ?? null,
+        keyType: "personal",
         tier,
         scopes: scopes as string[],
         status: "active",
@@ -16534,6 +16725,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         userEmail: userEmail ?? null,
         orgId: orgId ?? null,
         orgName: orgName ?? null,
+        keyType: orgId ? "org" : "personal",
         tier,
         scopes: tierConfig.scopes as string[],
         status: "active",
@@ -16548,8 +16740,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         actorId: adminUser?.id ?? null,
         actorType: "admin",
         targetUserId: userId,
-        payload: { tier, label, note },
+        payload: { tier, label, note, keyType: orgId ? "org" : "personal" },
       }).catch(() => {});
+      if (adminUser) {
+        await insertAdminEvent({ adminUserId: adminUser.id, adminEmail: adminUser.email, action: "api_key_created", targetUserId: userId, targetOrgId: orgId ?? undefined, payload: { tier, keyType: orgId ? "org" : "personal", prefix } });
+      }
       return res.json({ ok: true, prefix, raw });
     } catch (err) {
       console.error("[admin/api-management/keys POST]", err);

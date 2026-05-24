@@ -28,6 +28,9 @@ export type User = typeof users.$inferSelect;
 // user_id is a Supabase Auth UUID (from supabase.auth.getUser).
 // Industry users authenticate via Supabase, not our local `users` table,
 // so no FK to users.id is possible or correct here.
+export const INDUSTRY_PROFILE_STATUSES = ["active", "suspended", "deactivated"] as const;
+export type IndustryProfileStatus = typeof INDUSTRY_PROFILE_STATUSES[number];
+
 export const industryProfiles = pgTable("industry_profiles", {
   userId: text("user_id").primaryKey(),
   userName: text("user_name").notNull().default(""),
@@ -44,6 +47,11 @@ export const industryProfiles = pgTable("industry_profiles", {
   lastViewedAlertsAt: timestamp("last_viewed_alerts_at"),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  // Account lifecycle — managed by admin; default active. Checked in auth middleware.
+  status: text("status").notNull().default("active"),
+  statusChangedAt: timestamp("status_changed_at"),
+  statusChangedBy: text("status_changed_by"),
+  statusNote: text("status_note"),
 });
 
 export type IndustryProfileRow = typeof industryProfiles.$inferSelect;
@@ -895,9 +903,16 @@ export const adminEvents = pgTable("admin_events", {
   id: serial("id").primaryKey(),
   adminUserId: text("admin_user_id").notNull(),
   adminEmail: text("admin_email").notNull(),
-  action: text("action").notNull(), // role_change | user_delete | impersonation_start | impersonation_end | user_invite | plan_change | market_access_change
+  // Consolidated action vocabulary:
+  // user: role_change | user_delete | user_invite | user_status_change | impersonation_start | impersonation_end
+  // org: org_created | org_updated | org_deleted | org_plan_change | market_access_change
+  // members: org_member_added | org_member_removed | org_member_role_change
+  // api: api_key_created | api_key_revoked | api_key_suspended | api_key_restored
+  // entitlements: entitlement_override_set | entitlement_override_removed
+  action: text("action").notNull(),
   targetUserId: text("target_user_id"),
   targetEmail: text("target_email"),
+  targetOrgId: integer("target_org_id"),
   payload: jsonb("payload").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -1453,6 +1468,8 @@ export const apiKeys = pgTable("api_keys", {
   userEmail: text("user_email"),
   orgId: integer("org_id"),
   orgName: text("org_name"),
+  // "org" = owned by the org, survives member changes; "personal" = individual developer key
+  keyType: text("key_type").notNull().default("personal"),
   tier: text("tier").notNull().default("starter"),
   scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
   status: text("status").notNull().default("active"),
@@ -1512,3 +1529,47 @@ export const apiKeyAuditLog = pgTable("api_key_audit_log", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 export type ApiKeyAuditLog = typeof apiKeyAuditLog.$inferSelect;
+
+// ── Plan Entitlements & Org Overrides ─────────────────────────────────────────
+// Source of truth for what each plan tier can do. Replaces hardcoded plan checks
+// in application code. Seeded by migration 0006; editable via admin panel.
+
+export const ENTITLEMENT_FEATURE_KEYS = [
+  "api_calls_daily",
+  "seat_count",
+  "pipeline_lists",
+  "reports_monthly",
+  "market_access",
+] as const;
+export type EntitlementFeatureKey = typeof ENTITLEMENT_FEATURE_KEYS[number];
+
+export const planEntitlements = pgTable("plan_entitlements", {
+  id: serial("id").primaryKey(),
+  planTier: text("plan_tier").notNull(),
+  featureKey: text("feature_key").notNull(),
+  limitValue: integer("limit_value"),      // null = unlimited
+  limitType: text("limit_type").notNull().default("total"), // daily | monthly | total | boolean
+  enabled: boolean("enabled").notNull().default(true),
+}, (t) => [
+  uniqueIndex("plan_entitlements_tier_feature_idx").on(t.planTier, t.featureKey),
+]);
+export type PlanEntitlement = typeof planEntitlements.$inferSelect;
+export type InsertPlanEntitlement = typeof planEntitlements.$inferInsert;
+
+// Per-org overrides above or below the plan default. Allows custom enterprise limits
+// without changing the plan tier or deploying code.
+export const orgEntitlementOverrides = pgTable("org_entitlement_overrides", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  featureKey: text("feature_key").notNull(),
+  overrideValue: integer("override_value"),  // null = unlimited
+  enabled: boolean("enabled"),               // null = inherit from plan
+  grantedBy: text("granted_by"),
+  grantedAt: timestamp("granted_at").defaultNow().notNull(),
+  note: text("note"),
+}, (t) => [
+  uniqueIndex("org_entitlement_overrides_org_feature_idx").on(t.orgId, t.featureKey),
+  index("org_entitlement_overrides_org_idx").on(t.orgId),
+]);
+export type OrgEntitlementOverride = typeof orgEntitlementOverrides.$inferSelect;
+export type InsertOrgEntitlementOverride = typeof orgEntitlementOverrides.$inferInsert;

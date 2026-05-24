@@ -32,7 +32,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Building2, Plus, Users, Pencil, Trash2, UserPlus, UserMinus, ChevronDown, ChevronRight, Mail } from "lucide-react";
+import { Building2, Plus, Users, Pencil, Trash2, UserPlus, UserMinus, ChevronDown, ChevronRight, Mail, ShieldOff, ShieldCheck, ArrowUpCircle, Settings } from "lucide-react";
 
 interface Organization {
   id: number;
@@ -62,6 +62,26 @@ interface OrgMember {
   inviteStatus: string | null;
   joinedAt: string;
   lastSignInAt: string | null;
+  // Account status — from industry_profiles (may be absent on older records)
+  accountStatus?: string;
+}
+
+interface Entitlement {
+  id: number;
+  planTier: string;
+  featureKey: string;
+  limitValue: number | null;
+  limitType: string;
+  enabled: boolean;
+  override: {
+    overrideValue: number | null;
+    enabled: boolean | null;
+    grantedBy: string | null;
+    grantedAt: string;
+    note: string | null;
+  } | null;
+  effectiveValue: number | null;
+  effectiveEnabled: boolean;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -284,6 +304,61 @@ export function OrganizationsTab({ pw }: { pw: string }) {
       adminFetch(`/api/admin/organizations/${orgId}/members/${userId}/resend-invite`, { method: "POST" }, pw),
     onSuccess: (data: { ok: boolean; email: string }) => {
       toast({ title: `Invite resent to ${data.email}` });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // User account status toggle
+  const setUserStatusMutation = useMutation({
+    mutationFn: ({ userId, status, note }: { userId: string; status: string; note?: string }) =>
+      adminFetch(`/api/admin/users/${userId}/status`, { method: "PATCH", body: JSON.stringify({ status, note }) }, pw),
+    onSuccess: () => {
+      if (expandedId) queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", expandedId] });
+      toast({ title: "Account status updated" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // Individual → Org upgrade
+  const [upgradeUserId, setUpgradeUserId] = useState<string | null>(null);
+  const [upgradeOrgName, setUpgradeOrgName] = useState("");
+  const upgradeToOrgMutation = useMutation({
+    mutationFn: ({ userId, orgName }: { userId: string; orgName: string }) =>
+      adminFetch(`/api/admin/users/${userId}/upgrade-to-org`, { method: "POST", body: JSON.stringify({ orgName }) }, pw),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations"] });
+      if (expandedId) queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", expandedId] });
+      setUpgradeUserId(null);
+      setUpgradeOrgName("");
+      toast({ title: "User converted to org account" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  // Entitlements
+  const [entitlementsOrgId, setEntitlementsOrgId] = useState<number | null>(null);
+  const { data: entitlementsData, isLoading: entitlementsLoading } = useQuery<{ planTier: string; entitlements: Entitlement[] }>({
+    queryKey: ["/api/admin/organizations", entitlementsOrgId, "entitlements"],
+    queryFn: () => adminFetch(`/api/admin/organizations/${entitlementsOrgId}/entitlements`, {}, pw),
+    enabled: entitlementsOrgId !== null,
+  });
+  const [editingEntitlement, setEditingEntitlement] = useState<{ featureKey: string; value: string; note: string } | null>(null);
+  const upsertEntitlementMutation = useMutation({
+    mutationFn: ({ orgId, featureKey, overrideValue, note }: { orgId: number; featureKey: string; overrideValue: number | null; note: string }) =>
+      adminFetch(`/api/admin/organizations/${orgId}/entitlements/${featureKey}`, { method: "PATCH", body: JSON.stringify({ overrideValue, note: note || undefined }) }, pw),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", entitlementsOrgId, "entitlements"] });
+      setEditingEntitlement(null);
+      toast({ title: "Entitlement override saved" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+  const removeEntitlementMutation = useMutation({
+    mutationFn: ({ orgId, featureKey }: { orgId: number; featureKey: string }) =>
+      adminFetch(`/api/admin/organizations/${orgId}/entitlements/${featureKey}`, { method: "PATCH", body: JSON.stringify({ remove: true }) }, pw),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", entitlementsOrgId, "entitlements"] });
+      toast({ title: "Override removed — reverted to plan default" });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -662,6 +737,11 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                           Pending setup
                                         </span>
                                       )}
+                                      {m.accountStatus && m.accountStatus !== "active" && (
+                                        <span className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${m.accountStatus === "suspended" ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" : "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"}`} data-testid={`badge-account-status-${m.userId}`}>
+                                          {m.accountStatus === "suspended" ? "Suspended" : "Deactivated"}
+                                        </span>
+                                      )}
                                     </div>
                                   </div>
                                   <Select
@@ -698,6 +778,32 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                   >
                                     <Mail className="h-3.5 w-3.5" />
                                   </Button>
+                                  {/* Suspend / Restore account */}
+                                  {m.accountStatus === "suspended" ? (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-emerald-600 hover:text-emerald-700"
+                                      title="Restore account access"
+                                      disabled={setUserStatusMutation.isPending && setUserStatusMutation.variables?.userId === m.userId}
+                                      onClick={() => setUserStatusMutation.mutate({ userId: m.userId, status: "active" })}
+                                      data-testid={`button-restore-${m.userId}`}
+                                    >
+                                      <ShieldCheck className="h-3.5 w-3.5" />
+                                    </Button>
+                                  ) : (
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      className="h-7 w-7 p-0 text-muted-foreground hover:text-amber-600"
+                                      title="Suspend account — blocks login immediately"
+                                      disabled={setUserStatusMutation.isPending && setUserStatusMutation.variables?.userId === m.userId}
+                                      onClick={() => setUserStatusMutation.mutate({ userId: m.userId, status: "suspended" })}
+                                      data-testid={`button-suspend-${m.userId}`}
+                                    >
+                                      <ShieldOff className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="ghost"
@@ -723,6 +829,91 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                             </div>
                           )}
                         </div>
+
+                        {/* Entitlements section */}
+                        <div className="mt-4 border-t pt-3">
+                          <button
+                            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                            onClick={() => setEntitlementsOrgId(entitlementsOrgId === org.id ? null : org.id)}
+                          >
+                            <Settings className="h-3.5 w-3.5" />
+                            {entitlementsOrgId === org.id ? "Hide entitlements" : "View / override entitlements"}
+                          </button>
+                          {entitlementsOrgId === org.id && (
+                            <div className="mt-3">
+                              {entitlementsLoading ? (
+                                <p className="text-xs text-muted-foreground">Loading…</p>
+                              ) : entitlementsData ? (
+                                <div className="space-y-1">
+                                  <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                                    Plan: {entitlementsData.planTier} — click a row to override
+                                  </p>
+                                  {entitlementsData.entitlements.map((e) => (
+                                    <div
+                                      key={e.featureKey}
+                                      className={`flex items-center justify-between rounded px-2 py-1 text-xs cursor-pointer hover:bg-muted/50 ${e.override ? "bg-amber-50 dark:bg-amber-900/10" : ""}`}
+                                      onClick={() => setEditingEntitlement(editingEntitlement?.featureKey === e.featureKey ? null : { featureKey: e.featureKey, value: String(e.effectiveValue ?? ""), note: e.override?.note ?? "" })}
+                                    >
+                                      <span className="font-mono text-[11px]">{e.featureKey}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-muted-foreground">{e.effectiveValue === null ? "∞" : e.effectiveValue} / {e.limitType}</span>
+                                        {e.override && (
+                                          <span className="text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-1.5 rounded">override</span>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                  {editingEntitlement && (
+                                    <div className="mt-2 border rounded p-2 space-y-2 bg-background">
+                                      <p className="text-[11px] font-medium">Override: {editingEntitlement.featureKey}</p>
+                                      <div className="flex gap-2">
+                                        <Input
+                                          className="h-7 text-xs w-28"
+                                          placeholder="Value (blank=∞)"
+                                          value={editingEntitlement.value}
+                                          onChange={(e) => setEditingEntitlement((prev) => prev ? { ...prev, value: e.target.value } : prev)}
+                                        />
+                                        <Input
+                                          className="h-7 text-xs flex-1"
+                                          placeholder="Note (optional)"
+                                          value={editingEntitlement.note}
+                                          onChange={(e) => setEditingEntitlement((prev) => prev ? { ...prev, note: e.target.value } : prev)}
+                                        />
+                                      </div>
+                                      <div className="flex gap-1.5">
+                                        <Button
+                                          size="sm"
+                                          className="h-7 text-xs"
+                                          disabled={upsertEntitlementMutation.isPending}
+                                          onClick={() => {
+                                            const v = editingEntitlement.value.trim();
+                                            upsertEntitlementMutation.mutate({
+                                              orgId: org.id,
+                                              featureKey: editingEntitlement.featureKey,
+                                              overrideValue: v === "" ? null : parseInt(v),
+                                              note: editingEntitlement.note,
+                                            });
+                                          }}
+                                        >Save</Button>
+                                        {entitlementsData.entitlements.find((e) => e.featureKey === editingEntitlement.featureKey)?.override && (
+                                          <Button
+                                            size="sm"
+                                            variant="outline"
+                                            className="h-7 text-xs text-destructive"
+                                            disabled={removeEntitlementMutation.isPending}
+                                            onClick={() => removeEntitlementMutation.mutate({ orgId: org.id, featureKey: editingEntitlement.featureKey })}
+                                          >Remove override</Button>
+                                        )}
+                                        <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setEditingEntitlement(null)}>Cancel</Button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : null}
+                            </div>
+                          )}
+                        </div>
+
                       </div>
                     )}
                   </div>
@@ -732,6 +923,35 @@ export function OrganizationsTab({ pw }: { pw: string }) {
           })}
         </div>
       )}
+
+      {/* Individual → Org Upgrade Dialog */}
+      <Dialog open={upgradeUserId !== null} onOpenChange={(open) => { if (!open) { setUpgradeUserId(null); setUpgradeOrgName(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Convert to Org Account</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">Creates an organization and makes this user the owner. Their existing pipeline lists will be migrated to org scope.</p>
+          <div className="space-y-1.5 py-1">
+            <Label>Organization name</Label>
+            <Input
+              value={upgradeOrgName}
+              onChange={(e) => setUpgradeOrgName(e.target.value)}
+              placeholder="Acme Pharma"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setUpgradeUserId(null); setUpgradeOrgName(""); }}>Cancel</Button>
+            <Button
+              disabled={!upgradeOrgName.trim() || upgradeToOrgMutation.isPending}
+              onClick={() => upgradeUserId && upgradeToOrgMutation.mutate({ userId: upgradeUserId, orgName: upgradeOrgName.trim() })}
+            >
+              <ArrowUpCircle className="h-4 w-4 mr-1.5" />
+              Convert
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Create / Edit Org Dialog */}
       <Dialog open={orgDialogOpen} onOpenChange={setOrgDialogOpen}>

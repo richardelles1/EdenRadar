@@ -44,6 +44,9 @@ import {
   institutionQualitySnapshots,
   assetSignalEvents,
   adminEvents, type AdminEvent, type InsertAdminEvent,
+  planEntitlements, type PlanEntitlement,
+  orgEntitlementOverrides, type OrgEntitlementOverride, type InsertOrgEntitlementOverride,
+  type IndustryProfileStatus,
 } from "@shared/schema";
 import { computeMomentumScore } from "./lib/pipeline/computeMomentumScore";
 import { db } from "./db";
@@ -450,7 +453,7 @@ export interface IStorage {
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
-  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt">): Promise<IndustryProfileRow>;
+  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt" | "status" | "statusChangedAt" | "statusChangedBy" | "statusNote">): Promise<IndustryProfileRow>;
   getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
   setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void>;
 
@@ -4096,7 +4099,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt">): Promise<IndustryProfileRow> {
+  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt" | "status" | "statusChangedAt" | "statusChangedBy" | "statusNote">): Promise<IndustryProfileRow> {
     const [row] = await db
       .insert(industryProfiles)
       .values({ userId, ...data, updatedAt: new Date() })
@@ -5441,6 +5444,114 @@ export async function insertAdminEvent(event: InsertAdminEvent): Promise<void> {
 
 export async function getAdminEvents(limit = 100): Promise<AdminEvent[]> {
   return db.select().from(adminEvents).orderBy(desc(adminEvents.createdAt)).limit(limit);
+}
+
+// ── User Account Status ────────────────────────────────────────────────────────
+
+export async function setIndustryProfileStatus(
+  userId: string,
+  status: IndustryProfileStatus,
+  changedBy: string,
+  note?: string,
+): Promise<void> {
+  await db
+    .insert(industryProfiles)
+    .values({ userId, status, statusChangedAt: new Date(), statusChangedBy: changedBy, statusNote: note ?? null, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: industryProfiles.userId,
+      set: { status, statusChangedAt: new Date(), statusChangedBy: changedBy, statusNote: note ?? null, updatedAt: new Date() },
+    });
+}
+
+export async function getIndustryProfileStatus(userId: string): Promise<IndustryProfileStatus | null> {
+  const [row] = await db
+    .select({ status: industryProfiles.status })
+    .from(industryProfiles)
+    .where(eq(industryProfiles.userId, userId))
+    .limit(1);
+  return (row?.status as IndustryProfileStatus) ?? null;
+}
+
+// ── Plan Entitlements ──────────────────────────────────────────────────────────
+
+export async function getPlanEntitlements(planTier?: string): Promise<PlanEntitlement[]> {
+  const q = db.select().from(planEntitlements).orderBy(planEntitlements.planTier, planEntitlements.featureKey);
+  if (planTier) {
+    return q.where(eq(planEntitlements.planTier, planTier));
+  }
+  return q;
+}
+
+// ── Org Entitlement Overrides ─────────────────────────────────────────────────
+
+export async function getOrgEntitlementOverrides(orgId: number): Promise<OrgEntitlementOverride[]> {
+  return db.select().from(orgEntitlementOverrides).where(eq(orgEntitlementOverrides.orgId, orgId));
+}
+
+export async function upsertOrgEntitlementOverride(
+  orgId: number,
+  featureKey: string,
+  overrideValue: number | null,
+  enabled: boolean | null,
+  grantedBy: string,
+  note?: string,
+): Promise<OrgEntitlementOverride> {
+  const [row] = await db
+    .insert(orgEntitlementOverrides)
+    .values({ orgId, featureKey, overrideValue, enabled, grantedBy, grantedAt: new Date(), note: note ?? null })
+    .onConflictDoUpdate({
+      target: [orgEntitlementOverrides.orgId, orgEntitlementOverrides.featureKey],
+      set: { overrideValue, enabled, grantedBy, grantedAt: new Date(), note: note ?? null },
+    })
+    .returning();
+  return row;
+}
+
+export async function deleteOrgEntitlementOverride(orgId: number, featureKey: string): Promise<void> {
+  await db
+    .delete(orgEntitlementOverrides)
+    .where(and(eq(orgEntitlementOverrides.orgId, orgId), eq(orgEntitlementOverrides.featureKey, featureKey)));
+}
+
+// ── Individual → Org Upgrade ──────────────────────────────────────────────────
+// Converts a user with no org (industryProfiles.org_id = null) into an org owner.
+// Migrates their personal pipeline lists to org scope.
+
+export async function upgradeIndividualToOrg(
+  userId: string,
+  orgName: string,
+): Promise<Organization> {
+  return db.transaction(async (tx) => {
+    // Create org with individual plan (admin can upgrade tier separately)
+    const [org] = await tx
+      .insert(organizations)
+      .values({ name: orgName, planTier: "individual", seatLimit: 1, updatedAt: new Date() })
+      .returning();
+
+    // Add user as owner
+    await tx.insert(orgMembers).values({
+      orgId: org.id,
+      userId,
+      role: "owner",
+      invitedBy: "admin",
+      inviteSource: "admin",
+      inviteStatus: "active",
+    });
+
+    // Link profile to new org
+    await tx
+      .update(industryProfiles)
+      .set({ orgId: org.id, updatedAt: new Date() })
+      .where(eq(industryProfiles.userId, userId));
+
+    // Migrate personal pipeline lists to org scope
+    await tx
+      .update(pipelineLists)
+      .set({ orgId: org.id })
+      .where(and(eq(pipelineLists.userId, userId), isNull(pipelineLists.orgId)));
+
+    return org;
+  });
 }
 
 export const storage = new DatabaseStorage();

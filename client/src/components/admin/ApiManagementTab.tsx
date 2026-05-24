@@ -380,9 +380,16 @@ function KeysPanel({ pw }: { pw: string }) {
                     {k.orgName && <div className="text-[10px] text-muted-foreground truncate max-w-[140px]">{k.orgName}</div>}
                   </td>
                   <td className="px-3 py-3">
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${tierBadge(k.tier)}`}>
-                      {k.tier}
-                    </span>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border ${tierBadge(k.tier)}`}>
+                        {k.tier}
+                      </span>
+                      {k.keyType && k.keyType !== "personal" && (
+                        <span className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400">
+                          org
+                        </span>
+                      )}
+                    </div>
                   </td>
                   <td className="px-3 py-3 hidden lg:table-cell">
                     <ScopesCell scopes={k.scopes as string[]} />

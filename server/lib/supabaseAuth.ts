@@ -53,6 +53,10 @@ export async function verifyResearcherAuth(
   if (!token) return res.status(401).json({ error: "Authentication required" });
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return res.status(401).json({ error: "Invalid or expired token" });
+  const researcherAccountStatus = data.user.user_metadata?.account_status;
+  if (researcherAccountStatus === "suspended" || researcherAccountStatus === "deactivated") {
+    return res.status(403).json({ error: "Account access restricted. Contact support@edennx.com." });
+  }
   if (data.user.user_metadata?.role !== "researcher") {
     return res.status(403).json({ error: "Researcher role required" });
   }
@@ -79,6 +83,10 @@ export async function verifyConceptAuth(
   if (!token) return res.status(401).json({ error: "Authentication required" });
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return res.status(401).json({ error: "Invalid or expired token" });
+  const conceptAccountStatus = data.user.user_metadata?.account_status;
+  if (conceptAccountStatus === "suspended" || conceptAccountStatus === "deactivated") {
+    return res.status(403).json({ error: "Account access restricted. Contact support@edennx.com." });
+  }
   if (data.user.user_metadata?.role !== "concept") {
     return res.status(403).json({ error: "Concept role required" });
   }
@@ -174,6 +182,17 @@ export async function verifyAnyAuth(
   if (!token) return res.status(401).json({ error: "Authentication required" });
   const { data, error } = await supabase.auth.getUser(token);
   if (error || !data.user) return res.status(401).json({ error: "Invalid or expired token" });
+
+  // Account status check — suspended/deactivated users are blocked at auth time.
+  // Status is stored in user_metadata so it requires no extra DB call here.
+  const accountStatus = data.user.user_metadata?.account_status;
+  if (accountStatus === "suspended") {
+    return res.status(403).json({ error: "Account suspended. Contact support@edennx.com." });
+  }
+  if (accountStatus === "deactivated") {
+    return res.status(403).json({ error: "Account deactivated." });
+  }
+
   req.headers["x-user-id"] = data.user.id;
   req.headers["x-user-role"] = data.user.user_metadata?.role || "";
   req.headers["x-user-email"] = data.user.email || "";
