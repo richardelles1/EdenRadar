@@ -181,25 +181,21 @@ function OverviewPanel({ pw }: { pw: string }) {
           icon={<Key className="h-4 w-4 text-emerald-500" />}
           label="Active Keys"
           value={d.activeKeys}
-          color="emerald"
         />
         <StatCard
           icon={<Shield className="h-4 w-4 text-blue-500" />}
           label="Total Keys"
           value={d.totalKeys}
-          color="blue"
         />
         <StatCard
           icon={<Activity className="h-4 w-4 text-amber-500" />}
           label="Calls Today"
           value={d.callsToday.toLocaleString()}
-          color="amber"
         />
         <StatCard
           icon={<TrendingUp className="h-4 w-4 text-violet-500" />}
           label="Calls This Month"
           value={d.callsMonth.toLocaleString()}
-          color="violet"
         />
       </div>
 
@@ -1021,12 +1017,11 @@ function AuditLogPanel({ pw }: { pw: string }) {
 // ── Shared UI ─────────────────────────────────────────────────────────────────
 
 function StatCard({
-  icon, label, value, color,
+  icon, label, value,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  color: string;
 }) {
   return (
     <div className="border border-border bg-card rounded-lg p-4">

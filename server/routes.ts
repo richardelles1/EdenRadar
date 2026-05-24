@@ -16111,7 +16111,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const todayCountsRaw = keyIds.length > 0
         ? await db.select({ keyId: apiUsageLogs.keyId, count: sql<number>`count(*)::int` })
             .from(apiUsageLogs)
-            .where(sql`called_at >= now() - interval '24 hours' AND key_id = ANY(${sql.raw(`ARRAY[${keyIds.join(',')}]`)})`)
+            .where(and(sql`called_at >= now() - interval '24 hours'`, inArray(apiUsageLogs.keyId, keyIds)))
             .groupBy(apiUsageLogs.keyId)
         : [];
       const todayCounts: Record<number, number> = {};
