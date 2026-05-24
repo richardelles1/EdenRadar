@@ -524,17 +524,21 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
                       <p className="text-xs text-muted-foreground italic px-1 py-1">No saved TTO assets yet — save a TTO asset first.</p>
                     ) : (
                       <div className="max-h-36 overflow-y-auto flex flex-col gap-0.5 rounded-md border border-border">
-                        {dialogTtoList.slice(0, 12).map((a) => (
-                          <button
-                            key={a.id}
-                            onClick={() => { setDialogParentId(a.id); setDialogParentSearch(""); }}
-                            className="w-full text-left px-2.5 py-2 text-sm hover:bg-muted/60 transition-colors flex items-center gap-2"
-                            data-testid={`dialog-tto-option-${a.id}`}
-                          >
-                            <FlaskConical className="w-3 h-3 text-emerald-500 shrink-0" />
-                            <span className="truncate">{a.assetName}</span>
-                          </button>
-                        ))}
+                        {dialogTtoList.slice(0, 12).map((a) => {
+                          const pl = pipelines.find((p) => p.id === a.pipelineListId);
+                          return (
+                            <button
+                              key={a.id}
+                              onClick={() => { setDialogParentId(a.id); setDialogParentSearch(""); }}
+                              className="w-full text-left px-2.5 py-2 text-sm hover:bg-muted/60 transition-colors flex items-center gap-2"
+                              data-testid={`dialog-tto-option-${a.id}`}
+                            >
+                              <FlaskConical className="w-3 h-3 text-emerald-500 shrink-0" />
+                              <span className="flex-1 truncate">{a.assetName}</span>
+                              {pl && <span className="text-[9px] text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded">{pl.name}</span>}
+                            </button>
+                          );
+                        })}
                         {dialogTtoList.length === 0 && (
                           <p className="text-xs text-muted-foreground italic px-2.5 py-2">No matches</p>
                         )}
@@ -595,10 +599,10 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
                 ) : (
                   <button
                     onClick={() => setDialogCreating(true)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground mt-2 transition-colors"
+                    className="flex items-center justify-center gap-1.5 text-xs font-medium border border-dashed border-primary/40 text-primary hover:bg-primary/5 rounded-lg px-3 py-2 mt-2 w-full transition-colors"
                     data-testid="button-dialog-new-pipeline"
                   >
-                    <Plus className="w-3 h-3" /> New pipeline
+                    <Plus className="w-3.5 h-3.5" /> New pipeline
                   </button>
                 )}
               </div>
@@ -630,7 +634,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
                   data-testid="button-dialog-save"
                 >
                   {dialogSaveMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bookmark className="w-3.5 h-3.5" />}
-                  {isSaved ? "Update" : "Save Signal"}
+                  {isSaved ? "Update" : "Add to Pipeline"}
                 </Button>
               </div>
             </DialogFooter>

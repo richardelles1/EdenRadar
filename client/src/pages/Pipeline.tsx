@@ -21,7 +21,6 @@ import {
   PointerSensor, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { motion, AnimatePresence } from "framer-motion";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,7 +47,7 @@ const STATUS_CONFIG: Record<string, { label: string; pill: string; select: strin
 };
 
 const BOARD_COLUMNS: { key: string | null; label: string; colorClass: string; dotClass: string }[] = [
-  { key: null,          label: "Unassigned",    colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
+  { key: null,          label: "New",           colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
   { key: "watching",    label: "Watching",      colorClass: "border-neutral-500/30 bg-neutral-500/5",  dotClass: "bg-neutral-400" },
   { key: "evaluating",  label: "Evaluating",    colorClass: "border-blue-500/30 bg-blue-500/5",        dotClass: "bg-blue-400" },
   { key: "in_discussion",label:"In Discussion", colorClass: "border-emerald-500/30 bg-emerald-500/5",  dotClass: "bg-emerald-400" },
@@ -100,6 +99,11 @@ function getSourceConfig(sourceName?: string | null): SourceConfig {
 }
 
 // ── Misc helpers ───────────────────────────────────────────────────────────────
+
+function toTitleCase(str: string): string {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function getBadgeClass(map: Record<string, string>, value: string) {
   if (!value) return "bg-muted text-muted-foreground border-border";
@@ -196,7 +200,10 @@ function PipelineCard({
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
   const [fanOpen, setFanOpen] = useState(false);
+  const [fanIndex, setFanIndex] = useState(0);
   useEffect(() => { setLocalStatus(asset.status ?? null); }, [asset.status]);
+  // Clamp index if signals array shrinks (e.g. after detach)
+  useEffect(() => { setFanIndex((i) => Math.min(i, Math.max(0, signals.length - 1))); }, [signals.length]);
 
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
   const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim()] ?? "unknown";
@@ -349,7 +356,7 @@ function PipelineCard({
                   className={`text-[10px] bg-transparent border border-white/20 dark:border-white/10 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
                   data-testid={`select-pipeline-status-${asset.id}`}
                 >
-                  <option value="none">CRM stage</option>
+                  <option value="none">Deal Stage</option>
                   {SAVED_ASSET_STATUSES.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>)}
                 </select>
               </div>
@@ -372,7 +379,7 @@ function PipelineCard({
               <div className="flex items-center gap-2 shrink-0">
                 {hasSignals && (
                   <button
-                    onClick={(e) => { e.stopPropagation(); setFanOpen((o) => !o); }}
+                    onClick={(e) => { e.stopPropagation(); setFanOpen((o) => { if (!o) setFanIndex(0); return !o; }); }}
                     className={`flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${fanOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5"}`}
                     data-testid={`button-pipeline-fan-${asset.id}`}
                     title={fanOpen ? "Collapse signals" : "Expand signals"}
@@ -457,36 +464,35 @@ function PipelineCard({
         </div>
       )}
 
-      {/* Fanned signal cards */}
-      <AnimatePresence>
-        {fanOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="flex flex-col gap-1.5 pt-1.5 pb-1">
-              {signals.map((sig, idx) => (
-                <motion.div
-                  key={sig.id}
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ delay: idx * 0.04, duration: 0.15 }}
-                >
-                  <SignalMiniCard
-                    signal={sig}
-                    draggable
-                    onDetach={onDetachSignal ? () => onDetachSignal(sig.id) : undefined}
-                  />
-                </motion.div>
-              ))}
+      {/* Paginated signal carousel */}
+      {fanOpen && signals.length > 0 && (
+        <div className="pt-1.5 pb-1">
+          {signals.length > 1 && (
+            <div className="flex items-center justify-between px-1 mb-1.5">
+              <button
+                onClick={(e) => { e.stopPropagation(); setFanIndex((i) => Math.max(0, i - 1)); }}
+                disabled={fanIndex === 0}
+                className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 transition-all"
+              >
+                <ChevronUp className="w-3 h-3" />
+              </button>
+              <span className="text-[10px] text-muted-foreground tabular-nums">{fanIndex + 1} of {signals.length}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); setFanIndex((i) => Math.min(signals.length - 1, i + 1)); }}
+                disabled={fanIndex === signals.length - 1}
+                className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 transition-all"
+              >
+                <ChevronDown className="w-3 h-3" />
+              </button>
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+          <SignalMiniCard
+            signal={signals[fanIndex]}
+            draggable
+            onDetach={onDetachSignal ? () => onDetachSignal(signals[fanIndex].id) : undefined}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -500,40 +506,40 @@ function UnlinkedSignalCard({ signal, onDelete }: { signal: PipelineAsset; onDel
     data: { type: "signal", assetId: signal.id },
   });
 
+  const displayName = signal.assetName !== "unknown" ? signal.assetName : (signal.sourceTitle ?? "Untitled");
+  const institution = signal.sourceJournal && signal.sourceJournal !== "Unknown"
+    ? toTitleCase(signal.sourceJournal) : null;
+
   return (
     <div
       ref={setNodeRef}
       {...attributes}
-      className={`relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-[12px] overflow-hidden transition-opacity ${isDragging ? "opacity-30" : ""}`}
+      {...listeners}
+      className={`relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-[12px] overflow-hidden cursor-grab active:cursor-grabbing transition-opacity ${isDragging ? "opacity-30" : ""}`}
       style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}
       data-testid={`unlinked-signal-${signal.id}`}
     >
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: cfg.accent }} />
-      <div className="pl-3 pr-2 py-2.5 flex items-center gap-2">
-        <div {...listeners} className="cursor-grab active:cursor-grabbing shrink-0 text-muted-foreground/40 hover:text-muted-foreground">
-          <GripVertical className="w-3.5 h-3.5" />
-        </div>
+      <div className="pl-3 pr-2 py-3 flex items-center gap-2">
+        <GripVertical className="w-3.5 h-3.5 shrink-0 text-muted-foreground/30" />
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className={`text-[9px] font-bold uppercase tracking-wide ${cfg.textClass}`}>{cfg.label}</span>
-          </div>
-          <p className="text-[11px] font-semibold text-foreground truncate">{signal.assetName !== "unknown" ? signal.assetName : signal.sourceTitle}</p>
-          {signal.sourceJournal && signal.sourceJournal !== "Unknown" && (
-            <p className="text-[9px] text-muted-foreground truncate mt-0.5">{signal.sourceJournal} · {signal.publicationYear}</p>
+          <span className={`text-[9px] font-bold uppercase tracking-wide ${cfg.textClass}`}>{cfg.label}</span>
+          <p className="text-[11px] font-semibold text-foreground truncate mt-0.5" title={displayName}>{displayName}</p>
+          {institution && (
+            <p className="text-[9px] text-muted-foreground truncate mt-0.5">{institution}{signal.publicationYear ? ` · ${signal.publicationYear}` : ""}</p>
           )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
           {signal.sourceUrl && (
             <a href={signal.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
               <ExternalLink className="w-3 h-3" />
             </a>
           )}
-          <button onClick={() => onDelete(signal.id)} className="text-muted-foreground hover:text-destructive transition-colors" title="Remove">
+          <button onClick={(e) => { e.stopPropagation(); onDelete(signal.id); }} className="text-muted-foreground hover:text-destructive transition-colors" title="Remove">
             <Trash2 className="w-3 h-3" />
           </button>
         </div>
       </div>
-      <p className="text-[8px] text-muted-foreground/60 px-3 pb-1.5 italic">Drag onto a TTO asset card to attach</p>
     </div>
   );
 }
@@ -595,7 +601,7 @@ export default function Pipeline() {
   const qc = useQueryClient();
 
   // View state
-  const [viewMode, setViewMode] = useState<ViewMode>("stage");
+  const [viewMode, setViewMode] = useState<ViewMode>("board");
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
   const [briefLoading, setBriefLoading] = useState<string | null>(null);
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
@@ -967,6 +973,7 @@ export default function Pipeline() {
                       <div className="flex gap-4 min-w-max pb-4">
                         {STAGES.map((stage) => {
                           const stageDecks = filteredDeckAssets.filter((d) => (d.developmentStage?.toLowerCase().trim() || "unknown") === stage.key);
+                          if (stageDecks.length === 0) return null;
                           return (
                             <div key={stage.key} className={`flex flex-col w-72 rounded-lg border ${stage.colorClass} shrink-0`} data-testid={`pipeline-stage-col-${stage.key}`}>
                               <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
