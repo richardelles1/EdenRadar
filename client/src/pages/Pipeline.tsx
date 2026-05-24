@@ -171,7 +171,7 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
 
 // ── CardFaceContent — pure visual component for a single card face ────────────
 
-function CardFaceContent({ asset }: { asset: PipelineAsset }) {
+function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hovered?: boolean }) {
   const cat = getSourceCategory(asset.sourceName);
   const tint = SCOUT_CARD_TINTS[cat];
   const isTto = isTtoSource(asset.sourceName);
@@ -180,6 +180,17 @@ function CardFaceContent({ asset }: { asset: PipelineAsset }) {
 
   return (
     <div className={`absolute inset-0 rounded-[17px] overflow-hidden ${tint.containerBg}`}>
+      {/* Bloom */}
+      <div className="absolute pointer-events-none" style={{
+        width: "56px", height: "56px", borderRadius: "50%",
+        background: tint.stripColor + "8C",
+        top: "-28px", left: "-28px",
+        transform: hovered ? "scale(26)" : "scale(1)",
+        opacity: hovered ? 0.13 : 0,
+        transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+        zIndex: 1,
+      }} />
+
       {/* Left accent strip */}
       <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: tint.stripColor }} />
 
@@ -271,6 +282,25 @@ function CardFaceContent({ asset }: { asset: PipelineAsset }) {
             </>
           )}
         </div>
+
+        {/* Footer strip for non-TTO signal cards */}
+        {!isTto && (
+          <div className="flex items-center gap-1 pt-2 border-t border-white/20 dark:border-white/10 mt-auto">
+            <span className="text-[10px] text-muted-foreground flex-1">Drag to stack</span>
+            {asset.sourceUrl && (
+              <a
+                href={asset.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+                className="text-muted-foreground hover:text-primary transition-colors"
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -363,7 +393,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
                 pointerEvents: idx === faceIdx ? "auto" : "none",
               }}
             >
-              <CardFaceContent asset={face} />
+              <CardFaceContent asset={face} hovered={hovered} />
             </div>
           ))}
 
@@ -922,7 +952,7 @@ export default function Pipeline() {
       setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
     },
-    onError: (err: any, vars, ctx: any) => {
+    onError: (err: any, _vars, ctx: any) => {
       if (ctx) setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
       toast({ title: "Status update failed", description: err.message, variant: "destructive" });
     },
