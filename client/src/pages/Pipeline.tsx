@@ -10,8 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
-  FileText, MessageSquare, ChevronDown, ChevronUp, Send, Link2, X,
-  LayoutDashboard, LayoutGrid, GripVertical, Layers,
+  FileText, ChevronLeft, ChevronRight, Send, Link2, X,
+  LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
 import { SAVED_ASSET_STATUSES } from "@shared/schema";
@@ -58,15 +58,6 @@ const STAGE_ABBREV: Record<string, string> = {
   discovery: "DI", preclinical: "PC", "phase 1": "P1", "phase 2": "P2", "phase 3": "P3", approved: "AP",
 };
 
-const MODALITY_COLORS: Record<string, string> = {
-  "small molecule": "bg-rose-500/15 text-rose-400 border-rose-500/30",
-  "antibody": "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
-  "car-t": "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30",
-  "gene therapy": "bg-teal-500/15 text-teal-400 border-teal-500/30",
-  "mrna therapy": "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  "peptide": "bg-pink-500/15 text-pink-400 border-pink-500/30",
-  "bispecific antibody": "bg-purple-500/15 text-purple-400 border-purple-500/30",
-};
 
 // ── Source helpers ─────────────────────────────────────────────────────────────
 
@@ -100,9 +91,16 @@ function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function getBadgeClass(map: Record<string, string>, value: string) {
-  if (!value) return "bg-muted text-muted-foreground border-border";
-  return map[value.toLowerCase().trim()] ?? "bg-muted text-muted-foreground border-border";
+const PILL_MUTED = "text-zinc-500 dark:text-zinc-400";
+function stagePillClass(stage: string): string {
+  const s = stage.toLowerCase();
+  if (s.includes("phase 3") || s.includes("phase iii") || s.includes("approved") || s.includes("marketed"))
+    return `bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 ${PILL_MUTED}`;
+  if (s.includes("phase 2") || s.includes("phase ii"))
+    return `bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 ${PILL_MUTED}`;
+  if (s.includes("phase 1") || (s.includes("phase i") && !s.includes("phase ii") && !s.includes("phase iii")))
+    return `bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 ${PILL_MUTED}`;
+  return `bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 ${PILL_MUTED}`;
 }
 
 function getInitials(name: string): string {
@@ -171,9 +169,9 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
   );
 }
 
-// ── PipelineGridCard — Scout-style card for the grid view ──────────────────────
+// ── PipelineCard — Scout-identical card for the grid view ─────────────────────
 
-function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
+function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   asset: PipelineAsset;
   signals?: PipelineAsset[];
   onDelete: (id: number) => void;
@@ -183,16 +181,20 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [sigIdx, setSigIdx] = useState(0);
+
+  useEffect(() => {
+    setSigIdx((i) => Math.min(i, Math.max(0, signals.length - 1)));
+  }, [signals.length]);
 
   const isTto = isTtoSource(asset.sourceName);
   const cat = getSourceCategory(asset.sourceName);
   const tint = SCOUT_CARD_TINTS[cat];
-  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
   const hasSignals = signals.length > 0;
-  const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality ?? "");
+  const curSignal = hasSignals ? signals[Math.min(sigIdx, signals.length - 1)] : null;
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
   const statusCfg = asset.status ? STATUS_CONFIG[asset.status] : null;
 
-  // TTO cards are drop targets for signals; signal cards are draggable
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `tto-drop-${asset.id}`,
     data: { type: "tto-drop", ttoId: asset.id },
@@ -213,24 +215,29 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    setTilt({ x: ((e.clientY - rect.top) / rect.height - 0.5) * -8, y: ((e.clientX - rect.left) / rect.width - 0.5) * 8, active: true });
+    setTilt({ x: ((e.clientY - rect.top) / rect.height - 0.5) * -10, y: ((e.clientX - rect.left) / rect.width - 0.5) * 10, active: true });
   };
   const handleMouseLeave = () => { setHovered(false); setTilt({ x: 0, y: 0, active: false }); setPressed(false); };
 
+  const displayTitle = asset.assetName !== "unknown" ? asset.assetName : (asset.sourceTitle ?? "Untitled");
+
   return (
     <div className={`relative transition-opacity ${isDragging ? "opacity-30" : ""}`}>
-      {/* Drop ring */}
       {isOver && <div className="absolute inset-0 rounded-[17px] ring-2 ring-emerald-400 ring-offset-2 z-20 pointer-events-none" />}
 
-      <div style={{ perspective: "1000px" }}>
+      <div style={{ perspective: "1000px" }} className={isTto ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}>
         <div
           ref={setRef}
-          className={`relative w-full h-[240px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 ${tint.containerBg} ${isTto ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`}
+          className={`relative w-full h-[260px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 ${tint.containerBg}`}
           style={{
             willChange: "transform",
             transformStyle: "preserve-3d",
-            transform: pressed ? "perspective(1000px) scale(0.97)" : tilt.active ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)` : "perspective(1000px)",
-            transition: pressed ? "transform 0.07s ease-in" : tilt.active ? "transform 0.08s ease-out" : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
+            transform: pressed
+              ? "perspective(1000px) scale(0.96) rotateZ(0.4deg)"
+              : tilt.active
+              ? `perspective(1000px) scale(1.015) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+              : "perspective(1000px)",
+            transition: pressed ? "transform 0.07s ease-in, box-shadow 0.1s" : tilt.active ? "transform 0.08s ease-out, box-shadow 0.2s" : "transform 0.5s cubic-bezier(0.23,1,0.32,1), box-shadow 0.4s",
             boxShadow: (hovered || isOver) ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)" : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
           }}
           onMouseMove={handleMouseMove}
@@ -240,7 +247,7 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
           onMouseUp={() => setPressed(false)}
           onClick={isTto ? onClick : undefined}
           {...(isTto ? {} : { ...attributes, ...listeners })}
-          data-testid={`pipeline-grid-card-${asset.id}`}
+          data-testid={`pipeline-card-${asset.id}`}
         >
           {/* Bloom */}
           <div className="absolute pointer-events-none" style={{
@@ -256,92 +263,149 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
           {/* Left accent strip */}
           <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: tint.stripColor }} />
 
-          {/* Top-left badge */}
-          <div className="absolute top-0 left-0 z-[5] flex items-center justify-center px-2.5 py-1.5 border-b border-r bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm" style={{ borderRadius: "17px 0 10px 0", borderColor: tint.stripColor + "40" }}>
+          {/* Top-left badge — matches Scout card */}
+          <div
+            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5 border-b border-r bg-white dark:bg-zinc-900"
+            style={{ borderRadius: "17px 0 10px 0", minWidth: "52px", borderColor: tint.stripColor + "40" }}
+          >
             {isTto && stageAbbr ? (
-              <div className="flex flex-col items-center">
+              <>
                 <span className="text-[7px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
                 <span className="font-mono text-xs font-bold leading-tight mt-0.5" style={{ color: tint.stripColor }}>{stageAbbr}</span>
-              </div>
+              </>
             ) : (
-              <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: tint.stripColor }}>{getSourceLabel(asset.sourceName)}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: tint.stripColor }}>{getSourceLabel(asset.sourceName)}</span>
             )}
           </div>
 
-          {/* Delete */}
+          {/* Delete — top-right (replaces bookmark) */}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute top-2 right-2 z-[5] w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+            className="absolute top-1.5 right-1.5 z-[5] w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
             data-testid={`button-delete-pipeline-${asset.id}`}
           >
-            <Trash2 className="w-3 h-3" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
 
-          {/* Content */}
-          <div className="relative z-[4] pl-4 pr-3 pt-11 pb-3 flex flex-col gap-2 h-full">
-            <div className="flex items-start gap-1.5 min-w-0">
-              {isTto
-                ? <FlaskConical className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tint.stripColor }} />
-                : <ExternalLink className="w-3 h-3 shrink-0 mt-0.5" style={{ color: tint.stripColor }} />}
-              <span className="font-semibold text-sm text-foreground leading-snug line-clamp-2">
-                {asset.assetName !== "unknown" ? asset.assetName : (asset.sourceTitle ?? "Untitled")}
-              </span>
-            </div>
+          {/* Content area — matches Scout card layout */}
+          <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] pb-3">
 
-            {asset.modality && asset.modality !== "unknown" && (
-              <div className="flex flex-wrap gap-1">
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>{asset.modality}</span>
-              </div>
-            )}
+            {/* Title */}
+            <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
+              {displayTitle}
+            </h3>
 
-            <div className="flex-1 flex flex-col gap-1.5 text-xs">
-              {isTto ? (
+            {/* Body — branches by card type */}
+            <div className="flex-1 flex flex-col gap-1.5 mt-2 min-h-0">
+              {cat === "tto" && (
                 <>
-                  {asset.target && asset.target !== "unknown" && (
-                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Target</span><span className="text-foreground truncate">{asset.target}</span></div>
-                  )}
                   {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Disease</span><span className="text-foreground truncate">{asset.diseaseIndication}</span></div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-1">{asset.diseaseIndication}</p>
                   )}
+                  <div className="flex flex-wrap gap-1 mt-0.5">
+                    {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(asset.developmentStage)}`}>{asset.developmentStage}</span>
+                    )}
+                    {asset.modality && asset.modality !== "unknown" && (
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400">{asset.modality}</span>
+                    )}
+                  </div>
                   {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">From</span><span className="text-foreground truncate">{toTitleCase(asset.sourceJournal)}</span></div>
+                    <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
+                      <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
+                    </p>
                   )}
                 </>
-              ) : (
+              )}
+              {cat === "patent" && (
                 <>
-                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Source</span><span className="text-foreground truncate">{toTitleCase(asset.sourceJournal)}</span></div>
-                  )}
                   {asset.publicationYear && (
-                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Year</span><span className="text-foreground">{asset.publicationYear}</span></div>
+                    <p className="text-[10px] text-muted-foreground">{asset.publicationYear}</p>
                   )}
                   {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Disease</span><span className="text-foreground truncate">{asset.diseaseIndication}</span></div>
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
+                  )}
+                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                    <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
+                      <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
+                    </p>
+                  )}
+                </>
+              )}
+              {cat === "trial" && (
+                <>
+                  {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                    <span className="self-start text-[10px] font-medium px-2 py-0.5 rounded-full border" style={{ borderColor: tint.stripColor + "40", color: tint.stripColor, background: tint.stripColor + "18" }}>
+                      {asset.developmentStage}
+                    </span>
+                  )}
+                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
+                  )}
+                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                    <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
+                      <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
+                    </p>
+                  )}
+                </>
+              )}
+              {cat === "research" && (
+                <>
+                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium line-clamp-1">{toTitleCase(asset.sourceJournal)}</p>
+                  )}
+                  {asset.publicationYear && (
+                    <p className="text-[10px] text-muted-foreground">{asset.publicationYear}</p>
+                  )}
+                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
                   )}
                 </>
               )}
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/20 dark:border-white/10">
+            <div className="flex items-center gap-1 pt-2 border-t border-white/20 dark:border-white/10">
               {isTto ? (
-                <>
-                  <div className="flex items-center gap-2">
-                    {hasSignals && (
-                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                        <Link2 className="w-2.5 h-2.5" />{signals.length} signal{signals.length !== 1 ? "s" : ""}
+                hasSignals && curSignal ? (
+                  // Inline signal carousel — cycle without opening drawer
+                  <>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSigIdx((i) => Math.max(0, i - 1)); }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      disabled={sigIdx === 0}
+                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors shrink-0"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <div className="flex-1 min-w-0 flex items-center gap-1">
+                      <span className="text-[8px] font-bold uppercase tracking-wide shrink-0 leading-none" style={{ color: SCOUT_CARD_TINTS[getSourceCategory(curSignal.sourceName)].stripColor }}>
+                        {getSourceLabel(curSignal.sourceName)}
                       </span>
-                    )}
-                    {statusCfg && (
-                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>
-                    )}
-                  </div>
-                  <span className="text-[10px]" style={{ color: tint.stripColor + "cc" }}>Details →</span>
-                </>
+                      <span className="text-[10px] text-foreground truncate">
+                        {curSignal.assetName !== "unknown" ? curSignal.assetName : (curSignal.sourceTitle ?? "Untitled")}
+                      </span>
+                    </div>
+                    <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">{sigIdx + 1}/{signals.length}</span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setSigIdx((i) => Math.min(signals.length - 1, i + 1)); }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      disabled={sigIdx === signals.length - 1}
+                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors shrink-0"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {statusCfg && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>}
+                    <span className="ml-auto text-[10px]" style={{ color: tint.stripColor + "cc" }}>Details →</span>
+                  </>
+                )
               ) : (
                 <>
-                  <span className="text-[10px] text-muted-foreground">Drag onto a TTO asset to stack</span>
+                  <span className="text-[10px] text-muted-foreground flex-1">Drag to stack</span>
                   {asset.sourceUrl && (
                     <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-primary transition-colors">
                       <ExternalLink className="w-3 h-3" />
@@ -354,7 +418,7 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
         </div>
       </div>
 
-      {/* Signal slivers peek below TTO cards */}
+      {/* Signal color slivers below TTO cards */}
       {isTto && hasSignals && (
         <div className="relative -mt-1 mx-1.5">
           {signals.slice(0, 3).map((sig, idx) => {
@@ -375,7 +439,7 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
   );
 }
 
-// ── BoardCard — compact card for kanban columns ────────────────────────────────
+// ── BoardCard — Scout-style compact card for kanban columns ───────────────────
 
 function BoardCard({ asset, signals = [], onClick, onDelete }: {
   asset: PipelineAsset;
@@ -390,8 +454,7 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
 
   const tint = SCOUT_CARD_TINTS["tto"];
   const hasSignals = signals.length > 0;
-  const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality ?? "");
-  const statusCfg = asset.status ? STATUS_CONFIG[asset.status] : null;
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
 
   return (
     <div
@@ -404,54 +467,45 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
       data-testid={`board-card-${asset.id}`}
     >
       <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.stripColor }} />
-      <div className="pl-3.5 pr-2.5 py-3 flex flex-col gap-2">
-        <div className="flex items-start gap-1.5">
-          <FlaskConical className="w-3 h-3 shrink-0 mt-0.5" style={{ color: tint.stripColor }} />
-          <span className="text-xs font-semibold text-foreground leading-snug flex-1 line-clamp-2">
-            {asset.assetName !== "unknown" ? asset.assetName : "Unnamed"}
-          </span>
+      <div className="pl-3 pr-2.5 py-2.5 flex flex-col gap-1.5">
+        <div className="flex items-start justify-between gap-1">
+          {stageAbbr && (
+            <span className="text-[9px] font-mono font-bold shrink-0 px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{stageAbbr}</span>
+          )}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
-            className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+            onPointerDown={(e) => e.stopPropagation()}
+            className="ml-auto w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
             data-testid={`button-delete-board-${asset.id}`}
           >
             <Trash2 className="w-2.5 h-2.5" />
           </button>
         </div>
 
+        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2">
+          {asset.assetName !== "unknown" ? asset.assetName : "Unnamed"}
+        </p>
+
         <div className="flex flex-wrap gap-1">
           {asset.modality && asset.modality !== "unknown" && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${modalityClass}`}>{asset.modality}</span>
-          )}
-          {statusCfg && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>
-          )}
-        </div>
-
-        <div className="text-[10px] space-y-0.5">
-          {asset.target && asset.target !== "unknown" && (
-            <div className="flex gap-1"><span className="text-muted-foreground w-10 shrink-0">Target</span><span className="text-foreground truncate">{asset.target}</span></div>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400">{asset.modality}</span>
           )}
           {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-            <div className="flex gap-1"><span className="text-muted-foreground w-10 shrink-0">Disease</span><span className="text-foreground truncate">{asset.diseaseIndication}</span></div>
+            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border line-clamp-1 max-w-[120px] truncate">{asset.diseaseIndication}</span>
           )}
         </div>
 
-        {(hasSignals || (asset.noteCount ?? 0) > 0) && (
-          <div className="flex items-center gap-2.5 pt-1.5 border-t border-white/20 dark:border-white/10">
-            {hasSignals && (
-              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                <Link2 className="w-2 h-2" />{signals.length}
-              </span>
-            )}
-            {(asset.noteCount ?? 0) > 0 && (
-              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                <MessageSquare className="w-2 h-2" />{asset.noteCount}
-              </span>
-            )}
-            <span className="ml-auto text-[9px] text-primary/60">Open →</span>
-          </div>
-        )}
+        <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+          {hasSignals && (
+            <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
+              <Link2 className="w-2 h-2" />{signals.length}
+            </span>
+          )}
+          {(asset.noteCount ?? 0) > 0 && (
+            <span className="text-[9px] text-muted-foreground">{asset.noteCount} note{asset.noteCount !== 1 ? "s" : ""}</span>
+          )}
+          <span className="ml-auto text-[9px]" style={{ color: tint.stripColor + "99" }}>Open →</span>
+        </div>
       </div>
     </div>
   );
@@ -520,14 +574,11 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
   const [activeTab, setActiveTab] = useState("overview");
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(null);
-  const [fanIndex, setFanIndex] = useState(0);
   const notesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (asset) { setLocalStatus(asset.status ?? null); setFanIndex(0); setNoteText(""); setActiveTab("overview"); }
+    if (asset) { setLocalStatus(asset.status ?? null); setNoteText(""); setActiveTab("overview"); }
   }, [asset?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { setFanIndex((i) => Math.min(i, Math.max(0, signals.length - 1))); }, [signals.length]);
 
   const { data: notesData } = useQuery<NotesResponse>({
     queryKey: ["/api/saved-assets", asset?.id, "notes"],
@@ -703,22 +754,14 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
                 </p>
               ) : (
                 <div className="flex flex-col gap-2">
-                  {signals.length > 1 && (
-                    <div className="flex items-center justify-between">
-                      <button onClick={() => setFanIndex((i) => Math.max(0, i - 1))} disabled={fanIndex === 0} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-30 transition-all">
-                        <ChevronUp className="w-3.5 h-3.5" />
-                      </button>
-                      <span className="text-[11px] text-muted-foreground tabular-nums font-medium">{fanIndex + 1} of {signals.length}</span>
-                      <button onClick={() => setFanIndex((i) => Math.min(signals.length - 1, i + 1))} disabled={fanIndex === signals.length - 1} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-30 transition-all">
-                        <ChevronDown className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                  <SignalMiniCard
-                    signal={signals[fanIndex]}
-                    draggable
-                    onDetach={() => onDetachSignal(signals[fanIndex].id)}
-                  />
+                  {signals.map((sig) => (
+                    <SignalMiniCard
+                      key={sig.id}
+                      signal={sig}
+                      draggable
+                      onDetach={() => onDetachSignal(sig.id)}
+                    />
+                  ))}
                 </div>
               )}
             </div>
@@ -1073,7 +1116,7 @@ export default function Pipeline() {
                           const isTto = isTtoSource(card.sourceName);
                           const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
                           return (
-                            <PipelineGridCard
+                            <PipelineCard
                               key={card.id}
                               asset={card}
                               signals={deck?.signals ?? []}
