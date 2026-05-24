@@ -169,7 +169,114 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
   );
 }
 
-// ── PipelineCard — Scout-identical card for the grid view ─────────────────────
+// ── CardFaceContent — pure visual component for a single card face ────────────
+
+function CardFaceContent({ asset }: { asset: PipelineAsset }) {
+  const cat = getSourceCategory(asset.sourceName);
+  const tint = SCOUT_CARD_TINTS[cat];
+  const isTto = isTtoSource(asset.sourceName);
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
+  const displayTitle = asset.assetName !== "unknown" ? asset.assetName : (asset.sourceTitle ?? "Untitled");
+
+  return (
+    <div className={`absolute inset-0 rounded-[17px] overflow-hidden ${tint.containerBg}`}>
+      {/* Left accent strip */}
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: tint.stripColor }} />
+
+      {/* Top-left badge */}
+      <div
+        className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5 border-b border-r bg-white dark:bg-zinc-900"
+        style={{ borderRadius: "17px 0 10px 0", minWidth: "52px", borderColor: tint.stripColor + "40" }}
+      >
+        {isTto && stageAbbr ? (
+          <>
+            <span className="text-[7px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
+            <span className="font-mono text-xs font-bold leading-tight mt-0.5" style={{ color: tint.stripColor }}>{stageAbbr}</span>
+          </>
+        ) : (
+          <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: tint.stripColor }}>{getSourceLabel(asset.sourceName)}</span>
+        )}
+      </div>
+
+      {/* Content */}
+      <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] pb-10">
+        <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
+          {displayTitle}
+        </h3>
+
+        <div className="flex-1 flex flex-col gap-1.5 mt-2 min-h-0 overflow-hidden">
+          {cat === "tto" && (
+            <>
+              {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-1">{asset.diseaseIndication}</p>
+              )}
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                  <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(asset.developmentStage)}`}>{asset.developmentStage}</span>
+                )}
+                {asset.modality && asset.modality !== "unknown" && (
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400">{asset.modality}</span>
+                )}
+              </div>
+              {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
+                  <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
+                </p>
+              )}
+            </>
+          )}
+          {cat === "patent" && (
+            <>
+              {asset.publicationYear && (
+                <p className="text-[10px] text-muted-foreground">{asset.publicationYear}</p>
+              )}
+              {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
+              )}
+              {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
+                  <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
+                </p>
+              )}
+            </>
+          )}
+          {cat === "trial" && (
+            <>
+              {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                <span className="self-start text-[10px] font-medium px-2 py-0.5 rounded-full border" style={{ borderColor: tint.stripColor + "40", color: tint.stripColor, background: tint.stripColor + "18" }}>
+                  {asset.developmentStage}
+                </span>
+              )}
+              {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
+              )}
+              {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
+                  <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
+                </p>
+              )}
+            </>
+          )}
+          {cat === "research" && (
+            <>
+              {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium line-clamp-1">{toTitleCase(asset.sourceJournal)}</p>
+              )}
+              {asset.publicationYear && (
+                <p className="text-[10px] text-muted-foreground">{asset.publicationYear}</p>
+              )}
+              {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PipelineCard — full multi-face deck with animated face transitions ─────────
 
 function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   asset: PipelineAsset;
@@ -181,19 +288,16 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [sigIdx, setSigIdx] = useState(0);
+  const [faceIdx, setFaceIdx] = useState(0);
+
+  const faces = [asset, ...signals];
 
   useEffect(() => {
-    setSigIdx((i) => Math.min(i, Math.max(0, signals.length - 1)));
-  }, [signals.length]);
+    setFaceIdx((i) => Math.min(i, Math.max(0, faces.length - 1)));
+  }, [faces.length]);
 
   const isTto = isTtoSource(asset.sourceName);
-  const cat = getSourceCategory(asset.sourceName);
-  const tint = SCOUT_CARD_TINTS[cat];
-  const hasSignals = signals.length > 0;
-  const curSignal = hasSignals ? signals[Math.min(sigIdx, signals.length - 1)] : null;
-  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
-  const statusCfg = asset.status ? STATUS_CONFIG[asset.status] : null;
+  const hasMultipleFaces = faces.length > 1;
 
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `tto-drop-${asset.id}`,
@@ -219,8 +323,6 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   };
   const handleMouseLeave = () => { setHovered(false); setTilt({ x: 0, y: 0, active: false }); setPressed(false); };
 
-  const displayTitle = asset.assetName !== "unknown" ? asset.assetName : (asset.sourceTitle ?? "Untitled");
-
   return (
     <div className={`relative transition-opacity ${isDragging ? "opacity-30" : ""}`}>
       {isOver && <div className="absolute inset-0 rounded-[17px] ring-2 ring-emerald-400 ring-offset-2 z-20 pointer-events-none" />}
@@ -228,7 +330,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
       <div style={{ perspective: "1000px" }} className={isTto ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}>
         <div
           ref={setRef}
-          className={`relative w-full h-[260px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 ${tint.containerBg}`}
+          className="relative w-full h-[260px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10"
           style={{
             willChange: "transform",
             transformStyle: "preserve-3d",
@@ -249,177 +351,59 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
           {...(isTto ? {} : { ...attributes, ...listeners })}
           data-testid={`pipeline-card-${asset.id}`}
         >
-          {/* Bloom */}
-          <div className="absolute pointer-events-none" style={{
-            width: "56px", height: "56px", borderRadius: "50%",
-            background: tint.stripColor + "8C",
-            top: "-28px", left: "-28px",
-            transform: hovered ? "scale(26)" : "scale(1)",
-            opacity: hovered ? 0.13 : 0,
-            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
-            zIndex: 1,
-          }} />
+          {/* Face layers — each face is the full card visual */}
+          {faces.map((face, idx) => (
+            <div
+              key={face.id}
+              className="absolute inset-0"
+              style={{
+                opacity: idx === faceIdx ? 1 : 0,
+                transform: idx === faceIdx ? "translateX(0)" : idx < faceIdx ? "translateX(-10px)" : "translateX(10px)",
+                transition: "opacity 0.25s ease, transform 0.25s ease",
+                pointerEvents: idx === faceIdx ? "auto" : "none",
+              }}
+            >
+              <CardFaceContent asset={face} />
+            </div>
+          ))}
 
-          {/* Left accent strip */}
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: tint.stripColor }} />
-
-          {/* Top-left badge — matches Scout card */}
-          <div
-            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5 border-b border-r bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "17px 0 10px 0", minWidth: "52px", borderColor: tint.stripColor + "40" }}
-          >
-            {isTto && stageAbbr ? (
-              <>
-                <span className="text-[7px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
-                <span className="font-mono text-xs font-bold leading-tight mt-0.5" style={{ color: tint.stripColor }}>{stageAbbr}</span>
-              </>
-            ) : (
-              <span className="text-[9px] font-bold uppercase tracking-wide leading-none" style={{ color: tint.stripColor }}>{getSourceLabel(asset.sourceName)}</span>
-            )}
-          </div>
-
-          {/* Delete — top-right (replaces bookmark) */}
+          {/* Delete button */}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
             onPointerDown={(e) => e.stopPropagation()}
-            className="absolute top-1.5 right-1.5 z-[5] w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+            className="absolute top-1.5 right-1.5 z-[20] w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
             data-testid={`button-delete-pipeline-${asset.id}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
 
-          {/* Content area — matches Scout card layout */}
-          <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] pb-3">
-
-            {/* Title */}
-            <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
-              {displayTitle}
-            </h3>
-
-            {/* Body — branches by card type */}
-            <div className="flex-1 flex flex-col gap-1.5 mt-2 min-h-0">
-              {cat === "tto" && (
-                <>
-                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-1">{asset.diseaseIndication}</p>
-                  )}
-                  <div className="flex flex-wrap gap-1 mt-0.5">
-                    {asset.developmentStage && asset.developmentStage !== "unknown" && (
-                      <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(asset.developmentStage)}`}>{asset.developmentStage}</span>
-                    )}
-                    {asset.modality && asset.modality !== "unknown" && (
-                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400">{asset.modality}</span>
-                    )}
-                  </div>
-                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                    <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
-                      <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
-                    </p>
-                  )}
-                </>
-              )}
-              {cat === "patent" && (
-                <>
-                  {asset.publicationYear && (
-                    <p className="text-[10px] text-muted-foreground">{asset.publicationYear}</p>
-                  )}
-                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
-                  )}
-                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                    <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
-                      <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
-                    </p>
-                  )}
-                </>
-              )}
-              {cat === "trial" && (
-                <>
-                  {asset.developmentStage && asset.developmentStage !== "unknown" && (
-                    <span className="self-start text-[10px] font-medium px-2 py-0.5 rounded-full border" style={{ borderColor: tint.stripColor + "40", color: tint.stripColor, background: tint.stripColor + "18" }}>
-                      {asset.developmentStage}
-                    </span>
-                  )}
-                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
-                  )}
-                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                    <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-300 font-medium line-clamp-1 mt-auto">
-                      <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />{toTitleCase(asset.sourceJournal)}
-                    </p>
-                  )}
-                </>
-              )}
-              {cat === "research" && (
-                <>
-                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                    <p className="text-[11px] text-amber-600 dark:text-amber-400 font-medium line-clamp-1">{toTitleCase(asset.sourceJournal)}</p>
-                  )}
-                  {asset.publicationYear && (
-                    <p className="text-[10px] text-muted-foreground">{asset.publicationYear}</p>
-                  )}
-                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                    <p className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-2">{asset.diseaseIndication}</p>
-                  )}
-                </>
-              )}
+          {/* Nav buttons — bottom bar, only when multiple faces */}
+          {hasMultipleFaces && (
+            <div className="absolute bottom-0 left-0 right-0 z-[20] flex items-center justify-between px-2 py-2 bg-gradient-to-t from-black/25 to-transparent rounded-b-[17px]">
+              <button
+                onClick={(e) => { e.stopPropagation(); setFaceIdx((i) => Math.max(0, i - 1)); }}
+                onPointerDown={(e) => e.stopPropagation()}
+                disabled={faceIdx === 0}
+                className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white disabled:opacity-20 transition-colors shrink-0"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <span className="text-[9px] text-white/60 tabular-nums">{faceIdx + 1}/{faces.length}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); setFaceIdx((i) => Math.min(faces.length - 1, i + 1)); }}
+                onPointerDown={(e) => e.stopPropagation()}
+                disabled={faceIdx === faces.length - 1}
+                className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white disabled:opacity-20 transition-colors shrink-0"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
             </div>
-
-            {/* Footer */}
-            <div className="flex items-center gap-1 pt-2 border-t border-white/20 dark:border-white/10">
-              {isTto ? (
-                hasSignals && curSignal ? (
-                  // Inline signal carousel — cycle without opening drawer
-                  <>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setSigIdx((i) => Math.max(0, i - 1)); }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      disabled={sigIdx === 0}
-                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors shrink-0"
-                    >
-                      <ChevronLeft className="w-3.5 h-3.5" />
-                    </button>
-                    <div className="flex-1 min-w-0 flex items-center gap-1">
-                      <span className="text-[8px] font-bold uppercase tracking-wide shrink-0 leading-none" style={{ color: SCOUT_CARD_TINTS[getSourceCategory(curSignal.sourceName)].stripColor }}>
-                        {getSourceLabel(curSignal.sourceName)}
-                      </span>
-                      <span className="text-[10px] text-foreground truncate">
-                        {curSignal.assetName !== "unknown" ? curSignal.assetName : (curSignal.sourceTitle ?? "Untitled")}
-                      </span>
-                    </div>
-                    <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">{sigIdx + 1}/{signals.length}</span>
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setSigIdx((i) => Math.min(signals.length - 1, i + 1)); }}
-                      onPointerDown={(e) => e.stopPropagation()}
-                      disabled={sigIdx === signals.length - 1}
-                      className="w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-foreground disabled:opacity-20 transition-colors shrink-0"
-                    >
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {statusCfg && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>}
-                    <span className="ml-auto text-[10px]" style={{ color: tint.stripColor + "cc" }}>Details →</span>
-                  </>
-                )
-              ) : (
-                <>
-                  <span className="text-[10px] text-muted-foreground flex-1">Drag to stack</span>
-                  {asset.sourceUrl && (
-                    <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-primary transition-colors">
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
+          )}
         </div>
       </div>
 
       {/* Signal color slivers below TTO cards */}
-      {isTto && hasSignals && (
+      {isTto && signals.length > 0 && (
         <div className="relative -mt-1 mx-1.5">
           {signals.slice(0, 3).map((sig, idx) => {
             const sigTint = SCOUT_CARD_TINTS[getSourceCategory(sig.sourceName)];
@@ -825,6 +809,8 @@ export default function Pipeline() {
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
   const [activeAssetId, setActiveAssetId] = useState<number | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [parentOverrides, setParentOverrides] = useState<Map<number, number | null>>(new Map());
+  const [statusOverrides, setStatusOverrides] = useState<Map<number, string | null>>(new Map());
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
 
@@ -850,10 +836,11 @@ export default function Pipeline() {
   const signalsByParent = new Map<number, PipelineAsset[]>();
   const unlinkedSignals: PipelineAsset[] = [];
   for (const sig of signalAssets) {
-    if (sig.parentSavedAssetId) {
-      const arr = signalsByParent.get(sig.parentSavedAssetId) ?? [];
+    const effectiveParent = parentOverrides.has(sig.id) ? parentOverrides.get(sig.id)! : sig.parentSavedAssetId;
+    if (effectiveParent) {
+      const arr = signalsByParent.get(effectiveParent) ?? [];
       arr.push(sig);
-      signalsByParent.set(sig.parentSavedAssetId, arr);
+      signalsByParent.set(effectiveParent, arr);
     } else {
       unlinkedSignals.push(sig);
     }
@@ -861,6 +848,7 @@ export default function Pipeline() {
 
   const deckAssets: DeckAsset[] = ttoAssets.map((tto) => ({
     ...tto,
+    status: statusOverrides.has(tto.id) ? statusOverrides.get(tto.id)! : tto.status,
     signals: signalsByParent.get(tto.id) ?? [],
   }));
 
@@ -901,11 +889,19 @@ export default function Pipeline() {
       });
       if (!res.ok) throw new Error("Failed to attach signal");
     },
+    onMutate: ({ signalId, parentId }) => {
+      setParentOverrides((m) => new Map(m).set(signalId, parentId));
+      return { signalId };
+    },
     onSuccess: (_, vars) => {
+      setParentOverrides((m) => { const n = new Map(m); n.delete(vars.signalId); return n; });
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       toast({ title: vars.parentId ? "Signal attached" : "Signal detached" });
     },
-    onError: (err: any) => toast({ title: "Attach failed", description: err.message, variant: "destructive" }),
+    onError: (err: any, vars, ctx: any) => {
+      if (ctx) setParentOverrides((m) => { const n = new Map(m); n.delete(ctx.signalId); return n; });
+      toast({ title: "Attach failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const boardStatusMutation = useMutation({
@@ -918,8 +914,18 @@ export default function Pipeline() {
       });
       if (!res.ok) throw new Error("Failed to update status");
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/saved-assets"] }),
-    onError: (err: any) => toast({ title: "Status update failed", description: err.message, variant: "destructive" }),
+    onMutate: ({ id, status }) => {
+      setStatusOverrides((m) => new Map(m).set(id, status));
+      return { id };
+    },
+    onSuccess: (_, vars) => {
+      setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any, vars, ctx: any) => {
+      if (ctx) setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
+      toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const handleDetachSignal = useCallback((signalId: number) => {
@@ -940,9 +946,9 @@ export default function Pipeline() {
       if (dragData.assetId !== dropData.ttoId) attachMutation.mutate({ signalId: dragData.assetId, parentId: dropData.ttoId });
     }
     if (dragData?.type === "tto" && dropData?.type === "status-drop") {
-      const tto = ttoAssets.find((a) => a.id === dragData.assetId);
+      const deck = deckAssets.find((a) => a.id === dragData.assetId);
       const newStatus = dropData.status as string | null;
-      if (tto && tto.status !== newStatus) boardStatusMutation.mutate({ id: dragData.assetId, status: newStatus });
+      if (deck && deck.status !== newStatus) boardStatusMutation.mutate({ id: dragData.assetId, status: newStatus });
     }
   }
 
@@ -1111,7 +1117,7 @@ export default function Pipeline() {
                         </button>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
                         {gridCards.map((card) => {
                           const isTto = isTtoSource(card.sourceName);
                           const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
@@ -1167,21 +1173,15 @@ export default function Pipeline() {
               </div>
             </div>
 
-            {/* Drag overlay */}
+            {/* Drag overlay — full card visual */}
             <DragOverlay>
               {activeDragAsset && (
-                <div className="opacity-90 rotate-1 scale-[0.97]">
+                <div className="opacity-90 rotate-1 scale-[0.97]" style={{ width: "200px" }}>
                   <div
-                    className="relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-xl px-3 py-2.5 w-52"
-                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
+                    className="relative w-full h-[260px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10"
+                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.28)" }}
                   >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl" style={{ background: SCOUT_CARD_TINTS[getSourceCategory(activeDragAsset.sourceName)].stripColor }} />
-                    <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: SCOUT_CARD_TINTS[getSourceCategory(activeDragAsset.sourceName)].stripColor }}>
-                      {getSourceLabel(activeDragAsset.sourceName)}
-                    </p>
-                    <p className="text-[12px] font-semibold text-foreground truncate">
-                      {activeDragAsset.assetName !== "unknown" ? activeDragAsset.assetName : activeDragAsset.sourceTitle}
-                    </p>
+                    <CardFaceContent asset={activeDragAsset} />
                   </div>
                 </div>
               )}
