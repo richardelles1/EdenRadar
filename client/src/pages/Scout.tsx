@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { OrientationHint } from "@/components/OrientationHint";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, useSearch } from "wouter";
 import type { InstitutionsListResponse } from "@/lib/institutions";
@@ -1039,7 +1038,6 @@ export default function Scout() {
     modalitiesMulti.length > 0,
     institutionsMulti.length > 0,
     sinceFilter !== "any",
-    sortMode !== "score",
     minScore !== 0,
   ].filter(Boolean).length;
 
@@ -1061,8 +1059,13 @@ export default function Scout() {
     <div className="min-h-full flex flex-col bg-gradient-to-b from-background via-background to-muted/20">
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
-          <div className="px-4 sm:px-6 pt-8 pb-5 space-y-4">
-            <div className="max-w-3xl mx-auto text-center mb-6 relative">
+          <div className="relative px-4 sm:px-6 pt-10 pb-6 space-y-5 overflow-hidden">
+            {/* Atmospheric radial bloom — anchored to the search bar zone */}
+            <div className="pointer-events-none absolute inset-x-0 -top-24 -z-10 flex justify-center">
+              <div className="h-[480px] w-[800px] rounded-full bg-primary/10 dark:bg-primary/[0.13] blur-3xl" />
+            </div>
+
+            <div className="max-w-3xl mx-auto text-center mb-2 relative">
               <button
                 onClick={() => setLocation("/settings")}
                 className="absolute right-0 top-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
@@ -1077,23 +1080,66 @@ export default function Scout() {
                 </span>
               </h1>
               <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-                Semantic search across indexed TTO assets from leading research institutions, matched to your buyer thesis.
+                Semantic search across TTO assets from leading research institutions, scored against your buyer thesis.
               </p>
             </div>
 
+            {/* Pre-search state — stats bar + suggestion chips */}
             {!hasSearched && (
-              <div className="max-w-3xl mx-auto">
-                <OrientationHint
-                  hintId="scout-cross-source"
-                  title="TTO asset discovery."
-                  body="Search across 300+ TTO disclosures, scored against your buyer thesis. Results automatically include patents and clinical trials in their dedicated tabs. Optionally add PubMed or preprint sources via the Sources selector."
-                  accent="emerald"
-                />
+              <div className="max-w-3xl mx-auto space-y-4 animate-in fade-in duration-500">
+                <div className="flex items-center justify-center gap-5 sm:gap-8 flex-wrap">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center">
+                      <Building2 className="w-3.5 h-3.5 text-primary" />
+                    </div>
+                    <div className="leading-tight">
+                      <span className="text-sm font-bold text-foreground">{liveInstitutionCount || "50+"}</span>
+                      <span className="text-xs text-muted-foreground ml-1.5">institutions</span>
+                    </div>
+                  </div>
+                  <div className="hidden sm:block w-px h-5 bg-border" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
+                      <FlaskConical className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="leading-tight">
+                      <span className="text-sm font-bold text-foreground">300+</span>
+                      <span className="text-xs text-muted-foreground ml-1.5">TTO assets</span>
+                    </div>
+                  </div>
+                  <div className="hidden sm:block w-px h-5 bg-border" />
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
+                      <ScrollText className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    </div>
+                    <div className="leading-tight">
+                      <span className="text-xs text-muted-foreground">Patents · Trials · Research</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap justify-center gap-2">
+                  {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
+                    <button
+                      key={chip}
+                      onClick={() => handleChipClick(chip)}
+                      className="px-3.5 py-1.5 rounded-full border border-border/70 bg-background/60 hover:border-primary/50 hover:bg-primary/5 hover:text-primary text-xs text-muted-foreground transition-all duration-150 backdrop-blur-sm"
+                      data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            <div className="max-w-3xl mx-auto flex gap-2">
-              <div className="flex-1">
+            {/* Search bar — elevated with ambient glow ring */}
+            <div className="max-w-3xl mx-auto flex gap-2 relative">
+              <div
+                className="absolute -inset-1 rounded-xl pointer-events-none"
+                style={{ boxShadow: "0 0 0 1px hsl(var(--primary) / 0.10), 0 6px 28px hsl(var(--primary) / 0.09)" }}
+                aria-hidden="true"
+              />
+              <div className="relative flex-1 z-10">
                 <SearchBar
                   query={inputQuery}
                   onQueryChange={setInputQuery}
@@ -1109,7 +1155,7 @@ export default function Scout() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                  className="relative z-10 shrink-0 h-12 w-12 text-muted-foreground hover:text-foreground"
                   onClick={handleClearSearch}
                   data-testid="button-clear-search"
                   title="New search"
@@ -1154,10 +1200,16 @@ export default function Scout() {
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} onClear={handleClearProfile} />
           </div>
 
-          {/* TTO loading indicator */}
+          {/* TTO loading skeleton — mirrors card layout so layout doesn't jump when results arrive */}
           {searchMutation.isPending && (
-            <div className="flex items-center justify-center py-16">
-              <Loader2 className="w-6 h-6 animate-spin text-primary opacity-60" />
+            <div className="px-4 sm:px-6">
+              <SearchResults
+                assets={[]}
+                isLoading={true}
+                hasSearched={true}
+                savedAssetIds={savedAssetIds}
+                onUnsave={handleUnsave}
+              />
             </div>
           )}
 
@@ -1314,6 +1366,37 @@ export default function Scout() {
             </div>
           )}
 
+          {/* Cross-tab results summary — orientation line shown once TTO resolves */}
+          {hasSearched && !searchMutation.isPending && (
+            <div className="px-4 sm:px-6 pb-1">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                <span>
+                  <span className="text-foreground font-semibold">{searchResults.length}</span> TTO assets
+                </span>
+                {!patentMutation.isPending && patentResults.length > 0 && (
+                  <>
+                    <span className="opacity-30">·</span>
+                    <span><span className="text-foreground font-semibold">{patentResults.length}</span> patents</span>
+                  </>
+                )}
+                {!trialMutation.isPending && trialResults.length > 0 && (
+                  <>
+                    <span className="opacity-30">·</span>
+                    <span><span className="text-foreground font-semibold">{trialResults.length}</span> trials</span>
+                  </>
+                )}
+                {availableInstitutions.length > 0 && (
+                  <>
+                    <span className="opacity-30">·</span>
+                    <span className="text-muted-foreground/70">
+                      {availableInstitutions.slice(0, 3).join(", ")}{availableInstitutions.length > 3 ? ` +${availableInstitutions.length - 3}` : ""}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Active filter chips — only on assets tab */}
           {showControls && activeFilterCount > 0 && resultTab === "assets" && (
             <div className="px-4 sm:px-6 pb-3">
@@ -1374,7 +1457,13 @@ export default function Scout() {
             </div>
           )}
 
-          <div className="flex-1 px-4 sm:px-6 pb-10 space-y-6">
+          <div
+            className="flex-1 px-4 sm:px-6 pb-10 space-y-6"
+            style={{
+              backgroundImage: "radial-gradient(circle, hsl(var(--primary) / 0.045) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          >
             {/* Assets tab — TTO results shown immediately once TTO query resolves; not blocked by patent/research loading */}
             {(resultTab === "assets" || !hasSearched) && !searchMutation.isPending && (
               <>

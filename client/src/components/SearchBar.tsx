@@ -44,7 +44,7 @@ export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sour
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder={placeholder}
-          className="pl-10 h-11 bg-card border-card-border focus:border-primary/60 text-sm"
+          className="pl-10 h-12 bg-card border-card-border focus:border-primary/50 focus-visible:ring-2 focus-visible:ring-primary/15 focus-visible:ring-offset-0 text-sm"
           data-testid="input-search"
           disabled={isLoading}
         />
@@ -81,7 +81,7 @@ export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sour
       )}
       <Button
         type="submit"
-        className="h-11 px-5 shrink-0"
+        className="h-12 px-6 shrink-0 shadow-sm"
         disabled={isLoading || !query.trim()}
         data-testid="button-search"
       >

@@ -46,6 +46,11 @@ function LoadingSkeleton() {
               <Skeleton className="h-3.5 w-4/5 bg-muted/50 dark:bg-zinc-700" />
               <Skeleton className="h-3.5 w-3/5 bg-muted/50 dark:bg-zinc-700" />
             </div>
+            <Skeleton className="h-3 w-2/5 bg-muted/35 dark:bg-zinc-800 mt-2" />
+            <div className="flex gap-1 mt-2">
+              <Skeleton className="h-4 w-14 rounded-full bg-muted/40 dark:bg-zinc-700/70" />
+              <Skeleton className="h-4 w-10 rounded-full bg-muted/40 dark:bg-zinc-700/70" />
+            </div>
             <div className="mt-auto">
               <Skeleton className="h-3 w-3/4 bg-muted/40 dark:bg-zinc-800 mb-2" />
               <Skeleton className="h-7 w-full rounded-md bg-emerald-200/60 dark:bg-emerald-900/40" />
@@ -142,14 +147,19 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         )}
       </div>
       <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-        {assets.map((asset) => (
-          <AssetCard
+        {assets.map((asset, index) => (
+          <div
             key={asset.id}
-            asset={asset}
-            isSaved={savedAssetIds.has(asset.id)}
-            onSave={onSave ? () => onSave(asset) : undefined}
-            onUnsave={() => onUnsave(asset.id, asset.asset_name)}
-          />
+            className="animate-in fade-in slide-in-from-bottom-3 duration-300"
+            style={{ animationDelay: `${Math.min(index * 35, 350)}ms`, animationFillMode: "both" }}
+          >
+            <AssetCard
+              asset={asset}
+              isSaved={savedAssetIds.has(asset.id)}
+              onSave={onSave ? () => onSave(asset) : undefined}
+              onUnsave={() => onUnsave(asset.id, asset.asset_name)}
+            />
+          </div>
         ))}
       </div>
     </div>
