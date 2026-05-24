@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType, index, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1415,3 +1415,100 @@ export const regulatoryDesignations = pgTable("regulatory_designations", {
 
 export type RegulatoryDesignation = typeof regulatoryDesignations.$inferSelect;
 export type InsertRegulatoryDesignation = typeof regulatoryDesignations.$inferInsert;
+
+// ── API Keys & Usage ──────────────────────────────────────────────────────────
+
+export const API_SCOPES = [
+  "read:assets",
+  "read:institutions",
+  "read:pipeline",
+  "write:pipeline",
+  "read:reports",
+  "read:analytics",
+] as const;
+export type ApiScope = typeof API_SCOPES[number];
+
+export const API_SCOPE_LABELS: Record<string, string> = {
+  "read:assets":       "Read Assets — search and retrieve TTO assets",
+  "read:institutions": "Read Institutions — list and query institutions",
+  "read:pipeline":     "Read Pipeline — view saved assets pipeline",
+  "write:pipeline":    "Write Pipeline — add/remove from pipeline",
+  "read:reports":      "Read Reports — generate match reports",
+  "read:analytics":    "Read Analytics — access own usage analytics",
+};
+
+export const API_TIER_CONFIG = {
+  starter:      { dailyLimit: 500,   scopes: ["read:assets", "read:institutions"] as string[] },
+  professional: { dailyLimit: 5000,  scopes: ["read:assets", "read:institutions", "read:pipeline", "write:pipeline", "read:reports"] as string[] },
+  enterprise:   { dailyLimit: 50000, scopes: ["read:assets", "read:institutions", "read:pipeline", "write:pipeline", "read:reports", "read:analytics"] as string[] },
+} as const;
+export type ApiTierName = keyof typeof API_TIER_CONFIG;
+
+export const apiKeys = pgTable("api_keys", {
+  id: serial("id").primaryKey(),
+  keyHash: text("key_hash").notNull().unique(),
+  keyPrefix: text("key_prefix").notNull(),
+  label: text("label").notNull().default("API Key"),
+  userId: text("user_id").notNull(),
+  userEmail: text("user_email"),
+  orgId: integer("org_id"),
+  orgName: text("org_name"),
+  tier: text("tier").notNull().default("starter"),
+  scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
+  status: text("status").notNull().default("active"),
+  dailyLimit: integer("daily_limit").notNull().default(500),
+  limitOverride: integer("limit_override"),
+  accessGrantNote: text("access_grant_note"),
+  grantedByAdmin: text("granted_by_admin"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  revokedAt: timestamp("revoked_at"),
+  revokedBy: text("revoked_by"),
+  suspendedAt: timestamp("suspended_at"),
+  suspendedBy: text("suspended_by"),
+  suspendReason: text("suspend_reason"),
+  expiresAt: timestamp("expires_at"),
+});
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type InsertApiKey = typeof apiKeys.$inferInsert;
+
+export const apiUsageLogs = pgTable("api_usage_logs", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  keyId: integer("key_id"),
+  keyPrefix: text("key_prefix"),
+  userId: text("user_id"),
+  orgId: integer("org_id"),
+  orgName: text("org_name"),
+  endpoint: text("endpoint").notNull(),
+  method: text("method").notNull().default("GET"),
+  statusCode: integer("status_code").notNull(),
+  responseTimeMs: integer("response_time_ms"),
+  calledAt: timestamp("called_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+}, (t) => [
+  index("api_usage_logs_called_at_idx").on(t.calledAt),
+  index("api_usage_logs_key_id_idx").on(t.keyId),
+]);
+export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
+
+export const apiRateLimitWindows = pgTable("api_rate_limit_windows", {
+  keyId: integer("key_id").primaryKey(),
+  windowStart: timestamp("window_start").defaultNow().notNull(),
+  callCount: integer("call_count").notNull().default(0),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const apiKeyAuditLog = pgTable("api_key_audit_log", {
+  id: serial("id").primaryKey(),
+  action: text("action").notNull(),
+  keyId: integer("key_id"),
+  keyPrefix: text("key_prefix"),
+  actorId: text("actor_id"),
+  actorType: text("actor_type").notNull().default("admin"),
+  targetUserId: text("target_user_id"),
+  targetOrgId: integer("target_org_id"),
+  payload: jsonb("payload").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type ApiKeyAuditLog = typeof apiKeyAuditLog.$inferSelect;

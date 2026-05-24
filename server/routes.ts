@@ -9,7 +9,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -16040,6 +16040,211 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       res.json({ ok: true, removed });
     } catch (err: any) {
       res.status(500).json({ error: err?.message ?? "Purge failed" });
+    }
+  });
+
+  // ── API Management (admin) ────────────────────────────────────────────────────
+
+  app.get("/api/admin/api-management/overview", requireAdmin, async (req, res) => {
+    try {
+      const [keysResult, callsTodayResult, callsMonthResult] = await Promise.all([
+        db.select({ status: apiKeys.status, count: sql<number>`count(*)::int` })
+          .from(apiKeys)
+          .groupBy(apiKeys.status),
+        db.select({ count: sql<number>`count(*)::int` })
+          .from(apiUsageLogs)
+          .where(sql`called_at >= now() - interval '24 hours'`),
+        db.select({ count: sql<number>`count(*)::int` })
+          .from(apiUsageLogs)
+          .where(sql`called_at >= date_trunc('month', now())`),
+      ]);
+      const activeKeys = keysResult.find(r => r.status === 'active')?.count ?? 0;
+      const totalKeys = keysResult.reduce((s, r) => s + (r.count ?? 0), 0);
+      const callsToday = callsTodayResult[0]?.count ?? 0;
+      const callsMonth = callsMonthResult[0]?.count ?? 0;
+
+      // Top orgs by calls this month
+      const topOrgs = await db.select({
+        orgName: apiUsageLogs.orgName,
+        calls: sql<number>`count(*)::int`,
+      })
+        .from(apiUsageLogs)
+        .where(sql`called_at >= date_trunc('month', now()) AND org_name IS NOT NULL`)
+        .groupBy(apiUsageLogs.orgName)
+        .orderBy(sql`count(*) desc`)
+        .limit(5);
+
+      // 30-day sparkline
+      const sparkline = await db.select({
+        day: sql<string>`to_char(date_trunc('day', called_at), 'MM/DD')`,
+        calls: sql<number>`count(*)::int`,
+      })
+        .from(apiUsageLogs)
+        .where(sql`called_at >= now() - interval '30 days'`)
+        .groupBy(sql`date_trunc('day', called_at)`)
+        .orderBy(sql`date_trunc('day', called_at)`);
+
+      res.json({ activeKeys, totalKeys, callsToday, callsMonth, topOrgs, sparkline });
+    } catch (e) {
+      res.json({ activeKeys: 0, totalKeys: 0, callsToday: 0, callsMonth: 0, topOrgs: [], sparkline: [] });
+    }
+  });
+
+  app.get("/api/admin/api-management/keys", requireAdmin, async (req, res) => {
+    try {
+      const search = (req.query.search as string) ?? "";
+      const status = (req.query.status as string) ?? "all";
+      const rows = await db.select().from(apiKeys).orderBy(desc(apiKeys.createdAt));
+      let filtered = rows;
+      if (status !== "all") filtered = filtered.filter(k => k.status === status);
+      if (search) {
+        const q = search.toLowerCase();
+        filtered = filtered.filter(k =>
+          k.keyPrefix.toLowerCase().includes(q) ||
+          (k.orgName ?? "").toLowerCase().includes(q) ||
+          (k.userEmail ?? "").toLowerCase().includes(q) ||
+          k.label.toLowerCase().includes(q)
+        );
+      }
+      // Attach today's call count per key
+      const keyIds = filtered.map(k => k.id);
+      const todayCountsRaw = keyIds.length > 0
+        ? await db.select({ keyId: apiUsageLogs.keyId, count: sql<number>`count(*)::int` })
+            .from(apiUsageLogs)
+            .where(sql`called_at >= now() - interval '24 hours' AND key_id = ANY(${sql.raw(`ARRAY[${keyIds.join(',')}]`)})`)
+            .groupBy(apiUsageLogs.keyId)
+        : [];
+      const todayCounts: Record<number, number> = {};
+      for (const r of todayCountsRaw) { if (r.keyId) todayCounts[r.keyId] = r.count; }
+      const result = filtered.map(k => ({ ...k, callsToday: todayCounts[k.id] ?? 0 }));
+      res.json({ keys: result });
+    } catch (e) {
+      res.json({ keys: [] });
+    }
+  });
+
+  app.post("/api/admin/api-management/keys/:id/suspend", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const { reason } = req.body as { reason?: string };
+      const adminEmail = String(req.headers["x-admin-email"] ?? "admin");
+      await db.update(apiKeys)
+        .set({ status: "suspended", suspendedAt: new Date(), suspendedBy: adminEmail, suspendReason: reason ?? null })
+        .where(eq(apiKeys.id, id));
+      await db.insert(apiKeyAuditLog).values({
+        action: "key_suspended", keyId: id, actorType: "admin",
+        actorId: adminEmail,
+        payload: { reason },
+      });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: String(e) }); }
+  });
+
+  app.post("/api/admin/api-management/keys/:id/restore", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const adminEmail = String(req.headers["x-admin-email"] ?? "admin");
+      await db.update(apiKeys)
+        .set({ status: "active", suspendedAt: null, suspendedBy: null, suspendReason: null })
+        .where(eq(apiKeys.id, id));
+      await db.insert(apiKeyAuditLog).values({
+        action: "key_restored", keyId: id, actorType: "admin", actorId: adminEmail,
+      });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: String(e) }); }
+  });
+
+  app.post("/api/admin/api-management/keys/:id/revoke", requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const adminEmail = String(req.headers["x-admin-email"] ?? "admin");
+      await db.update(apiKeys)
+        .set({ status: "revoked", revokedAt: new Date(), revokedBy: adminEmail })
+        .where(eq(apiKeys.id, id));
+      await db.insert(apiKeyAuditLog).values({
+        action: "key_revoked", keyId: id, actorType: "admin", actorId: adminEmail,
+      });
+      res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: String(e) }); }
+  });
+
+  app.get("/api/admin/api-management/orgs", requireAdmin, async (req, res) => {
+    try {
+      const orgSummaries = await db.select({
+        orgId: apiKeys.orgId,
+        orgName: apiKeys.orgName,
+        keyCount: sql<number>`count(*)::int`,
+        activeKeys: sql<number>`count(*) filter (where status = 'active')::int`,
+        tier: sql<string>`max(tier)`,
+      })
+        .from(apiKeys)
+        .where(sql`org_id IS NOT NULL`)
+        .groupBy(apiKeys.orgId, apiKeys.orgName);
+
+      const callsMonth = await db.select({
+        orgId: apiUsageLogs.orgId,
+        calls: sql<number>`count(*)::int`,
+      })
+        .from(apiUsageLogs)
+        .where(sql`called_at >= date_trunc('month', now()) AND org_id IS NOT NULL`)
+        .groupBy(apiUsageLogs.orgId);
+
+      const callMap: Record<number, number> = {};
+      for (const r of callsMonth) { if (r.orgId) callMap[r.orgId] = r.calls; }
+
+      const result = orgSummaries.map(o => ({
+        ...o,
+        callsThisMonth: o.orgId ? (callMap[o.orgId] ?? 0) : 0,
+      }));
+      res.json({ orgs: result });
+    } catch (e) {
+      res.json({ orgs: [] });
+    }
+  });
+
+  app.get("/api/admin/api-management/usage", requireAdmin, async (req, res) => {
+    try {
+      const [volumeByDay, byEndpoint, byStatus] = await Promise.all([
+        db.select({
+          day: sql<string>`to_char(date_trunc('day', called_at), 'MM/DD')`,
+          calls: sql<number>`count(*)::int`,
+        })
+          .from(apiUsageLogs)
+          .where(sql`called_at >= now() - interval '30 days'`)
+          .groupBy(sql`date_trunc('day', called_at)`)
+          .orderBy(sql`date_trunc('day', called_at)`),
+        db.select({
+          endpoint: apiUsageLogs.endpoint,
+          calls: sql<number>`count(*)::int`,
+        })
+          .from(apiUsageLogs)
+          .where(sql`called_at >= date_trunc('month', now())`)
+          .groupBy(apiUsageLogs.endpoint)
+          .orderBy(sql`count(*) desc`)
+          .limit(10),
+        db.select({
+          statusCode: apiUsageLogs.statusCode,
+          calls: sql<number>`count(*)::int`,
+        })
+          .from(apiUsageLogs)
+          .where(sql`called_at >= date_trunc('month', now())`)
+          .groupBy(apiUsageLogs.statusCode),
+      ]);
+      res.json({ volumeByDay, byEndpoint, byStatus });
+    } catch (e) {
+      res.json({ volumeByDay: [], byEndpoint: [], byStatus: [] });
+    }
+  });
+
+  app.get("/api/admin/api-management/audit", requireAdmin, async (req, res) => {
+    try {
+      const events = await db.select()
+        .from(apiKeyAuditLog)
+        .orderBy(desc(apiKeyAuditLog.createdAt))
+        .limit(200);
+      res.json({ events });
+    } catch (e) {
+      res.json({ events: [] });
     }
   });
 

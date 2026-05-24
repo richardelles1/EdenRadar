@@ -1792,6 +1792,81 @@ async function migrateAssetStatusValues() {
   } catch (err: any) {
     log(`[startup] Asset status migration note: ${err?.message}`, "startup");
   }
+
+  // ── API Keys tables ──────────────────────────────────────────────────────────
+  try {
+    await mdb.execute(sql`
+      CREATE TABLE IF NOT EXISTS api_keys (
+        id serial PRIMARY KEY,
+        key_hash text NOT NULL UNIQUE,
+        key_prefix text NOT NULL,
+        label text NOT NULL DEFAULT 'API Key',
+        user_id text NOT NULL,
+        user_email text,
+        org_id integer,
+        org_name text,
+        tier text NOT NULL DEFAULT 'starter',
+        scopes jsonb NOT NULL DEFAULT '[]'::jsonb,
+        status text NOT NULL DEFAULT 'active',
+        daily_limit integer NOT NULL DEFAULT 500,
+        limit_override integer,
+        access_grant_note text,
+        granted_by_admin text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        last_used_at timestamptz,
+        revoked_at timestamptz,
+        revoked_by text,
+        suspended_at timestamptz,
+        suspended_by text,
+        suspend_reason text,
+        expires_at timestamptz
+      )
+    `);
+    await mdb.execute(sql`
+      CREATE TABLE IF NOT EXISTS api_usage_logs (
+        id bigserial PRIMARY KEY,
+        key_id integer,
+        key_prefix text,
+        user_id text,
+        org_id integer,
+        org_name text,
+        endpoint text NOT NULL,
+        method text NOT NULL DEFAULT 'GET',
+        status_code integer NOT NULL,
+        response_time_ms integer,
+        called_at timestamptz NOT NULL DEFAULT now(),
+        ip_address text,
+        user_agent text
+      )
+    `);
+    await mdb.execute(sql`CREATE INDEX IF NOT EXISTS api_usage_logs_called_at_idx ON api_usage_logs(called_at)`);
+    await mdb.execute(sql`CREATE INDEX IF NOT EXISTS api_usage_logs_key_id_idx ON api_usage_logs(key_id)`);
+    await mdb.execute(sql`
+      CREATE TABLE IF NOT EXISTS api_rate_limit_windows (
+        key_id integer PRIMARY KEY,
+        window_start timestamptz NOT NULL DEFAULT now(),
+        call_count integer NOT NULL DEFAULT 0,
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    await mdb.execute(sql`
+      CREATE TABLE IF NOT EXISTS api_key_audit_log (
+        id serial PRIMARY KEY,
+        action text NOT NULL,
+        key_id integer,
+        key_prefix text,
+        actor_id text,
+        actor_type text NOT NULL DEFAULT 'admin',
+        target_user_id text,
+        target_org_id integer,
+        payload jsonb,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )
+    `);
+    log("[startup] api_keys tables ready", "startup");
+  } catch (e) {
+    log(`[startup] api_keys migration warning: ${e}`, "startup");
+  }
 }
 
 (async () => {

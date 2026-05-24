@@ -3,8 +3,9 @@ import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveCo
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
+import { ApiManagementTab } from "@/components/admin/ApiManagementTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, Key, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -9005,6 +9006,7 @@ function AdminInner() {
     adminControls: false,
     edenmarket: false,
     outbound: false,
+    apiManagement: false,
   });
   const { theme, setTheme } = useTheme();
   const { session, signOut, sendPasswordReset } = useAuth();
@@ -13693,6 +13695,31 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
                 </button>
               </>
             )}
+
+            {/* ── API MANAGEMENT ── */}
+            <div className="hidden lg:block border-t border-border mt-3 pt-1 pb-1.5">
+              <button
+                onClick={() => setNavOpen(o => ({ ...o, apiManagement: !o.apiManagement }))}
+                className="w-full flex items-center justify-between px-3 py-0.5 group"
+              >
+                <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground">API Management</p>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground/60 transition-transform duration-200 ${navOpen.apiManagement ? "" : "-rotate-90"}`} />
+              </button>
+            </div>
+            {navOpen.apiManagement && (
+              <>
+                <button
+                  onClick={() => setActiveTab("api-management")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "api-management" ? "bg-violet-500/10 text-violet-600 dark:text-violet-400" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-api-management"
+                >
+                  <Key className="h-4 w-4" />
+                  API Management
+                </button>
+              </>
+            )}
           </nav>
         </aside>
 
@@ -13871,6 +13898,10 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
           {activeTab === "documents" && <DocumentsTab pw={pw} />}
 
           {activeTab === "jarvis" && <JarvisTab pw={pw} />}
+
+          {activeTab === "api-management" && (
+            <ApiManagementTab pw={pw} />
+          )}
 
         </main>
       </div>
