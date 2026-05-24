@@ -33,6 +33,7 @@ export interface ScoreBreakdown {
   licensability: number;
   fit: number;
   competition: number;
+  search_relevance?: number;
   record_quality?: number;
   availability?: number;
   total: number;

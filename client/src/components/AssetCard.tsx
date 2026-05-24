@@ -39,10 +39,11 @@ const TIER_BORDER_BOTTOM_RIGHT: Record<TierKey, string> = {
   none: "border-zinc-200/60 dark:border-zinc-700/40",
 };
 
-const SCORE_BREAKDOWN_KEYS = ["fit", "record_quality", "availability"] as const;
+const SCORE_BREAKDOWN_KEYS = ["search_relevance", "fit", "record_quality", "availability"] as const;
 type BreakdownKey = typeof SCORE_BREAKDOWN_KEYS[number];
 
 const BREAKDOWN_LABELS: Record<BreakdownKey, string> = {
+  search_relevance: "Query Match",
   fit: "Fit",
   record_quality: "Record Quality",
   availability: "Availability",
@@ -78,9 +79,15 @@ function ScoreBreakdownRows({
   if (isUnscored || !breakdown) {
     return <p className="text-[11px] text-muted-foreground">No score data available for this asset.</p>;
   }
+  // TTO assets use search_relevance (query match) as primary dimension — fit is zero and meaningless for them.
+  // Legacy assets (papers, patents, trials) use fit instead.
+  const isTTO = breakdown.dimension_basis != null && "search_relevance" in breakdown.dimension_basis;
+  const visibleKeys: BreakdownKey[] = isTTO
+    ? ["search_relevance", "record_quality", "availability"]
+    : ["fit", "record_quality", "availability"];
   return (
     <div className="space-y-2.5">
-      {SCORE_BREAKDOWN_KEYS.map((k) => {
+      {visibleKeys.map((k) => {
         const val = breakdown[k as keyof ScoreBreakdown] as number | undefined;
         const basis = breakdown.dimension_basis?.[k];
         const displayVal = typeof val === "number" ? Math.round(val) : null;
