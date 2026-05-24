@@ -34,6 +34,8 @@ type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | nu
 type DeckAsset = PipelineAsset & { signals: PipelineAsset[] };
 type BriefModal = { stage: string; label: string; brief: string; assetCount: number };
 type ViewMode = "stage" | "board";
+type PipelineList = { id: number; name: string; userId: string; createdAt: string };
+type PipelinesResponse = { pipelines: PipelineList[] };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -594,6 +596,7 @@ export default function Pipeline() {
 
   // View state
   const [viewMode, setViewMode] = useState<ViewMode>("stage");
+  const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
   const [briefLoading, setBriefLoading] = useState<string | null>(null);
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
   const [copied, setCopied] = useState(false);
@@ -612,6 +615,12 @@ export default function Pipeline() {
     refetchInterval: 30000,
     refetchOnWindowFocus: true,
   });
+
+  const { data: pipelinesData } = useQuery<PipelinesResponse>({
+    queryKey: ["/api/pipelines"],
+    staleTime: 30000,
+  });
+  const pipelines = pipelinesData?.pipelines ?? [];
 
   const savedAssets = data?.assets ?? [];
 
@@ -635,6 +644,14 @@ export default function Pipeline() {
     ...tto,
     signals: signalsByParent.get(tto.id) ?? [],
   }));
+
+  const filteredDeckAssets = filterPipeline === "all" ? deckAssets
+    : filterPipeline === null ? deckAssets.filter((d) => d.pipelineListId == null)
+    : deckAssets.filter((d) => d.pipelineListId === filterPipeline);
+
+  const filteredUnlinkedSignals = filterPipeline === "all" ? unlinkedSignals
+    : filterPipeline === null ? unlinkedSignals.filter((s) => s.pipelineListId == null)
+    : unlinkedSignals.filter((s) => s.pipelineListId === filterPipeline);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -781,51 +798,83 @@ export default function Pipeline() {
         {/* Header */}
         <div className="border-b border-border bg-card/30">
           <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">
-                  Drug Development{" "}
-                  <span className="gradient-text dark:gradient-text gradient-text-light">Pipeline</span>
-                </h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  {totalAssets > 0
-                    ? `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${unlinkedCount > 0 ? ` · ${unlinkedCount} unlinked signal${unlinkedCount !== 1 ? "s" : ""}` : ""}`
-                    : "Save assets from Scout to build your pipeline"}
-                </p>
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">
+                    Drug Development{" "}
+                    <span className="gradient-text dark:gradient-text gradient-text-light">Pipeline</span>
+                  </h1>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    {totalAssets > 0
+                      ? `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${unlinkedCount > 0 ? ` · ${unlinkedCount} unlinked signal${unlinkedCount !== 1 ? "s" : ""}` : ""}`
+                      : "Save assets from Scout to build your pipeline"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {totalAssets > 0 && (
+                    <>
+                      {/* View toggle */}
+                      <div className="flex items-center gap-0.5 border border-card-border rounded-md p-0.5 bg-card">
+                        <button
+                          onClick={() => setViewMode("stage")}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === "stage" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                          data-testid="button-view-stage"
+                          title="Stage view — organized by clinical development stage"
+                        >
+                          <AlignJustify className="w-3 h-3" />
+                          Stage
+                        </button>
+                        <button
+                          onClick={() => setViewMode("board")}
+                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === "board" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                          data-testid="button-view-board"
+                          title="Board view — organized by CRM status stage"
+                        >
+                          <LayoutDashboard className="w-3 h-3" />
+                          Board
+                        </button>
+                      </div>
+                      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs border-card-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
+                        <Download className="w-3 h-3" />JSON
+                      </Button>
+                      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs border-card-border" onClick={handleExportCsv} data-testid="button-pipeline-export-csv">
+                        <Download className="w-3 h-3" />CSV
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                {totalAssets > 0 && (
-                  <>
-                    {/* View toggle */}
-                    <div className="flex items-center gap-0.5 border border-card-border rounded-md p-0.5 bg-card">
-                      <button
-                        onClick={() => setViewMode("stage")}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === "stage" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid="button-view-stage"
-                        title="Stage view — organized by clinical development stage"
-                      >
-                        <AlignJustify className="w-3 h-3" />
-                        Stage
-                      </button>
-                      <button
-                        onClick={() => setViewMode("board")}
-                        className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === "board" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid="button-view-board"
-                        title="Board view — organized by CRM deal stage"
-                      >
-                        <LayoutDashboard className="w-3 h-3" />
-                        Board
-                      </button>
-                    </div>
-                    <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs border-card-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
-                      <Download className="w-3 h-3" />JSON
-                    </Button>
-                    <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs border-card-border" onClick={handleExportCsv} data-testid="button-pipeline-export-csv">
-                      <Download className="w-3 h-3" />CSV
-                    </Button>
-                  </>
-                )}
-              </div>
+
+              {/* Pipeline filter pills */}
+              {totalAssets > 0 && (
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setFilterPipeline("all")}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterPipeline === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                    data-testid="filter-pipeline-all"
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setFilterPipeline(null)}
+                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterPipeline === null ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                    data-testid="filter-pipeline-uncategorised"
+                  >
+                    Uncategorised
+                  </button>
+                  {pipelines.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={() => setFilterPipeline(pl.id)}
+                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterPipeline === pl.id ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
+                      data-testid={`filter-pipeline-${pl.id}`}
+                    >
+                      {pl.name}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -863,7 +912,7 @@ export default function Pipeline() {
                     <div className="overflow-x-auto">
                       <div className="flex gap-4 min-w-max pb-4">
                         {BOARD_COLUMNS.map((col) => {
-                          const colDecks = deckAssets.filter((d) => (d.status ?? null) === col.key);
+                          const colDecks = filteredDeckAssets.filter((d) => (d.status ?? null) === col.key);
                           return (
                             <KanbanStatusColumn
                               key={col.key ?? "unassigned"}
@@ -880,18 +929,18 @@ export default function Pipeline() {
                 )}
 
                 {/* ── Stage view (organized by clinical dev stage) ───────── */}
-                {viewMode === "stage" && deckAssets.length > 0 && (
+                {viewMode === "stage" && filteredDeckAssets.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <FlaskConical className="w-4 h-4 text-emerald-500" />
                       <h3 className="text-sm font-semibold text-foreground">TTO Assets</h3>
-                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{deckAssets.length}</span>
+                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{filteredDeckAssets.length}</span>
                       <span className="text-[10px] text-muted-foreground ml-1">— Drag signals onto a card to attach. Drag the ⣿ handle to reorder.</span>
                     </div>
                     <div className="overflow-x-auto">
                       <div className="flex gap-4 min-w-max pb-4">
                         {STAGES.map((stage) => {
-                          const stageDecks = deckAssets.filter((d) => (d.developmentStage?.toLowerCase().trim() || "unknown") === stage.key);
+                          const stageDecks = filteredDeckAssets.filter((d) => (d.developmentStage?.toLowerCase().trim() || "unknown") === stage.key);
                           return (
                             <div key={stage.key} className={`flex flex-col w-72 rounded-lg border ${stage.colorClass} shrink-0`} data-testid={`pipeline-stage-col-${stage.key}`}>
                               <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
@@ -941,16 +990,16 @@ export default function Pipeline() {
                 )}
 
                 {/* ── Unlinked signals tray ─────────────────────────────── */}
-                {unlinkedSignals.length > 0 && (
+                {filteredUnlinkedSignals.length > 0 && (
                   <div>
                     <div className="flex items-center gap-2 mb-3">
                       <Unlink className="w-4 h-4 text-muted-foreground" />
                       <h3 className="text-sm font-semibold text-foreground">Unlinked Signals</h3>
-                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{unlinkedSignals.length}</span>
+                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{filteredUnlinkedSignals.length}</span>
                       <span className="text-[10px] text-muted-foreground ml-1">— Drag these onto a TTO asset card to attach as supporting evidence</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-                      {unlinkedSignals.map((sig) => (
+                      {filteredUnlinkedSignals.map((sig) => (
                         <UnlinkedSignalCard
                           key={sig.id}
                           signal={sig}
