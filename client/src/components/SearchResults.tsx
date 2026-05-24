@@ -147,14 +147,19 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         )}
       </div>
       <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-        {assets.map((asset) => (
-          <AssetCard
+        {assets.map((asset, index) => (
+          <div
             key={asset.id}
-            asset={asset}
-            isSaved={savedAssetIds.has(asset.id)}
-            onSave={onSave ? () => onSave(asset) : undefined}
-            onUnsave={() => onUnsave(asset.id, asset.asset_name)}
-          />
+            className="animate-in fade-in slide-in-from-bottom-3 duration-300"
+            style={{ animationDelay: `${Math.min(index * 35, 350)}ms`, animationFillMode: "both" }}
+          >
+            <AssetCard
+              asset={asset}
+              isSaved={savedAssetIds.has(asset.id)}
+              onSave={onSave ? () => onSave(asset) : undefined}
+              onUnsave={() => onUnsave(asset.id, asset.asset_name)}
+            />
+          </div>
         ))}
       </div>
     </div>
