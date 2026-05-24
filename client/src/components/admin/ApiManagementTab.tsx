@@ -832,7 +832,7 @@ function AccessGrantsPanel({ pw }: { pw: string }) {
     onSuccess: (d) => {
       setIssuedRaw(d.raw);
       setIssuedCopied(false);
-      setGrantUserId(""); setGrantEmail(""); setGrantNote("");
+      setGrantUserId(""); setGrantEmail(""); setGrantNote(""); setGrantTier("starter");
       qc.invalidateQueries({ queryKey: ["admin", "api-management"] });
       toast({ title: "Key issued" });
     },

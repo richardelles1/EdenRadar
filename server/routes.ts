@@ -12,7 +12,7 @@ import { storage, type EnrichFilter } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
-import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
+import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore, computeContentHash } from "./lib/pipeline/contentHash";
 import { fetchHtml, extractText } from "./lib/scrapers/utils";
 import { DESCRIPTION_SELECTORS } from "./lib/scrapers/detailFetcher";
@@ -16383,7 +16383,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     if (!userId) return res.status(401).json({ error: "Unauthorized" });
     try {
       const rows = await db.select().from(apiKeys)
-        .where(and(eq(apiKeys.userId, userId), eq(apiKeys.status, "active")))
+        .where(and(eq(apiKeys.userId, userId), ne(apiKeys.status, "revoked")))
         .orderBy(desc(apiKeys.createdAt))
         .limit(1);
       if (!rows.length) return res.json({ key: null });
