@@ -457,7 +457,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   );
 }
 
-// ── BoardCard — Scout-style compact card for kanban columns ───────────────────
+// ── BoardCard — uses same CardFaceContent visual as the grid ─────────────────
 
 function BoardCard({ asset, signals = [], onClick, onDelete }: {
   asset: PipelineAsset;
@@ -470,61 +470,67 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
     data: { type: "tto", assetId: asset.id },
   });
 
-  const tint = SCOUT_CARD_TINTS["tto"];
   const hasSignals = signals.length > 0;
-  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
 
   return (
     <div
-      ref={setNodeRef}
-      className={`relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-xl overflow-hidden cursor-pointer transition-opacity ${isDragging ? "opacity-30" : ""}`}
-      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
-      onClick={onClick}
-      {...attributes}
-      {...listeners}
-      data-testid={`board-card-${asset.id}`}
+      className={`relative transition-opacity ${isDragging ? "opacity-30" : ""}`}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.stripColor }} />
-      <div className="pl-3 pr-2.5 py-2.5 flex flex-col gap-1.5">
-        <div className="flex items-start justify-between gap-1">
-          {stageAbbr && (
-            <span className="text-[9px] font-mono font-bold shrink-0 px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{stageAbbr}</span>
-          )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="ml-auto w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
-            data-testid={`button-delete-board-${asset.id}`}
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        </div>
+      <div
+        ref={setNodeRef}
+        className="relative w-full h-[210px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 cursor-pointer"
+        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)" }}
+        onClick={onClick}
+        {...attributes}
+        {...listeners}
+        data-testid={`board-card-${asset.id}`}
+      >
+        <CardFaceContent asset={asset} />
 
-        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2">
-          {asset.assetName !== "unknown" ? asset.assetName : "Unnamed"}
-        </p>
+        {/* Delete button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute top-1.5 right-1.5 z-[20] w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+          data-testid={`button-delete-board-${asset.id}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
 
-        <div className="flex flex-wrap gap-1">
-          {asset.modality && asset.modality !== "unknown" && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400">{asset.modality}</span>
-          )}
-          {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border line-clamp-1 max-w-[120px] truncate">{asset.diseaseIndication}</span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 border-t border-border/50">
-          {hasSignals && (
-            <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
-              <Link2 className="w-2 h-2" />{signals.length}
-            </span>
-          )}
-          {(asset.noteCount ?? 0) > 0 && (
-            <span className="text-[9px] text-muted-foreground">{asset.noteCount} note{asset.noteCount !== 1 ? "s" : ""}</span>
-          )}
-          <span className="ml-auto text-[9px]" style={{ color: tint.stripColor + "99" }}>Open →</span>
-        </div>
+        {/* Signal + note count badge — bottom-right */}
+        {(hasSignals || (asset.noteCount ?? 0) > 0) && (
+          <div className="absolute bottom-2 right-2 z-[20] flex items-center gap-1.5">
+            {hasSignals && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[9px] text-white">
+                <Link2 className="w-2.5 h-2.5" />{signals.length}
+              </span>
+            )}
+            {(asset.noteCount ?? 0) > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[9px] text-white">
+                {asset.noteCount}n
+              </span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Signal color slivers below board cards */}
+      {hasSignals && (
+        <div className="relative -mt-1 mx-1.5">
+          {signals.slice(0, 3).map((sig, idx) => {
+            const sigTint = SCOUT_CARD_TINTS[getSourceCategory(sig.sourceName)];
+            return (
+              <div key={sig.id} style={{
+                background: sigTint.stripColor,
+                height: "5px", marginTop: "1px",
+                marginLeft: `${(idx + 1) * 4}px`, marginRight: `${(idx + 1) * 4}px`,
+                opacity: 0.5 - idx * 0.12,
+                borderRadius: "0 0 4px 4px",
+              }} />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
