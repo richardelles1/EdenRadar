@@ -476,7 +476,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         {renderTrigger(() => setDialogOpen(true))}
 
         <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); }}>
-          <DialogContent className="max-w-sm" data-testid="dialog-non-tto-save">
+          <DialogContent className="max-w-md w-full" data-testid="dialog-non-tto-save">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
                 <Bookmark className="w-4 h-4 text-primary shrink-0" />
@@ -490,7 +490,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
               </div>
             </DialogHeader>
 
-            <div className="flex flex-col gap-4 py-1">
+            <div className="flex flex-col gap-4 py-1 max-h-[60vh] overflow-y-auto pr-1">
               {/* ── Link to TTO Asset ─────────────────────────────────────── */}
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">

@@ -907,24 +907,49 @@ export default function Pipeline() {
 
                 {/* ── Board view (CRM kanban by status) ─────────────────── */}
                 {viewMode === "board" && (
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-3">Drag TTO assets between columns to update their CRM stage. Drag signals onto TTO cards to attach.</p>
-                    <div className="overflow-x-auto">
-                      <div className="flex gap-4 min-w-max pb-4">
-                        {BOARD_COLUMNS.map((col) => {
-                          const colDecks = filteredDeckAssets.filter((d) => (d.status ?? null) === col.key);
-                          return (
-                            <KanbanStatusColumn
-                              key={col.key ?? "unassigned"}
-                              col={col}
-                              decks={colDecks}
-                              onDelete={(id) => deleteMutation.mutate(id)}
-                              onDetachSignal={handleDetachSignal}
-                            />
-                          );
-                        })}
+                  filteredDeckAssets.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
+                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                        <FlaskConical className="w-6 h-6 text-emerald-500" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-sm font-semibold text-foreground">No TTO assets in this view</p>
+                        <p className="text-xs text-muted-foreground max-w-xs">Save TTO assets from Scout to use the kanban board. Signals (patents, trials, papers) appear in the tray below.</p>
+                      </div>
+                      <Link href="/discover"><Button size="sm" variant="outline" className="gap-1.5 border-card-border">Go to Scout <ArrowRight className="w-3 h-3" /></Button></Link>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-3">Drag TTO assets between columns to update their CRM stage. Drag signals onto TTO cards to attach.</p>
+                      <div className="overflow-x-auto">
+                        <div className="flex gap-4 min-w-max pb-4">
+                          {BOARD_COLUMNS.map((col) => {
+                            const colDecks = filteredDeckAssets.filter((d) => (d.status ?? null) === col.key);
+                            return (
+                              <KanbanStatusColumn
+                                key={col.key ?? "unassigned"}
+                                col={col}
+                                decks={colDecks}
+                                onDelete={(id) => deleteMutation.mutate(id)}
+                                onDetachSignal={handleDetachSignal}
+                              />
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
+                  )
+                )}
+
+                {/* ── Stage view: no TTO assets callout ─────────────────── */}
+                {viewMode === "stage" && filteredDeckAssets.length === 0 && ttoAssets.length === 0 && (
+                  <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-sm">
+                    <FlaskConical className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-foreground">No TTO assets saved yet</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Save a TTO asset from Scout to see stage columns and use drag-and-drop stacking. Signals below can be linked to TTO assets once saved.</p>
+                    </div>
+                    <Link href="/discover" className="shrink-0 ml-auto"><Button size="sm" variant="outline" className="gap-1 text-xs border-card-border h-7">Scout <ArrowRight className="w-3 h-3" /></Button></Link>
                   </div>
                 )}
 
@@ -996,7 +1021,7 @@ export default function Pipeline() {
                       <Unlink className="w-4 h-4 text-muted-foreground" />
                       <h3 className="text-sm font-semibold text-foreground">Unlinked Signals</h3>
                       <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{filteredUnlinkedSignals.length}</span>
-                      <span className="text-[10px] text-muted-foreground ml-1">— Drag these onto a TTO asset card to attach as supporting evidence</span>
+                      <span className="text-[10px] text-muted-foreground ml-1">— Grab the ⣿ handle and drag onto a TTO asset card to attach as supporting evidence</span>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
                       {filteredUnlinkedSignals.map((sig) => (
