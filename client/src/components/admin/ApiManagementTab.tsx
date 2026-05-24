@@ -7,7 +7,7 @@ import {
 import {
   Key, Shield, Activity, Building2, BarChart3, ClipboardList,
   AlertTriangle, CheckCircle2, XCircle, Clock, TrendingUp,
-  Search, ChevronDown, Eye, Ban, RotateCcw, Trash2, Loader2,
+  Search, ChevronDown, Eye, Ban, RotateCcw, Trash2, Loader2, Copy,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -806,12 +806,37 @@ function AccessGrantsPanel({ pw }: { pw: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
+  // Issue key form state
+  const [grantUserId, setGrantUserId] = useState("");
+  const [grantEmail, setGrantEmail] = useState("");
+  const [grantTier, setGrantTier] = useState<"starter" | "professional" | "enterprise">("starter");
+  const [grantNote, setGrantNote] = useState("");
+  const [issuedRaw, setIssuedRaw] = useState<string | null>(null);
+  const [issuedCopied, setIssuedCopied] = useState(false);
+
   const { data, isLoading } = useQuery<{ keys: KeyWithCalls[] }>({
     queryKey: ["admin", "api-management", "keys", "", "all"],
     queryFn: () =>
       fetch("/api/admin/api-management/keys", {
         headers: { Authorization: `Bearer ${pw}` },
       }).then(r => r.json()),
+  });
+
+  const issueKey = useMutation({
+    mutationFn: () =>
+      fetch("/api/admin/api-management/keys", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${pw}` },
+        body: JSON.stringify({ userId: grantUserId.trim(), userEmail: grantEmail.trim() || undefined, tier: grantTier, note: grantNote.trim() || undefined }),
+      }).then(async r => { const d = await r.json(); if (!r.ok) throw new Error(d.error ?? "Failed"); return d as { ok: boolean; prefix: string; raw: string }; }),
+    onSuccess: (d) => {
+      setIssuedRaw(d.raw);
+      setIssuedCopied(false);
+      setGrantUserId(""); setGrantEmail(""); setGrantNote("");
+      qc.invalidateQueries({ queryKey: ["admin", "api-management"] });
+      toast({ title: "Key issued" });
+    },
+    onError: (e: Error) => toast({ title: "Failed to issue key", description: e.message, variant: "destructive" }),
   });
 
   const restore = useMutation({
@@ -848,6 +873,64 @@ function AccessGrantsPanel({ pw }: { pw: string }) {
 
   return (
     <div className="space-y-8">
+      {/* Issue a new key */}
+      <div>
+        <h3 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
+          <Key className="h-4 w-4 text-violet-500" />
+          Issue API Key
+        </h3>
+        <div className="border border-border rounded-lg p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Supabase User ID <span className="text-destructive">*</span></p>
+              <Input placeholder="uuid" value={grantUserId} onChange={e => setGrantUserId(e.target.value)} className="h-8 text-xs font-mono" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">User email (optional)</p>
+              <Input placeholder="user@company.com" value={grantEmail} onChange={e => setGrantEmail(e.target.value)} className="h-8 text-xs" />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Tier</p>
+              <Select value={grantTier} onValueChange={v => setGrantTier(v as typeof grantTier)}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="starter">Starter (500/day)</SelectItem>
+                  <SelectItem value="professional">Professional (5,000/day)</SelectItem>
+                  <SelectItem value="enterprise">Enterprise (50,000/day)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-muted-foreground font-medium">Note (optional)</p>
+              <Input placeholder="e.g. early access partner" value={grantNote} onChange={e => setGrantNote(e.target.value)} className="h-8 text-xs" />
+            </div>
+          </div>
+          <Button size="sm" className="gap-1.5" onClick={() => issueKey.mutate()} disabled={issueKey.isPending || !grantUserId.trim()}>
+            {issueKey.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Key className="h-3.5 w-3.5" />}
+            Issue key
+          </Button>
+          {issuedRaw && (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2 mt-2">
+              <p className="text-xs font-semibold text-amber-600 flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                Share with user — not stored, won't be shown again
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 font-mono text-xs bg-background border border-border rounded px-2.5 py-1.5 break-all select-all">{issuedRaw}</code>
+                <Button size="sm" variant="outline" className="shrink-0 h-7 text-xs gap-1" onClick={() => {
+                  navigator.clipboard.writeText(issuedRaw).then(() => { setIssuedCopied(true); setTimeout(() => setIssuedCopied(false), 2000); });
+                }}>
+                  {issuedCopied ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                  {issuedCopied ? "Copied" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* Manual access grants */}
       <div>
         <h3 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">

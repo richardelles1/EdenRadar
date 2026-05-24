@@ -16135,11 +16135,36 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       return res.status(400).json({ error: "Invalid asset ID", code: "invalid_id" });
     }
     try {
-      const rows = await storage.getIngestedAssetsByIds([id]);
+      const rows = await db.select().from(ingestedAssets)
+        .where(and(eq(ingestedAssets.id, id), eq(ingestedAssets.relevant, true)))
+        .limit(1);
       if (!rows.length) {
         return res.status(404).json({ error: "Asset not found", code: "not_found" });
       }
-      return res.json({ data: formatV1Asset(rows[0]) });
+      const r = rows[0];
+      return res.json({ data: formatV1Asset({
+        id: r.id,
+        assetName: r.assetName,
+        target: r.target ?? null,
+        modality: r.modality ?? null,
+        indication: r.indication ?? null,
+        developmentStage: r.developmentStage ?? "",
+        institution: r.institution ?? "",
+        mechanismOfAction: r.mechanismOfAction ?? null,
+        innovationClaim: r.innovationClaim ?? null,
+        unmetNeed: r.unmetNeed ?? null,
+        comparableDrugs: r.comparableDrugs ?? null,
+        completenessScore: r.completenessScore ?? null,
+        licensingReadiness: r.licensingReadiness ?? null,
+        ipType: r.ipType ?? null,
+        sourceUrl: r.sourceUrl ?? null,
+        sourceName: r.sourceName ?? null,
+        summary: r.summary ?? null,
+        categories: null,
+        technologyId: r.technologyId ?? null,
+        similarity: 1.0,
+        lastSeenAt: r.lastSeenAt ? r.lastSeenAt.toISOString() : null,
+      }) });
     } catch (err) {
       console.error("[v1/assets/:id]", err);
       return res.status(500).json({ error: "Lookup failed", code: "lookup_error" });
