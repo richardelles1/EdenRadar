@@ -1,11 +1,13 @@
 /**
  * Temple University — Office of Technology Commercialization
  *
- * Platform: Drupal 7 (tuportal6.temple.edu)
- * Structure: Single SSR page, 30-35 techs as h3-separated content blocks.
- *   Each block: <h3>Title</h3> … <strong>About</strong> <p>text</p> …
- *   Ref ID pattern: C2022-026 (appears in block text after the h3)
- * Verified accessible 2026-05-23.
+ * Platform: Drupal 7 + DataTables (tuportal6.temple.edu)
+ * Structure: Single SSR page, all ~40-45 techs in one HTML table
+ *   Table: #Table_TechTransfer
+ *   Each row: first td → <b>Title</b><br>RefID
+ *              second td → Column1 div with About / Proposed Use sections
+ * No per-technology URLs — all items share the listing page URL.
+ * Verified accessible 2026-05-21.
  */
 
 import type { InstitutionScraper, ScrapedListing } from "./types";
@@ -15,42 +17,40 @@ const INST = "Temple University";
 const LISTING_URL =
   "https://tuportal6.temple.edu/html/TEMPLE/apps/tup/Public/Research/LicensingOpportunities/";
 const REF_ID_RE = /([A-Z]\d{4}-\d+)/;
-const SECTION_LABELS = new Set(["About", "Proposed Use", "Creator(s)", "Patent", "Contact", "Keywords"]);
 
-function extractBlock($: ReturnType<typeof Object.create>, h3el: any): ScrapedListing | null {
-  const title = cleanText($(h3el).text());
-  if (!title || title.length < 4) return null;
+function extractSection(colText: string, label: string, nextLabel?: string): string {
+  const start = colText.indexOf(label);
+  if (start === -1) return "";
+  const afterLabel = colText.slice(start + label.length);
+  const end = nextLabel ? afterLabel.indexOf(nextLabel) : -1;
+  const segment = end !== -1 ? afterLabel.slice(0, end) : afterLabel;
+  return segment.replace(/\s+/g, " ").trim();
+}
 
-  // Collect all sibling content between this h3 and the next h3
-  let blockText = "";
-  let $cur = $(h3el).next();
-  while ($cur.length && (!$cur[0].tagName || $cur[0].tagName.toLowerCase() !== "h3")) {
-    blockText += " " + $cur.text();
-    $cur = $cur.next();
-  }
+function parseRow($: ReturnType<typeof Object.create>, row: any, $row: any): ScrapedListing | null {
+  const cells = $row.find("td");
+  if (cells.length < 2) return null;
 
-  const refMatch = blockText.match(REF_ID_RE);
+  const titleCell = cells.eq(0);
+  const title = cleanText(titleCell.find("b").first().text());
+  if (title.length < 4) return null;
+
+  const cellText = titleCell.text();
+  const refMatch = cellText.match(REF_ID_RE);
   const technologyId = refMatch?.[1];
 
-  // Extract About section (between "About" and "Proposed Use")
-  const aboutIdx = blockText.indexOf("About");
-  const proposedIdx = blockText.indexOf("Proposed Use");
-  let description = "";
-  if (aboutIdx !== -1) {
-    const afterAbout = blockText.slice(aboutIdx + "About".length);
-    const end = proposedIdx > aboutIdx ? proposedIdx - aboutIdx - "About".length : -1;
-    const raw = end !== -1 ? afterAbout.slice(0, end) : afterAbout;
-    description = cleanText(raw).substring(0, 1000);
-  }
+  const colText = cells.eq(1).find(".Column1").text();
+  const description = extractSection(colText, "About", "Proposed Use");
 
-  const anchor = technologyId
-    ?? title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 60);
-  const url = `${LISTING_URL}#${anchor}`;
+  // Use anchor URL so each listing gets a unique sourceUrl — the ingest pipeline
+  // deduplicates by sourceUrl within a batch, which would collapse all 58 rows to
+  // one if they all point to the same listing page.
+  const listingUrl = technologyId ? `${LISTING_URL}#${technologyId}` : LISTING_URL;
 
   return {
     title,
     description,
-    url,
+    url: listingUrl,
     institution: INST,
     ...(technologyId ? { technologyId } : {}),
   };
@@ -63,12 +63,11 @@ export const templeScraper: InstitutionScraper = {
     const $ = await fetchHtml(LISTING_URL, 20_000);
     if (!$) return [];
     const results: ScrapedListing[] = [];
-    $("h3").each((_, el) => {
+    $("#Table_TechTransfer tbody tr").each((_, row) => {
       if (results.length >= maxResults) return false as any;
-      const title = cleanText($(el).text());
-      if (title.length >= 4 && !SECTION_LABELS.has(title)) {
-        results.push({ title, url: LISTING_URL, institution: INST, description: "" });
-      }
+      const $row = $(row);
+      const title = cleanText($row.find("td").eq(0).find("b").first().text());
+      if (title.length >= 4) results.push({ title, url: LISTING_URL, institution: INST, description: "" });
     });
     return results;
   },
@@ -79,13 +78,9 @@ export const templeScraper: InstitutionScraper = {
     if (!$) return [];
 
     const results: ScrapedListing[] = [];
-    const seen = new Set<string>();
-
-    $("h3").each((_, el) => {
-      const title = cleanText($(el).text());
-      if (!title || SECTION_LABELS.has(title) || seen.has(title)) return;
-      seen.add(title);
-      const listing = extractBlock($, el);
+    $("#Table_TechTransfer tbody tr").each((_, row) => {
+      const $row = $(row);
+      const listing = parseRow($, row, $row);
       if (listing) results.push(listing);
     });
 
