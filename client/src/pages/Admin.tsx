@@ -4519,37 +4519,6 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
             </div>
           </div>
 
-          {/* Step 2e: Clear Data-Sparse Flags */}
-          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">2e</span>
-              <span className="text-sm font-semibold text-slate-800 dark:text-slate-300">Clear Data-Sparse Flags</span>
-              <span className="ml-auto text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
-            </div>
-            <div className="p-4 space-y-3">
-              <p className="text-xs text-muted-foreground">
-                Unlocks assets that were previously flagged as data-sparse but have since gained enough text (≥ 150 chars combined title + summary + abstract).
-                Resets <em>enriched_at</em> so the AI enrichment queue picks them up again.
-                Run this after any retroactive refetch to maximize the deep-enrichment queue.
-              </p>
-              {clearSparse.isSuccess && (
-                <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30" data-testid="clear-sparse-result">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                    {(clearSparse.data?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
-                  </p>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => clearSparse.mutate()} disabled={clearSparse.isPending}
-                  className="gap-1.5 bg-slate-600 hover:bg-slate-700 text-white" data-testid="button-clear-sparse">
-                  {clearSparse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-                  Clear Data-Sparse Flags
-                </Button>
-              </div>
-            </div>
-          </div>
-
           {/* Step 2d: USPTO Patent Cross-Reference */}
           <div className="border border-blue-200 dark:border-blue-900 rounded-xl bg-blue-50/50 dark:bg-blue-950/20 overflow-hidden" data-testid="card-uspto-xref">
             <div className="px-4 py-2.5 border-b border-blue-200 dark:border-blue-900 bg-blue-100/60 dark:bg-blue-950/40 flex items-center gap-2">
@@ -4677,6 +4646,37 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   className="gap-1.5 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50" data-testid="button-run-uspto-xref">
                   {usptoStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
                   Run Cross-Reference
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Step 2e: Clear Data-Sparse Flags */}
+          <div className="border border-slate-200 dark:border-slate-800 rounded-xl bg-slate-50/50 dark:bg-slate-950/20 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 bg-slate-100/60 dark:bg-slate-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-slate-500 text-white text-xs font-bold shrink-0">2e</span>
+              <span className="text-sm font-semibold text-slate-800 dark:text-slate-300">Clear Data-Sparse Flags</span>
+              <span className="ml-auto text-xs font-medium text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Unlocks assets that were previously flagged as data-sparse but have since gained enough text (≥ 150 chars combined title + summary + abstract).
+                Resets <em>enriched_at</em> so the AI enrichment queue picks them up again.
+                Run this after any retroactive refetch to maximize the deep-enrichment queue.
+              </p>
+              {clearSparse.isSuccess && (
+                <div className="flex items-center gap-2 p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/30" data-testid="clear-sparse-result">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    {(clearSparse.data?.cleared ?? 0).toLocaleString()} assets unlocked for AI enrichment
+                  </p>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => clearSparse.mutate()} disabled={clearSparse.isPending}
+                  className="gap-1.5 bg-slate-600 hover:bg-slate-700 text-white" data-testid="button-clear-sparse">
+                  {clearSparse.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                  Clear Data-Sparse Flags
                 </Button>
               </div>
             </div>
@@ -4981,6 +4981,299 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                     Run Ingest
                   </Button>
                 )}
+              </div>
+            </div>
+          </div>
+
+          {/* Step 3c: GPT-4o-mini Re-enrich */}
+          <div className="border border-amber-200 dark:border-amber-900 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">3c</span>
+              <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">GPT-4o-mini Re-enrich</span>
+              <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                <span className="bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o-mini</span>
+                <span>~$0.15/1k assets</span><span className="text-amber-500">·</span><span>~${costEstimate.toFixed(2)} est.</span>
+              </span>
+            </div>
+            <div className="p-4 space-y-3">
+              <p className="text-xs text-muted-foreground">Runs GPT-4o-mini on assets that still have unknown fields after rule fill. Type-aware classification: nulls returned for non-applicable fields. Resumable.</p>
+
+              {/* Queue Health */}
+              {enrichHealth && (
+                <div className="grid grid-cols-4 gap-2" data-testid="enrichment-queue-health">
+                  <div title="Have sufficient text and are under the 3-attempt cap — will be processed by the next run"
+                    className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-background p-2.5 text-center"
+                    data-testid="stat-health-ready-to-enrich">
+                    <div className="text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{enrichHealth.readyCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">Ready to enrich</div>
+                  </div>
+                  <div title="Summary &lt; 120 chars — run a re-fetch tool first to gather more text before enrichment"
+                    className="rounded-lg border border-sky-200 dark:border-sky-800 bg-background p-2.5 text-center"
+                    data-testid="stat-health-needs-re-fetch">
+                    <div className="text-base font-bold tabular-nums text-sky-700 dark:text-sky-400">{enrichHealth.needsRefetchCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">Needs re-fetch</div>
+                  </div>
+                  <button
+                    title="Hit the 3-attempt cap — AI tried 3× and couldn't classify. Click to filter the asset list below. Re-fetch that improves text by 200+ chars will reset the cap."
+                    onClick={onGaveUpClick}
+                    className={`rounded-lg border bg-background p-2.5 text-center transition-colors
+                      ${enrichHealth.gaveUpCount > 0
+                        ? "border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                        : "border-border cursor-default"}
+                    `}
+                    data-testid="stat-health-gave-up">
+                    <div className={`text-base font-bold tabular-nums ${enrichHealth.gaveUpCount > 0 ? "text-red-600 dark:text-red-400" : "text-muted-foreground"}`}>
+                      {enrichHealth.gaveUpCount.toLocaleString()}
+                    </div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">
+                      Gave up{enrichHealth.gaveUpCount > 0 && onGaveUpClick ? " ↓ view" : ""}
+                    </div>
+                  </button>
+                  <div title="Assets where enriched_at was set in the last 24 hours"
+                    className="rounded-lg border border-violet-200 dark:border-violet-800 bg-background p-2.5 text-center"
+                    data-testid="stat-health-enriched-24-h">
+                    <div className="text-base font-bold tabular-nums text-violet-700 dark:text-violet-400">{enrichHealth.enriched24hCount.toLocaleString()}</div>
+                    <div className="text-xs text-muted-foreground leading-tight mt-0.5">Enriched (24 h)</div>
+                  </div>
+                </div>
+              )}
+
+              {pipelineStats && unknownCount > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {[{ label: "Target", val: pipelineStats.byField.target }, { label: "Modality", val: pipelineStats.byField.modality }, { label: "Indication", val: pipelineStats.byField.indication }, { label: "Dev Stage", val: pipelineStats.byField.developmentStage }].map(f => (
+                    <div key={f.label} className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
+                      <div className="text-base font-bold tabular-nums text-amber-700 dark:text-amber-400">{f.val.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{f.label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {isRunning && status && (
+                <div className="space-y-2" data-testid="enrichment-progress">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                    <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">Running{isResumed ? " (resumed)" : ""}…</span>
+                    <span className="text-xs tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">{status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)</span>
+                    <Button variant="ghost" size="sm" onClick={() => stopEnrichment.mutate()} disabled={stopEnrichment.isPending} className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" data-testid="button-enrichment-stop">
+                      {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    </Button>
+                  </div>
+                  {status.filters && Object.values(status.filters).some(Boolean) && (
+                    <div className="flex flex-wrap gap-1.5 items-center" data-testid="enrichment-active-filters">
+                      <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Filters:</span>
+                      {status.filters.institution && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-institution">
+                          Institution: {status.filters.institution}
+                        </span>
+                      )}
+                      {status.filters.modality && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-modality">
+                          Modality: {status.filters.modality}
+                        </span>
+                      )}
+                      {status.filters.tier && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-tier">
+                          Tier: {status.filters.tier}
+                        </span>
+                      )}
+                      {status.filters.missingField && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-missing">
+                          Missing: {status.filters.missingField}
+                        </span>
+                      )}
+                      {status.filters.stage && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-stage">
+                          Stage: {status.filters.stage}
+                        </span>
+                      )}
+                      {status.filters.indication && (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800" data-testid="badge-filter-indication">
+                          Indication: {status.filters.indication}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
+                    <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} data-testid="enrichment-progress-bar" />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {status.improved.toLocaleString()} assets improved so far
+                    {status.tokenCost != null && status.tokenCost > 0 && (
+                      <span className="ml-1.5 text-amber-600 dark:text-amber-400">${status.tokenCost.toFixed(3)} spent</span>
+                    )}
+                  </p>
+                </div>
+              )}
+              {status?.status === "done" && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="enrichment-done">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                  <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                    Complete — {status.improved} of {status.total} assets improved
+                    {status.tokenCost != null && status.tokenCost > 0 && (
+                      <span className="ml-1.5 font-normal text-emerald-600 dark:text-emerald-500">(${status.tokenCost.toFixed(3)} spent)</span>
+                    )}
+                  </p>
+                </div>
+              )}
+              {status?.status === "error" && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
+                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-red-700 dark:text-red-400">Job failed</p>
+                    <p className="text-xs text-red-600 dark:text-red-500">{status.error ?? "Dismiss to return to idle."}</p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs text-red-600 dark:text-red-400 hover:text-red-800 shrink-0" onClick={() => dismissError.mutate()} disabled={dismissError.isPending} data-testid="button-dismiss-enrichment-error">
+                    {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+                  </Button>
+                </div>
+              )}
+              {(miniQueue?.exhaustedCount ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground" data-testid="text-mini-exhausted">
+                  <span className="text-red-500 font-medium">{miniQueue!.exhaustedCount.toLocaleString()} gave up</span>
+                  <span className="ml-1">— reached 3-attempt cap with fields still unknown. Content change will reset.</span>
+                </p>
+              )}
+
+              {/* ── Targeted Filter Bar ── */}
+              <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 p-2.5 space-y-2" data-testid="enrichment-filter-bar">
+                <p className="text-xs font-medium text-amber-800 dark:text-amber-300">Target enrichment run</p>
+                <div className="flex flex-wrap gap-2">
+                  <Popover open={enrichInstOpen} onOpenChange={setEnrichInstOpen}>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="h-7 px-2 text-xs rounded-md border border-input bg-background w-44 focus:outline-none focus:ring-1 focus:ring-amber-400 flex items-center justify-between gap-1 truncate"
+                        data-testid="input-enrich-institution"
+                      >
+                        <span className={`truncate ${enrichInstitution ? "text-foreground" : "text-muted-foreground"}`}>
+                          {enrichInstitution || "All institutions"}
+                        </span>
+                        <ChevronsUpDown className="w-3 h-3 shrink-0 opacity-50" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent align="start" className="w-64 p-0">
+                      <Command>
+                        <CommandInput placeholder="Search institutions…" className="h-8 text-xs" />
+                        <CommandList className="max-h-56">
+                          <CommandEmpty className="py-2 text-xs text-center text-muted-foreground">No institution found</CommandEmpty>
+                          <CommandGroup>
+                            <CommandItem
+                              value="__all__"
+                              onSelect={() => { setEnrichInstitution(""); setEnrichInstOpen(false); }}
+                              className="text-xs"
+                            >
+                              <Check className={`mr-2 h-3 w-3 ${!enrichInstitution ? "opacity-100" : "opacity-0"}`} />
+                              All institutions
+                            </CommandItem>
+                          </CommandGroup>
+                          {(() => {
+                            const queues = enrichInstitutionsQuery.data?.institutions ?? [];
+                            if (enrichInstitutionsQuery.isLoading) return (
+                              <div className="py-3 text-xs text-center text-muted-foreground">Loading…</div>
+                            );
+                            if (queues.length === 0) return (
+                              <div className="py-3 text-xs text-center text-muted-foreground">All caught up ✓</div>
+                            );
+                            return (
+                              <CommandGroup heading={`${queues.length} institution${queues.length === 1 ? "" : "s"} with pending work`}>
+                                {queues.map(inst => (
+                                  <CommandItem
+                                    key={inst.name}
+                                    value={inst.name}
+                                    onSelect={(val) => { setEnrichInstitution(val); setEnrichInstOpen(false); }}
+                                    className="text-xs"
+                                  >
+                                    <Check className={`mr-2 h-3 w-3 shrink-0 ${enrichInstitution === inst.name ? "opacity-100" : "opacity-0"}`} />
+                                    <span className="flex-1 truncate">{inst.name}</span>
+                                    <span className="ml-2 text-muted-foreground tabular-nums">({inst.queueCount})</span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            );
+                          })()}
+                        </CommandList>
+                      </Command>
+                    </PopoverContent>
+                  </Popover>
+                  <Select value={enrichTier || "__all__"} onValueChange={v => setEnrichTier(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs w-32" data-testid="select-enrich-tier"><SelectValue placeholder="Any tier" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Any tier</SelectItem>
+                      <SelectItem value="excellent">Excellent (≥80)</SelectItem>
+                      <SelectItem value="good">Good (60–79)</SelectItem>
+                      <SelectItem value="partial">Partial (40–59)</SelectItem>
+                      <SelectItem value="poor">Poor (1–39)</SelectItem>
+                      <SelectItem value="unscored">Unscored</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={enrichModality || "__all__"} onValueChange={v => setEnrichModality(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs w-36" data-testid="select-enrich-modality"><SelectValue placeholder="Any modality" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Any modality</SelectItem>
+                      <SelectItem value="small molecule">Small molecule</SelectItem>
+                      <SelectItem value="biologic">Biologic</SelectItem>
+                      <SelectItem value="cell therapy">Cell therapy</SelectItem>
+                      <SelectItem value="gene therapy">Gene therapy</SelectItem>
+                      <SelectItem value="medical device">Medical Device</SelectItem>
+                      <SelectItem value="diagnostic">Diagnostic</SelectItem>
+                      <SelectItem value="platform">Platform</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={enrichMissingField || "__all__"} onValueChange={v => setEnrichMissingField(v === "__all__" ? "" : v)}>
+                    <SelectTrigger className="h-7 text-xs w-36" data-testid="select-enrich-missing"><SelectValue placeholder="Any field" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">Any field</SelectItem>
+                      <SelectItem value="target">Missing: Target</SelectItem>
+                      <SelectItem value="indication">Missing: Indication</SelectItem>
+                      <SelectItem value="modality">Missing: Modality</SelectItem>
+                      <SelectItem value="stage">Missing: Dev Stage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {hasEnrichFilters && (
+                    <button
+                      onClick={() => { setEnrichInstitution(""); setEnrichModality(""); setEnrichTier(""); setEnrichMissingField(""); }}
+                      className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                      data-testid="button-enrich-clear-filters"
+                    >Clear</button>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(() => {
+                    // Always source count from /count endpoint (same criteria as the batch run)
+                    // so the button label always matches what will actually be processed.
+                    const totalCount = enrichCount?.count ?? 0;
+                    const totalCost = enrichCount?.costEstimate ?? 0;
+                    const batchCount = Math.min(500, totalCount);
+                    const filterOpts = hasEnrichFilters ? { institution: debouncedInstitution || undefined, modality: enrichModality || undefined, tier: enrichTier || undefined, missingField: enrichMissingField || undefined } : undefined;
+                    const noAssets = enrichCount?.count === 0;
+                    return (<>
+                      <Button size="sm"
+                        onClick={() => runEnrichment.mutate(filterOpts)}
+                        disabled={isRunning || runEnrichment.isPending || noAssets || enrichCountLoading}
+                        className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+                        data-testid="button-run-enrichment"
+                        title={hasEnrichFilters ? `Enrich the top ${batchCount.toLocaleString()} assets matching current filters (completeness DESC)` : `Enrich the top ${batchCount.toLocaleString()} assets (completeness DESC)`}>
+                        {isRunning || enrichCountLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Run {batchCount.toLocaleString()}{hasEnrichFilters ? " filtered" : " batch"}
+                        {totalCost > 0 && <span className="opacity-70 text-[10px]"> ~${(batchCount * 0.0003).toFixed(2)}</span>}
+                      </Button>
+                      <Button size="sm" variant="outline"
+                        onClick={() => {
+                          const label = hasEnrichFilters ? "filtered assets" : "assets in queue";
+                          const ok = window.confirm(`Run on ALL ${totalCount.toLocaleString()} ${label}?\n\nEstimated cost: $${totalCost.toFixed(2)}\n\nThe job pulls the next 500 until the queue is empty. You can stop at any time.`);
+                          if (ok) runEnrichment.mutate({ all: true, ...filterOpts });
+                        }}
+                        disabled={isRunning || runEnrichment.isPending || noAssets || enrichCountLoading}
+                        className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                        data-testid="button-run-enrichment-all">
+                        {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                        Run all ({enrichCountLoading ? "…" : totalCount.toLocaleString()})
+                      </Button>
+                    </>);
+                  })()}
+                  {(miniQueue?.backfillCount ?? 0) > 0 && (
+                    <MiniBackfillButton pw={pw} onDone={() => queryClient.invalidateQueries({ queryKey: ["/api/admin/enrichment/mini-queue"] })} />
+                  )}
+                </div>
               </div>
             </div>
           </div>
