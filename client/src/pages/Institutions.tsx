@@ -96,13 +96,13 @@ function InstitutionCard({
   return (
     <div
       style={{ perspective: "900px" }}
-      className="cursor-pointer w-full"
+      className="cursor-pointer w-full h-full"
       onClick={() => setLocation(`/institutions/${inst.slug}`)}
       data-testid={`institution-card-${inst.slug}`}
     >
       <div
         ref={cardRef}
-        className="relative w-full rounded-[14px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className="relative w-full h-full rounded-[14px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
         style={{
           willChange: "transform",
           transformStyle: "preserve-3d",
@@ -148,7 +148,7 @@ function InstitutionCard({
           style={{ background: "#22c55e" }}
         />
 
-        <div className="relative z-[4] flex flex-col gap-3 pl-5 pr-4 pt-4 pb-4">
+        <div className="relative z-[4] flex flex-col gap-3 pl-5 pr-4 pt-4 pb-4 h-full">
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
               <Building2 className="w-4 h-4 text-primary" />
@@ -219,6 +219,7 @@ function InstitutionCard({
             </div>
           )}
 
+          <div className="flex-1" />
           <div className="flex items-center justify-between pt-1 border-t border-white/20 dark:border-white/10">
             <span className="text-xs text-muted-foreground" data-testid={`text-listings-${inst.slug}`}>
               {loading ? (
