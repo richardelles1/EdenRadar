@@ -16128,7 +16128,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.get("/v1/assets/:id", requireApiKey("read:assets"), async (req, res) => {
-    const id = parseInt(req.params.id, 10);
+    const id = parseInt(String(req.params.id), 10);
     if (isNaN(id) || id <= 0) {
       return res.status(400).json({ error: "Invalid asset ID", code: "invalid_id" });
     }
