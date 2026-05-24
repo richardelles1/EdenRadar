@@ -1033,7 +1033,9 @@ export class DatabaseStorage implements IStorage {
       const tk = computeTitleKey(l.assetName);
       const match = tk ? titleKeyCanonMap.get(tk) : undefined;
       const canonicalAssetId = match && match.institution !== (l.institution ?? "") ? match.id : undefined;
-      return { ...l, titleKey: tk || undefined, canonicalAssetId };
+      const duplicateFlag = canonicalAssetId !== undefined ? true : undefined;
+      const duplicateOfId = canonicalAssetId;
+      return { ...l, titleKey: tk || undefined, canonicalAssetId, duplicateFlag, duplicateOfId };
     });
     const xInstDedup = annotatedNewListings.filter((l) => l.canonicalAssetId).length;
     if (xInstDedup > 0) {

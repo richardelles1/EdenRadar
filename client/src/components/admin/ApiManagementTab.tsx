@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip,
@@ -7,7 +7,7 @@ import {
 import {
   Key, Shield, Activity, Building2, BarChart3, ClipboardList,
   AlertTriangle, CheckCircle2, XCircle, Clock, TrendingUp,
-  Search, ChevronDown, Eye, Ban, RotateCcw, Trash2, Loader2, Copy,
+  Search, ChevronDown, Eye, Ban, RotateCcw, Trash2, Loader2, Copy, ChevronsUpDown, Check,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,11 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from "@/components/ui/command";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 import type { ApiKey, ApiKeyAuditLog } from "@shared/schema";
 import { API_SCOPE_LABELS, API_TIER_CONFIG } from "@shared/schema";
 
@@ -800,6 +804,119 @@ function TierConfigPanel() {
   );
 }
 
+// ── User combobox ─────────────────────────────────────────────────────────────
+
+interface AdminUser {
+  id: string;
+  email: string;
+  name: string | null;
+}
+
+function UserCombobox({
+  pw,
+  value,
+  onSelect,
+}: {
+  pw: string;
+  value: string;
+  onSelect: (user: AdminUser) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const { data, isLoading } = useQuery<{ users: AdminUser[] }>({
+    queryKey: ["admin", "users-list"],
+    queryFn: () =>
+      fetch("/api/admin/users", {
+        headers: { Authorization: `Bearer ${pw}` },
+      }).then(r => r.json()),
+    staleTime: 60_000,
+  });
+
+  const users = data?.users ?? [];
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return users;
+    return users.filter(
+      u =>
+        u.email.toLowerCase().includes(q) ||
+        (u.name ?? "").toLowerCase().includes(q) ||
+        u.id.toLowerCase().includes(q),
+    );
+  }, [users, search]);
+
+  const selected = users.find(u => u.id === value);
+  const displayLabel = selected
+    ? (selected.name ? `${selected.name} — ${selected.email}` : selected.email)
+    : null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(
+            "flex h-8 w-full items-center justify-between rounded-md border border-input bg-background px-2.5 py-1 text-xs ring-offset-background",
+            "hover:bg-accent/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+            !value && "text-muted-foreground",
+          )}
+        >
+          <span className="truncate">{displayLabel ?? "Search users…"}</span>
+          <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground ml-1" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="start">
+        <Command>
+          <CommandInput
+            placeholder="Name, email, or UUID…"
+            value={search}
+            onValueChange={setSearch}
+            className="h-8 text-xs"
+          />
+          <CommandList>
+            {isLoading && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              </div>
+            )}
+            <CommandEmpty>No users found.</CommandEmpty>
+            <CommandGroup>
+              {filtered.slice(0, 100).map(u => (
+                <CommandItem
+                  key={u.id}
+                  value={u.id}
+                  onSelect={() => {
+                    onSelect(u);
+                    setSearch("");
+                    setOpen(false);
+                  }}
+                  className="flex items-start gap-2 py-2"
+                >
+                  <Check
+                    className={cn(
+                      "h-3.5 w-3.5 mt-0.5 shrink-0",
+                      value === u.id ? "opacity-100 text-primary" : "opacity-0",
+                    )}
+                  />
+                  <div className="min-w-0">
+                    {u.name && (
+                      <p className="text-xs font-medium text-foreground truncate">{u.name}</p>
+                    )}
+                    <p className={cn("text-xs truncate", u.name ? "text-muted-foreground" : "text-foreground font-medium")}>
+                      {u.email}
+                    </p>
+                    <p className="text-[10px] font-mono text-muted-foreground/60 truncate">{u.id}</p>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 // ── 6. Access Grants ──────────────────────────────────────────────────────────
 
 function AccessGrantsPanel({ pw }: { pw: string }) {
@@ -880,15 +997,16 @@ function AccessGrantsPanel({ pw }: { pw: string }) {
           Issue API Key
         </h3>
         <div className="border border-border rounded-lg p-4 space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground font-medium">Supabase User ID <span className="text-destructive">*</span></p>
-              <Input placeholder="uuid" value={grantUserId} onChange={e => setGrantUserId(e.target.value)} className="h-8 text-xs font-mono" />
-            </div>
-            <div className="space-y-1">
-              <p className="text-xs text-muted-foreground font-medium">User email (optional)</p>
-              <Input placeholder="user@company.com" value={grantEmail} onChange={e => setGrantEmail(e.target.value)} className="h-8 text-xs" />
-            </div>
+          <div className="space-y-1">
+            <p className="text-xs text-muted-foreground font-medium">User <span className="text-destructive">*</span></p>
+            <UserCombobox
+              pw={pw}
+              value={grantUserId}
+              onSelect={u => { setGrantUserId(u.id); setGrantEmail(u.email); }}
+            />
+            {grantUserId && (
+              <p className="text-[10px] font-mono text-muted-foreground/70 truncate">{grantUserId}</p>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">

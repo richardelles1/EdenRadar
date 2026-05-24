@@ -990,8 +990,35 @@ export async function registerRoutes(
           modalities:          savedFitBasis.modalities,
         };
       }
-      // No profile → scoutFitProfile remains undefined → scoreFit returns
-      // neutral 50 (hasData:true) for all assets — no penalty, no distortion.
+      // Query-match boost: inject search terms as fit keywords so assets whose
+      // text literally matches the query get a fit bonus even without a saved
+      // buyer profile. For a specific query like "CAR-T" this pushes clearly
+      // relevant results from the 40-65 range up toward 80-100.
+      // Only include tokens ≥ 4 chars to avoid short abbreviations over-matching.
+      if (trimmedQuery) {
+        const queryLower = trimmedQuery.toLowerCase();
+        const rawTerms = queryLower.split(/\s+/).filter(w => w.length >= 4);
+        // Include the full phrase if it's a single meaningful token, plus individual long words
+        const queryKw = [...new Set([
+          ...(queryLower.length >= 4 ? [queryLower] : []),
+          ...rawTerms,
+        ])];
+        if (queryKw.length > 0) {
+          if (scoutFitProfile) {
+            scoutFitProfile = {
+              ...scoutFitProfile,
+              indication_keywords: [...new Set([...(scoutFitProfile.indication_keywords ?? []), ...queryKw])],
+              target_keywords: [...new Set([...(scoutFitProfile.target_keywords ?? []), ...queryKw])],
+            };
+          } else {
+            scoutFitProfile = {
+              ...DEFAULT_BUYER_PROFILE,
+              indication_keywords: queryKw,
+              target_keywords: queryKw,
+            };
+          }
+        }
+      }
 
       // ── TTO scoring: relevance base + fit bonus ─────────────────────────────
       // Base score (search_relevance 80%, record_quality 12%, availability 8%)

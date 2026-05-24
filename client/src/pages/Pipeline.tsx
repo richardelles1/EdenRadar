@@ -3,17 +3,16 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
-  FileText, Copy, Check, Printer, MessageSquare, ChevronDown, ChevronUp,
-  Send, Share2, Eye, EyeOff, Lock, Link2, X,
-  LayoutDashboard, AlignJustify, Unlink, GripVertical,
+  FileText, MessageSquare, ChevronDown, ChevronUp, Send, Link2, X,
+  LayoutDashboard, LayoutGrid, GripVertical, Layers,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
 import type { SavedAsset } from "@shared/schema";
 import { SAVED_ASSET_STATUSES } from "@shared/schema";
 import {
@@ -21,7 +20,7 @@ import {
   PointerSensor, useSensor, useSensors,
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
-import { motion, AnimatePresence } from "framer-motion";
+import { SCOUT_CARD_TINTS, type ScoutCardCategory } from "@/lib/scoutCardTints";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -32,38 +31,27 @@ type SavedAssetsResponse = {
 };
 type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | null };
 type DeckAsset = PipelineAsset & { signals: PipelineAsset[] };
-type BriefModal = { stage: string; label: string; brief: string; assetCount: number };
-type ViewMode = "stage" | "board";
+type ViewMode = "grid" | "board";
 type PipelineList = { id: number; name: string; userId: string; createdAt: string };
 type PipelinesResponse = { pipelines: PipelineList[] };
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const STATUS_CONFIG: Record<string, { label: string; pill: string; select: string; column: string }> = {
-  watching:      { label: "Watching",      pill: "bg-neutral-500/15 text-neutral-400 border-neutral-500/30",  select: "text-neutral-400",  column: "border-neutral-500/30 bg-neutral-500/5" },
-  evaluating:    { label: "Evaluating",    pill: "bg-blue-500/15 text-blue-400 border-blue-500/30",           select: "text-blue-400",     column: "border-blue-500/30 bg-blue-500/5" },
-  in_discussion: { label: "In Discussion", pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",  select: "text-emerald-500",  column: "border-emerald-500/30 bg-emerald-500/5" },
-  on_hold:       { label: "On Hold",       pill: "bg-amber-500/15 text-amber-400 border-amber-500/30",        select: "text-amber-400",    column: "border-amber-500/30 bg-amber-500/5" },
-  passed:        { label: "Passed",        pill: "bg-red-500/15 text-red-400 border-red-500/30",              select: "text-red-400",      column: "border-red-500/30 bg-red-500/5" },
+const STATUS_CONFIG: Record<string, { label: string; pill: string }> = {
+  watching:      { label: "Watching",      pill: "bg-neutral-500/15 text-neutral-400 border-neutral-500/30" },
+  evaluating:    { label: "Evaluating",    pill: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+  in_discussion: { label: "In Discussion", pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30" },
+  on_hold:       { label: "On Hold",       pill: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+  passed:        { label: "Passed",        pill: "bg-red-500/15 text-red-400 border-red-500/30" },
 };
 
 const BOARD_COLUMNS: { key: string | null; label: string; colorClass: string; dotClass: string }[] = [
-  { key: null,          label: "Unassigned",    colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
-  { key: "watching",    label: "Watching",      colorClass: "border-neutral-500/30 bg-neutral-500/5",  dotClass: "bg-neutral-400" },
-  { key: "evaluating",  label: "Evaluating",    colorClass: "border-blue-500/30 bg-blue-500/5",        dotClass: "bg-blue-400" },
-  { key: "in_discussion",label:"In Discussion", colorClass: "border-emerald-500/30 bg-emerald-500/5",  dotClass: "bg-emerald-400" },
-  { key: "on_hold",     label: "On Hold",       colorClass: "border-amber-500/30 bg-amber-500/5",      dotClass: "bg-amber-400" },
-  { key: "passed",      label: "Passed",        colorClass: "border-red-500/30 bg-red-500/5",          dotClass: "bg-red-400" },
-];
-
-const STAGES = [
-  { key: "discovery",   label: "Discovery",   colorClass: "border-violet-500/30 bg-violet-500/5",   dotClass: "bg-violet-400" },
-  { key: "preclinical", label: "Preclinical", colorClass: "border-amber-500/30 bg-amber-500/5",    dotClass: "bg-amber-400" },
-  { key: "phase 1",     label: "Phase 1",     colorClass: "border-cyan-500/30 bg-cyan-500/5",       dotClass: "bg-cyan-400" },
-  { key: "phase 2",     label: "Phase 2",     colorClass: "border-sky-500/30 bg-sky-500/5",         dotClass: "bg-sky-400" },
-  { key: "phase 3",     label: "Phase 3",     colorClass: "border-blue-500/30 bg-blue-500/5",       dotClass: "bg-blue-400" },
-  { key: "approved",    label: "Approved",    colorClass: "border-emerald-500/30 bg-emerald-500/5", dotClass: "bg-emerald-400" },
-  { key: "unknown",     label: "Unknown",     colorClass: "border-border bg-muted/20",              dotClass: "bg-muted-foreground" },
+  { key: null,           label: "New",           colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
+  { key: "watching",    label: "Watching",       colorClass: "border-neutral-500/30 bg-neutral-500/5",  dotClass: "bg-neutral-400" },
+  { key: "evaluating",  label: "Evaluating",     colorClass: "border-blue-500/30 bg-blue-500/5",        dotClass: "bg-blue-400" },
+  { key: "in_discussion", label: "In Discussion",colorClass: "border-emerald-500/30 bg-emerald-500/5",  dotClass: "bg-emerald-400" },
+  { key: "on_hold",     label: "On Hold",        colorClass: "border-amber-500/30 bg-amber-500/5",      dotClass: "bg-amber-400" },
+  { key: "passed",      label: "Passed",         colorClass: "border-red-500/30 bg-red-500/5",          dotClass: "bg-red-400" },
 ];
 
 const STAGE_ABBREV: Record<string, string> = {
@@ -80,7 +68,7 @@ const MODALITY_COLORS: Record<string, string> = {
   "bispecific antibody": "bg-purple-500/15 text-purple-400 border-purple-500/30",
 };
 
-// ── Source type helpers ────────────────────────────────────────────────────────
+// ── Source helpers ─────────────────────────────────────────────────────────────
 
 const NON_TTO_SRC = ["patent", "clinical_trial", "pubmed", "biorxiv", "medrxiv", "literature", "arxiv", "preprint", "paper"];
 
@@ -89,17 +77,28 @@ function isTtoSource(sourceName?: string | null): boolean {
   return !NON_TTO_SRC.some((s) => sn === s || sn.includes(s));
 }
 
-type SourceConfig = { accent: string; sliverBg: string; label: string; textClass: string };
-
-function getSourceConfig(sourceName?: string | null): SourceConfig {
+function getSourceCategory(sourceName?: string | null): ScoutCardCategory {
   const sn = (sourceName ?? "").toLowerCase();
-  if (sn === "patent") return { accent: "#d97706", sliverBg: "bg-amber-400",  label: "Patent",   textClass: "text-amber-500" };
-  if (sn === "clinical_trial") return { accent: "#0d9488", sliverBg: "bg-teal-400",   label: "Trial",    textClass: "text-teal-500" };
-  if (NON_TTO_SRC.some((s) => sn.includes(s))) return { accent: "#7c3aed", sliverBg: "bg-violet-400", label: "Research", textClass: "text-violet-500" };
-  return { accent: "#22c55e", sliverBg: "bg-emerald-400", label: "TTO", textClass: "text-emerald-500" };
+  if (sn === "patent") return "patent";
+  if (sn === "clinical_trial" || sn.includes("trial")) return "trial";
+  if (NON_TTO_SRC.some((s) => sn.includes(s))) return "research";
+  return "tto";
+}
+
+function getSourceLabel(sourceName?: string | null): string {
+  const cat = getSourceCategory(sourceName);
+  if (cat === "patent") return "Patent";
+  if (cat === "trial") return "Clinical Trial";
+  if (cat === "research") return "Research";
+  return "TTO Asset";
 }
 
 // ── Misc helpers ───────────────────────────────────────────────────────────────
+
+function toTitleCase(str: string): string {
+  if (!str) return str;
+  return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 function getBadgeClass(map: Record<string, string>, value: string) {
   if (!value) return "bg-muted text-muted-foreground border-border";
@@ -121,16 +120,15 @@ function timeAgo(dateStr: string): string {
   return `${Math.floor(h / 24)}d ago`;
 }
 
-// ── SignalMiniCard — compact card shown in the fan ─────────────────────────────
+// ── SignalMiniCard ─────────────────────────────────────────────────────────────
 
-function SignalMiniCard({
-  signal, onDetach, draggable = false,
-}: {
+function SignalMiniCard({ signal, onDetach, draggable = false }: {
   signal: PipelineAsset;
   onDetach?: () => void;
   draggable?: boolean;
 }) {
-  const cfg = getSourceConfig(signal.sourceName);
+  const cat = getSourceCategory(signal.sourceName);
+  const tint = SCOUT_CARD_TINTS[cat];
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `signal-${signal.id}`,
     disabled: !draggable,
@@ -141,17 +139,17 @@ function SignalMiniCard({
     <div
       ref={setNodeRef}
       {...(draggable ? attributes : {})}
-      className={`relative flex items-center gap-2 bg-white dark:bg-zinc-900 border border-white/80 dark:border-white/10 rounded-[10px] px-3 py-2 overflow-hidden transition-opacity ${isDragging ? "opacity-40" : ""}`}
+      className={`relative flex items-center gap-2 bg-white dark:bg-zinc-900 border border-white/80 dark:border-white/10 rounded-[10px] px-3 py-2.5 overflow-hidden transition-opacity ${isDragging ? "opacity-40" : ""}`}
       style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[10px]" style={{ background: cfg.accent }} />
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[10px]" style={{ background: tint.stripColor }} />
       {draggable && (
         <div {...listeners} className="cursor-grab active:cursor-grabbing shrink-0 text-muted-foreground/40 hover:text-muted-foreground -ml-1">
           <GripVertical className="w-3 h-3" />
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <p className={`text-[10px] font-bold uppercase tracking-wide mb-0.5 ${cfg.textClass}`}>{cfg.label}</p>
+        <p className="text-[10px] font-bold uppercase tracking-wide mb-0.5" style={{ color: tint.stripColor }}>{getSourceLabel(signal.sourceName)}</p>
         <p className="text-[11px] font-semibold text-foreground truncate leading-tight">{signal.assetName !== "unknown" ? signal.assetName : signal.sourceTitle}</p>
         {signal.sourceJournal && signal.sourceJournal !== "Unknown" && (
           <p className="text-[9px] text-muted-foreground truncate mt-0.5">{signal.sourceJournal}</p>
@@ -164,7 +162,7 @@ function SignalMiniCard({
           </a>
         )}
         {onDetach && (
-          <button onClick={(e) => { e.stopPropagation(); onDetach(); }} title="Detach from asset" className="text-muted-foreground hover:text-destructive transition-colors">
+          <button onClick={(e) => { e.stopPropagation(); onDetach(); }} title="Detach" className="text-muted-foreground hover:text-destructive transition-colors">
             <X className="w-3 h-3" />
           </button>
         )}
@@ -173,113 +171,61 @@ function SignalMiniCard({
   );
 }
 
-// ── PipelineCard — the main TTO card with notes, status, CRM ──────────────────
+// ── PipelineGridCard — Scout-style card for the grid view ──────────────────────
 
-function PipelineCard({
-  asset, onDelete, signals = [], onDetachSignal, isDropTarget = false,
-}: {
+function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
   asset: PipelineAsset;
-  onDelete: (id: number) => void;
   signals?: PipelineAsset[];
-  onDetachSignal?: (signalId: number) => void;
-  isDropTarget?: boolean;
+  onDelete: (id: number) => void;
+  onClick?: () => void;
 }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [, navigate] = useLocation();
   const cardRef = useRef<HTMLDivElement>(null);
-  const notesEndRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
-  const [notesOpen, setNotesOpen] = useState(false);
-  const [noteText, setNoteText] = useState("");
-  const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
-  const [fanOpen, setFanOpen] = useState(false);
-  useEffect(() => { setLocalStatus(asset.status ?? null); }, [asset.status]);
 
-  const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
-  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim()] ?? "unknown";
-  const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
+  const isTto = isTtoSource(asset.sourceName);
+  const cat = getSourceCategory(asset.sourceName);
+  const tint = SCOUT_CARD_TINTS[cat];
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
   const hasSignals = signals.length > 0;
+  const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality ?? "");
+  const statusCfg = asset.status ? STATUS_CONFIG[asset.status] : null;
 
-  // Droppable target for signals
+  // TTO cards are drop targets for signals; signal cards are draggable
   const { setNodeRef: setDropRef, isOver } = useDroppable({
     id: `tto-drop-${asset.id}`,
     data: { type: "tto-drop", ttoId: asset.id },
+    disabled: !isTto,
+  });
+  const { attributes, listeners, setNodeRef: setDragRef, isDragging } = useDraggable({
+    id: `signal-${asset.id}`,
+    data: { type: "signal", assetId: asset.id },
+    disabled: isTto,
   });
 
-  // Draggable (for kanban board mode)
-  const { attributes: dragAttrs, listeners: dragListeners, setNodeRef: setDragRef, isDragging } = useDraggable({
-    id: `tto-${asset.id}`,
-    data: { type: "tto", assetId: asset.id },
-  });
-
-  const { data: notesData } = useQuery<NotesResponse>({
-    queryKey: ["/api/saved-assets", asset.id, "notes"],
-    queryFn: async () => {
-      const res = await fetch(`/api/saved-assets/${asset.id}/notes?limit=50`);
-      if (!res.ok) throw new Error("Failed to load notes");
-      return res.json();
-    },
-    enabled: notesOpen,
-    staleTime: 10000,
-    refetchInterval: notesOpen ? 15000 : false,
-  });
-  const notes = notesData?.notes ?? [];
-
-  useEffect(() => {
-    if (notesOpen && notesEndRef.current) notesEndRef.current.scrollIntoView({ behavior: "smooth" });
-  }, [notesOpen, notes.length]);
-
-  const statusMutation = useMutation<unknown, Error, string | null, { prev: string | null }>({
-    mutationFn: async (status: string | null) => {
-      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, { status });
-      return res.json();
-    },
-    onMutate: (newStatus) => { const prev = localStatus; setLocalStatus(newStatus); return { prev }; },
-    onSuccess: (_, newStatus) => { setLocalStatus(newStatus); qc.invalidateQueries({ queryKey: ["/api/saved-assets"] }); },
-    onError: (err, _, ctx) => { if (ctx?.prev !== undefined) setLocalStatus(ctx.prev); toast({ title: "Status update failed", description: err.message, variant: "destructive" }); },
-  });
-
-  const noteMutation = useMutation({
-    mutationFn: async (content: string) => { const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content }); return res.json(); },
-    onSuccess: () => { setNoteText(""); qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] }); qc.invalidateQueries({ queryKey: ["/api/saved-assets"] }); },
-    onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
-  });
+  const setRef = (el: HTMLDivElement | null) => {
+    (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
+    setDropRef(el);
+    if (!isTto) setDragRef(el);
+  };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || notesOpen || fanOpen) return;
+    if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     setTilt({ x: ((e.clientY - rect.top) / rect.height - 0.5) * -8, y: ((e.clientX - rect.left) / rect.width - 0.5) * 8, active: true });
   };
   const handleMouseLeave = () => { setHovered(false); setTilt({ x: 0, y: 0, active: false }); setPressed(false); };
 
-  const noteCount = asset.noteCount ?? notes.length;
-  const lastNoteAt = asset.lastNoteAt ?? (notes.length > 0 ? notes[notes.length - 1]?.createdAt : null);
-  const bloomColor = "rgba(38,122,70,0.55)";
-
-  const setRef = (el: HTMLDivElement | null) => {
-    (cardRef as React.MutableRefObject<HTMLDivElement | null>).current = el;
-    setDropRef(el);
-    setDragRef(el);
-  };
-
-  // Slivers that peek below when fan is closed
-  const sliverSignals = signals.slice(0, 3);
-
   return (
     <div className={`relative transition-opacity ${isDragging ? "opacity-30" : ""}`}>
-      {/* Drop highlight ring */}
-      {(isOver || isDropTarget) && (
-        <div className="absolute inset-0 rounded-[14px] ring-2 ring-emerald-400 ring-offset-1 z-20 pointer-events-none" />
-      )}
+      {/* Drop ring */}
+      {isOver && <div className="absolute inset-0 rounded-[17px] ring-2 ring-emerald-400 ring-offset-2 z-20 pointer-events-none" />}
 
-      {/* Main card */}
-      <div style={{ perspective: "1000px" }} data-testid={`pipeline-card-${asset.id}`}>
+      <div style={{ perspective: "1000px" }}>
         <div
           ref={setRef}
-          className="relative rounded-[14px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
+          className={`relative w-full h-[240px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 ${tint.containerBg} ${isTto ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}`}
           style={{
             willChange: "transform",
             transformStyle: "preserve-3d",
@@ -292,32 +238,55 @@ function PipelineCard({
           onMouseLeave={handleMouseLeave}
           onMouseDown={() => setPressed(true)}
           onMouseUp={() => setPressed(false)}
-          onClick={() => { if (asset.ingestedAssetId) navigate(`/asset/${asset.ingestedAssetId}`); }}
-          {...dragAttrs}
-          {...dragListeners}
+          onClick={isTto ? onClick : undefined}
+          {...(isTto ? {} : { ...attributes, ...listeners })}
+          data-testid={`pipeline-grid-card-${asset.id}`}
         >
           {/* Bloom */}
-          <div className="absolute pointer-events-none" style={{ width: "56px", height: "56px", borderRadius: "50%", background: bloomColor, top: "-28px", left: "-28px", transform: hovered ? "scale(26)" : "scale(1)", opacity: hovered ? 0.13 : 0, transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease", zIndex: 1 }} />
+          <div className="absolute pointer-events-none" style={{
+            width: "56px", height: "56px", borderRadius: "50%",
+            background: tint.stripColor + "8C",
+            top: "-28px", left: "-28px",
+            transform: hovered ? "scale(26)" : "scale(1)",
+            opacity: hovered ? 0.13 : 0,
+            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+            zIndex: 1,
+          }} />
 
-          {/* Accent bar */}
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
+          {/* Left accent strip */}
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: tint.stripColor }} />
 
-          {/* Stage badge */}
-          <div className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900" style={{ borderRadius: "17px 0 10px 0", minWidth: "36px" }} data-testid={`pipeline-stage-badge-${asset.id}`}>
-            <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
-            <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">{stageAbbr !== "unknown" ? stageAbbr : <span className="opacity-40">?</span>}</span>
+          {/* Top-left badge */}
+          <div className="absolute top-0 left-0 z-[5] flex items-center justify-center px-2.5 py-1.5 border-b border-r bg-white/80 dark:bg-zinc-900/80 backdrop-blur-sm" style={{ borderRadius: "17px 0 10px 0", borderColor: tint.stripColor + "40" }}>
+            {isTto && stageAbbr ? (
+              <div className="flex flex-col items-center">
+                <span className="text-[7px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
+                <span className="font-mono text-xs font-bold leading-tight mt-0.5" style={{ color: tint.stripColor }}>{stageAbbr}</span>
+              </div>
+            ) : (
+              <span className="text-[9px] font-bold uppercase tracking-wide" style={{ color: tint.stripColor }}>{getSourceLabel(asset.sourceName)}</span>
+            )}
           </div>
 
           {/* Delete */}
-          <button onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }} className="absolute top-2 right-2 z-[5] shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150 active:scale-90" data-testid={`button-delete-pipeline-${asset.id}`} title="Remove asset">
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+            onPointerDown={(e) => e.stopPropagation()}
+            className="absolute top-2 right-2 z-[5] w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+            data-testid={`button-delete-pipeline-${asset.id}`}
+          >
             <Trash2 className="w-3 h-3" />
           </button>
 
-          <div className="relative z-[4] pl-4 pr-3 pt-8 pb-3 flex flex-col gap-2.5" onClick={(e) => e.stopPropagation()}>
-            {/* Title */}
-            <div className="flex items-center gap-1.5 min-w-0">
-              <FlaskConical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="font-semibold text-sm text-foreground truncate leading-tight">{asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}</span>
+          {/* Content */}
+          <div className="relative z-[4] pl-4 pr-3 pt-11 pb-3 flex flex-col gap-2 h-full">
+            <div className="flex items-start gap-1.5 min-w-0">
+              {isTto
+                ? <FlaskConical className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: tint.stripColor }} />
+                : <ExternalLink className="w-3 h-3 shrink-0 mt-0.5" style={{ color: tint.stripColor }} />}
+              <span className="font-semibold text-sm text-foreground leading-snug line-clamp-2">
+                {asset.assetName !== "unknown" ? asset.assetName : (asset.sourceTitle ?? "Untitled")}
+              </span>
             </div>
 
             {asset.modality && asset.modality !== "unknown" && (
@@ -326,227 +295,175 @@ function PipelineCard({
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-              <div>
-                <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Target</p>
-                <p className="text-foreground truncate mt-0.5">{asset.target !== "unknown" ? asset.target : "—"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Disease</p>
-                <p className="text-foreground truncate mt-0.5">{asset.diseaseIndication !== "unknown" ? asset.diseaseIndication : "—"}</p>
-              </div>
-            </div>
-
-            {/* Status + Notes */}
-            <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/20 dark:border-white/10">
-              <div className="flex items-center gap-1">
-                {statusCfg && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>}
-                <select
-                  value={localStatus ?? "none"}
-                  onChange={(e) => { e.stopPropagation(); statusMutation.mutate(e.target.value === "none" ? null : e.target.value); }}
-                  disabled={statusMutation.isPending}
-                  onClick={(e) => e.stopPropagation()}
-                  className={`text-[10px] bg-transparent border border-white/20 dark:border-white/10 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
-                  data-testid={`select-pipeline-status-${asset.id}`}
-                >
-                  <option value="none">CRM stage</option>
-                  {SAVED_ASSET_STATUSES.map((s) => <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>)}
-                </select>
-              </div>
-              <button
-                onClick={(e) => { e.stopPropagation(); setNotesOpen((o) => !o); }}
-                className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${notesOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-white/20 dark:border-white/10 text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
-                data-testid={`button-pipeline-notes-toggle-${asset.id}`}
-              >
-                <MessageSquare className="w-2.5 h-2.5" />
-                <span>{noteCount > 0 ? noteCount : "Notes"}</span>
-                {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-              </button>
-            </div>
-
-            {lastNoteAt && !notesOpen && <p className="text-[9px] text-muted-foreground -mt-1.5">Last note {timeAgo(lastNoteAt)}</p>}
-
-            {/* Footer links + signal toggle */}
-            <div className="flex items-center justify-between -mt-1">
-              <p className="text-[10px] text-muted-foreground truncate">{asset.sourceJournal} · {asset.publicationYear}</p>
-              <div className="flex items-center gap-2 shrink-0">
-                {hasSignals && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setFanOpen((o) => !o); }}
-                    className={`flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${fanOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5"}`}
-                    data-testid={`button-pipeline-fan-${asset.id}`}
-                    title={fanOpen ? "Collapse signals" : "Expand signals"}
-                  >
-                    <Link2 className="w-2.5 h-2.5" />
-                    <span>{signals.length} signal{signals.length !== 1 ? "s" : ""}</span>
-                    {fanOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-                  </button>
-                )}
-                {asset.ingestedAssetId && (
-                  <Link href={`/asset/${asset.ingestedAssetId}`} onClick={(e) => e.stopPropagation()} className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors" data-testid={`link-pipeline-dossier-${asset.id}`}>
-                    Dossier →
-                  </Link>
-                )}
-              </div>
-            </div>
-
-            {/* Notes panel */}
-            {notesOpen && (
-              <div className="border-t border-white/20 dark:border-white/10 pt-2.5 flex flex-col gap-2">
-                <div className="max-h-40 overflow-y-auto flex flex-col gap-1.5 pr-0.5">
-                  {notes.length === 0 ? (
-                    <p className="text-[10px] text-muted-foreground text-center py-2">No notes yet</p>
-                  ) : (
-                    notes.map((note) => (
-                      <div key={note.id} className={`flex gap-1.5 ${note.isSystemEvent ? "opacity-60" : ""}`} data-testid={`note-pipeline-${note.id}`}>
-                        {!note.isSystemEvent && (
-                          <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[7px] font-bold shrink-0 mt-0.5">{getInitials(note.authorName)}</div>
-                        )}
-                        <div className={`flex-1 min-w-0 ${note.isSystemEvent ? "pl-5" : ""}`}>
-                          {!note.isSystemEvent && <div className="flex items-center gap-1 mb-0.5"><span className="text-[9px] font-semibold text-foreground">{note.authorName}</span><span className="text-[9px] text-muted-foreground">{timeAgo(note.createdAt)}</span></div>}
-                          <p className="text-[10px] text-foreground leading-relaxed break-words">{note.content}</p>
-                        </div>
-                      </div>
-                    ))
+            <div className="flex-1 flex flex-col gap-1.5 text-xs">
+              {isTto ? (
+                <>
+                  {asset.target && asset.target !== "unknown" && (
+                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Target</span><span className="text-foreground truncate">{asset.target}</span></div>
                   )}
-                  <div ref={notesEndRef} />
-                </div>
-                <div className="flex gap-1.5">
-                  <input
-                    value={noteText}
-                    onChange={(e) => setNoteText(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (noteText.trim()) noteMutation.mutate(noteText.trim()); } }}
-                    placeholder="Add a note…"
-                    className="flex-1 min-w-0 bg-transparent border border-white/20 dark:border-white/10 rounded px-2 py-1 text-[10px] text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/30"
-                    data-testid={`textarea-pipeline-note-${asset.id}`}
-                  />
-                  <button
-                    onClick={() => { if (noteText.trim()) noteMutation.mutate(noteText.trim()); }}
-                    disabled={!noteText.trim() || noteMutation.isPending}
-                    className="w-6 h-6 rounded flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all active:scale-90 shrink-0"
-                    data-testid={`button-pipeline-note-submit-${asset.id}`}
-                  >
-                    {noteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                  </button>
-                </div>
-              </div>
-            )}
+                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Disease</span><span className="text-foreground truncate">{asset.diseaseIndication}</span></div>
+                  )}
+                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">From</span><span className="text-foreground truncate">{toTitleCase(asset.sourceJournal)}</span></div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Source</span><span className="text-foreground truncate">{toTitleCase(asset.sourceJournal)}</span></div>
+                  )}
+                  {asset.publicationYear && (
+                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Year</span><span className="text-foreground">{asset.publicationYear}</span></div>
+                  )}
+                  {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                    <div className="flex gap-1.5"><span className="text-muted-foreground w-12 shrink-0">Disease</span><span className="text-foreground truncate">{asset.diseaseIndication}</span></div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between mt-auto pt-2 border-t border-white/20 dark:border-white/10">
+              {isTto ? (
+                <>
+                  <div className="flex items-center gap-2">
+                    {hasSignals && (
+                      <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                        <Link2 className="w-2.5 h-2.5" />{signals.length} signal{signals.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                    {statusCfg && (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>
+                    )}
+                  </div>
+                  <span className="text-[10px]" style={{ color: tint.stripColor + "cc" }}>Details →</span>
+                </>
+              ) : (
+                <>
+                  <span className="text-[10px] text-muted-foreground">Drag onto a TTO asset to stack</span>
+                  {asset.sourceUrl && (
+                    <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-primary transition-colors">
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Signal slivers — peek below when fan is closed */}
-      {hasSignals && !fanOpen && (
+      {/* Signal slivers peek below TTO cards */}
+      {isTto && hasSignals && (
         <div className="relative -mt-1 mx-1.5">
-          {sliverSignals.map((sig, idx) => {
-            const cfg = getSourceConfig(sig.sourceName);
+          {signals.slice(0, 3).map((sig, idx) => {
+            const sigTint = SCOUT_CARD_TINTS[getSourceCategory(sig.sourceName)];
             return (
-              <div
-                key={sig.id}
-                className={`${cfg.sliverBg} rounded-b-md`}
-                style={{
-                  height: "5px",
-                  marginTop: "1px",
-                  marginLeft: `${(idx + 1) * 4}px`,
-                  marginRight: `${(idx + 1) * 4}px`,
-                  opacity: 0.7 - idx * 0.15,
-                }}
-              />
+              <div key={sig.id} style={{
+                background: sigTint.stripColor,
+                height: "5px", marginTop: "1px",
+                marginLeft: `${(idx + 1) * 4}px`, marginRight: `${(idx + 1) * 4}px`,
+                opacity: 0.5 - idx * 0.12,
+                borderRadius: "0 0 4px 4px",
+              }} />
             );
           })}
         </div>
       )}
-
-      {/* Fanned signal cards */}
-      <AnimatePresence>
-        {fanOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: "easeInOut" }}
-            className="overflow-hidden"
-          >
-            <div className="flex flex-col gap-1.5 pt-1.5 pb-1">
-              {signals.map((sig, idx) => (
-                <motion.div
-                  key={sig.id}
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ delay: idx * 0.04, duration: 0.15 }}
-                >
-                  <SignalMiniCard
-                    signal={sig}
-                    draggable
-                    onDetach={onDetachSignal ? () => onDetachSignal(sig.id) : undefined}
-                  />
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
 
-// ── UnlinkedSignalCard — draggable signal in the tray ─────────────────────────
+// ── BoardCard — compact card for kanban columns ────────────────────────────────
 
-function UnlinkedSignalCard({ signal, onDelete }: { signal: PipelineAsset; onDelete: (id: number) => void }) {
-  const cfg = getSourceConfig(signal.sourceName);
+function BoardCard({ asset, signals = [], onClick, onDelete }: {
+  asset: PipelineAsset;
+  signals?: PipelineAsset[];
+  onClick: () => void;
+  onDelete: (id: number) => void;
+}) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `signal-${signal.id}`,
-    data: { type: "signal", assetId: signal.id },
+    id: `tto-${asset.id}`,
+    data: { type: "tto", assetId: asset.id },
   });
+
+  const tint = SCOUT_CARD_TINTS["tto"];
+  const hasSignals = signals.length > 0;
+  const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality ?? "");
+  const statusCfg = asset.status ? STATUS_CONFIG[asset.status] : null;
 
   return (
     <div
       ref={setNodeRef}
+      className={`relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-xl overflow-hidden cursor-pointer transition-opacity ${isDragging ? "opacity-30" : ""}`}
+      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
+      onClick={onClick}
       {...attributes}
-      className={`relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-[12px] overflow-hidden transition-opacity ${isDragging ? "opacity-30" : ""}`}
-      style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.07)" }}
-      data-testid={`unlinked-signal-${signal.id}`}
+      {...listeners}
+      data-testid={`board-card-${asset.id}`}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: cfg.accent }} />
-      <div className="pl-3 pr-2 py-2.5 flex items-center gap-2">
-        <div {...listeners} className="cursor-grab active:cursor-grabbing shrink-0 text-muted-foreground/40 hover:text-muted-foreground">
-          <GripVertical className="w-3.5 h-3.5" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 mb-0.5">
-            <span className={`text-[9px] font-bold uppercase tracking-wide ${cfg.textClass}`}>{cfg.label}</span>
-          </div>
-          <p className="text-[11px] font-semibold text-foreground truncate">{signal.assetName !== "unknown" ? signal.assetName : signal.sourceTitle}</p>
-          {signal.sourceJournal && signal.sourceJournal !== "Unknown" && (
-            <p className="text-[9px] text-muted-foreground truncate mt-0.5">{signal.sourceJournal} · {signal.publicationYear}</p>
-          )}
-        </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          {signal.sourceUrl && (
-            <a href={signal.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-muted-foreground hover:text-primary transition-colors">
-              <ExternalLink className="w-3 h-3" />
-            </a>
-          )}
-          <button onClick={() => onDelete(signal.id)} className="text-muted-foreground hover:text-destructive transition-colors" title="Remove">
-            <Trash2 className="w-3 h-3" />
+      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.stripColor }} />
+      <div className="pl-3.5 pr-2.5 py-3 flex flex-col gap-2">
+        <div className="flex items-start gap-1.5">
+          <FlaskConical className="w-3 h-3 shrink-0 mt-0.5" style={{ color: tint.stripColor }} />
+          <span className="text-xs font-semibold text-foreground leading-snug flex-1 line-clamp-2">
+            {asset.assetName !== "unknown" ? asset.assetName : "Unnamed"}
+          </span>
+          <button
+            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+            className="shrink-0 w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+            data-testid={`button-delete-board-${asset.id}`}
+          >
+            <Trash2 className="w-2.5 h-2.5" />
           </button>
         </div>
+
+        <div className="flex flex-wrap gap-1">
+          {asset.modality && asset.modality !== "unknown" && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${modalityClass}`}>{asset.modality}</span>
+          )}
+          {statusCfg && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>
+          )}
+        </div>
+
+        <div className="text-[10px] space-y-0.5">
+          {asset.target && asset.target !== "unknown" && (
+            <div className="flex gap-1"><span className="text-muted-foreground w-10 shrink-0">Target</span><span className="text-foreground truncate">{asset.target}</span></div>
+          )}
+          {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+            <div className="flex gap-1"><span className="text-muted-foreground w-10 shrink-0">Disease</span><span className="text-foreground truncate">{asset.diseaseIndication}</span></div>
+          )}
+        </div>
+
+        {(hasSignals || (asset.noteCount ?? 0) > 0) && (
+          <div className="flex items-center gap-2.5 pt-1.5 border-t border-white/20 dark:border-white/10">
+            {hasSignals && (
+              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
+                <Link2 className="w-2 h-2" />{signals.length}
+              </span>
+            )}
+            {(asset.noteCount ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
+                <MessageSquare className="w-2 h-2" />{asset.noteCount}
+              </span>
+            )}
+            <span className="ml-auto text-[9px] text-primary/60">Open →</span>
+          </div>
+        )}
       </div>
-      <p className="text-[8px] text-muted-foreground/60 px-3 pb-1.5 italic">Drag onto a TTO asset card to attach</p>
     </div>
   );
 }
 
-// ── KanbanStatusColumn — droppable status column ───────────────────────────────
+// ── KanbanColumn — droppable column for the board view ────────────────────────
 
-function KanbanStatusColumn({
-  col, decks, onDelete, onDetachSignal,
-}: {
+function KanbanColumn({ col, decks, onDelete, onCardClick }: {
   col: typeof BOARD_COLUMNS[number];
   decks: DeckAsset[];
   onDelete: (id: number) => void;
-  onDetachSignal: (signalId: number) => void;
+  onCardClick: (asset: DeckAsset) => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: `status-col-${col.key ?? "unassigned"}`,
@@ -556,29 +473,29 @@ function KanbanStatusColumn({
   return (
     <div
       ref={setNodeRef}
-      className={`flex flex-col w-72 rounded-lg border shrink-0 transition-colors ${col.colorClass} ${isOver ? "ring-2 ring-primary/40" : ""}`}
+      className={`flex flex-col w-52 rounded-xl border shrink-0 transition-colors ${col.colorClass} ${isOver ? "ring-2 ring-primary/40" : ""}`}
     >
-      <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-inherit">
         <div className="flex items-center gap-2">
-          <div className={`w-2 h-2 rounded-full ${col.dotClass}`} />
-          <span className="text-sm font-semibold text-foreground">{col.label}</span>
+          <div className={`w-1.5 h-1.5 rounded-full ${col.dotClass}`} />
+          <span className="text-xs font-semibold text-foreground">{col.label}</span>
         </div>
-        <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{decks.length}</span>
+        <span className="text-[10px] font-bold text-muted-foreground tabular-nums min-w-[16px] h-4 rounded-full bg-muted/60 flex items-center justify-center px-1">{decks.length}</span>
       </div>
       <ScrollArea className="flex-1 max-h-[calc(100vh-16rem)]">
-        <div className="p-2.5 flex flex-col gap-3">
+        <div className="p-2 flex flex-col gap-2">
           {decks.length === 0 ? (
             <div className={`py-10 text-center rounded-lg border-2 border-dashed border-inherit transition-colors ${isOver ? "border-primary/40 bg-primary/5" : ""}`}>
-              <p className="text-xs text-muted-foreground">Drop asset here</p>
+              <p className="text-[10px] text-muted-foreground">Drop here</p>
             </div>
           ) : (
             decks.map((deck) => (
-              <PipelineCard
+              <BoardCard
                 key={deck.id}
                 asset={deck}
                 signals={deck.signals}
+                onClick={() => onCardClick(deck)}
                 onDelete={onDelete}
-                onDetachSignal={onDetachSignal}
               />
             ))
           )}
@@ -588,26 +505,286 @@ function KanbanStatusColumn({
   );
 }
 
-// ── Pipeline main component ────────────────────────────────────────────────────
+// ── AssetDrawer — right-side drawer with Overview / CRM / Notes tabs ──────────
+
+function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }: {
+  asset: PipelineAsset | null;
+  signals?: PipelineAsset[];
+  onClose: () => void;
+  onDetachSignal: (signalId: number) => void;
+  onDelete: (id: number) => void;
+}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [noteText, setNoteText] = useState("");
+  const [localStatus, setLocalStatus] = useState<string | null>(null);
+  const [fanIndex, setFanIndex] = useState(0);
+  const notesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (asset) { setLocalStatus(asset.status ?? null); setFanIndex(0); setNoteText(""); setActiveTab("overview"); }
+  }, [asset?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { setFanIndex((i) => Math.min(i, Math.max(0, signals.length - 1))); }, [signals.length]);
+
+  const { data: notesData } = useQuery<NotesResponse>({
+    queryKey: ["/api/saved-assets", asset?.id, "notes"],
+    queryFn: async () => {
+      const res = await fetch(`/api/saved-assets/${asset!.id}/notes?limit=50`);
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    enabled: !!asset && activeTab === "notes",
+    staleTime: 10000,
+  });
+  const notes = notesData?.notes ?? [];
+
+  useEffect(() => {
+    if (notesEndRef.current) notesEndRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [notes.length]);
+
+  const statusMutation = useMutation<unknown, Error, string | null, { prev: string | null }>({
+    mutationFn: async (status) => {
+      if (!asset) throw new Error("No asset");
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, { status });
+      return res.json();
+    },
+    onMutate: (s) => { const prev = localStatus; setLocalStatus(s); return { prev }; },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/saved-assets"] }),
+    onError: (err, _, ctx) => { if (ctx) setLocalStatus(ctx.prev); toast({ title: "Status update failed", description: err.message, variant: "destructive" }); },
+  });
+
+  const noteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      if (!asset) throw new Error("No asset");
+      const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      setNoteText("");
+      if (asset) {
+        qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+        qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      }
+    },
+    onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
+  });
+
+  if (!asset) return null;
+
+  const tint = SCOUT_CARD_TINTS[getSourceCategory(asset.sourceName)];
+  const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""];
+  const noteCount = asset.noteCount ?? 0;
+
+  return (
+    <Sheet open={!!asset} onOpenChange={(o) => { if (!o) onClose(); }}>
+      <SheetContent className="w-full sm:max-w-md flex flex-col p-0 gap-0 overflow-hidden" side="right">
+        {/* Header */}
+        <div className="shrink-0 border-b border-border px-5 py-4" style={{ borderTop: `3px solid ${tint.stripColor}` }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wide" style={{ color: tint.stripColor }}>{getSourceLabel(asset.sourceName)}</span>
+                {stageAbbr && <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{stageAbbr}</span>}
+                {statusCfg && <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium border ${statusCfg.pill}`}>{statusCfg.label}</span>}
+              </div>
+              <h2 className="font-bold text-base text-foreground leading-snug">
+                {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
+              </h2>
+            </div>
+            <button onClick={onClose} className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col min-h-0">
+          <TabsList className="w-full rounded-none border-b border-border bg-transparent h-10 px-5 justify-start gap-6 shrink-0">
+            <TabsTrigger value="overview" className="text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="crm" className="text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none">
+              CRM{signals.length > 0 ? ` (${signals.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none">
+              Notes{noteCount > 0 ? ` (${noteCount})` : ""}
+            </TabsTrigger>
+          </TabsList>
+
+          {/* Overview */}
+          <TabsContent value="overview" className="flex-1 overflow-y-auto px-5 py-5 space-y-5 m-0">
+            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+              {asset.target && asset.target !== "unknown" && (
+                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Target</p><p className="text-foreground font-medium">{asset.target}</p></div>
+              )}
+              {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disease</p><p className="text-foreground font-medium">{asset.diseaseIndication}</p></div>
+              )}
+              {asset.modality && asset.modality !== "unknown" && (
+                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Modality</p><p className="text-foreground font-medium">{asset.modality}</p></div>
+              )}
+              {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Dev Stage</p><p className="text-foreground font-medium">{asset.developmentStage}</p></div>
+              )}
+              {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                <div className="col-span-2"><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Institution</p><p className="text-foreground font-medium">{toTitleCase(asset.sourceJournal)}</p></div>
+              )}
+              {asset.publicationYear && (
+                <div><p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Year</p><p className="text-foreground font-medium">{asset.publicationYear}</p></div>
+              )}
+            </div>
+
+            {asset.summary && (
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
+                <p className="text-sm text-foreground leading-relaxed">{asset.summary}</p>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2.5 pt-1 border-t border-border">
+              {asset.sourceUrl && (
+                <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
+                  <ExternalLink className="w-3.5 h-3.5" /> View Source
+                </a>
+              )}
+              {asset.ingestedAssetId && (
+                <button onClick={() => navigate(`/asset/${asset.ingestedAssetId}`)} className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors text-left">
+                  <FileText className="w-3.5 h-3.5" /> Open Full Dossier →
+                </button>
+              )}
+              <button
+                onClick={() => { onDelete(asset.id); onClose(); }}
+                className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors mt-1"
+              >
+                <Trash2 className="w-3.5 h-3.5" /> Remove from Pipeline
+              </button>
+            </div>
+          </TabsContent>
+
+          {/* CRM */}
+          <TabsContent value="crm" className="flex-1 overflow-y-auto px-5 py-5 space-y-6 m-0">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">Deal Stage</p>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  onClick={() => statusMutation.mutate(null)}
+                  disabled={statusMutation.isPending}
+                  className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${localStatus === null ? "bg-muted text-foreground border-muted-foreground/30 font-semibold" : "border-border text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground"}`}
+                >
+                  None
+                </button>
+                {SAVED_ASSET_STATUSES.map((s) => {
+                  const cfg = STATUS_CONFIG[s];
+                  return (
+                    <button
+                      key={s}
+                      onClick={() => statusMutation.mutate(s)}
+                      disabled={statusMutation.isPending}
+                      className={`px-3 py-1.5 rounded-full text-xs border transition-colors ${localStatus === s ? `${cfg.pill} font-semibold` : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
+                    >
+                      {cfg?.label ?? s}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
+              </p>
+              {signals.length === 0 ? (
+                <p className="text-xs text-muted-foreground italic leading-relaxed">
+                  No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {signals.length > 1 && (
+                    <div className="flex items-center justify-between">
+                      <button onClick={() => setFanIndex((i) => Math.max(0, i - 1))} disabled={fanIndex === 0} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-30 transition-all">
+                        <ChevronUp className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="text-[11px] text-muted-foreground tabular-nums font-medium">{fanIndex + 1} of {signals.length}</span>
+                      <button onClick={() => setFanIndex((i) => Math.min(signals.length - 1, i + 1))} disabled={fanIndex === signals.length - 1} className="w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-30 transition-all">
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  )}
+                  <SignalMiniCard
+                    signal={signals[fanIndex]}
+                    draggable
+                    onDetach={() => onDetachSignal(signals[fanIndex].id)}
+                  />
+                </div>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* Notes */}
+          <TabsContent value="notes" className="flex-1 flex flex-col min-h-0 m-0">
+            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+              {notes.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-6">No notes yet. Add one below.</p>
+              ) : (
+                notes.map((note) => (
+                  <div key={note.id} className={`flex gap-2.5 ${note.isSystemEvent ? "opacity-60" : ""}`}>
+                    {!note.isSystemEvent && (
+                      <div className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[8px] font-bold shrink-0 mt-0.5">{getInitials(note.authorName)}</div>
+                    )}
+                    <div className={`flex-1 min-w-0 ${note.isSystemEvent ? "pl-7" : ""}`}>
+                      {!note.isSystemEvent && (
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-semibold text-foreground">{note.authorName}</span>
+                          <span className="text-[10px] text-muted-foreground">{timeAgo(note.createdAt)}</span>
+                        </div>
+                      )}
+                      <p className="text-xs text-foreground leading-relaxed break-words">{note.content}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+              <div ref={notesEndRef} />
+            </div>
+            <div className="shrink-0 border-t border-border px-5 py-3 flex gap-2">
+              <input
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (noteText.trim()) noteMutation.mutate(noteText.trim()); } }}
+                placeholder="Add a note…"
+                className="flex-1 min-w-0 bg-transparent border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40"
+              />
+              <button
+                onClick={() => { if (noteText.trim()) noteMutation.mutate(noteText.trim()); }}
+                disabled={!noteText.trim() || noteMutation.isPending}
+                className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all active:scale-90 shrink-0"
+              >
+                {noteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+              </button>
+            </div>
+          </TabsContent>
+        </Tabs>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+// ── Pipeline page ──────────────────────────────────────────────────────────────
 
 export default function Pipeline() {
   const { toast } = useToast();
   const qc = useQueryClient();
 
-  // View state
-  const [viewMode, setViewMode] = useState<ViewMode>("stage");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
-  const [briefLoading, setBriefLoading] = useState<string | null>(null);
-  const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [shareUrl, setShareUrl] = useState<string | null>(null);
-  const [shareLinkCopied, setShareLinkCopied] = useState(false);
-  const [showShareForm, setShowShareForm] = useState(false);
-  const [shareBriefPassword, setShareBriefPassword] = useState("");
-  const [shareBriefPasswordVisible, setShareBriefPasswordVisible] = useState(false);
-
-  // DnD state
+  const [activeAssetId, setActiveAssetId] = useState<number | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
+
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
   const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
@@ -621,7 +798,6 @@ export default function Pipeline() {
     staleTime: 30000,
   });
   const pipelines = pipelinesData?.pipelines ?? [];
-
   const savedAssets = data?.assets ?? [];
 
   // ── Data grouping ──────────────────────────────────────────────────────────
@@ -645,19 +821,30 @@ export default function Pipeline() {
     signals: signalsByParent.get(tto.id) ?? [],
   }));
 
-  const filteredDeckAssets = filterPipeline === "all" ? deckAssets
+  const filteredDecks = filterPipeline === "all" ? deckAssets
     : filterPipeline === null ? deckAssets.filter((d) => d.pipelineListId == null)
     : deckAssets.filter((d) => d.pipelineListId === filterPipeline);
 
-  const filteredUnlinkedSignals = filterPipeline === "all" ? unlinkedSignals
+  const filteredSignals = filterPipeline === "all" ? unlinkedSignals
     : filterPipeline === null ? unlinkedSignals.filter((s) => s.pipelineListId == null)
     : unlinkedSignals.filter((s) => s.pipelineListId === filterPipeline);
+
+  // Grid shows TTO cards first, then unlinked signals
+  const gridCards: PipelineAsset[] = [...filteredDecks, ...filteredSignals];
+
+  // Drawer
+  const activeAsset = activeAssetId ? (deckAssets.find((d) => d.id === activeAssetId) ?? null) : null;
+  const activeSignals = activeAsset ? (signalsByParent.get(activeAsset.id) ?? []) : [];
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => { await apiRequest("DELETE", `/api/saved-assets/${id}`); },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["/api/saved-assets"] }); toast({ title: "Asset removed from pipeline" }); },
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      if (activeAssetId === id) setActiveAssetId(null);
+      toast({ title: "Removed from pipeline" });
+    },
     onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
@@ -673,8 +860,7 @@ export default function Pipeline() {
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
-      if (vars.parentId) toast({ title: "Signal attached to asset" });
-      else toast({ title: "Signal detached" });
+      toast({ title: vars.parentId ? "Signal attached" : "Signal detached" });
     },
     onError: (err: any) => toast({ title: "Attach failed", description: err.message, variant: "destructive" }),
   });
@@ -697,193 +883,103 @@ export default function Pipeline() {
     attachMutation.mutate({ signalId, parentId: null });
   }, [attachMutation]);
 
-  // ── DnD handlers ──────────────────────────────────────────────────────────
+  // ── DnD ───────────────────────────────────────────────────────────────────
 
-  function handleDragStart(event: DragStartEvent) {
-    setActiveDragId(String(event.active.id));
-  }
+  function handleDragStart(event: DragStartEvent) { setActiveDragId(String(event.active.id)); }
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveDragId(null);
     const { active, over } = event;
     if (!over) return;
-
     const dragData = active.data.current;
     const dropData = over.data.current;
-
     if (dragData?.type === "signal" && dropData?.type === "tto-drop") {
-      if (dragData.assetId !== dropData.ttoId) {
-        attachMutation.mutate({ signalId: dragData.assetId, parentId: dropData.ttoId });
-      }
+      if (dragData.assetId !== dropData.ttoId) attachMutation.mutate({ signalId: dragData.assetId, parentId: dropData.ttoId });
     }
-
     if (dragData?.type === "tto" && dropData?.type === "status-drop") {
       const tto = ttoAssets.find((a) => a.id === dragData.assetId);
       const newStatus = dropData.status as string | null;
-      if (tto && tto.status !== newStatus) {
-        boardStatusMutation.mutate({ id: dragData.assetId, status: newStatus });
-      }
+      if (tto && tto.status !== newStatus) boardStatusMutation.mutate({ id: dragData.assetId, status: newStatus });
     }
   }
 
-  // ── Brief / export ────────────────────────────────────────────────────────
+  // ── Exports ───────────────────────────────────────────────────────────────
 
-  const briefMutation = useMutation({
-    mutationFn: async ({ stage }: { stage: string }) => {
-      const res = await apiRequest("POST", "/api/pipeline/brief", { stage });
-      return res.json() as Promise<{ brief: string; assetCount: number }>;
-    },
-    onSuccess: (result, vars) => {
-      const stageInfo = STAGES.find((s) => s.key === vars.stage);
-      setBriefModal({ stage: vars.stage, label: stageInfo?.label ?? vars.stage, brief: result.brief, assetCount: result.assetCount });
-      setBriefLoading(null);
-    },
-    onError: (err: any) => { toast({ title: "Brief generation failed", description: err.message, variant: "destructive" }); setBriefLoading(null); },
-  });
-
-  const shareBriefMutation = useMutation({
-    mutationFn: async () => {
-      if (!briefModal) throw new Error("No brief to share");
-      const body: Record<string, unknown> = { type: "pipeline_brief", payload: { brief: briefModal.brief, pipelineName: briefModal.label, assetCount: briefModal.assetCount } };
-      if (shareBriefPassword) body.password = shareBriefPassword;
-      const res = await apiRequest("POST", "/api/share", body);
-      if (!res.ok) { const err = await res.json(); throw new Error(err.error ?? "Failed to create share link"); }
-      return res.json() as Promise<{ token: string; expiresAt: string; url: string }>;
-    },
-    onSuccess: (data) => { setShareUrl(data.url); setShowShareForm(false); },
-    onError: (err: any) => toast({ title: "Failed to create share link", description: err.message, variant: "destructive" }),
-  });
-
-  const handleBrief = (stageKey: string) => { setBriefLoading(stageKey); briefMutation.mutate({ stage: stageKey }); };
-  const handleCopy = () => { if (!briefModal) return; navigator.clipboard.writeText(briefModal.brief).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); }); };
-  const handlePrint = () => {
-    if (!briefModal) return;
-    sessionStorage.setItem("pipeline-brief-print", JSON.stringify({ brief: briefModal.brief, pipelineName: briefModal.label, assetCount: briefModal.assetCount }));
-    window.open("/pipeline/brief/print", "_blank");
+  const handleExportCsv = () => {
+    if (savedAssets.length === 0) return;
+    const headers = ["Asset Name", "Target", "Modality", "Stage", "Disease", "Summary", "Journal", "Year", "Source", "URL"];
+    const rows = savedAssets.map((a) => [
+      a.assetName, a.target, a.modality, a.developmentStage, a.diseaseIndication,
+      `"${(a.summary ?? "").replace(/"/g, '""')}"`,
+      a.sourceJournal, a.publicationYear, a.sourceName, a.sourceUrl ?? "",
+    ]);
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a"); a.href = url; a.download = "eden-pipeline.csv"; a.click(); URL.revokeObjectURL(url);
   };
 
   const handleExportJson = () => {
     const blob = new Blob([JSON.stringify(savedAssets, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "helixradar-pipeline.json"; a.click(); URL.revokeObjectURL(url);
+    const a = document.createElement("a"); a.href = url; a.download = "eden-pipeline.json"; a.click(); URL.revokeObjectURL(url);
   };
 
-  const handleExportCsv = () => {
-    if (savedAssets.length === 0) return;
-    const headers = ["Asset Name", "Target", "Modality", "Stage", "Disease", "Summary", "Journal", "Year", "Source", "URL"];
-    const rows = savedAssets.map((a) => [a.assetName, a.target, a.modality, a.developmentStage, a.diseaseIndication, `"${a.summary.replace(/"/g, '""')}"`, a.sourceJournal, a.publicationYear, a.sourceName, a.sourceUrl ?? ""]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = "helixradar-pipeline.csv"; a.click(); URL.revokeObjectURL(url);
-  };
-
-  // ── Derived counts ─────────────────────────────────────────────────────────
   const totalAssets = savedAssets.length;
   const ttoCount = ttoAssets.length;
-  const unlinkedCount = unlinkedSignals.length;
-
-  // Active drag asset (for overlay)
-  const activeDragAsset = activeDragId
-    ? savedAssets.find((a) => `signal-${a.id}` === activeDragId || `tto-${a.id}` === activeDragId)
-    : null;
-
-  // ── Render ─────────────────────────────────────────────────────────────────
+  const signalCount = signalAssets.length;
+  const activeDragAsset = activeDragId ? savedAssets.find((a) => `signal-${a.id}` === activeDragId || `tto-${a.id}` === activeDragId) : null;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
-      <main className="flex-1 flex flex-col">
+      <main className="flex-1 flex flex-col min-h-0">
 
         {/* Header */}
-        <div className="border-b border-border bg-card/30">
-          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
-            <div className="flex flex-col gap-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    Drug Development{" "}
-                    <span className="gradient-text dark:gradient-text gradient-text-light">Pipeline</span>
-                  </h1>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {totalAssets > 0
-                      ? `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${unlinkedCount > 0 ? ` · ${unlinkedCount} unlinked signal${unlinkedCount !== 1 ? "s" : ""}` : ""}`
-                      : "Save assets from Scout to build your pipeline"}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {totalAssets > 0 && (
-                    <>
-                      {/* View toggle */}
-                      <div className="flex items-center gap-0.5 border border-card-border rounded-md p-0.5 bg-card">
-                        <button
-                          onClick={() => setViewMode("stage")}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === "stage" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                          data-testid="button-view-stage"
-                          title="Stage view — organized by clinical development stage"
-                        >
-                          <AlignJustify className="w-3 h-3" />
-                          Stage
-                        </button>
-                        <button
-                          onClick={() => setViewMode("board")}
-                          className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium transition-colors ${viewMode === "board" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                          data-testid="button-view-board"
-                          title="Board view — organized by CRM status stage"
-                        >
-                          <LayoutDashboard className="w-3 h-3" />
-                          Board
-                        </button>
-                      </div>
-                      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs border-card-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
-                        <Download className="w-3 h-3" />JSON
-                      </Button>
-                      <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs border-card-border" onClick={handleExportCsv} data-testid="button-pipeline-export-csv">
-                        <Download className="w-3 h-3" />CSV
-                      </Button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Pipeline filter pills */}
-              {totalAssets > 0 && (
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => setFilterPipeline("all")}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterPipeline === "all" ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
-                    data-testid="filter-pipeline-all"
-                  >
-                    All
-                  </button>
-                  <button
-                    onClick={() => setFilterPipeline(null)}
-                    className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterPipeline === null ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
-                    data-testid="filter-pipeline-uncategorised"
-                  >
-                    Uncategorised
-                  </button>
-                  {pipelines.map((pl) => (
-                    <button
-                      key={pl.id}
-                      onClick={() => setFilterPipeline(pl.id)}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors ${filterPipeline === pl.id ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}
-                      data-testid={`filter-pipeline-${pl.id}`}
-                    >
-                      {pl.name}
-                    </button>
-                  ))}
-                </div>
-              )}
+        <div className="border-b border-border bg-card/30 shrink-0">
+          <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">
+                Pipeline <span className="gradient-text dark:gradient-text gradient-text-light">Builder</span>
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {totalAssets > 0
+                  ? `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${signalCount > 0 ? ` · ${signalCount} signal${signalCount !== 1 ? "s" : ""}` : ""}`
+                  : "Save assets from Scout to build your pipeline"}
+              </p>
             </div>
+            {totalAssets > 0 && (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card">
+                  <button
+                    onClick={() => setViewMode("grid")}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === "grid" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    data-testid="button-view-grid"
+                  >
+                    <LayoutGrid className="w-3 h-3" /> Grid
+                  </button>
+                  <button
+                    onClick={() => setViewMode("board")}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${viewMode === "board" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                    data-testid="button-view-board"
+                  >
+                    <LayoutDashboard className="w-3 h-3" /> Board
+                  </button>
+                </div>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" onClick={handleExportCsv} data-testid="button-pipeline-export-csv">
+                  <Download className="w-3 h-3" />CSV
+                </Button>
+                <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
+                  <Download className="w-3 h-3" />JSON
+                </Button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Loading gate: show spinner while pending. On error, fall through to empty state
-            so the page is never stuck. isLoading = isPending && isFetching in TanStack v5
-            so we also check !data to cover the gap between retry attempts. */}
+        {/* Loading / global empty state */}
         {isLoading && !isError ? (
-          <div className="flex-1 flex items-center justify-center py-24">
+          <div className="flex-1 flex items-center justify-center">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
         ) : totalAssets === 0 ? (
@@ -893,165 +989,156 @@ export default function Pipeline() {
             </div>
             <div className="space-y-2">
               <h2 className="text-xl font-bold text-foreground">Your pipeline is empty</h2>
-              <p className="text-muted-foreground max-w-sm">Discover TTO assets from Scout and save them here to build your pipeline.</p>
+              <p className="text-muted-foreground max-w-sm text-sm">Discover TTO assets in Scout and bookmark them to build your pipeline.</p>
             </div>
-            <Link href="/discover">
-              <Button className="gap-2 mt-2" data-testid="button-go-discover">
-                Start Discovering <ArrowRight className="w-4 h-4" />
-              </Button>
-            </Link>
+            <Link href="/scout"><Button className="gap-2 mt-2" data-testid="button-go-scout">Go to Scout <ArrowRight className="w-4 h-4" /></Button></Link>
           </div>
         ) : (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-            <div className="flex-1">
-              <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+            <div className="flex-1 flex min-h-0">
 
-                {/* ── Board view (CRM kanban by status) ─────────────────── */}
-                {viewMode === "board" && (
-                  filteredDeckAssets.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-16 gap-4 text-center">
-                      <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                        <FlaskConical className="w-6 h-6 text-emerald-500" />
+              {/* ── Left sidebar — always visible ─────────────────────────── */}
+              <aside className="w-56 shrink-0 border-r border-border bg-card/20 flex flex-col">
+                <div className="px-4 py-3 border-b border-border shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Layers className="w-3.5 h-3.5 text-muted-foreground" />
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Pipelines</span>
+                  </div>
+                </div>
+                <ScrollArea className="flex-1">
+                  <div className="px-2 py-2 flex flex-col gap-0.5">
+                    <button
+                      onClick={() => setFilterPipeline("all")}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${filterPipeline === "all" ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
+                      data-testid="filter-pipeline-all"
+                    >
+                      <span className="font-medium truncate">All Assets</span>
+                      <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${filterPipeline === "all" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                        {totalAssets}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => setFilterPipeline(null)}
+                      className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${filterPipeline === null ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
+                      data-testid="filter-pipeline-uncategorised"
+                    >
+                      <span className="truncate">Uncategorised</span>
+                      <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${filterPipeline === null ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                        {savedAssets.filter((a) => a.pipelineListId == null).length}
+                      </span>
+                    </button>
+                    {pipelines.length > 0 && <div className="my-1.5 border-t border-border" />}
+                    {pipelines.map((pl) => {
+                      const count = savedAssets.filter((a) => a.pipelineListId === pl.id).length;
+                      return (
+                        <button
+                          key={pl.id}
+                          onClick={() => setFilterPipeline(pl.id)}
+                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${filterPipeline === pl.id ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
+                          data-testid={`filter-pipeline-${pl.id}`}
+                        >
+                          <span className="truncate">{pl.name}</span>
+                          <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${filterPipeline === pl.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              </aside>
+
+              {/* ── Main content area ─────────────────────────────────────── */}
+              <div className="flex-1 overflow-auto">
+                <div className="px-6 py-6">
+
+                  {/* Grid view */}
+                  {viewMode === "grid" && (
+                    gridCards.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+                        <div className="w-12 h-12 rounded-xl bg-muted/50 border border-border flex items-center justify-center">
+                          <Beaker className="w-5 h-5 text-muted-foreground" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">No assets in this pipeline</p>
+                          <p className="text-xs text-muted-foreground mt-1">Save assets to this pipeline from Scout, or view all assets.</p>
+                        </div>
+                        <button onClick={() => setFilterPipeline("all")} className="text-xs text-primary hover:text-primary/80 transition-colors">
+                          ← Back to All Assets
+                        </button>
                       </div>
-                      <div className="space-y-1.5">
-                        <p className="text-sm font-semibold text-foreground">No TTO assets in this view</p>
-                        <p className="text-xs text-muted-foreground max-w-xs">Save TTO assets from Scout to use the kanban board. Signals (patents, trials, papers) appear in the tray below.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                        {gridCards.map((card) => {
+                          const isTto = isTtoSource(card.sourceName);
+                          const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
+                          return (
+                            <PipelineGridCard
+                              key={card.id}
+                              asset={card}
+                              signals={deck?.signals ?? []}
+                              onDelete={(id) => deleteMutation.mutate(id)}
+                              onClick={isTto ? () => setActiveAssetId(card.id) : undefined}
+                            />
+                          );
+                        })}
                       </div>
-                      <Link href="/discover"><Button size="sm" variant="outline" className="gap-1.5 border-card-border">Go to Scout <ArrowRight className="w-3 h-3" /></Button></Link>
-                    </div>
-                  ) : (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-3">Drag TTO assets between columns to update their CRM stage. Drag signals onto TTO cards to attach.</p>
+                    )
+                  )}
+
+                  {/* Board view */}
+                  {viewMode === "board" && (
+                    filteredDecks.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-24 gap-4 text-center">
+                        <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                          <FlaskConical className="w-5 h-5 text-emerald-500" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">No TTO assets in this pipeline</p>
+                          <p className="text-xs text-muted-foreground mt-1">The board shows TTO assets only. Switch to Grid to see all assets.</p>
+                        </div>
+                        <button onClick={() => setViewMode("grid")} className="text-xs text-primary hover:text-primary/80 transition-colors">
+                          ← Switch to Grid view
+                        </button>
+                      </div>
+                    ) : (
                       <div className="overflow-x-auto">
-                        <div className="flex gap-4 min-w-max pb-4">
+                        <div className="flex gap-3 min-w-max pb-4">
                           {BOARD_COLUMNS.map((col) => {
-                            const colDecks = filteredDeckAssets.filter((d) => (d.status ?? null) === col.key);
+                            const colDecks = filteredDecks.filter((d) => (d.status ?? null) === col.key);
                             return (
-                              <KanbanStatusColumn
+                              <KanbanColumn
                                 key={col.key ?? "unassigned"}
                                 col={col}
                                 decks={colDecks}
                                 onDelete={(id) => deleteMutation.mutate(id)}
-                                onDetachSignal={handleDetachSignal}
+                                onCardClick={(asset) => setActiveAssetId(asset.id)}
                               />
                             );
                           })}
                         </div>
                       </div>
-                    </div>
-                  )
-                )}
-
-                {/* ── Stage view: no TTO assets callout ─────────────────── */}
-                {viewMode === "stage" && filteredDeckAssets.length === 0 && ttoAssets.length === 0 && (
-                  <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 text-sm">
-                    <FlaskConical className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium text-foreground">No TTO assets saved yet</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">Save a TTO asset from Scout to see stage columns and use drag-and-drop stacking. Signals below can be linked to TTO assets once saved.</p>
-                    </div>
-                    <Link href="/discover" className="shrink-0 ml-auto"><Button size="sm" variant="outline" className="gap-1 text-xs border-card-border h-7">Scout <ArrowRight className="w-3 h-3" /></Button></Link>
-                  </div>
-                )}
-
-                {/* ── Stage view (organized by clinical dev stage) ───────── */}
-                {viewMode === "stage" && filteredDeckAssets.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <FlaskConical className="w-4 h-4 text-emerald-500" />
-                      <h3 className="text-sm font-semibold text-foreground">TTO Assets</h3>
-                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{filteredDeckAssets.length}</span>
-                      <span className="text-[10px] text-muted-foreground ml-1">— Drag signals onto a card to attach. Drag the ⣿ handle to reorder.</span>
-                    </div>
-                    <div className="overflow-x-auto">
-                      <div className="flex gap-4 min-w-max pb-4">
-                        {STAGES.map((stage) => {
-                          const stageDecks = filteredDeckAssets.filter((d) => (d.developmentStage?.toLowerCase().trim() || "unknown") === stage.key);
-                          return (
-                            <div key={stage.key} className={`flex flex-col w-72 rounded-lg border ${stage.colorClass} shrink-0`} data-testid={`pipeline-stage-col-${stage.key}`}>
-                              <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
-                                <div className="flex items-center gap-2">
-                                  <div className={`w-2 h-2 rounded-full ${stage.dotClass}`} />
-                                  <span className="text-sm font-semibold text-foreground">{stage.label}</span>
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{stageDecks.length}</span>
-                                  {stage.key !== "unknown" && stageDecks.length > 0 && (
-                                    <button
-                                      onClick={() => handleBrief(stage.key)}
-                                      disabled={briefLoading === stage.key}
-                                      className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
-                                      data-testid={`button-pipeline-brief-${stage.key.replace(" ", "-")}`}
-                                      title="Generate pipeline brief"
-                                    >
-                                      {briefLoading === stage.key ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <FileText className="w-2.5 h-2.5" />}
-                                      Brief
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                              <ScrollArea className="flex-1 max-h-[calc(100vh-20rem)]">
-                                <div className="p-2.5 flex flex-col gap-3">
-                                  {stageDecks.length === 0 ? (
-                                    <div className="py-8 text-center"><p className="text-xs text-muted-foreground">No assets</p></div>
-                                  ) : (
-                                    stageDecks.map((deck) => (
-                                      <PipelineCard
-                                        key={deck.id}
-                                        asset={deck}
-                                        signals={deck.signals}
-                                        onDelete={(id) => deleteMutation.mutate(id)}
-                                        onDetachSignal={handleDetachSignal}
-                                      />
-                                    ))
-                                  )}
-                                </div>
-                              </ScrollArea>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Unlinked signals tray ─────────────────────────────── */}
-                {filteredUnlinkedSignals.length > 0 && (
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <Unlink className="w-4 h-4 text-muted-foreground" />
-                      <h3 className="text-sm font-semibold text-foreground">Unlinked Signals</h3>
-                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">{filteredUnlinkedSignals.length}</span>
-                      <span className="text-[10px] text-muted-foreground ml-1">— Grab the ⣿ handle and drag onto a TTO asset card to attach as supporting evidence</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-                      {filteredUnlinkedSignals.map((sig) => (
-                        <UnlinkedSignalCard
-                          key={sig.id}
-                          signal={sig}
-                          onDelete={(id) => deleteMutation.mutate(id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
+                    )
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Drag overlay — ghost card while dragging */}
+            {/* Drag overlay */}
             <DragOverlay>
               {activeDragAsset && (
-                <div className="opacity-80 rotate-1 scale-[0.98]">
+                <div className="opacity-90 rotate-1 scale-[0.97]">
                   <div
-                    className="relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-[12px] px-3 py-2.5 w-64"
-                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.25)", background: getSourceConfig(activeDragAsset.sourceName).accent + "15" }}
+                    className="relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-xl px-3 py-2.5 w-52"
+                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.25)" }}
                   >
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-[12px]" style={{ background: getSourceConfig(activeDragAsset.sourceName).accent }} />
-                    <p className={`text-[9px] font-bold uppercase tracking-wide mb-1 ${getSourceConfig(activeDragAsset.sourceName).textClass}`}>
-                      {getSourceConfig(activeDragAsset.sourceName).label}
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px] rounded-l-xl" style={{ background: SCOUT_CARD_TINTS[getSourceCategory(activeDragAsset.sourceName)].stripColor }} />
+                    <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: SCOUT_CARD_TINTS[getSourceCategory(activeDragAsset.sourceName)].stripColor }}>
+                      {getSourceLabel(activeDragAsset.sourceName)}
                     </p>
-                    <p className="text-[12px] font-semibold text-foreground truncate">{activeDragAsset.assetName !== "unknown" ? activeDragAsset.assetName : activeDragAsset.sourceTitle}</p>
+                    <p className="text-[12px] font-semibold text-foreground truncate">
+                      {activeDragAsset.assetName !== "unknown" ? activeDragAsset.assetName : activeDragAsset.sourceTitle}
+                    </p>
                   </div>
                 </div>
               )}
@@ -1060,61 +1147,14 @@ export default function Pipeline() {
         )}
       </main>
 
-      {/* ── Brief dialog ──────────────────────────────────────────────────── */}
-      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); setShareUrl(null); setShareLinkCopied(false); setShowShareForm(false); setShareBriefPassword(""); setShareBriefPasswordVisible(false); } }}>
-        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col overflow-hidden" data-testid="dialog-pipeline-brief">
-          <DialogHeader>
-            <div className="flex items-center justify-between gap-3">
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <FileText className="w-4 h-4 text-primary" />
-                {briefModal?.label} Pipeline Brief
-              </DialogTitle>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-muted-foreground">{briefModal?.assetCount} asset{briefModal?.assetCount !== 1 ? "s" : ""}</span>
-                <Button variant="outline" size="sm" onClick={handleCopy} className="h-7 text-xs gap-1.5 border-card-border" data-testid="button-brief-copy">
-                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  {copied ? "Copied!" : "Copy"}
-                </Button>
-                <Button variant="outline" size="sm" onClick={handlePrint} className="h-7 text-xs gap-1.5 border-card-border" data-testid="button-brief-print">
-                  <Printer className="w-3 h-3" />Print
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => { setShowShareForm(true); setShareUrl(null); setShareBriefPassword(""); setShareBriefPasswordVisible(false); }} disabled={shareBriefMutation.isPending} className="h-7 text-xs gap-1.5 border-card-border" data-testid="button-brief-share">
-                  <Share2 className="w-3 h-3" />Share
-                </Button>
-              </div>
-            </div>
-            {showShareForm && !shareUrl && (
-              <div className="flex flex-col gap-2 mt-2" data-testid="share-form-row">
-                <div className="flex gap-2 items-center">
-                  <Input type={shareBriefPasswordVisible ? "text" : "password"} placeholder="Password (optional)" value={shareBriefPassword} onChange={(e) => setShareBriefPassword(e.target.value)} className="h-7 text-xs" data-testid="input-brief-share-password" />
-                  <Button size="sm" variant="ghost" className="h-7 px-2 shrink-0" onClick={() => setShareBriefPasswordVisible(v => !v)} data-testid="button-brief-toggle-password">
-                    {shareBriefPasswordVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
-                  </Button>
-                  <Button size="sm" onClick={() => shareBriefMutation.mutate()} disabled={shareBriefMutation.isPending} className="h-7 text-xs gap-1.5 shrink-0" data-testid="button-create-brief-share-link">
-                    {shareBriefMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Share2 className="w-3 h-3" />}
-                    {shareBriefMutation.isPending ? "..." : "Create Link"}
-                  </Button>
-                </div>
-              </div>
-            )}
-            {shareUrl && (
-              <div className="flex gap-2 mt-2" data-testid="share-url-row">
-                {shareBriefPassword && <Lock className="w-3 h-3 text-amber-500 shrink-0 self-center" />}
-                <Input readOnly value={shareUrl} className="h-7 text-xs font-mono" onClick={(e) => (e.target as HTMLInputElement).select()} data-testid="input-brief-share-url" />
-                <Button size="sm" variant="outline" className="h-7 shrink-0 gap-1.5 text-xs border-card-border" onClick={() => { navigator.clipboard.writeText(shareUrl).then(() => { setShareLinkCopied(true); setTimeout(() => setShareLinkCopied(false), 2000); }); }} data-testid="button-copy-brief-share-url">
-                  {shareLinkCopied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  {shareLinkCopied ? "Copied!" : "Copy"}
-                </Button>
-              </div>
-            )}
-          </DialogHeader>
-          <ScrollArea className="flex-1 min-h-0 mt-2">
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed px-1 pb-4" data-testid="text-brief-content">
-              {briefModal?.brief}
-            </pre>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+      {/* Asset drawer */}
+      <AssetDrawer
+        asset={activeAsset}
+        signals={activeSignals}
+        onClose={() => setActiveAssetId(null)}
+        onDetachSignal={handleDetachSignal}
+        onDelete={(id) => deleteMutation.mutate(id)}
+      />
     </div>
   );
 }
