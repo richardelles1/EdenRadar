@@ -1,4 +1,4 @@
-import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink } from "lucide-react";
+import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download } from "lucide-react";
 import { EdenAvatar, MarkdownContent, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import type { ChatAsset, ChatMessage } from "@/hooks/useEdenChat";
@@ -31,6 +31,39 @@ function modalityBadgeClass(m?: string): string {
   return "bg-muted text-muted-foreground border-border";
 }
 
+function modalityLeftBorder(m?: string): string {
+  if (!m) return "border-l-border/60";
+  const lm = m.toLowerCase();
+  if (lm.includes("antibody") || lm.includes("bispecific")) return "border-l-indigo-500/50";
+  if (lm.includes("small") || lm.includes("molecule")) return "border-l-rose-500/50";
+  if (lm.includes("gene") || lm.includes("cell") || lm.includes("rna") || lm.includes("mrna")) return "border-l-pink-500/50";
+  if (lm.includes("platform") || lm.includes("diagnostic") || lm.includes("device")) return "border-l-teal-500/50";
+  return "border-l-emerald-500/40";
+}
+
+function exportCitationsAsCsv(assets: ChatAsset[]): void {
+  const headers = ["Asset Name", "Institution", "Modality", "Development Stage", "IP Type", "Source URL", "Relevance Score"];
+  const rows = assets.map((a) => [
+    a.assetName,
+    a.institution,
+    a.modality || "",
+    a.developmentStage || "",
+    a.ipType || "",
+    a.sourceUrl || "",
+    a.similarity.toFixed(3),
+  ]);
+  const csv = [headers, ...rows]
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+    .join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = "eden-assets.csv";
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
 function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
   asset: ChatAsset;
   index: number;
@@ -38,6 +71,7 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
   compact?: boolean;
 }) {
   const { label, cls } = relevanceLabel(asset.similarity);
+  const leftBorder = modalityLeftBorder(asset.modality);
   const isSaved = savedIngestedIds.has(asset.id);
   const payload: PipelinePickerPayload = {
     asset_name: asset.assetName,
@@ -55,17 +89,19 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
   };
   return (
     <div
-      className="rounded-xl border bg-card p-3 flex flex-col gap-1.5 hover:border-emerald-500/30 transition-all hover:shadow-sm"
+      className={`rounded-xl border bg-card flex flex-col gap-1.5 hover:shadow-md transition-all border-l-[3px] ${leftBorder} hover:border-emerald-500/30 ${compact ? "p-3" : "p-3.5"}`}
       data-testid={`citation-card-${index}`}
     >
+      {/* Title + relevance badge */}
       <div className="flex items-start justify-between gap-2">
-        <p className={`font-semibold text-foreground leading-snug line-clamp-2 flex-1 ${compact ? "text-[11px]" : "text-xs"}`}>{asset.assetName}</p>
-        <div className="flex items-center gap-1 shrink-0">
-          <PipelinePicker payload={payload} alreadySaved={isSaved} />
-          <span className={`font-medium border rounded px-1.5 py-0.5 ${cls} ${compact ? "text-[9px]" : "text-[10px]"}`}>{label}</span>
-        </div>
+        <p className={`font-bold text-foreground leading-snug line-clamp-2 flex-1 ${compact ? "text-[11px]" : "text-xs"}`}>{asset.assetName}</p>
+        <span className={`font-medium border rounded px-1.5 py-0.5 shrink-0 ${cls} ${compact ? "text-[9px]" : "text-[10px]"}`}>{label}</span>
       </div>
-      <p className={`text-muted-foreground truncate ${compact ? "text-[10px]" : "text-[11px]"}`}>{asset.institution}</p>
+
+      {/* Institution */}
+      <p className={`text-muted-foreground leading-none ${compact ? "text-[10px]" : "text-[11px]"}`}>{asset.institution}</p>
+
+      {/* Modality / stage / IP badges */}
       <div className="flex flex-wrap gap-1 mt-0.5">
         {asset.modality && asset.modality !== "unknown" && (
           <span className={`font-medium border rounded px-1.5 py-0.5 ${modalityBadgeClass(asset.modality)} ${compact ? "text-[9px]" : "text-[10px]"}`}>
@@ -83,18 +119,23 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
           </span>
         )}
       </div>
-      {asset.sourceUrl && (
-        <a
-          href={asset.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={`text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 mt-0.5 ${compact ? "text-[10px]" : "text-[11px]"}`}
-          data-testid={`citation-link-${index}`}
-        >
-          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-          View source
-        </a>
-      )}
+
+      {/* Actions row */}
+      <div className="flex items-center justify-between mt-0.5 pt-1.5 border-t border-border/50">
+        <PipelinePicker payload={payload} alreadySaved={isSaved} />
+        {asset.sourceUrl && (
+          <a
+            href={asset.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"}`}
+            data-testid={`citation-link-${index}`}
+          >
+            <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+            View source
+          </a>
+        )}
+      </div>
     </div>
   );
 }
@@ -227,14 +268,27 @@ export function EdenChatThread({
                     </button>
                   ) : (
                     <>
-                      <button
-                        className={`flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground hover:text-foreground transition-colors mb-1.5 group`}
-                        onClick={() => onToggleCitations(i, false)}
-                        data-testid={`button-hide-citations-${i}`}
-                      >
-                        <ChevronDown className="h-3 w-3 shrink-0 rotate-180" />
-                        Hide assets
-                      </button>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <button
+                          className={`flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground hover:text-foreground transition-colors group`}
+                          onClick={() => onToggleCitations(i, false)}
+                          data-testid={`button-hide-citations-${i}`}
+                        >
+                          <ChevronDown className="h-3 w-3 shrink-0 rotate-180" />
+                          Hide assets
+                        </button>
+                        {!compact && msg.assets.length > 0 && (
+                          <button
+                            className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
+                            onClick={() => exportCitationsAsCsv(sortAssetsByMention(msg.assets!, msg.content))}
+                            title="Export assets as CSV"
+                            data-testid={`button-export-csv-${i}`}
+                          >
+                            <Download className="h-3 w-3 shrink-0" />
+                            Export CSV
+                          </button>
+                        )}
+                      </div>
                       <div className={gridCols}>
                         {sortAssetsByMention(msg.assets, msg.content).map((a, ci) => (
                           <div

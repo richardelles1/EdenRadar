@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Dna, FlaskConical, Brain, Shield, TrendingUp, Building2 } from "lucide-react";
+import { Dna, FlaskConical, Brain, Shield, TrendingUp, Building2, Microscope, Pill, Zap, Globe, BarChart2, Layers } from "lucide-react";
 
 export function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; size?: number }) {
   const r = size / 2;
@@ -233,6 +233,7 @@ export const PROMPT_CARDS = [
     q: "Which CRISPR assets from top research universities are in preclinical stage?",
     color: "from-emerald-500/10 to-emerald-600/5 border-emerald-500/20 hover:border-emerald-500/40",
     iconColor: "text-emerald-500",
+    tags: ["gene therapy", "crispr"],
   },
   {
     icon: TrendingUp,
@@ -240,6 +241,7 @@ export const PROMPT_CARDS = [
     q: "How many oncology assets does Stanford TTO have?",
     color: "from-violet-500/10 to-violet-600/5 border-violet-500/20 hover:border-violet-500/40",
     iconColor: "text-violet-500",
+    tags: ["oncology", "cancer"],
   },
   {
     icon: FlaskConical,
@@ -247,6 +249,7 @@ export const PROMPT_CARDS = [
     q: "Who is doing the most work in gene therapy right now?",
     color: "from-blue-500/10 to-blue-600/5 border-blue-500/20 hover:border-blue-500/40",
     iconColor: "text-blue-500",
+    tags: ["gene therapy", "aav", "viral vector"],
   },
   {
     icon: Shield,
@@ -254,6 +257,7 @@ export const PROMPT_CARDS = [
     q: "Recommend assets for a company focused on autoimmune indications",
     color: "from-amber-500/10 to-amber-600/5 border-amber-500/20 hover:border-amber-500/40",
     iconColor: "text-amber-500",
+    tags: ["autoimmune", "immunology", "inflammation"],
   },
   {
     icon: Brain,
@@ -261,6 +265,7 @@ export const PROMPT_CARDS = [
     q: "Find CNS platform technologies with clear mechanisms of action available for licensing",
     color: "from-rose-500/10 to-rose-600/5 border-rose-500/20 hover:border-rose-500/40",
     iconColor: "text-rose-500",
+    tags: ["cns", "neurology", "brain"],
   },
   {
     icon: Building2,
@@ -268,8 +273,80 @@ export const PROMPT_CARDS = [
     q: "What therapeutics are coming out of MIT and Harvard TTO offices?",
     color: "from-teal-500/10 to-teal-600/5 border-teal-500/20 hover:border-teal-500/40",
     iconColor: "text-teal-500",
+    tags: [],
+  },
+  {
+    icon: Microscope,
+    label: "Antibody programs Phase 2+",
+    q: "Show me antibody or bispecific programs that have reached Phase 2 or later",
+    color: "from-indigo-500/10 to-indigo-600/5 border-indigo-500/20 hover:border-indigo-500/40",
+    iconColor: "text-indigo-500",
+    tags: ["antibody", "bispecific", "biologics", "mab"],
+  },
+  {
+    icon: Pill,
+    label: "Small molecule metabolic",
+    q: "Find small molecule assets targeting metabolic diseases like obesity or diabetes",
+    color: "from-orange-500/10 to-orange-600/5 border-orange-500/20 hover:border-orange-500/40",
+    iconColor: "text-orange-500",
+    tags: ["small molecule", "metabolic", "diabetes", "obesity"],
+  },
+  {
+    icon: Zap,
+    label: "mRNA & RNA therapeutics",
+    q: "What mRNA or RNA therapeutic platforms are available for licensing?",
+    color: "from-pink-500/10 to-pink-600/5 border-pink-500/20 hover:border-pink-500/40",
+    iconColor: "text-pink-500",
+    tags: ["mrna", "rna", "nucleotide", "oligonucleotide"],
+  },
+  {
+    icon: Globe,
+    label: "Rare disease assets",
+    q: "Find orphan drug or rare disease assets with strong unmet medical need",
+    color: "from-cyan-500/10 to-cyan-600/5 border-cyan-500/20 hover:border-cyan-500/40",
+    iconColor: "text-cyan-500",
+    tags: ["rare disease", "orphan"],
+  },
+  {
+    icon: BarChart2,
+    label: "Compare oncology TTOs",
+    q: "Compare the oncology pipelines at Stanford, MIT, and Johns Hopkins",
+    color: "from-purple-500/10 to-purple-600/5 border-purple-500/20 hover:border-purple-500/40",
+    iconColor: "text-purple-500",
+    tags: ["oncology", "cancer"],
+  },
+  {
+    icon: Layers,
+    label: "Platform technologies",
+    q: "Find platform technologies applicable across multiple therapeutic areas",
+    color: "from-lime-500/10 to-lime-600/5 border-lime-500/20 hover:border-lime-500/40",
+    iconColor: "text-lime-600",
+    tags: ["platform"],
   },
 ];
+
+// ── Personalized card selection based on user profile ────────────────────
+export function getPersonalizedCards(
+  profile: { therapeuticAreas?: string[]; modalities?: string[] },
+  count = 6
+): typeof PROMPT_CARDS {
+  const profileTerms = [
+    ...(profile.therapeuticAreas ?? []),
+    ...(profile.modalities ?? []),
+  ].map((t) => t.toLowerCase());
+
+  if (profileTerms.length === 0) return PROMPT_CARDS.slice(0, count);
+
+  const scored = PROMPT_CARDS.map((card) => ({
+    card,
+    score: card.tags.filter((tag) =>
+      profileTerms.some((term) => term.includes(tag) || tag.includes(term))
+    ).length,
+  }));
+
+  scored.sort((a, b) => b.score - a.score || PROMPT_CARDS.indexOf(a.card) - PROMPT_CARDS.indexOf(b.card));
+  return scored.slice(0, count).map((s) => s.card);
+}
 
 // ── Shared follow-up pill logic ───────────────────────────────────────────
 export const FOLLOW_UP_RULES: Array<{ test: (text: string) => boolean; pills: string[] }> = [

@@ -33,6 +33,8 @@ export type EdenSessionSummary = {
   updatedAt: string;
 };
 
+export type StreamingStage = "idle" | "searching" | "ranking" | "generating";
+
 type SseContextPayload = { sessionId?: string; assets: ChatAsset[] };
 type SseTokenPayload = { text: string };
 type SseDonePayload = { sessionId?: string };
@@ -58,6 +60,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
+  const [streamingStage, setStreamingStage] = useState<StreamingStage>("idle");
   const [sessionId, setSessionId] = useState("");
 
   async function send(overrideMsg?: string): Promise<void> {
@@ -71,6 +74,9 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
       { role: "assistant", content: "", assets: [], isStreaming: true },
     ]);
     setStreaming(true);
+    setStreamingStage("searching");
+
+    let gotFirstToken = false;
 
     try {
       const response = await fetch("/api/eden/chat", {
@@ -113,6 +119,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
           if (dispatched.type === "context") {
             const d = dispatched.data;
             if (d.sessionId) setSessionId(d.sessionId);
+            setStreamingStage("ranking");
             setMessages((prev) => {
               const upd = [...prev];
               const last = upd[upd.length - 1];
@@ -121,6 +128,10 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
             });
           } else if (dispatched.type === "token") {
             const d = dispatched.data;
+            if (!gotFirstToken) {
+              gotFirstToken = true;
+              setStreamingStage("generating");
+            }
             setMessages((prev) => {
               const upd = [...prev];
               const last = upd[upd.length - 1];
@@ -163,6 +174,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
       });
     } finally {
       setStreaming(false);
+      setStreamingStage("idle");
     }
   }
 
@@ -182,5 +194,5 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
     setSessionId(session.sessionId);
   }
 
-  return { messages, setMessages, input, setInput, streaming, sessionId, send, clearChat, loadSession };
+  return { messages, setMessages, input, setInput, streaming, streamingStage, sessionId, send, clearChat, loadSession };
 }
