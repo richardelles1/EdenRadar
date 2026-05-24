@@ -89,10 +89,13 @@ export function normalizeSourceUrl(url: string | null | undefined): string | nul
   try {
     const parsed = new URL(url);
     parsed.search = "";
-    parsed.hash = "";
+    // Hash fragments are preserved — scrapers like Temple use #refId anchors to give
+    // each asset a unique URL on a shared listing page. Stripping them collapses all
+    // assets to the same URL, causing 54/55 inserts to be silently dropped by the
+    // source_url unique index.
     return parsed.toString();
   } catch {
-    return url.replace(/[?#].*$/, "");
+    return url.replace(/[?].*$/, "");
   }
 }
 
