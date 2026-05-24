@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
-  FileText, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Send, Link2, X,
+  FileText, ChevronLeft, ChevronRight, Send, Link2, X,
   LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
@@ -58,15 +58,6 @@ const STAGE_ABBREV: Record<string, string> = {
   discovery: "DI", preclinical: "PC", "phase 1": "P1", "phase 2": "P2", "phase 3": "P3", approved: "AP",
 };
 
-const MODALITY_COLORS: Record<string, string> = {
-  "small molecule": "bg-rose-500/15 text-rose-400 border-rose-500/30",
-  "antibody": "bg-indigo-500/15 text-indigo-400 border-indigo-500/30",
-  "car-t": "bg-fuchsia-500/15 text-fuchsia-400 border-fuchsia-500/30",
-  "gene therapy": "bg-teal-500/15 text-teal-400 border-teal-500/30",
-  "mrna therapy": "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  "peptide": "bg-pink-500/15 text-pink-400 border-pink-500/30",
-  "bispecific antibody": "bg-purple-500/15 text-purple-400 border-purple-500/30",
-};
 
 // ── Source helpers ─────────────────────────────────────────────────────────────
 
@@ -100,11 +91,6 @@ function toTitleCase(str: string): string {
   return str.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function getBadgeClass(map: Record<string, string>, value: string) {
-  if (!value) return "bg-muted text-muted-foreground border-border";
-  return map[value.toLowerCase().trim()] ?? "bg-muted text-muted-foreground border-border";
-}
-
 const PILL_MUTED = "text-zinc-500 dark:text-zinc-400";
 function stagePillClass(stage: string): string {
   const s = stage.toLowerCase();
@@ -112,7 +98,7 @@ function stagePillClass(stage: string): string {
     return `bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 ${PILL_MUTED}`;
   if (s.includes("phase 2") || s.includes("phase ii"))
     return `bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 ${PILL_MUTED}`;
-  if (s.includes("phase 1") || s.includes("phase i"))
+  if (s.includes("phase 1") || (s.includes("phase i") && !s.includes("phase ii") && !s.includes("phase iii")))
     return `bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 ${PILL_MUTED}`;
   return `bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 ${PILL_MUTED}`;
 }
@@ -196,6 +182,10 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [sigIdx, setSigIdx] = useState(0);
+
+  useEffect(() => {
+    setSigIdx((i) => Math.min(i, Math.max(0, signals.length - 1)));
+  }, [signals.length]);
 
   const isTto = isTtoSource(asset.sourceName);
   const cat = getSourceCategory(asset.sourceName);
@@ -394,7 +384,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
                         {getSourceLabel(curSignal.sourceName)}
                       </span>
                       <span className="text-[10px] text-foreground truncate">
-                        {curSignal.assetName !== "unknown" ? curSignal.assetName : curSignal.sourceTitle}
+                        {curSignal.assetName !== "unknown" ? curSignal.assetName : (curSignal.sourceTitle ?? "Untitled")}
                       </span>
                     </div>
                     <span className="text-[9px] text-muted-foreground tabular-nums shrink-0">{sigIdx + 1}/{signals.length}</span>
