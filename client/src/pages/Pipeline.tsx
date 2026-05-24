@@ -10,8 +10,8 @@ import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
   FileText, Copy, Check, Printer, MessageSquare, ChevronDown, ChevronUp,
-  Send, Share2, Eye, EyeOff, Lock, ScrollText, Activity, Link2, X,
-  LayoutDashboard, AlignJustify, Unlink, ChevronRight, GripVertical,
+  Send, Share2, Eye, EyeOff, Lock, Link2, X,
+  LayoutDashboard, AlignJustify, Unlink, GripVertical,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { SavedAsset } from "@shared/schema";
@@ -26,7 +26,7 @@ import { motion, AnimatePresence } from "framer-motion";
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type AssetNote = { id: number; authorName: string; content: string; createdAt: string; isSystemEvent: boolean };
-type NotesResponse = { notes: AssetNote[]; total: number };
+type NotesResponse = { notes: AssetNote[]; limit: number; offset: number };
 type SavedAssetsResponse = {
   assets: (SavedAsset & { noteCount?: number; lastNoteAt?: string | null })[];
 };
@@ -292,6 +292,7 @@ function PipelineCard({
           onMouseUp={() => setPressed(false)}
           onClick={() => { if (asset.ingestedAssetId) navigate(`/asset/${asset.ingestedAssetId}`); }}
           {...dragAttrs}
+          {...dragListeners}
         >
           {/* Bloom */}
           <div className="absolute pointer-events-none" style={{ width: "56px", height: "56px", borderRadius: "50%", background: bloomColor, top: "-28px", left: "-28px", transform: hovered ? "scale(26)" : "scale(1)", opacity: hovered ? 0.13 : 0, transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease", zIndex: 1 }} />
@@ -440,10 +441,10 @@ function PipelineCard({
             return (
               <div
                 key={sig.id}
-                className={`${cfg.sliverBg} rounded-b-md opacity-${70 - idx * 15}`}
+                className={`${cfg.sliverBg} rounded-b-md`}
                 style={{
                   height: "5px",
-                  marginTop: idx === 0 ? "1px" : "1px",
+                  marginTop: "1px",
                   marginLeft: `${(idx + 1) * 4}px`,
                   marginRight: `${(idx + 1) * 4}px`,
                   opacity: 0.7 - idx * 0.15,
@@ -829,8 +830,15 @@ export default function Pipeline() {
           </div>
         </div>
 
+        {/* Loading state */}
+        {isLoading && (
+          <div className="flex-1 flex items-center justify-center py-24">
+            <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+
         {/* Empty state */}
-        {totalAssets === 0 && !isLoading ? (
+        {!isLoading && totalAssets === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-24 px-6 text-center gap-5">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Beaker className="w-8 h-8 text-primary" />
@@ -845,7 +853,7 @@ export default function Pipeline() {
               </Button>
             </Link>
           </div>
-        ) : (
+        ) : !isLoading ? (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex-1">
               <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-8">
@@ -976,7 +984,7 @@ export default function Pipeline() {
               )}
             </DragOverlay>
           </DndContext>
-        )}
+        ) : null}
       </main>
 
       {/* ── Brief dialog ──────────────────────────────────────────────────── */}
