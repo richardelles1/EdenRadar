@@ -683,77 +683,81 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Overview: metadata + signals + action links ── */}
-          <TabsContent value="overview" className="flex-1 overflow-y-auto px-5 py-5 m-0 flex flex-col gap-5">
+          {/* ── Overview: metadata + signals (scrollable) + action links (pinned) ── */}
+          <TabsContent value="overview" className="flex-1 flex flex-col min-h-0 m-0">
 
-            {/* Metadata grid */}
-            <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
-              {asset.target && asset.target !== "unknown" && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Target</p>
-                  <p className="text-foreground font-medium">{asset.target}</p>
-                </div>
-              )}
-              {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disease</p>
-                  <p className="text-foreground font-medium">{asset.diseaseIndication}</p>
-                </div>
-              )}
-              {asset.modality && asset.modality !== "unknown" && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Modality</p>
-                  <p className="text-foreground font-medium">{asset.modality}</p>
-                </div>
-              )}
-              {asset.developmentStage && asset.developmentStage !== "unknown" && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Stage</p>
-                  <p className="text-foreground font-medium">{asset.developmentStage}</p>
-                </div>
-              )}
-              {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
-                <div className="col-span-2">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Institution</p>
-                  <p className="text-foreground font-medium">{toTitleCase(asset.sourceJournal)}</p>
-                </div>
-              )}
-              {asset.publicationYear && (
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Year</p>
-                  <p className="text-foreground font-medium">{asset.publicationYear}</p>
-                </div>
-              )}
-            </div>
+            {/* Scrollable content */}
+            <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
 
-            {/* Summary */}
-            {asset.summary && (
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
-                <p className="text-sm text-foreground leading-relaxed">{asset.summary}</p>
+              {/* Metadata grid */}
+              <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                {asset.target && asset.target !== "unknown" && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Target</p>
+                    <p className="text-foreground font-medium">{asset.target}</p>
+                  </div>
+                )}
+                {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disease</p>
+                    <p className="text-foreground font-medium">{asset.diseaseIndication}</p>
+                  </div>
+                )}
+                {asset.modality && asset.modality !== "unknown" && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Modality</p>
+                    <p className="text-foreground font-medium">{asset.modality}</p>
+                  </div>
+                )}
+                {asset.developmentStage && asset.developmentStage !== "unknown" && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Stage</p>
+                    <p className="text-foreground font-medium">{asset.developmentStage}</p>
+                  </div>
+                )}
+                {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
+                  <div className="col-span-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Institution</p>
+                    <p className="text-foreground font-medium">{toTitleCase(asset.sourceJournal)}</p>
+                  </div>
+                )}
+                {asset.publicationYear && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Year</p>
+                    <p className="text-foreground font-medium">{asset.publicationYear}</p>
+                  </div>
+                )}
               </div>
-            )}
 
-            {/* Supporting signals */}
-            <div>
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
-              </p>
-              {signals.length === 0 ? (
-                <p className="text-xs text-muted-foreground italic leading-relaxed">
-                  No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
-                </p>
-              ) : (
-                <div className="flex flex-col gap-2">
-                  {signals.map((sig) => (
-                    <SignalMiniCard key={sig.id} signal={sig} draggable onDetach={() => onDetachSignal(sig.id)} />
-                  ))}
+              {/* Summary */}
+              {asset.summary && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
+                  <p className="text-sm text-foreground leading-relaxed">{asset.summary}</p>
                 </div>
               )}
+
+              {/* Supporting signals */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                  Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
+                </p>
+                {signals.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic leading-relaxed">
+                    No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
+                  </p>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {signals.map((sig) => (
+                      <SignalMiniCard key={sig.id} signal={sig} draggable onDetach={() => onDetachSignal(sig.id)} />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Action links */}
-            <div className="flex flex-col gap-2.5 pt-1 border-t border-border">
+            {/* Action links — pinned to bottom, always visible */}
+            <div className="shrink-0 border-t border-border px-5 py-4 flex flex-col gap-2.5">
               {asset.sourceUrl && (
                 <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors">
                   <ExternalLink className="w-3.5 h-3.5" /> View Source
@@ -766,7 +770,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
               )}
               <button
                 onClick={() => { onDelete(asset.id); onClose(); }}
-                className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors mt-1"
+                className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors"
               >
                 <Trash2 className="w-3.5 h-3.5" /> Remove from Pipeline
               </button>
