@@ -2418,6 +2418,8 @@ export async function registerRoutes(
         });
       }
 
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+
       const rawPl = req.query.pipelineListId;
       let pipelineListId: number | null | undefined = undefined;
       if (rawPl === "null") pipelineListId = null;
@@ -2695,8 +2697,19 @@ export async function registerRoutes(
       const before = await storage.getSavedAsset(id);
       if (!before) return res.status(404).json({ error: "Asset not found" });
       if (!await canAccessSavedAsset(before, userId ?? null)) return res.status(403).json({ error: "Access denied" });
-      // Prevent circular references and self-parenting
+      // Prevent self-parenting and circular chains (A→B→A)
       if (parent_saved_asset_id === id) return res.status(400).json({ error: "Asset cannot be its own parent" });
+      if (parent_saved_asset_id !== null) {
+        let cursor: number | null = parent_saved_asset_id;
+        const visited = new Set<number>();
+        while (cursor !== null) {
+          if (cursor === id) return res.status(400).json({ error: "Circular parent reference detected" });
+          if (visited.has(cursor)) break;
+          visited.add(cursor);
+          const node = await storage.getSavedAsset(cursor);
+          cursor = node?.parentSavedAssetId ?? null;
+        }
+      }
       const asset = await storage.updateSavedAssetParent(id, parent_saved_asset_id);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       res.json({ asset });
@@ -16056,6 +16069,79 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       tier: key.tier,
       scopes: key.scopes,
     });
+  });
+
+  // Step 2: asset search + detail.
+
+  const v1AssetSearchSchema = z.object({
+    q: z.string().min(1).max(300),
+    limit: z.coerce.number().int().min(1).max(50).default(20),
+    offset: z.coerce.number().int().min(0).default(0),
+    modality: z.string().optional(),
+    stage: z.string().optional(),
+    indication: z.string().optional(),
+    institution: z.string().optional(),
+  });
+
+  function formatV1Asset(a: import("./storage").RetrievedAsset) {
+    return {
+      id: a.id,
+      name: a.assetName,
+      target: a.target ?? null,
+      modality: a.modality ?? null,
+      indication: a.indication ?? null,
+      stage: a.developmentStage,
+      institution: a.institution,
+      summary: a.summary ?? null,
+      mechanism_of_action: a.mechanismOfAction ?? null,
+      ip_type: a.ipType ?? null,
+      licensing_readiness: a.licensingReadiness ?? null,
+      source_url: a.sourceUrl ?? null,
+      completeness_score: a.completenessScore ?? null,
+      last_seen_at: a.lastSeenAt ?? null,
+    };
+  }
+
+  app.get("/v1/assets/search", requireApiKey("read:assets"), async (req, res) => {
+    const parsed = v1AssetSearchSchema.safeParse(req.query);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid parameters", details: parsed.error.flatten().fieldErrors });
+    }
+    const { q, limit, offset, modality, stage, indication, institution } = parsed.data;
+    try {
+      const results = await storage.keywordSearchIngestedAssets(q, limit + offset + 1, {
+        modality, stage, indication, institution,
+      });
+      const page = results.slice(offset, offset + limit);
+      return res.json({
+        data: page.map(formatV1Asset),
+        query: q,
+        total_returned: page.length,
+        limit,
+        offset,
+        has_more: results.length > offset + limit,
+      });
+    } catch (err) {
+      console.error("[v1/assets/search]", err);
+      return res.status(500).json({ error: "Search failed", code: "search_error" });
+    }
+  });
+
+  app.get("/v1/assets/:id", requireApiKey("read:assets"), async (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id) || id <= 0) {
+      return res.status(400).json({ error: "Invalid asset ID", code: "invalid_id" });
+    }
+    try {
+      const rows = await storage.getIngestedAssetsByIds([id]);
+      if (!rows.length) {
+        return res.status(404).json({ error: "Asset not found", code: "not_found" });
+      }
+      return res.json({ data: formatV1Asset(rows[0]) });
+    } catch (err) {
+      console.error("[v1/assets/:id]", err);
+      return res.status(500).json({ error: "Lookup failed", code: "lookup_error" });
+    }
   });
 
   // ── API Management (admin) ────────────────────────────────────────────────────
