@@ -271,6 +271,7 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
           {/* Delete */}
           <button
             onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+            onPointerDown={(e) => e.stopPropagation()}
             className="absolute top-2 right-2 z-[5] w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
             data-testid={`button-delete-pipeline-${asset.id}`}
           >
@@ -342,7 +343,7 @@ function PipelineGridCard({ asset, signals = [], onDelete, onClick }: {
                 <>
                   <span className="text-[10px] text-muted-foreground">Drag onto a TTO asset to stack</span>
                   {asset.sourceUrl && (
-                    <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-primary transition-colors">
+                    <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-primary transition-colors">
                       <ExternalLink className="w-3 h-3" />
                     </a>
                   )}
@@ -781,6 +782,8 @@ export default function Pipeline() {
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
   const [activeAssetId, setActiveAssetId] = useState<number | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
