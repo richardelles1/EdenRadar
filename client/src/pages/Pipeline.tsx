@@ -830,15 +830,13 @@ export default function Pipeline() {
           </div>
         </div>
 
-        {/* Loading state */}
-        {isLoading && (
+        {/* Loading / retry / no-data-yet state — gate on data existence, not isLoading,
+            because isLoading drops to false between retry attempts even when data is still undefined */}
+        {(isLoading || !data) ? (
           <div className="flex-1 flex items-center justify-center py-24">
             <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
           </div>
-        )}
-
-        {/* Empty state */}
-        {!isLoading && totalAssets === 0 ? (
+        ) : totalAssets === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-24 px-6 text-center gap-5">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Beaker className="w-8 h-8 text-primary" />
@@ -853,7 +851,7 @@ export default function Pipeline() {
               </Button>
             </Link>
           </div>
-        ) : !isLoading ? (
+        ) : (
           <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
             <div className="flex-1">
               <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6 space-y-8">
@@ -984,7 +982,7 @@ export default function Pipeline() {
               )}
             </DragOverlay>
           </DndContext>
-        ) : null}
+        )}
       </main>
 
       {/* ── Brief dialog ──────────────────────────────────────────────────── */}
