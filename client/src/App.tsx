@@ -19,6 +19,7 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Scout from "@/pages/Scout";
 import Assets from "@/pages/Assets";
+import Pipeline from "@/pages/Pipeline";
 import AssetDossier from "@/pages/AssetDossier";
 import Report from "@/pages/Report";
 import Reports from "@/pages/Reports";
@@ -64,6 +65,7 @@ import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
 import IndustrySettings, { SimplifiedSettings } from "@/pages/IndustrySettings";
 import IndustryEden from "@/pages/IndustryEden";
+import Developers from "@/pages/Developers";
 import Dashboard from "@/pages/Dashboard";
 import IndustryDashboard from "@/pages/IndustryDashboard";
 import NewArrivals from "@/pages/NewArrivals";
@@ -183,7 +185,7 @@ function Router() {
       <Route path="/assets">
         <DashboardLayout>
           <ScoutGate>
-            <Assets />
+            <Pipeline />
           </ScoutGate>
         </DashboardLayout>
       </Route>
@@ -262,6 +264,12 @@ function Router() {
           their org context (the mechanism by which they gain paid-plan access). */}
       <Route path="/industry/settings" component={SettingsRoute} />
       <Route path="/settings" component={SettingsRoute} />
+      {/* Developers docs — exempt from ScoutGate so users on any plan can read the API docs */}
+      <Route path="/developers">
+        <DashboardLayout>
+          <Developers />
+        </DashboardLayout>
+      </Route>
       <Route path="/industry/eden">
         <DashboardLayout>
           <ScoutGate>

@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Lightbulb, FlaskConical, Building2, Bell,
   Layers, User, Moon, Sun, LogOut, Menu, X, Radar,
-  LayoutDashboard, Settings, Newspaper, ShoppingBag, BarChart2, Sparkles,
+  LayoutDashboard, Settings, Newspaper, ShoppingBag, BarChart2, Sparkles, Code2,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
@@ -71,6 +71,12 @@ const NAV_GROUPS: NavGroup[] = [
     groupLabel: "EdenMarket",
     items: [
       { href: "/market", label: "Deal Marketplace", icon: ShoppingBag, exact: true },
+    ],
+  },
+  {
+    groupLabel: "Developers",
+    items: [
+      { href: "/developers", label: "API Docs", icon: Code2, exact: true },
     ],
   },
 ];

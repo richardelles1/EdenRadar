@@ -87,7 +87,9 @@ export function requireApiKey(requiredScope?: string) {
 
     if (!key) {
       res.status(401).json({ error: "Invalid API key", code: "invalid_key" });
-      logUsage(null, raw.slice(0, 8), null, null, null, endpoint, method, 401, Date.now() - start, ip, ua);
+      // Extract the 8-char hex prefix from eden_<prefix>_<secret>; fall back to first 8 chars for malformed keys.
+      const logPrefix = raw.startsWith("eden_") ? raw.slice(5, 13) : raw.slice(0, 8);
+      logUsage(null, logPrefix, null, null, null, endpoint, method, 401, Date.now() - start, ip, ua);
       return;
     }
 
