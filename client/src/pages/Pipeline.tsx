@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -1051,8 +1050,7 @@ export default function Pipeline() {
   const activeDragAsset = activeDragId ? savedAssets.find((a) => `signal-${a.id}` === activeDragId || `tto-${a.id}` === activeDragId) : null;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Nav />
+    <div className="flex flex-col h-full">
       <main className="flex-1 flex flex-col min-h-0">
 
         {/* Header */}
