@@ -351,7 +351,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
     return (
       <div
         className={`w-full h-[260px] shrink-0 ${canNavigate ? "cursor-pointer" : ""}`}
-        onClick={canNavigate ? () => navigate(`/industry/tto/${asset.ingestedAssetId}`) : undefined}
+        onClick={canNavigate ? () => navigate(`/asset/${asset.ingestedAssetId}`) : undefined}
         data-testid={`tto-pipeline-card-${asset.id}`}
       >
         <div
@@ -405,7 +405,7 @@ function PipelineCardWrapper({ asset, onDelete, onMove, pipelines, restrictMeta,
                   <button
                     className="flex items-center gap-0.5 text-[10px] font-semibold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 transition-colors"
                     data-testid={`link-dossier-tto-${asset.id}`}
-                    onClick={(e) => { e.stopPropagation(); navigate(`/industry/tto/${asset.ingestedAssetId}`); }}
+                    onClick={(e) => { e.stopPropagation(); navigate(`/asset/${asset.ingestedAssetId}`); }}
                   >
                     View dossier
                     <ArrowRight className="w-2.5 h-2.5 ml-0.5" />
