@@ -64,6 +64,7 @@ import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
 import IndustrySettings, { SimplifiedSettings } from "@/pages/IndustrySettings";
 import IndustryEden from "@/pages/IndustryEden";
+import Developers from "@/pages/Developers";
 import Dashboard from "@/pages/Dashboard";
 import IndustryDashboard from "@/pages/IndustryDashboard";
 import NewArrivals from "@/pages/NewArrivals";
@@ -262,6 +263,12 @@ function Router() {
           their org context (the mechanism by which they gain paid-plan access). */}
       <Route path="/industry/settings" component={SettingsRoute} />
       <Route path="/settings" component={SettingsRoute} />
+      {/* Developers docs — exempt from ScoutGate so users on any plan can read the API docs */}
+      <Route path="/developers">
+        <DashboardLayout>
+          <Developers />
+        </DashboardLayout>
+      </Route>
       <Route path="/industry/eden">
         <DashboardLayout>
           <ScoutGate>
