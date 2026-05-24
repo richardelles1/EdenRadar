@@ -18,6 +18,8 @@ interface ScoreBadgeProps {
     scored_dimensions?: string[];
   };
   size?: "sm" | "md" | "lg";
+  /** Display score as X / 10 instead of raw / 100 */
+  tenScale?: boolean;
 }
 
 function scoreColor(score: number): { bg: string; text: string; ring: string } {
@@ -41,12 +43,14 @@ const TTO_DIMS    = ["search_relevance", "record_quality", "availability"] as co
 // Dimensions shown as bars in the legacy (non-TTO) tooltip
 const LEGACY_DIMS = ["novelty", "readiness", "licensability"] as const;
 
-export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
+export function ScoreBadge({ score, breakdown, size = "md", tenScale = false }: ScoreBadgeProps) {
   const isUnscored = score === 0 || (breakdown?.signal_coverage ?? 0) === 0;
   const { bg, text, ring } = isUnscored
     ? { bg: "bg-muted", text: "text-muted-foreground", ring: "ring-border" }
     : scoreColor(score);
   const sizeClass = size === "sm" ? "text-[10px] px-1.5 py-0.5" : size === "lg" ? "text-sm px-3 py-1.5" : "text-xs px-2 py-1";
+  const displayScore = tenScale ? Math.max(1, Math.round(score / 10)) : Math.round(score);
+  const displayMax = tenScale ? "/ 10" : "/ 100";
 
   const badge = (
     <div
@@ -57,8 +61,8 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
         <span className="font-mono opacity-60">–</span>
       ) : (
         <>
-          <span className="font-mono">{Math.round(score)}</span>
-          <span className="opacity-60 font-normal text-[0.7em]">/ 100</span>
+          <span className="font-mono">{displayScore}</span>
+          <span className="opacity-60 font-normal text-[0.7em]">{displayMax}</span>
         </>
       )}
     </div>

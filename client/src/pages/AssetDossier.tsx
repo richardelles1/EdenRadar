@@ -541,7 +541,7 @@ export default function AssetDossier() {
         >
           {/* Badge row */}
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="lg" />
+            <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="lg" tenScale />
             {asset.development_stage && asset.development_stage !== "unknown" && (
               <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border capitalize ${stageClass}`}>
                 {asset.development_stage}
