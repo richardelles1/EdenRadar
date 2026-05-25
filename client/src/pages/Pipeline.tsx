@@ -1152,11 +1152,16 @@ export default function Pipeline() {
       return { signalId };
     },
     onSuccess: (_, vars) => {
+      // Write directly into the cache and clear the override in the same batch —
+      // no intermediate render with stale data, so no flash back to old position.
+      qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
+        if (!old) return old;
+        return { ...old, assets: old.assets.map((a) => a.id === vars.signalId ? { ...a, parentSavedAssetId: vars.parentId } : a) };
+      });
       setParentOverrides((m) => { const n = new Map(m); n.delete(vars.signalId); return n; });
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       toast({ title: vars.parentId ? "Signal attached" : "Signal detached" });
     },
-    onError: (err: any, vars, ctx: any) => {
+    onError: (err: any, _vars, ctx: any) => {
       if (ctx) setParentOverrides((m) => { const n = new Map(m); n.delete(ctx.signalId); return n; });
       toast({ title: "Attach failed", description: err.message, variant: "destructive" });
     },
@@ -1177,8 +1182,11 @@ export default function Pipeline() {
       return { id };
     },
     onSuccess: (_, vars) => {
+      qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
+        if (!old) return old;
+        return { ...old, assets: old.assets.map((a) => a.id === vars.id ? { ...a, status: vars.status } : a) };
+      });
       setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       toast({ title: "Stage updated" });
     },
     onError: (err: any, _vars, ctx: any) => {
@@ -1634,8 +1642,9 @@ export default function Pipeline() {
               </div>
             </div>
 
-            {/* Drag overlay — full card visual */}
-            <DragOverlay>
+            {/* Drag overlay — full card visual; dropAnimation=null so overlay vanishes
+                instantly on release (the real card is already in position via onMutate) */}
+            <DragOverlay dropAnimation={null}>
               {activeDragAsset && (() => {
                 const isBoardDrag = activeDragId?.startsWith("tto-");
                 return (
