@@ -6,6 +6,8 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
+import { useOrg } from "@/hooks/use-org";
 import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
@@ -603,13 +605,14 @@ function KanbanColumn({ col, decks, onDelete, onCardClick }: {
 
 const TAB_TRIGGER_CLS = "text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none";
 
-function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, pipelines = [] }: {
+function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, pipelines = [], isViewer = false }: {
   asset: PipelineAsset | null;
   signals?: PipelineAsset[];
   onClose: () => void;
   onDetachSignal: (signalId: number) => void;
   onDelete: (id: number) => void;
   pipelines?: PipelineList[];
+  isViewer?: boolean;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -913,12 +916,14 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
                   <FileText className="w-3.5 h-3.5" /> Open Full Dossier →
                 </button>
               )}
-              <button
-                onClick={() => { onDelete(asset.id); onClose(); }}
-                className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors"
-              >
-                <Trash2 className="w-3.5 h-3.5" /> Remove from Pipeline
-              </button>
+              {!isViewer && (
+                <button
+                  onClick={() => { onDelete(asset.id); onClose(); }}
+                  className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Remove from Pipeline
+                </button>
+              )}
             </div>
           </TabsContent>
 
@@ -927,11 +932,14 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
 
             {/* Deal stage — compact, fixed */}
             <div className="shrink-0 px-5 pt-4 pb-3 border-b border-border">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2.5">Deal Stage</p>
+              <div className="flex items-center justify-between mb-2.5">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Deal Stage</p>
+                {isViewer && <span className="text-[9px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">Read only</span>}
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 <button
-                  onClick={() => statusMutation.mutate(null)}
-                  disabled={statusMutation.isPending}
+                  onClick={() => !isViewer && statusMutation.mutate(null)}
+                  disabled={statusMutation.isPending || isViewer}
                   className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${localStatus === null ? "bg-muted text-foreground border-muted-foreground/30 font-semibold" : "border-border text-muted-foreground hover:border-muted-foreground/30 hover:text-foreground"}`}
                 >
                   None
@@ -941,8 +949,8 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
                   return (
                     <button
                       key={s}
-                      onClick={() => statusMutation.mutate(s)}
-                      disabled={statusMutation.isPending}
+                      onClick={() => !isViewer && statusMutation.mutate(s)}
+                      disabled={statusMutation.isPending || isViewer}
                       className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${localStatus === s ? `${cfg.pill} font-semibold` : "border-border text-muted-foreground hover:border-primary/30 hover:text-foreground"}`}
                     >
                       {cfg?.label ?? s}
@@ -997,22 +1005,28 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
             </div>
 
             {/* Note input — pinned to bottom */}
-            <div className="shrink-0 border-t border-border px-5 py-3 flex gap-2">
-              <input
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (noteText.trim()) noteMutation.mutate(noteText.trim()); } }}
-                placeholder="Add a note…"
-                className="flex-1 min-w-0 bg-transparent border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40"
-              />
-              <button
-                onClick={() => { if (noteText.trim()) noteMutation.mutate(noteText.trim()); }}
-                disabled={!noteText.trim() || noteMutation.isPending}
-                className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all active:scale-90 shrink-0"
-              >
-                {noteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-              </button>
-            </div>
+            {isViewer ? (
+              <div className="shrink-0 border-t border-border px-5 py-2.5 text-center">
+                <p className="text-[10px] text-muted-foreground">Viewers cannot add notes</p>
+              </div>
+            ) : (
+              <div className="shrink-0 border-t border-border px-5 py-3 flex gap-2">
+                <input
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (noteText.trim()) noteMutation.mutate(noteText.trim()); } }}
+                  placeholder="Add a note…"
+                  className="flex-1 min-w-0 bg-transparent border border-border rounded-lg px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary/40"
+                />
+                <button
+                  onClick={() => { if (noteText.trim()) noteMutation.mutate(noteText.trim()); }}
+                  disabled={!noteText.trim() || noteMutation.isPending}
+                  className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all active:scale-90 shrink-0"
+                >
+                  {noteMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                </button>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </SheetContent>
@@ -1025,6 +1039,9 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
 export default function Pipeline() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
+  const { data: org } = useOrg();
+  const isViewer = org?.members?.some((m: any) => m.userId === user?.id && m.role === "viewer") ?? false;
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
@@ -1042,7 +1059,8 @@ export default function Pipeline() {
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  // Viewers get a near-infinite drag distance so DnD is effectively disabled
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: isViewer ? 999999 : 8 } }));
 
   const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
@@ -1057,6 +1075,18 @@ export default function Pipeline() {
   const pipelines = pipelinesData?.pipelines ?? [];
   const pipelinesMap = new Map(pipelines.map((pl) => [pl.id, pl.name]));
   const savedAssets = data?.assets ?? [];
+
+  const { data: activityData } = useQuery<{ items: any[]; memberCount: number }>({
+    queryKey: ["/api/team/activity", { limit: 5 }],
+    queryFn: async () => {
+      const res = await fetch("/api/team/activity?limit=5");
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: 30000,
+    staleTime: 15000,
+  });
+  const recentActivity = activityData?.items ?? [];
 
   // ── Data grouping ──────────────────────────────────────────────────────────
   const ttoAssets = savedAssets.filter((a) => isTtoSource(a.sourceName));
@@ -1447,28 +1477,47 @@ export default function Pipeline() {
                               {count}
                             </span>
                           </button>
-                          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); setRenamingPipelineId(pl.id); setRenamePipelineName(pl.name); }}
-                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
-                              title="Rename"
-                            >
-                              <Pencil className="w-2.5 h-2.5" />
-                            </button>
-                            <button
-                              onClick={(e) => { e.stopPropagation(); deletePipelineMutation.mutate(pl.id); }}
-                              disabled={deletePipelineMutation.isPending}
-                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-red-300 hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-destructive hover:bg-muted"}`}
-                              title="Delete pipeline"
-                            >
-                              <Trash2 className="w-2.5 h-2.5" />
-                            </button>
-                          </div>
+                          {!isViewer && (
+                            <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setRenamingPipelineId(pl.id); setRenamePipelineName(pl.name); }}
+                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                                title="Rename"
+                              >
+                                <Pencil className="w-2.5 h-2.5" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deletePipelineMutation.mutate(pl.id); }}
+                                disabled={deletePipelineMutation.isPending}
+                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-red-300 hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-destructive hover:bg-muted"}`}
+                                title="Delete pipeline"
+                              >
+                                <Trash2 className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       );
                     })}
                   </div>
                 </ScrollArea>
+                {/* Recent Activity — compact sidebar feed */}
+                {recentActivity.length > 0 && (
+                  <div className="border-t border-border px-3 py-2.5 shrink-0">
+                    <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-1.5">Activity</p>
+                    <div className="space-y-1.5">
+                      {recentActivity.slice(0, 4).map((item: any) => (
+                        <div key={item.id} className="flex flex-col gap-0.5">
+                          <p className="text-[10px] text-foreground font-medium truncate">{item.actorName}</p>
+                          <p className="text-[9px] text-muted-foreground truncate">
+                            {item.action === "moved_asset" ? `moved · ${timeAgo(item.createdAt)}` : `${item.action.replace("_", " ")} · ${timeAgo(item.createdAt)}`}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Create new pipeline */}
                 <div className="px-2 py-2 border-t border-border shrink-0">
                   {creatingPipeline ? (
@@ -1492,7 +1541,7 @@ export default function Pipeline() {
                         {createPipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
                       </button>
                     </div>
-                  ) : (
+                  ) : (!isViewer && (
                     <button
                       onClick={() => setCreatingPipeline(true)}
                       className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
@@ -1501,7 +1550,7 @@ export default function Pipeline() {
                       <Plus className="w-3.5 h-3.5 shrink-0" />
                       New pipeline
                     </button>
-                  )}
+                  ))}
                 </div>
               </aside>
 
@@ -1576,7 +1625,7 @@ export default function Pipeline() {
                                   key={card.id}
                                   asset={card}
                                   signals={deck?.signals ?? []}
-                                  onDelete={(id) => deleteMutation.mutate(id)}
+                                  onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
                                   onClick={() => setActiveAssetId(card.id)}
                                   pipelineName={cardPipelineName}
                                 />
@@ -1628,7 +1677,7 @@ export default function Pipeline() {
                                   key={col.key ?? "unassigned"}
                                   col={col}
                                   decks={colDecks}
-                                  onDelete={(id) => deleteMutation.mutate(id)}
+                                  onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
                                   onCardClick={(asset) => setActiveAssetId(asset.id)}
                                 />
                               );
@@ -1669,8 +1718,9 @@ export default function Pipeline() {
         signals={activeSignals}
         onClose={() => setActiveAssetId(null)}
         onDetachSignal={handleDetachSignal}
-        onDelete={(id) => deleteMutation.mutate(id)}
+        onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
         pipelines={pipelines}
+        isViewer={isViewer}
       />
     </div>
   );

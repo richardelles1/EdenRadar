@@ -13,6 +13,7 @@ type PortfolioStats = {
   byModality: { modality: string; count: number }[];
   byStage: { stage: string; count: number }[];
   byTherapyArea: { area: string; count: number }[];
+  byBiology: { biology: string; count: number }[];
   topInstitutions: { institution: string; count: number }[];
   lastFetched: number;
 };
