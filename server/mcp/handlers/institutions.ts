@@ -74,7 +74,7 @@ export async function handleGetInstitution(
   const [countRow] = await db
     .select({ assetCount: sql<number>`count(*)::int` })
     .from(ingestedAssets)
-    .where(and(eq(ingestedAssets.relevant, true), ilike(ingestedAssets.institution, name)));
+    .where(and(eq(ingestedAssets.relevant, true), ilike(ingestedAssets.institution, `%${name}%`)));
 
   const [meta] = await db
     .select()

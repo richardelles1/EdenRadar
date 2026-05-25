@@ -48,35 +48,6 @@ function detailShape(a: typeof ingestedAssets.$inferSelect) {
   };
 }
 
-// ── Tool definitions ─────────────────────────────────────────────────────────
-
-export const searchAssetsInputSchema = {
-  query: {
-    type: "string" as const,
-    description: "Free-text search across asset name, indication, target, and summary",
-  },
-  institution: {
-    type: "string" as const,
-    description: "Filter by institution name (partial match)",
-    optional: true,
-  },
-  modality: {
-    type: "string" as const,
-    description: "Filter by modality (e.g. small molecule, antibody, gene therapy)",
-    optional: true,
-  },
-  stage: {
-    type: "string" as const,
-    description: "Filter by development stage (e.g. preclinical, Phase I)",
-    optional: true,
-  },
-  limit: {
-    type: "number" as const,
-    description: "Max results (default and cap enforced by tier)",
-    optional: true,
-  },
-};
-
 export async function handleSearchAssets(
   args: Record<string, unknown>,
   cfg: ToolConfig,

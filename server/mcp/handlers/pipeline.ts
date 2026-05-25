@@ -6,7 +6,7 @@
 
 import { db } from "../../db";
 import { pipelineLists, savedAssets, ingestedAssets } from "../../../shared/schema";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, inArray } from "drizzle-orm";
 import type { ToolConfig } from "../config";
 
 export async function handleListPipelines(
@@ -28,22 +28,30 @@ export async function handleListPipelines(
     .limit(limit)
     .orderBy(pipelineLists.updatedAt);
 
-  // Asset count per list
-  const results = await Promise.all(
-    lists.map(async (list) => {
-      const [{ count }] = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(savedAssets)
-        .where(eq(savedAssets.pipelineListId, list.id));
-      return {
-        id: list.id,
-        name: list.name,
-        assetCount: count,
-        createdAt: list.createdAt.toISOString(),
-        updatedAt: list.updatedAt.toISOString(),
-      };
-    }),
-  );
+  if (lists.length === 0) {
+    return { content: [{ type: "text", text: JSON.stringify({ count: 0, pipelines: [] }, null, 2) }] };
+  }
+
+  // Single query to count assets per list
+  const listIds = lists.map((l) => l.id);
+  const countRows = await db
+    .select({
+      pipelineListId: savedAssets.pipelineListId,
+      assetCount: sql<number>`count(*)::int`,
+    })
+    .from(savedAssets)
+    .where(inArray(savedAssets.pipelineListId, listIds))
+    .groupBy(savedAssets.pipelineListId);
+
+  const countByList = new Map(countRows.map((r) => [r.pipelineListId, r.assetCount]));
+
+  const results = lists.map((list) => ({
+    id: list.id,
+    name: list.name,
+    assetCount: countByList.get(list.id) ?? 0,
+    createdAt: list.createdAt.toISOString(),
+    updatedAt: list.updatedAt.toISOString(),
+  }));
 
   return {
     content: [{ type: "text", text: JSON.stringify({ count: results.length, pipelines: results }, null, 2) }],

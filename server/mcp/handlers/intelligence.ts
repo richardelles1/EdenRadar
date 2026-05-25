@@ -6,7 +6,7 @@
 
 import { db } from "../../db";
 import { convergenceSignals, ingestedAssets } from "../../../shared/schema";
-import { eq, sql, desc } from "drizzle-orm";
+import { sql, desc } from "drizzle-orm";
 import type { ToolConfig } from "../config";
 
 export async function handleGetConvergenceSignals(
@@ -19,11 +19,7 @@ export async function handleGetConvergenceSignals(
   const rows = await db
     .select()
     .from(convergenceSignals)
-    .where(
-      minInstitutions > 1
-        ? sql`institution_count >= ${minInstitutions}`
-        : undefined,
-    )
+    .where(sql`institution_count >= ${minInstitutions}`)
     .orderBy(desc(convergenceSignals.score))
     .limit(limit);
 

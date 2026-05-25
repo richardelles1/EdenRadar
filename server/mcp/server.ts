@@ -16,8 +16,8 @@ import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { z } from "zod";
 
-import { resolveAuth, checkFreeRateLimit, type ResolvedAuth } from "./auth";
-import { TOOL_CONFIG, tierSatisfies, getVisibleTools } from "./config";
+import { resolveAuth, checkFreeRateLimit, logMcpUsage, type ResolvedAuth } from "./auth";
+import { TOOL_CONFIG, getVisibleTools } from "./config";
 import {
   handleSearchAssets,
   handleGetAsset,
@@ -257,8 +257,15 @@ export async function handleMcpRequest(req: IncomingMessage, res: ServerResponse
     );
   }
 
-  // 4. Wire stateless transport and handle the request
+  // 4. Wire stateless transport, handle the request, and log usage
+  const start = Date.now();
+  const ip = getClientIp(req);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   await server.connect(transport);
   await transport.handleRequest(req, res, body);
+
+  // Log after the response completes (non-free only — free tier has no key to attribute)
+  if (auth.tier !== "free") {
+    logMcpUsage(auth, "/mcp", res.statusCode, Date.now() - start, ip);
+  }
 }

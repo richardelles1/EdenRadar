@@ -10,14 +10,11 @@
  *   DELETE /mcp — session teardown (stateless: no-op)
  */
 
-import { Router, json } from "express";
+import { Router } from "express";
 import type { Request, Response } from "express";
 import { handleMcpRequest } from "./server";
 
 const router = Router();
-
-// Parse JSON bodies for MCP POST requests before our handler sees them
-router.use(json());
 
 // Handle all MCP traffic through one function
 async function mcpRoute(req: Request, res: Response): Promise<void> {

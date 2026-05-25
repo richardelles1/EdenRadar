@@ -8,7 +8,7 @@
 import crypto from "crypto";
 import type { IncomingMessage } from "node:http";
 import { db } from "../db";
-import { apiKeys } from "../../shared/schema";
+import { apiKeys, apiUsageLogs } from "../../shared/schema";
 import { eq } from "drizzle-orm";
 import type { AccessTier } from "./config";
 import { FREE_RATE_LIMIT_PER_HOUR } from "./config";
@@ -84,4 +84,26 @@ export async function resolveAuth(req: IncomingMessage): Promise<ResolvedAuth> {
     keyId: key.id,
     keyPrefix: key.keyPrefix,
   };
+}
+
+export function logMcpUsage(
+  auth: ResolvedAuth,
+  endpoint: string,
+  statusCode: number,
+  responseTimeMs: number,
+  ipAddress: string | null,
+): void {
+  db.insert(apiUsageLogs).values({
+    keyId: auth.keyId ?? null,
+    keyPrefix: auth.keyPrefix ?? null,
+    userId: auth.userId ?? null,
+    orgId: auth.orgId ?? null,
+    orgName: null,
+    endpoint,
+    method: "POST",
+    statusCode,
+    responseTimeMs,
+    ipAddress,
+    userAgent: "mcp-client",
+  }).catch(() => {});
 }
