@@ -836,23 +836,51 @@ export default function IndustrySettings() {
               )}
             </>
           ) : (
-            <div className="text-center py-6 space-y-3">
-              <div className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center mx-auto">
-                <Terminal className="w-5 h-5 text-muted-foreground" />
+            <div className="space-y-4">
+              <div className="text-center py-6 space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-muted border border-border flex items-center justify-center mx-auto">
+                  <Terminal className="w-5 h-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-foreground">No API key</p>
+                  <p className="text-xs text-muted-foreground mt-1">Generate a key to access the EdenRadar API and connect AI tools to your Eden Scout data.</p>
+                </div>
+                <Button
+                  size="sm"
+                  className="gap-1.5"
+                  onClick={() => generateKey.mutate()}
+                  disabled={generateKey.isPending}
+                >
+                  {generateKey.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
+                  Generate API key
+                </Button>
               </div>
-              <div>
-                <p className="text-sm font-medium text-foreground">No API key</p>
-                <p className="text-xs text-muted-foreground mt-1">Generate a key to access the EdenRadar API from your own tools and workflows.</p>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Bot className="w-4 h-4 text-violet-500" />
+                  <p className="text-sm font-semibold text-foreground">AI Integration (MCP)</p>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-500/40 text-violet-600 dark:text-violet-400">New</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Connect Claude or any MCP-compatible AI directly to your Eden Scout data. Search assets, read enriched details, and manage your pipeline — all from a conversation. Generate an API key above to get your setup config.
+                </p>
+                <div>
+                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Endpoint</p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 font-mono text-xs bg-muted border border-border rounded px-2.5 py-1.5 text-foreground truncate">
+                      {window.location.origin}/mcp
+                    </code>
+                    <Button
+                      size="sm" variant="outline"
+                      className="shrink-0 h-7 w-7 p-0"
+                      onClick={() => navigator.clipboard.writeText(`${window.location.origin}/mcp`)}
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <Button
-                size="sm"
-                className="gap-1.5"
-                onClick={() => generateKey.mutate()}
-                disabled={generateKey.isPending}
-              >
-                {generateKey.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <KeyRound className="w-3.5 h-3.5" />}
-                Generate API key
-              </Button>
             </div>
           )}
         </div>

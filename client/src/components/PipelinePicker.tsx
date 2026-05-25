@@ -646,9 +646,9 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
       {renderTrigger(() => setOpen(true))}
 
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setSelectedParentId(null); setParentSearch(""); setCreating(false); setNewName(""); setCreateShared(false); } }}>
-        <DialogContent className="max-w-xs w-full p-3" data-testid="pipeline-picker-popover">
-          <DialogHeader className="pb-1">
-            <DialogTitle className="text-sm font-semibold">
+        <DialogContent className="max-w-sm w-full" data-testid="pipeline-picker-popover">
+          <DialogHeader>
+            <DialogTitle>
               {isSaved ? "Move to pipeline" : "Save to pipeline"}
             </DialogTitle>
           </DialogHeader>
