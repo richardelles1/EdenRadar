@@ -2297,14 +2297,14 @@ export async function registerRoutes(
 
       const pdf = await generateDossierPdf({
         fingerprint: fingerprintStr,
-        assetName: rec?.assetName ?? asset?.asset_name ?? "Asset Dossier",
-        institution: rec?.institution ?? asset?.institution ?? null,
-        indication: rec?.indication ?? asset?.indication ?? null,
-        target: rec?.target ?? asset?.target ?? null,
-        modality: rec?.modality ?? asset?.modality ?? null,
-        stage: rec?.developmentStage ?? asset?.development_stage ?? null,
-        patentStatus: rec?.patentStatus ?? asset?.patent_status ?? null,
-        licensingStatus: rec?.licensingStatus ?? asset?.licensing_status ?? null,
+        assetName: (rec?.assetName?.trim() || asset?.asset_name?.trim()) || "Asset Dossier",
+        institution: (rec?.institution?.trim() || asset?.institution?.trim()) || null,
+        indication: (rec?.indication?.trim() || asset?.indication?.trim()) || null,
+        target: (rec?.target?.trim() || asset?.target?.trim()) || null,
+        modality: (rec?.modality?.trim() || asset?.modality?.trim()) || null,
+        stage: (rec?.developmentStage?.trim() || asset?.development_stage?.trim()) || null,
+        patentStatus: (rec?.patentStatus?.trim() || asset?.patent_status?.trim()) || null,
+        licensingStatus: (rec?.licensingStatus?.trim() || asset?.licensing_status?.trim()) || null,
         contactEmail: rec?.contactEmail ?? asset?.contact_office ?? null,
         sourceTypes: asset?.source_types ?? [],
         evidenceCount: asset?.evidence_count ?? 0,
@@ -2342,7 +2342,7 @@ export async function registerRoutes(
         narrativeGeneratedAt: dossier?.generated_at ?? null,
       });
 
-      const safeName = (rec?.assetName ?? asset?.asset_name ?? "dossier")
+      const safeName = (rec?.assetName?.trim() || asset?.asset_name?.trim() || "dossier")
         .replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").slice(0, 60);
       const date = new Date().toISOString().slice(0, 10);
       res.setHeader("Content-Type", "application/pdf");
