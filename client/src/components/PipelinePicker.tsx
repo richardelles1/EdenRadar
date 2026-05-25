@@ -5,11 +5,6 @@ import { getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -644,86 +639,91 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
     );
   }
 
-  // ── TTO path: existing Popover (unchanged) ─────────────────────────────────
+  // ── TTO path: Dialog (centered, avoids card boundary overflow) ───────────────
 
   return (
-    <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setSelectedParentId(null); setParentSearch(""); } }}>
-      <PopoverTrigger asChild>
-        {renderTrigger()}
-      </PopoverTrigger>
-      <PopoverContent className="w-60 p-2 shadow-lg" align="end" collisionPadding={12} data-testid="pipeline-picker-popover">
-        <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">
-          {isSaved ? "Move to pipeline" : "Save to pipeline"}
-        </div>
+    <>
+      {renderTrigger(() => setOpen(true))}
 
-        {(() => {
-          const isCurrentUncat = isSaved && currentPipelineListId === null;
-          return (
-            <button
-              onClick={() => { if (isCurrentUncat) { setOpen(false); return; } saveMutation.mutate({ pipelineListId: null }); }}
-              disabled={isPending}
-              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left ${isCurrentUncat ? "bg-primary/5" : "hover:bg-muted/50"}`}
-              data-testid="pipeline-option-uncategorised"
-            >
-              <Layers className={`w-3.5 h-3.5 shrink-0 ${isCurrentUncat ? "text-primary" : "text-muted-foreground"}`} />
-              <span className={`flex-1 truncate ${isCurrentUncat ? "font-medium text-primary" : ""}`}>Uncategorised</span>
-              {isCurrentUncat && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
-            </button>
-          );
-        })()}
+      <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setSelectedParentId(null); setParentSearch(""); setCreating(false); setNewName(""); setCreateShared(false); } }}>
+        <DialogContent className="max-w-xs w-full p-3" data-testid="pipeline-picker-popover">
+          <DialogHeader className="pb-1">
+            <DialogTitle className="text-sm font-semibold">
+              {isSaved ? "Move to pipeline" : "Save to pipeline"}
+            </DialogTitle>
+          </DialogHeader>
 
-        {hasTeamOrg ? (
-          <>
-            {myLists.length > 0 && (<><div className="my-1 border-t border-border" /><div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 py-0.5">My Lists</div>{myLists.map((p) => renderPipelineRow(p, false))}</>)}
-            {teamLists.length > 0 && (<><div className="my-1 border-t border-border" /><div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 py-0.5">Team Lists</div>{teamLists.map((p) => renderPipelineRow(p, true))}</>)}
-            {myLists.length === 0 && teamLists.length === 0 && <div className="my-1 border-t border-border" />}
-          </>
-        ) : (
-          <>
-            {pipelines.length > 0 && <div className="my-1 border-t border-border" />}
-            {pipelines.map((p) => renderPipelineRow(p, false))}
-          </>
-        )}
+          <div className="flex flex-col gap-0.5">
+            {(() => {
+              const isCurrentUncat = isSaved && currentPipelineListId === null;
+              return (
+                <button
+                  onClick={() => { if (isCurrentUncat) { setOpen(false); return; } saveMutation.mutate({ pipelineListId: null }); }}
+                  disabled={isPending}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left ${isCurrentUncat ? "bg-primary/5" : "hover:bg-muted/50"}`}
+                  data-testid="pipeline-option-uncategorised"
+                >
+                  <Layers className={`w-3.5 h-3.5 shrink-0 ${isCurrentUncat ? "text-primary" : "text-muted-foreground"}`} />
+                  <span className={`flex-1 truncate ${isCurrentUncat ? "font-medium text-primary" : ""}`}>Uncategorised</span>
+                  {isCurrentUncat && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+                </button>
+              );
+            })()}
 
-        <div className="mt-1 border-t border-border pt-1">
-          {creating ? (
-            <div className="flex flex-col gap-1.5 px-1">
-              <div className="flex items-center gap-1.5">
-                <Input
-                  autoFocus value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleCreateAndSave(); if (e.key === "Escape") { setCreating(false); setNewName(""); setCreateShared(false); } }}
-                  placeholder="Pipeline name…" className="h-7 text-xs flex-1"
-                  data-testid="input-new-pipeline-name"
-                />
-                <Button size="sm" className="h-7 px-2 text-xs" onClick={handleCreateAndSave} disabled={!newName.trim() || isPending} data-testid="button-confirm-new-pipeline">
-                  <Check className="w-3 h-3" />
-                </Button>
-              </div>
-              {hasTeamOrg && (
-                <div className="flex items-center gap-1">
-                  <button type="button" onClick={() => setCreateShared(false)} className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${!createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`} data-testid="button-picker-create-personal">Personal</button>
-                  <button type="button" onClick={() => setCreateShared(true)} className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`} data-testid="button-picker-create-team">Team</button>
+            {hasTeamOrg ? (
+              <>
+                {myLists.length > 0 && (<><div className="my-1 border-t border-border" /><div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 py-0.5">My Lists</div>{myLists.map((p) => renderPipelineRow(p, false))}</>)}
+                {teamLists.length > 0 && (<><div className="my-1 border-t border-border" /><div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 py-0.5">Team Lists</div>{teamLists.map((p) => renderPipelineRow(p, true))}</>)}
+                {myLists.length === 0 && teamLists.length === 0 && <div className="my-1 border-t border-border" />}
+              </>
+            ) : (
+              <>
+                {pipelines.length > 0 && <div className="my-1 border-t border-border" />}
+                {pipelines.map((p) => renderPipelineRow(p, false))}
+              </>
+            )}
+
+            <div className="mt-1 border-t border-border pt-1">
+              {creating ? (
+                <div className="flex flex-col gap-1.5 px-1">
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      autoFocus value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") handleCreateAndSave(); if (e.key === "Escape") { setCreating(false); setNewName(""); setCreateShared(false); } }}
+                      placeholder="Pipeline name…" className="h-7 text-xs flex-1"
+                      data-testid="input-new-pipeline-name"
+                    />
+                    <Button size="sm" className="h-7 px-2 text-xs" onClick={handleCreateAndSave} disabled={!newName.trim() || isPending} data-testid="button-confirm-new-pipeline">
+                      <Check className="w-3 h-3" />
+                    </Button>
+                  </div>
+                  {hasTeamOrg && (
+                    <div className="flex items-center gap-1">
+                      <button type="button" onClick={() => setCreateShared(false)} className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${!createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`} data-testid="button-picker-create-personal">Personal</button>
+                      <button type="button" onClick={() => setCreateShared(true)} className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`} data-testid="button-picker-create-team">Team</button>
+                    </div>
+                  )}
                 </div>
+              ) : (
+                <button onClick={() => setCreating(true)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-left" data-testid="button-new-pipeline">
+                  <Plus className="w-3.5 h-3.5 shrink-0" />
+                  New pipeline…
+                </button>
               )}
             </div>
-          ) : (
-            <button onClick={() => setCreating(true)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-left" data-testid="button-new-pipeline">
-              <Plus className="w-3.5 h-3.5 shrink-0" />
-              New pipeline…
-            </button>
-          )}
-        </div>
 
-        {isSaved && savedAsset?.id && !creating && (
-          <div className="mt-1 border-t border-border pt-1">
-            <button onClick={() => removeMutation.mutate()} disabled={isPending} className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-destructive hover:bg-destructive/10 transition-colors text-left" data-testid="button-remove-saved-asset">
-              <Trash2 className="w-3.5 h-3.5 shrink-0" />
-              Remove from saved
-            </button>
+            {isSaved && savedAsset?.id && !creating && (
+              <div className="mt-1 border-t border-border pt-1">
+                <button onClick={() => removeMutation.mutate()} disabled={isPending} className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-destructive hover:bg-destructive/10 transition-colors text-left" data-testid="button-remove-saved-asset">
+                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                  Remove from saved
+                </button>
+              </div>
+            )}
           </div>
-        )}
-      </PopoverContent>
-    </Popover>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

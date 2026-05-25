@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
-  FileText, ChevronLeft, ChevronRight, Send, Link2, X,
+  FileText, ChevronLeft, ChevronRight, Send, Link2, X, MessageSquare, Plus, Check,
   LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
@@ -32,6 +32,7 @@ type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | nu
 type DeckAsset = PipelineAsset & { signals: PipelineAsset[] };
 type ViewMode = "grid" | "board";
 type GridFilterType = "all" | "tto" | "trial" | "patent" | "research";
+type SortOrder = "date" | "az" | "stage";
 type PipelineList = { id: number; name: string; userId: string; createdAt: string };
 type PipelinesResponse = { pipelines: PipelineList[] };
 
@@ -64,7 +65,8 @@ const STAGE_ABBREV: Record<string, string> = {
 const NON_TTO_SRC = ["patent", "clinical_trial", "pubmed", "biorxiv", "medrxiv", "literature", "arxiv", "preprint", "paper"];
 
 function isTtoSource(sourceName?: string | null): boolean {
-  const sn = (sourceName ?? "").toLowerCase();
+  if (!sourceName) return false;
+  const sn = sourceName.toLowerCase();
   return !NON_TTO_SRC.some((s) => sn === s || sn.includes(s));
 }
 
@@ -110,6 +112,7 @@ function getInitials(name: string): string {
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff <= 0) return "just now";
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -171,7 +174,7 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
 
 // ── CardFaceContent — pure visual component for a single card face ────────────
 
-function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hovered?: boolean }) {
+function CardFaceContent({ asset, hovered = false, compact = false, inDeck = false }: { asset: PipelineAsset; hovered?: boolean; compact?: boolean; inDeck?: boolean }) {
   const cat = getSourceCategory(asset.sourceName);
   const tint = SCOUT_CARD_TINTS[cat];
   const isTto = isTtoSource(asset.sourceName);
@@ -210,7 +213,7 @@ function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hov
       </div>
 
       {/* Content */}
-      <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] pb-10">
+      <div className={`absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] ${compact ? "pb-3" : "pb-10"}`}>
         <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
           {displayTitle}
         </h3>
@@ -283,8 +286,8 @@ function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hov
           )}
         </div>
 
-        {/* Footer strip for non-TTO signal cards */}
-        {!isTto && (
+        {/* Footer strip for standalone non-TTO cards — suppressed when used as a face inside a TTO deck */}
+        {!isTto && !inDeck && (
           <div className="flex items-center gap-1 pt-2 border-t border-white/20 dark:border-white/10 mt-auto">
             <span className="text-[10px] text-muted-foreground flex-1">Drag to stack</span>
             {asset.sourceUrl && (
@@ -397,7 +400,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
                 pointerEvents: idx === faceIdx ? "auto" : "none",
               }}
             >
-              <CardFaceContent asset={face} hovered={hovered} />
+              <CardFaceContent asset={face} hovered={hovered} inDeck={idx > 0} />
             </div>
           ))}
 
@@ -465,6 +468,7 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
   onClick: () => void;
   onDelete: (id: number) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `tto-${asset.id}`,
     data: { type: "tto", assetId: asset.id },
@@ -479,13 +483,15 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
       <div
         ref={setNodeRef}
         className="relative w-full h-[210px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 cursor-pointer"
-        style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)" }}
+        style={{ boxShadow: hovered ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)" : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)", transition: "box-shadow 0.25s ease" }}
         onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         {...attributes}
         {...listeners}
         data-testid={`board-card-${asset.id}`}
       >
-        <CardFaceContent asset={asset} />
+        <CardFaceContent asset={asset} hovered={hovered} compact />
 
         {/* Delete button */}
         <button
@@ -497,7 +503,7 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
           <Trash2 className="w-3.5 h-3.5" />
         </button>
 
-        {/* Signal + note count badge — bottom-right */}
+        {/* Signal + note count badges — bottom-right */}
         {(hasSignals || (asset.noteCount ?? 0) > 0) && (
           <div className="absolute bottom-2 right-2 z-[20] flex items-center gap-1.5">
             {hasSignals && (
@@ -506,8 +512,8 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
               </span>
             )}
             {(asset.noteCount ?? 0) > 0 && (
-              <span className="px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[9px] text-white">
-                {asset.noteCount}n
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[9px] text-white">
+                <MessageSquare className="w-2.5 h-2.5" />{asset.noteCount}
               </span>
             )}
           </div>
@@ -602,6 +608,8 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(null);
   const [localPipelineId, setLocalPipelineId] = useState<number | null | undefined>(undefined);
+  const [drawerCreatingPipeline, setDrawerCreatingPipeline] = useState(false);
+  const [drawerNewPipelineName, setDrawerNewPipelineName] = useState("");
   const notesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -667,6 +675,26 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
       if (ctx) setLocalPipelineId(ctx.prev);
       toast({ title: "Pipeline update failed", description: err.message, variant: "destructive" });
     },
+  });
+
+  const drawerCreatePipelineMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/pipelines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ name, shared: false }),
+      });
+      if (!res.ok) throw new Error("Failed to create pipeline");
+      return res.json();
+    },
+    onSuccess: ({ pipeline }) => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      pipelineMutation.mutate(pipeline.id);
+      setDrawerCreatingPipeline(false);
+      setDrawerNewPipelineName("");
+    },
+    onError: (err: any) => toast({ title: "Failed to create", description: err.message, variant: "destructive" }),
   });
 
   const noteMutation = useMutation({
@@ -810,6 +838,35 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
                     </button>
                   ))}
                 </div>
+                {drawerCreatingPipeline ? (
+                  <div className="flex gap-1.5 mt-2">
+                    <input
+                      autoFocus
+                      value={drawerNewPipelineName}
+                      onChange={(e) => setDrawerNewPipelineName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && drawerNewPipelineName.trim()) drawerCreatePipelineMutation.mutate(drawerNewPipelineName.trim());
+                        if (e.key === "Escape") { setDrawerCreatingPipeline(false); setDrawerNewPipelineName(""); }
+                      }}
+                      placeholder="Pipeline name…"
+                      className="flex-1 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground"
+                    />
+                    <button
+                      onClick={() => { if (drawerNewPipelineName.trim()) drawerCreatePipelineMutation.mutate(drawerNewPipelineName.trim()); }}
+                      disabled={!drawerNewPipelineName.trim() || drawerCreatePipelineMutation.isPending}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0"
+                    >
+                      {drawerCreatePipelineMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setDrawerCreatingPipeline(true)}
+                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors mt-2"
+                  >
+                    <Plus className="w-3 h-3" /> New pipeline
+                  </button>
+                )}
               </div>
 
               {/* Supporting signals — TTO assets only */}
@@ -961,10 +1018,13 @@ export default function Pipeline() {
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
   const [filterType, setFilterType] = useState<GridFilterType>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("date");
   const [activeAssetId, setActiveAssetId] = useState<number | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [parentOverrides, setParentOverrides] = useState<Map<number, number | null>>(new Map());
   const [statusOverrides, setStatusOverrides] = useState<Map<number, string | null>>(new Map());
+  const [creatingPipeline, setCreatingPipeline] = useState(false);
+  const [newPipelineName, setNewPipelineName] = useState("");
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
@@ -1024,6 +1084,17 @@ export default function Pipeline() {
   const typeFilteredCards = filterType === "all" ? gridCards : gridCards.filter((c) => {
     const cat = getSourceCategory(c.sourceName);
     return cat === filterType;
+  });
+
+  const STAGE_SORT_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
+  const sortedCards = [...typeFilteredCards].sort((a, b) => {
+    if (sortOrder === "az") return a.assetName.localeCompare(b.assetName);
+    if (sortOrder === "stage") {
+      const ai = STAGE_SORT_ORDER.findIndex((s) => a.developmentStage?.toLowerCase().includes(s));
+      const bi = STAGE_SORT_ORDER.findIndex((s) => b.developmentStage?.toLowerCase().includes(s));
+      return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
+    }
+    return b.id - a.id;
   });
 
   // Drawer — search all saved assets so signal cards can open the drawer too
@@ -1091,6 +1162,27 @@ export default function Pipeline() {
     },
   });
 
+  const createPipelineMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/pipelines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ name, shared: false }),
+      });
+      if (!res.ok) throw new Error("Failed to create pipeline");
+      return res.json();
+    },
+    onSuccess: ({ pipeline }) => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      setFilterPipeline(pipeline.id);
+      setCreatingPipeline(false);
+      setNewPipelineName("");
+      toast({ title: `"${pipeline.name}" created` });
+    },
+    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
   const handleDetachSignal = useCallback((signalId: number) => {
     attachMutation.mutate({ signalId, parentId: null });
   }, [attachMutation]);
@@ -1118,9 +1210,9 @@ export default function Pipeline() {
   // ── Exports ───────────────────────────────────────────────────────────────
 
   const handleExportCsv = () => {
-    if (savedAssets.length === 0) return;
+    if (sortedCards.length === 0) return;
     const headers = ["Asset Name", "Target", "Modality", "Stage", "Disease", "Summary", "Journal", "Year", "Source", "URL"];
-    const rows = savedAssets.map((a) => [
+    const rows = sortedCards.map((a) => [
       a.assetName, a.target, a.modality, a.developmentStage, a.diseaseIndication,
       `"${(a.summary ?? "").replace(/"/g, '""')}"`,
       a.sourceJournal, a.publicationYear, a.sourceName, a.sourceUrl ?? "",
@@ -1132,7 +1224,7 @@ export default function Pipeline() {
   };
 
   const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify(savedAssets, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(sortedCards, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "eden-pipeline.json"; a.click(); URL.revokeObjectURL(url);
   };
@@ -1155,7 +1247,9 @@ export default function Pipeline() {
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {totalAssets > 0
-                  ? `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${signalCount > 0 ? ` · ${signalCount} signal${signalCount !== 1 ? "s" : ""}` : ""}`
+                  ? sortedCards.length < totalAssets
+                    ? `${sortedCards.length} of ${totalAssets} assets`
+                    : `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${signalCount > 0 ? ` · ${signalCount} signal${signalCount !== 1 ? "s" : ""}` : ""}`
                   : "Save assets from Scout to build your pipeline"}
               </p>
             </div>
@@ -1257,6 +1351,40 @@ export default function Pipeline() {
                     })}
                   </div>
                 </ScrollArea>
+                {/* Create new pipeline */}
+                <div className="px-2 py-2 border-t border-border shrink-0">
+                  {creatingPipeline ? (
+                    <div className="flex gap-1.5">
+                      <input
+                        autoFocus
+                        value={newPipelineName}
+                        onChange={(e) => setNewPipelineName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim());
+                          if (e.key === "Escape") { setCreatingPipeline(false); setNewPipelineName(""); }
+                        }}
+                        placeholder="Pipeline name…"
+                        className="flex-1 min-w-0 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground"
+                      />
+                      <button
+                        onClick={() => { if (newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim()); }}
+                        disabled={!newPipelineName.trim() || createPipelineMutation.isPending}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0"
+                      >
+                        {createPipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setCreatingPipeline(true)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                      data-testid="button-sidebar-new-pipeline"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      New pipeline
+                    </button>
+                  )}
+                </div>
               </aside>
 
               {/* ── Main content area ─────────────────────────────────────── */}
@@ -1280,24 +1408,37 @@ export default function Pipeline() {
                       </div>
                     ) : (
                       <>
-                        {/* Asset type filter bar */}
-                        <div className="flex items-center gap-1.5 flex-wrap mb-5">
-                          {(["all", "tto", "trial", "patent", "research"] as const).map((type) => {
-                            const count = type === "all" ? gridCards.length : gridCards.filter((c) => getSourceCategory(c.sourceName) === type).length;
-                            if (type !== "all" && count === 0) return null;
-                            return (
+                        {/* Filter bar + sort controls */}
+                        <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {(["all", "tto", "trial", "patent", "research"] as const).map((type) => {
+                              const count = type === "all" ? gridCards.length : gridCards.filter((c) => getSourceCategory(c.sourceName) === type).length;
+                              if (type !== "all" && count === 0) return null;
+                              return (
+                                <button
+                                  key={type}
+                                  onClick={() => setFilterType(type)}
+                                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${filterType === type ? "bg-primary text-primary-foreground border-primary font-medium" : "border-border text-foreground hover:border-primary/30 hover:bg-muted/40"}`}
+                                >
+                                  {TYPE_FILTER_LABELS[type]}{count > 0 && <span className={`ml-1 ${filterType === type ? "opacity-70" : "text-muted-foreground"}`}>({count})</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card shrink-0">
+                            {(["date", "az", "stage"] as const).map((s) => (
                               <button
-                                key={type}
-                                onClick={() => setFilterType(type)}
-                                className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${filterType === type ? "bg-primary text-primary-foreground border-primary font-medium" : "border-border text-foreground hover:border-primary/30 hover:bg-muted/40"}`}
+                                key={s}
+                                onClick={() => setSortOrder(s)}
+                                className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${sortOrder === s ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                               >
-                                {TYPE_FILTER_LABELS[type]}{count > 0 && <span className={`ml-1 ${filterType === type ? "opacity-70" : "text-muted-foreground"}`}>({count})</span>}
+                                {s === "date" ? "Date" : s === "az" ? "A–Z" : "Stage"}
                               </button>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
 
-                        {typeFilteredCards.length === 0 ? (
+                        {sortedCards.length === 0 ? (
                           <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
                             <p className="text-sm text-muted-foreground">No {TYPE_FILTER_LABELS[filterType].toLowerCase()} in this view.</p>
                             <button onClick={() => setFilterType("all")} className="text-xs text-primary hover:text-primary/80 transition-colors">
@@ -1306,7 +1447,7 @@ export default function Pipeline() {
                           </div>
                         ) : (
                           <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                            {typeFilteredCards.map((card) => {
+                            {sortedCards.map((card) => {
                               const isTto = isTtoSource(card.sourceName);
                               const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
                               return (
