@@ -10,7 +10,7 @@ import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
   FileText, ChevronLeft, ChevronRight, Send, Link2, X, MessageSquare, Plus, Check,
-  LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2,
+  LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2, Pencil,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
 import { SAVED_ASSET_STATUSES } from "@shared/schema";
@@ -289,7 +289,7 @@ function CardFaceContent({ asset, hovered = false, compact = false, inDeck = fal
         {/* Footer strip for standalone non-TTO cards — suppressed when used as a face inside a TTO deck */}
         {!isTto && !inDeck && (
           <div className="flex items-center gap-1 pt-2 border-t border-white/20 dark:border-white/10 mt-auto">
-            <span className="text-[10px] text-muted-foreground flex-1">Drag to stack</span>
+            <span className="text-[10px] text-muted-foreground flex-1">Drag onto a TTO asset</span>
             {asset.sourceUrl && (
               <a
                 href={asset.sourceUrl}
@@ -311,11 +311,12 @@ function CardFaceContent({ asset, hovered = false, compact = false, inDeck = fal
 
 // ── PipelineCard — full multi-face deck with animated face transitions ─────────
 
-function PipelineCard({ asset, signals = [], onDelete, onClick }: {
+function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: {
   asset: PipelineAsset;
   signals?: PipelineAsset[];
   onDelete: (id: number) => void;
   onClick?: () => void;
+  pipelineName?: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
@@ -413,6 +414,13 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
+
+          {/* Pipeline name badge — shown when viewing All Assets */}
+          {pipelineName && (
+            <div className="absolute bottom-2 left-3 z-[20] max-w-[calc(100%-3rem)]">
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-full">{pipelineName}</span>
+            </div>
+          )}
 
           {/* Nav buttons — no gradient, solid pill buttons so they're always readable */}
           {hasMultipleFaces && (
@@ -1025,6 +1033,8 @@ export default function Pipeline() {
   const [statusOverrides, setStatusOverrides] = useState<Map<number, string | null>>(new Map());
   const [creatingPipeline, setCreatingPipeline] = useState(false);
   const [newPipelineName, setNewPipelineName] = useState("");
+  const [renamingPipelineId, setRenamingPipelineId] = useState<number | null>(null);
+  const [renamePipelineName, setRenamePipelineName] = useState("");
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
@@ -1042,6 +1052,7 @@ export default function Pipeline() {
     staleTime: 30000,
   });
   const pipelines = pipelinesData?.pipelines ?? [];
+  const pipelinesMap = new Map(pipelines.map((pl) => [pl.id, pl.name]));
   const savedAssets = data?.assets ?? [];
 
   // ── Data grouping ──────────────────────────────────────────────────────────
@@ -1087,15 +1098,19 @@ export default function Pipeline() {
   });
 
   const STAGE_SORT_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
-  const sortedCards = [...typeFilteredCards].sort((a, b) => {
-    if (sortOrder === "az") return a.assetName.localeCompare(b.assetName);
-    if (sortOrder === "stage") {
-      const ai = STAGE_SORT_ORDER.findIndex((s) => a.developmentStage?.toLowerCase().includes(s));
-      const bi = STAGE_SORT_ORDER.findIndex((s) => b.developmentStage?.toLowerCase().includes(s));
-      return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
-    }
-    return b.id - a.id;
-  });
+  function applySort<T extends PipelineAsset>(items: T[]): T[] {
+    return [...items].sort((a, b) => {
+      if (sortOrder === "az") return a.assetName.localeCompare(b.assetName);
+      if (sortOrder === "stage") {
+        const ai = STAGE_SORT_ORDER.findIndex((s) => a.developmentStage?.toLowerCase().includes(s));
+        const bi = STAGE_SORT_ORDER.findIndex((s) => b.developmentStage?.toLowerCase().includes(s));
+        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
+      }
+      return b.id - a.id;
+    });
+  }
+  const sortedCards = applySort(typeFilteredCards);
+  const sortedDecks = applySort(filteredDecks);
 
   // Drawer — search all saved assets so signal cards can open the drawer too
   const activeAsset = activeAssetId ? (savedAssets.find((a) => a.id === activeAssetId) ?? null) : null;
@@ -1155,6 +1170,7 @@ export default function Pipeline() {
     onSuccess: (_, vars) => {
       setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      toast({ title: "Stage updated" });
     },
     onError: (err: any, _vars, ctx: any) => {
       if (ctx) setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
@@ -1181,6 +1197,43 @@ export default function Pipeline() {
       toast({ title: `"${pipeline.name}" created` });
     },
     onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const renamePipelineMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/pipelines/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("Failed to rename pipeline");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      setRenamingPipelineId(null);
+      setRenamePipelineName("");
+    },
+    onError: (err: any) => toast({ title: "Rename failed", description: err.message, variant: "destructive" }),
+  });
+
+  const deletePipelineMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/pipelines/${id}`, {
+        method: "DELETE",
+        headers: { ...authHeaders },
+      });
+      if (!res.ok) throw new Error("Failed to delete pipeline");
+    },
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      if (filterPipeline === id) setFilterPipeline("all");
+      toast({ title: "Pipeline deleted" });
+    },
+    onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const handleDetachSignal = useCallback((signalId: number) => {
@@ -1277,6 +1330,11 @@ export default function Pipeline() {
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
                   <Download className="w-3 h-3" />JSON
                 </Button>
+                <Link href="/pipeline/brief/print">
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" data-testid="button-pipeline-brief">
+                    <FileText className="w-3 h-3" />Brief
+                  </Button>
+                </Link>
               </div>
             )}
           </div>
@@ -1335,18 +1393,61 @@ export default function Pipeline() {
                     {pipelines.length > 0 && <div className="my-1.5 border-t border-border" />}
                     {pipelines.map((pl) => {
                       const count = savedAssets.filter((a) => a.pipelineListId === pl.id).length;
+                      const isActive = filterPipeline === pl.id;
+                      const isRenaming = renamingPipelineId === pl.id;
+                      if (isRenaming) {
+                        return (
+                          <div key={pl.id} className="flex gap-1.5 px-1">
+                            <input
+                              autoFocus
+                              value={renamePipelineName}
+                              onChange={(e) => setRenamePipelineName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && renamePipelineName.trim()) renamePipelineMutation.mutate({ id: pl.id, name: renamePipelineName.trim() });
+                                if (e.key === "Escape") { setRenamingPipelineId(null); setRenamePipelineName(""); }
+                              }}
+                              className="flex-1 min-w-0 text-xs border border-primary/40 rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none text-foreground"
+                            />
+                            <button
+                              onClick={() => { if (renamePipelineName.trim()) renamePipelineMutation.mutate({ id: pl.id, name: renamePipelineName.trim() }); }}
+                              disabled={!renamePipelineName.trim() || renamePipelineMutation.isPending}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 shrink-0"
+                            >
+                              {renamePipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        );
+                      }
                       return (
-                        <button
-                          key={pl.id}
-                          onClick={() => setFilterPipeline(pl.id)}
-                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${filterPipeline === pl.id ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
-                          data-testid={`filter-pipeline-${pl.id}`}
-                        >
-                          <span className="truncate">{pl.name}</span>
-                          <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${filterPipeline === pl.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                            {count}
-                          </span>
-                        </button>
+                        <div key={pl.id} className="group relative">
+                          <button
+                            onClick={() => setFilterPipeline(pl.id)}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${isActive ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
+                            data-testid={`filter-pipeline-${pl.id}`}
+                          >
+                            <span className="truncate flex-1 pr-6">{pl.name}</span>
+                            <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center group-hover:hidden ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                              {count}
+                            </span>
+                          </button>
+                          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRenamingPipelineId(pl.id); setRenamePipelineName(pl.name); }}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                              title="Rename"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deletePipelineMutation.mutate(pl.id); }}
+                              disabled={deletePipelineMutation.isPending}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-red-300 hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-destructive hover:bg-muted"}`}
+                              title="Delete pipeline"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1450,6 +1551,9 @@ export default function Pipeline() {
                             {sortedCards.map((card) => {
                               const isTto = isTtoSource(card.sourceName);
                               const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
+                              const cardPipelineName = filterPipeline === "all" && card.pipelineListId
+                                ? pipelinesMap.get(card.pipelineListId)
+                                : undefined;
                               return (
                                 <PipelineCard
                                   key={card.id}
@@ -1457,6 +1561,7 @@ export default function Pipeline() {
                                   signals={deck?.signals ?? []}
                                   onDelete={(id) => deleteMutation.mutate(id)}
                                   onClick={() => setActiveAssetId(card.id)}
+                                  pipelineName={cardPipelineName}
                                 />
                               );
                             })}
@@ -1482,22 +1587,38 @@ export default function Pipeline() {
                         </button>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <div className="flex gap-3 min-w-max pb-4">
-                          {BOARD_COLUMNS.map((col) => {
-                            const colDecks = filteredDecks.filter((d) => (d.status ?? null) === col.key);
-                            return (
-                              <KanbanColumn
-                                key={col.key ?? "unassigned"}
-                                col={col}
-                                decks={colDecks}
-                                onDelete={(id) => deleteMutation.mutate(id)}
-                                onCardClick={(asset) => setActiveAssetId(asset.id)}
-                              />
-                            );
-                          })}
+                      <>
+                        {/* Board sort bar */}
+                        <div className="flex items-center justify-end mb-4">
+                          <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card shrink-0">
+                            {(["date", "az", "stage"] as const).map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setSortOrder(s)}
+                                className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${sortOrder === s ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                              >
+                                {s === "date" ? "Date" : s === "az" ? "A–Z" : "Stage"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                        <div className="overflow-x-auto">
+                          <div className="flex gap-3 min-w-max pb-4">
+                            {BOARD_COLUMNS.map((col) => {
+                              const colDecks = sortedDecks.filter((d) => (d.status ?? null) === col.key);
+                              return (
+                                <KanbanColumn
+                                  key={col.key ?? "unassigned"}
+                                  col={col}
+                                  decks={colDecks}
+                                  onDelete={(id) => deleteMutation.mutate(id)}
+                                  onCardClick={(asset) => setActiveAssetId(asset.id)}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
                     )
                   )}
                 </div>
@@ -1506,16 +1627,19 @@ export default function Pipeline() {
 
             {/* Drag overlay — full card visual */}
             <DragOverlay>
-              {activeDragAsset && (
-                <div className="opacity-90 rotate-1 scale-[0.97]" style={{ width: "200px" }}>
-                  <div
-                    className="relative w-full h-[260px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10"
-                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.28)" }}
-                  >
-                    <CardFaceContent asset={activeDragAsset} />
+              {activeDragAsset && (() => {
+                const isBoardDrag = activeDragId?.startsWith("tto-");
+                return (
+                  <div className="opacity-90 rotate-1 scale-[0.97]" style={{ width: "200px" }}>
+                    <div
+                      className="relative w-full rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10"
+                      style={{ height: isBoardDrag ? "210px" : "260px", boxShadow: "0 20px 60px rgba(0,0,0,0.28)" }}
+                    >
+                      <CardFaceContent asset={activeDragAsset} compact={!!isBoardDrag} />
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </DragOverlay>
           </DndContext>
         )}
