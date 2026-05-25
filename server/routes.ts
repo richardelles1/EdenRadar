@@ -9,7 +9,7 @@ import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg } from "./storage";
+import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
@@ -2237,6 +2237,121 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[intelligence] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
+    }
+  });
+
+  // POST /api/assets/:fingerprint/export-pdf — server-side Playwright PDF generation
+  app.post("/api/assets/:fingerprint/export-pdf", verifyAnyAuth, async (req, res) => {
+    try {
+      const { fingerprint } = req.params;
+      const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
+      if (!fingerprintStr) return res.status(400).json({ error: "Fingerprint required" });
+
+      const { asset, dossier } = req.body as {
+        asset?: import("./lib/types").ScoredAsset;
+        dossier?: { narrative: string; generated_at: string } | null;
+      };
+
+      // Fetch enriched record and competing assets from DB
+      let rec = await db.select().from(ingestedAssets)
+        .where(eq(ingestedAssets.fingerprint, fingerprintStr)).limit(1).then((r) => r[0]);
+      if (!rec) {
+        const n = parseInt(fingerprintStr, 10);
+        if (!isNaN(n)) rec = await db.select().from(ingestedAssets)
+          .where(eq(ingestedAssets.id, n)).limit(1).then((r) => r[0]);
+      }
+
+      let competing: typeof rec[] = [];
+      if (rec?.target && rec.target !== "unknown") {
+        competing = await db.select().from(ingestedAssets).where(
+          and(
+            eq(ingestedAssets.target, rec.target),
+            sql`${ingestedAssets.institution} != ${rec.institution}`,
+            eq(ingestedAssets.relevant, true),
+            sql`${ingestedAssets.fingerprint} != ${fingerprintStr}`,
+          )
+        ).limit(5);
+      }
+
+      // Best-effort literature fetch (non-blocking)
+      let literature: Array<{ title: string; url: string; date: string; source_type: string }> = [];
+      if (rec) {
+        const terms = [rec.target, rec.indication].filter((v) => v && v !== "unknown").join(" ");
+        if (terms) {
+          try {
+            const pubmed = dataSources["pubmed" as SourceKey];
+            if (pubmed) {
+              const sigs = await Promise.race([
+                pubmed.search(terms, 4),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+              ]);
+              literature = (sigs as import("./lib/types").RawSignal[]).map((s) => ({
+                title: s.title, url: s.url, date: s.date, source_type: s.source_type,
+              }));
+            }
+          } catch { /* skip literature on timeout */ }
+        }
+      }
+
+      const { generateDossierPdf } = await import("./pdfExport");
+
+      const pdf = await generateDossierPdf({
+        fingerprint: fingerprintStr,
+        assetName: (rec?.assetName?.trim() || asset?.asset_name?.trim()) || "Asset Dossier",
+        institution: (rec?.institution?.trim() || asset?.institution?.trim()) || null,
+        indication: (rec?.indication?.trim() || asset?.indication?.trim()) || null,
+        target: (rec?.target?.trim() || asset?.target?.trim()) || null,
+        modality: (rec?.modality?.trim() || asset?.modality?.trim()) || null,
+        stage: (rec?.developmentStage?.trim() || asset?.development_stage?.trim()) || null,
+        patentStatus: (rec?.patentStatus?.trim() || asset?.patent_status?.trim()) || null,
+        licensingStatus: (rec?.licensingStatus?.trim() || asset?.licensing_status?.trim()) || null,
+        contactEmail: rec?.contactEmail ?? asset?.contact_office ?? null,
+        sourceTypes: asset?.source_types ?? [],
+        evidenceCount: asset?.evidence_count ?? 0,
+        sourceUrls: asset?.source_urls ?? (rec?.sourceUrl ? [rec.sourceUrl] : []),
+        score: asset?.score ?? 0,
+        scoreBreakdown: asset?.score_breakdown ? {
+          novelty: asset.score_breakdown.novelty,
+          freshness: asset.score_breakdown.freshness,
+          readiness: asset.score_breakdown.readiness,
+          licensability: asset.score_breakdown.licensability,
+          fit: asset.score_breakdown.fit,
+          competition: asset.score_breakdown.competition,
+          total: asset.score_breakdown.total,
+          signal_coverage: asset.score_breakdown.signal_coverage ?? 0,
+          scored_dimensions: asset.score_breakdown.scored_dimensions ?? [],
+        } : null,
+        mechanismOfAction: rec?.mechanismOfAction ?? null,
+        abstract: rec?.abstract ?? null,
+        ipType: rec?.ipType ?? null,
+        licensingReadiness: rec?.licensingReadiness ?? null,
+        inventors: rec?.inventors ?? null,
+        innovationClaim: rec?.innovationClaim ?? null,
+        unmetNeed: rec?.unmetNeed ?? null,
+        comparableDrugs: rec?.comparableDrugs ?? null,
+        whyItMatters: asset?.why_it_matters ?? null,
+        literature,
+        competingAssets: competing.map((c) => ({
+          assetName: c.assetName ?? "",
+          target: c.target ?? "",
+          modality: c.modality ?? "",
+          developmentStage: c.developmentStage ?? "",
+          institution: c.institution ?? "",
+        })),
+        narrative: dossier?.narrative ?? null,
+        narrativeGeneratedAt: dossier?.generated_at ?? null,
+      });
+
+      const safeName = (rec?.assetName?.trim() || asset?.asset_name?.trim() || "dossier")
+        .replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").slice(0, 60);
+      const date = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="EdenScout_${safeName}_${date}.pdf"`);
+      res.setHeader("Content-Length", pdf.length);
+      return res.end(pdf);
+    } catch (err: any) {
+      console.error("[export-pdf] Error:", err);
+      return res.status(500).json({ error: err.message ?? "PDF generation failed" });
     }
   });
 
@@ -9592,7 +9707,15 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
       if (error) return res.status(500).json({ error: error.message });
-      const users = (data?.users ?? []).map((u) => {
+      const authUsers = data?.users ?? [];
+      const userIds = authUsers.map((u) => u.id);
+      const profileRows = userIds.length > 0
+        ? await db.select({ userId: industryProfiles.userId, status: industryProfiles.status })
+            .from(industryProfiles)
+            .where(inArray(industryProfiles.userId, userIds))
+        : [];
+      const statusByUserId = new Map(profileRows.map((r) => [r.userId, r.status]));
+      const users = authUsers.map((u) => {
         const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
         const name =
           (typeof meta.name === "string" && meta.name) ||
@@ -9616,6 +9739,7 @@ If a field cannot be determined, use "N/A".`
           role: (typeof meta.role === "string" ? meta.role : null),
           subscribedToDigest: meta.subscribedToDigest === true,
           marketEntitlement,
+          status: statusByUserId.get(u.id) ?? "active",
           createdAt: u.created_at,
           lastSignInAt: u.last_sign_in_at ?? null,
         };
@@ -10236,6 +10360,42 @@ If a field cannot be determined, use "N/A".`
       });
 
       res.json({ ok: true, org });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Assign Existing User to Existing Org ─────────────────────────────────────
+  // POST /api/admin/users/:userId/assign-org — move a user (with or without a current org)
+  // into an existing org. Replaces any existing org_members row atomically.
+  app.post("/api/admin/users/:userId/assign-org", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { orgId, role } = z.object({
+        orgId: z.number().int().positive(),
+        role: z.enum(["owner", "member"]).default("member"),
+      }).parse(req.body);
+
+      const adminUser = await getAdminUser(req);
+      if (!adminUser) return res.status(401).json({ error: "Admin authentication required" });
+
+      // Verify the target org exists
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const prevProfile = await storage.getIndustryProfileByUserId(userId);
+      const prevOrgId = prevProfile?.orgId ?? null;
+
+      await assignUserToOrg(userId, orgId, role, adminUser.email);
+
+      await insertAdminEvent({
+        adminUserId: adminUser.id, adminEmail: adminUser.email,
+        action: "org_member_assigned", targetUserId: userId, targetOrgId: orgId,
+        payload: { role, previousOrgId: prevOrgId, orgName: org.name },
+      });
+
+      res.json({ ok: true, orgId, orgName: org.name, role });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
       res.status(500).json({ error: err.message });

@@ -238,6 +238,7 @@ export default function AssetDossier() {
   const { session } = useAuth();
   const [asset, setAsset] = useState<ScoredAsset | null>(null);
   const [dossier, setDossier] = useState<DossierPayload | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [metaExpanded, setMetaExpanded] = useState(false);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -252,6 +253,38 @@ export default function AssetDossier() {
   const abortRef = useRef<AbortController | null>(null);
 
   const fingerprint = sessionStorage.getItem(`asset-fingerprint-${id}`) ?? id;
+
+  async function handleExportPdf() {
+    if (!asset || pdfLoading) return;
+    setPdfLoading(true);
+    try {
+      const res = await fetch(`/api/assets/${encodeURIComponent(fingerprint)}/export-pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asset,
+          dossier: dossier ? { narrative: dossier.narrative, generated_at: dossier.generated_at } : null,
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "PDF generation failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="([^"]+)"/);
+      a.download = match?.[1] ?? `EdenScout_Dossier.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast({ title: "Export failed", description: err.message ?? "Could not generate PDF", variant: "destructive" });
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   const { data: intelligence, isLoading: intelLoading, isError: intelError } = useQuery<IntelligenceData>({
     queryKey: ["/api/assets", fingerprint, "intelligence"],
@@ -633,17 +666,14 @@ export default function AssetDossier() {
               variant="outline"
               size="sm"
               className="gap-1.5 text-xs"
-              onClick={() => {
-                try {
-                  sessionStorage.setItem(`asset-${id}`, JSON.stringify(asset));
-                  if (dossier) sessionStorage.setItem(`dossier-${id}`, JSON.stringify(dossier));
-                } catch {}
-                setLocation(`/asset/${id}/print`);
-              }}
+              onClick={handleExportPdf}
+              disabled={pdfLoading || !asset}
               data-testid="button-export-dossier"
             >
-              <Upload className="w-3.5 h-3.5" />
-              Export
+              {pdfLoading
+                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                : <Upload className="w-3.5 h-3.5" />}
+              {pdfLoading ? "Generating PDF…" : "Export PDF"}
             </Button>
             {dossier && (
               <Button
