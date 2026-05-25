@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
 import { useOrg } from "@/hooks/use-org";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AlertTriangle, Clock, X, ExternalLink, ArrowRight } from "lucide-react";
+import { AlertTriangle, Clock, X, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
@@ -77,7 +77,7 @@ function NonOwnerPastDueBanner() {
 }
 
 function TrialBanner({ daysLeft, periodEnd }: { daysLeft: number; periodEnd: string | Date | null | undefined }) {
-  const label = daysLeft === 0 ? "less than 1 day" : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+  const label = daysLeft === 1 ? "1 day" : `${daysLeft} days`;
   const chargeDate = periodEnd
     ? new Date(periodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : null;
@@ -90,17 +90,8 @@ function TrialBanner({ daysLeft, periodEnd }: { daysLeft: number; periodEnd: str
       <Clock className="w-4 h-4 shrink-0" />
       <span className="flex-1 min-w-0">
         <strong>{label} left on your free trial.</strong>
-        {chargeDate && <span className="text-muted-foreground"> Your card will be charged on {chargeDate} unless you cancel.</span>}
+        {chargeDate && <span className="text-muted-foreground"> You won't be charged until {chargeDate}. Cancel anytime from settings.</span>}
       </span>
-      <Link href="/pricing">
-        <a
-          className="shrink-0 flex items-center gap-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-700 text-white rounded px-2.5 py-1 transition-colors"
-          data-testid="banner-trial-upgrade"
-        >
-          Upgrade now
-          <ArrowRight className="w-3 h-3" />
-        </a>
-      </Link>
     </div>
   );
 }
@@ -136,8 +127,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const showPastDue = isOwner && org?.stripeStatus === "past_due" && !pastDueDismissed;
   const showNonOwnerPastDue = !isOwner && org?.stripeStatus === "past_due";
-  const showTrial = isOwner && org?.stripeStatus === "trialing" && !showPastDue;
-  const trialDaysLeft = showTrial ? daysUntil(org?.stripeCurrentPeriodEnd) : 0;
+  const showTrial = isOwner && org?.stripeStatus === "trialing" && !!org?.stripeCurrentPeriodEnd && !showPastDue;
+  const trialDaysLeft = showTrial ? Math.max(1, daysUntil(org?.stripeCurrentPeriodEnd)) : 0;
 
   useEffect(() => {
     if (org?.id) {
