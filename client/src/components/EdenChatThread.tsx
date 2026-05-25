@@ -218,20 +218,22 @@ export function EdenChatThread({
 
               {/* Feedback row */}
               {msg.role === "assistant" && !msg.isStreaming && msg.content && (
-                <div className="flex items-center gap-0.5 mt-1 ml-0.5">
+                <div className="flex items-center gap-1 mt-1.5 ml-0.5">
                   <button
                     onClick={() => onFeedback(i, "up")}
-                    className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "up" ? "text-emerald-500" : "text-muted-foreground/30 hover:text-emerald-500"}`}
+                    title="Good response"
+                    className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "up" ? "text-emerald-500" : "text-muted-foreground/50 hover:text-emerald-500"}`}
                     data-testid={`button-feedback-up-${i}`}
                   >
-                    <ThumbsUp className="h-3 w-3" fill={messageFeedback[i] === "up" ? "currentColor" : "none"} />
+                    <ThumbsUp className="h-3.5 w-3.5" fill={messageFeedback[i] === "up" ? "currentColor" : "none"} />
                   </button>
                   <button
                     onClick={() => onFeedback(i, "down")}
-                    className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "down" ? "text-rose-400" : "text-muted-foreground/30 hover:text-rose-400"}`}
+                    title="Bad response"
+                    className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "down" ? "text-rose-400" : "text-muted-foreground/50 hover:text-rose-400"}`}
                     data-testid={`button-feedback-down-${i}`}
                   >
-                    <ThumbsDown className="h-3 w-3" fill={messageFeedback[i] === "down" ? "currentColor" : "none"} />
+                    <ThumbsDown className="h-3.5 w-3.5" fill={messageFeedback[i] === "down" ? "currentColor" : "none"} />
                   </button>
                 </div>
               )}

@@ -7504,6 +7504,7 @@ Do not respond with anything else.`;
       // ── Merge LLM filters with accumulated session focus ──────────────────
       // LLM extracts what's in the current message; focusContext fills gaps with
       // prior accumulated context (e.g. a stage set two turns ago stays active).
+      // recency + trending are per-query only — never merged from focusContext.
       const filters = {
         modality: intentClass.filters.modality ?? focusContext.modality,
         stage: intentClass.filters.stage ?? focusContext.stage,
@@ -7511,7 +7512,20 @@ Do not respond with anything else.`;
         institution: intentClass.filters.institution ?? focusContext.institution,
         geography: intentClass.filters.geography ?? focusContext.geography,
         biology: intentClass.filters.biology ?? focusContext.biology,
+        recency: intentClass.filters.recency,
+        trending: intentClass.filters.trending,
       };
+
+      // Map recency window to a concrete Date for storage-layer filtering.
+      const RECENCY_MS: Record<string, number> = {
+        last30: 30 * 24 * 60 * 60 * 1000,
+        last90: 90 * 24 * 60 * 60 * 1000,
+        last180: 180 * 24 * 60 * 60 * 1000,
+        lastyear: 365 * 24 * 60 * 60 * 1000,
+      };
+      const sinceDate: Date | undefined = filters.recency
+        ? new Date(Date.now() - RECENCY_MS[filters.recency])
+        : undefined;
 
       // Two-pass institution detection: if LLM didn't catch it, try pattern + portfolio scan.
       if (!filters.institution) {
@@ -7584,7 +7598,7 @@ Do not respond with anything else.`;
           return;
         }
 
-        const count = await storage.filteredCount(geoRx, filters.modality, filters.stage, filters.indication, filters.institution, filters.biology).catch(() => null);
+        const count = await storage.filteredCount(geoRx, filters.modality, filters.stage, filters.indication, filters.institution, filters.biology, sinceDate).catch(() => null);
         if (count !== null) {
           const filterDesc = [
             filters.geography ? `${filters.geography.toUpperCase()} institution` : "",
@@ -7930,7 +7944,7 @@ Do not respond with anything else.`;
           : [];
         institutionAssets = instAssets;
         if (filtersActive) {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology);
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined);
         } else {
           allSemantic = await storage.semanticSearch(queryEmbedding, 20);
         }
@@ -7987,8 +8001,13 @@ Do not respond with anything else.`;
       }));
 
       sendEvent("context", { sessionId: sid, assets: assetPayload });
+      // For trending queries, append a note so EDEN frames results with market context.
+      // We're transparent about the data source (recently indexed, high completeness) — not behavioral signals.
+      const ragQuestion = filters.trending
+        ? `${message.trim()}\n\n[CONTEXT FOR EDEN: These assets were indexed in the last 90 days and are well-documented. After presenting them, add 2–3 sentences of genuine market context from your industry intelligence — what deal dynamics, funding trends, or mechanism enthusiasm makes this area compelling right now. Do NOT fabricate market data; only reference what you know from your training.]`
+        : message.trim();
       let fullResponse = "";
-      for await (const token of ragQuery(message.trim(), retrieved, history, resolvedCtx, portfolioStats, focusContext)) {
+      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext)) {
         fullResponse += token;
         sendEvent("token", { text: token });
       }

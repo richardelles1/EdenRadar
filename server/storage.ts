@@ -395,10 +395,10 @@ export interface IStorage {
   }>>;
 
   semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
-  filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number, biology?: string): Promise<RetrievedAsset[]>;
+  filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number, biology?: string, since?: Date, minCompleteness?: number): Promise<RetrievedAsset[]>;
   scoutVectorSearch(queryEmbedding: number[], opts?: { modality?: string; stage?: string; indication?: string; institution?: string; biology?: string; biologies?: string[]; limit?: number; minSimilarity?: number; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
   keywordSearchIngestedAssets(query: string, limit?: number, opts?: { modality?: string; stage?: string; indication?: string; institution?: string; biology?: string; biologies?: string[]; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
-  filteredCount(geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, biology?: string): Promise<number>;
+  filteredCount(geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, biology?: string, since?: Date): Promise<number>;
   searchIngestedAssetsByInstitution(name: string, limit?: number): Promise<RetrievedAsset[]>;
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
   appendEdenMessage(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
@@ -3245,7 +3245,8 @@ export class DatabaseStorage implements IStorage {
     stage?: string,
     indication?: string,
     institutionPattern?: string,
-    biology?: string
+    biology?: string,
+    since?: Date
   ): Promise<number> {
     const conditions: ReturnType<typeof sql>[] = [sql`relevant = true`];
     if (geoRegex) conditions.push(sql`institution ~* ${geoRegex}`);
@@ -3254,6 +3255,7 @@ export class DatabaseStorage implements IStorage {
     if (indication) conditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institutionPattern) conditions.push(sql`LOWER(institution) LIKE ${"%" + institutionPattern.toLowerCase() + "%"}`);
     if (biology) conditions.push(sql`LOWER(biology) LIKE ${"%" + biology.toLowerCase() + "%"}`);
+    if (since) conditions.push(sql`first_seen_at >= ${since.toISOString()}`);
 
     const where = conditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
     const result = await db.execute(sql`SELECT COUNT(*)::int AS count FROM ingested_assets WHERE ${where}`);
@@ -3268,7 +3270,9 @@ export class DatabaseStorage implements IStorage {
     indication?: string,
     institutionPattern?: string,
     limit = 15,
-    biology?: string
+    biology?: string,
+    since?: Date,
+    minCompleteness?: number
   ): Promise<RetrievedAsset[]> {
     const vectorStr = `[${queryEmbedding.join(",")}]`;
     const filterConditions: ReturnType<typeof sql>[] = [
@@ -3280,6 +3284,8 @@ export class DatabaseStorage implements IStorage {
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institutionPattern) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institutionPattern.toLowerCase() + "%"}`);
     if (biology) filterConditions.push(sql`LOWER(biology) LIKE ${"%" + biology.toLowerCase() + "%"}`);
+    if (since) filterConditions.push(sql`first_seen_at >= ${since.toISOString()}`);
+    if (minCompleteness != null) filterConditions.push(sql`completeness_score >= ${minCompleteness}`);
 
     const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
 
