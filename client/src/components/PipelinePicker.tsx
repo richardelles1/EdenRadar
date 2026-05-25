@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { getAuthHeaders } from "@/lib/queryClient";
@@ -166,16 +166,21 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
     ? ttoAssets.filter((a) => a.assetName.toLowerCase().includes(search.toLowerCase()))
     : ttoAssets;
 
-  // Initialise dialog fields from saved state when it opens
+  // Track whether the dialog was open on the previous render so we can detect the
+  // open→close transition and re-seed state on the NEXT open without clobbering
+  // the user's in-progress selections while the dialog is already open.
+  const prevDialogOpenRef = useRef(false);
   useEffect(() => {
-    if (dialogOpen) {
+    const justOpened = dialogOpen && !prevDialogOpenRef.current;
+    prevDialogOpenRef.current = dialogOpen;
+    if (justOpened) {
       setDialogParentId(savedAsset?.parentSavedAssetId ?? null);
       setDialogPipelineListId(savedAsset?.pipelineListId ?? null);
       setDialogParentSearch("");
       setDialogCreating(false);
       setDialogNewName("");
     }
-  }, [dialogOpen]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dialogOpen, savedAsset]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
 
@@ -307,6 +312,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
 
   // Dialog-specific save mutation (handles both new save + update of existing signal)
   const dialogSaveMutation = useMutation({
+    retry: 1,
     mutationFn: async () => {
       if (!effectivePayload) throw new Error("No payload");
       const authHeaders = await getAuthHeaders();
@@ -471,7 +477,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         {renderTrigger(() => setDialogOpen(true))}
 
         <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); }}>
-          <DialogContent className="max-w-md w-full" data-testid="dialog-non-tto-save">
+          <DialogContent className="max-w-lg w-full" data-testid="dialog-non-tto-save">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2 text-base">
                 <Bookmark className="w-4 h-4 text-primary shrink-0" />
@@ -485,7 +491,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
               </div>
             </DialogHeader>
 
-            <div className="flex flex-col gap-4 py-1 max-h-[60vh] overflow-y-auto pr-1">
+            <div className="flex flex-col gap-4 py-1 max-h-[60vh] overflow-y-auto overflow-x-hidden pr-1">
               {/* ── Link to TTO Asset ─────────────────────────────────────── */}
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -560,8 +566,9 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
                     <button
                       key={p.id}
                       onClick={() => setDialogPipelineListId(p.id)}
-                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${dialogPipelineListId === p.id ? "bg-primary text-primary-foreground border-primary" : "border-border text-foreground hover:border-primary/40 hover:bg-muted/50"}`}
+                      className={`max-w-[10rem] px-2.5 py-1 rounded-full text-xs border transition-colors truncate ${dialogPipelineListId === p.id ? "bg-primary text-primary-foreground border-primary" : "border-border text-foreground hover:border-primary/40 hover:bg-muted/50"}`}
                       data-testid={`dialog-pipeline-option-${p.id}`}
+                      title={p.name}
                     >
                       {p.name}
                     </button>

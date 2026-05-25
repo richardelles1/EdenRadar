@@ -111,9 +111,10 @@ function getInitials(name: string): string {
   return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string | undefined | null): string {
+  if (!dateStr) return "just now";
   const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff <= 0) return "just now";
+  if (!Number.isFinite(diff) || diff <= 0) return "just now";
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -710,7 +711,8 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
     mutationFn: async (content: string) => {
       if (!asset) throw new Error("No asset");
       const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content });
-      return res.json();
+      const data = await res.json();
+      return data.note ?? data;
     },
     onSuccess: (createdNote, _content) => {
       setNoteText("");
@@ -1150,11 +1152,16 @@ export default function Pipeline() {
       return { signalId };
     },
     onSuccess: (_, vars) => {
+      // Write directly into the cache and clear the override in the same batch —
+      // no intermediate render with stale data, so no flash back to old position.
+      qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
+        if (!old) return old;
+        return { ...old, assets: old.assets.map((a) => a.id === vars.signalId ? { ...a, parentSavedAssetId: vars.parentId } : a) };
+      });
       setParentOverrides((m) => { const n = new Map(m); n.delete(vars.signalId); return n; });
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       toast({ title: vars.parentId ? "Signal attached" : "Signal detached" });
     },
-    onError: (err: any, vars, ctx: any) => {
+    onError: (err: any, _vars, ctx: any) => {
       if (ctx) setParentOverrides((m) => { const n = new Map(m); n.delete(ctx.signalId); return n; });
       toast({ title: "Attach failed", description: err.message, variant: "destructive" });
     },
@@ -1175,8 +1182,11 @@ export default function Pipeline() {
       return { id };
     },
     onSuccess: (_, vars) => {
+      qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
+        if (!old) return old;
+        return { ...old, assets: old.assets.map((a) => a.id === vars.id ? { ...a, status: vars.status } : a) };
+      });
       setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       toast({ title: "Stage updated" });
     },
     onError: (err: any, _vars, ctx: any) => {
@@ -1632,8 +1642,9 @@ export default function Pipeline() {
               </div>
             </div>
 
-            {/* Drag overlay — full card visual */}
-            <DragOverlay>
+            {/* Drag overlay — full card visual; dropAnimation=null so overlay vanishes
+                instantly on release (the real card is already in position via onMutate) */}
+            <DragOverlay dropAnimation={null}>
               {activeDragAsset && (() => {
                 const isBoardDrag = activeDragId?.startsWith("tto-");
                 return (

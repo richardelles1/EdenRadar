@@ -181,11 +181,13 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current || breakdownOpen) return;
     const rect = cardRef.current.getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
-    setTilt({ x: (relY - 0.5) * -10, y: (relX - 0.5) * 10, active: true });
+    const x = Math.max(-2.5, Math.min(2.5, (relY - 0.5) * -4));
+    const y = Math.max(-2.5, Math.min(2.5, (relX - 0.5) * 4));
+    setTilt({ x, y, active: true });
   };
 
   const handleMouseLeave = () => {
@@ -209,12 +211,12 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           transformStyle: "preserve-3d",
           transform: pressed
             ? `perspective(1000px) scale(0.96) rotateZ(0.4deg)`
-            : tilt.active
+            : (tilt.active && !breakdownOpen)
             ? `perspective(1000px) scale(1.015) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
             : `perspective(1000px)`,
           transition: pressed
             ? "transform 0.07s ease-in, box-shadow 0.1s"
-            : tilt.active
+            : (tilt.active && !breakdownOpen)
             ? "transform 0.08s ease-out, box-shadow 0.2s"
             : "transform 0.5s cubic-bezier(0.23,1,0.32,1), box-shadow 0.4s",
           boxShadow: hovered
@@ -570,7 +572,9 @@ export function SavedAssetCard({
     const rect = cardRef.current.getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
-    setTilt({ x: (relY - 0.5) * -7, y: (relX - 0.5) * 7, active: true });
+    const x = Math.max(-2.5, Math.min(2.5, (relY - 0.5) * -4));
+    const y = Math.max(-2.5, Math.min(2.5, (relX - 0.5) * 4));
+    setTilt({ x, y, active: true });
   };
 
   const handleMouseLeave = () => {

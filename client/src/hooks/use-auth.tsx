@@ -76,6 +76,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_OUT" && wasSignedIn.current && !signingOutRef.current) {
         setSessionExpired(true);
       }
+      if (event === "SIGNED_IN" && s?.user && user && s.user.id !== user.id) {
+        sessionStorage.clear();
+      }
       if (s?.user) wasSignedIn.current = true;
 
       if (event === "PASSWORD_RECOVERY") {
@@ -215,7 +218,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   async function signOut() {
     signingOutRef.current = true;
     wasSignedIn.current = false;
-    sessionStorage.removeItem("edenradar_welcomed");
+    sessionStorage.clear();
     const userSpecificKeys = [
       "eden-industry-profile",
       "eden-researcher-profile",
