@@ -39,6 +39,7 @@ import {
   RefreshCw,
   Bot,
   Plug,
+  ArrowRight,
 } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import type { StripeBillingEvent } from "@shared/schema";
@@ -382,6 +383,15 @@ export default function IndustrySettings() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
 
+  // Org profile editing (Task 6)
+  const [orgName, setOrgName] = useState(org?.name ?? "");
+  const [orgBillingEmail, setOrgBillingEmail] = useState(org?.billingEmail ?? "");
+  const [orgSaving, setOrgSaving] = useState(false);
+
+  // Ownership transfer (Task 9)
+  const [transferToId, setTransferToId] = useState<string | null>(null);
+  const [transferring, setTransferring] = useState(false);
+
   const { data: billingHistory = [], isLoading: billingLoading } = useQuery<StripeBillingEvent[]>({
     queryKey: ["/api/billing/history"],
     queryFn: async () => {
@@ -473,6 +483,13 @@ export default function IndustrySettings() {
   }
 
   useEffect(() => {
+    if (org) {
+      setOrgName(org.name ?? "");
+      setOrgBillingEmail(org.billingEmail ?? "");
+    }
+  }, [org?.id]);
+
+  useEffect(() => {
     setEmailDigest(user?.user_metadata?.subscribedToDigest === true);
   }, [user?.user_metadata?.subscribedToDigest]);
 
@@ -493,6 +510,54 @@ export default function IndustrySettings() {
       })
       .catch(() => {});
   }, [session?.access_token, isIndustry]);
+
+  async function handleSaveOrg(e: React.FormEvent) {
+    e.preventDefault();
+    if (!session?.access_token || !orgName.trim()) return;
+    setOrgSaving(true);
+    try {
+      const res = await fetch("/api/industry/org", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ name: orgName.trim(), billingEmail: orgBillingEmail.trim() }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: "Save failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
+      } else {
+        toast({ title: "Organization updated" });
+        queryClient.invalidateQueries({ queryKey: ["/api/industry/org"] });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setOrgSaving(false);
+    }
+  }
+
+  async function handleTransferOwnership(targetId: string) {
+    if (!session?.access_token) return;
+    setTransferring(true);
+    try {
+      const res = await fetch(`/api/org/members/${targetId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ role: "owner" }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: "Transfer failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
+      } else {
+        toast({ title: "Ownership transferred", description: "You are now an admin." });
+        queryClient.invalidateQueries({ queryKey: ["/api/industry/org"] });
+        setTransferToId(null);
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setTransferring(false);
+    }
+  }
 
   async function handleSignOut() {
     await signOut();
@@ -624,6 +689,52 @@ export default function IndustrySettings() {
           </div>
         </div>
       </Link>
+
+      {/* Organization */}
+      {org && (
+        <div className="rounded-xl border border-card-border bg-card p-5">
+          <SectionHeader icon={Building2} title="Organization" description="Your workspace name and billing contact" />
+          <form onSubmit={handleSaveOrg} className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="org-name" className="text-xs font-semibold text-foreground">Organization name</Label>
+              {isOwner ? (
+                <Input
+                  id="org-name"
+                  value={orgName}
+                  onChange={(e) => setOrgName(e.target.value)}
+                  placeholder="e.g., Acme Therapeutics"
+                  data-testid="input-org-name"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">{org.name}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="org-billing-email" className="text-xs font-semibold text-foreground">
+                Billing email <span className="text-muted-foreground font-normal">(optional)</span>
+              </Label>
+              {isOwner ? (
+                <Input
+                  id="org-billing-email"
+                  type="email"
+                  value={orgBillingEmail}
+                  onChange={(e) => setOrgBillingEmail(e.target.value)}
+                  placeholder="billing@company.com"
+                  data-testid="input-org-billing-email"
+                />
+              ) : (
+                <p className="text-sm text-muted-foreground">{org.billingEmail ?? "—"}</p>
+              )}
+            </div>
+            {isOwner && (
+              <Button type="submit" size="sm" disabled={orgSaving || !orgName.trim()} className="gap-1.5" data-testid="button-save-org">
+                {orgSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                {orgSaving ? "Saving…" : "Save"}
+              </Button>
+            )}
+          </form>
+        </div>
+      )}
 
       {/* Notifications */}
       <div className="rounded-xl border border-card-border bg-card p-5">
@@ -1174,7 +1285,7 @@ export default function IndustrySettings() {
                 </p>
               </div>
             </div>
-            {isOwner && (
+            {isAdminOrOwner && (
               <Button
                 size="sm"
                 variant="outline"
@@ -1263,6 +1374,17 @@ export default function IndustrySettings() {
                           {isBeingResent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                         </button>
                       )}
+                      {isOwner && member.role !== "owner" && (
+                        <button
+                          onClick={() => setTransferToId(member.userId)}
+                          disabled={isBeingRemoved || isBeingResent}
+                          title="Transfer ownership"
+                          data-testid={`button-transfer-${member.userId}`}
+                          className="p-1 rounded text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10 transition-colors"
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                       {isOwner && (
                         <button
                           onClick={() => !isLastOwner && handleRemove(member.userId, displayName)}
@@ -1339,6 +1461,40 @@ export default function IndustrySettings() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Transfer ownership confirmation dialog */}
+      {transferToId && (() => {
+        const targetMember = org?.members?.find((m: any) => m.userId === transferToId);
+        const targetName = targetMember?.memberName ?? targetMember?.email ?? "this member";
+        return (
+          <Dialog open={!!transferToId} onOpenChange={(v) => { if (!v) setTransferToId(null); }}>
+            <DialogContent className="sm:max-w-md" data-testid="modal-transfer-ownership">
+              <DialogHeader>
+                <DialogTitle>Transfer ownership</DialogTitle>
+                <DialogDescription>
+                  This will make <strong>{targetName}</strong> the new owner. You will become an admin and lose owner-only permissions.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogFooter className="gap-2 pt-2">
+                <Button type="button" variant="ghost" onClick={() => setTransferToId(null)} disabled={transferring}>
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  disabled={transferring}
+                  data-testid="button-confirm-transfer"
+                  onClick={() => handleTransferOwnership(transferToId)}
+                  className="gap-1.5"
+                >
+                  {transferring ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                  {transferring ? "Transferring…" : "Yes, transfer ownership"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       <ChangePasswordModal open={pwModalOpen} onClose={() => setPwModalOpen(false)} />
     </div>
