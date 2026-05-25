@@ -5488,6 +5488,42 @@ export async function deleteOrgEntitlementOverride(orgId: number, featureKey: st
     .where(and(eq(orgEntitlementOverrides.orgId, orgId), eq(orgEntitlementOverrides.featureKey, featureKey)));
 }
 
+// ── Assign Existing User to Existing Org ─────────────────────────────────────
+// Moves a user (with or without a current org) into a target org.
+// Removes the old org_members row (if any), inserts the new one, and updates
+// industry_profiles.org_id — all in one transaction so nothing is left half-done.
+
+export async function assignUserToOrg(
+  userId: string,
+  targetOrgId: number,
+  role: "owner" | "member" = "member",
+  adminEmail = "admin",
+): Promise<void> {
+  return db.transaction(async (tx) => {
+    // Remove from any existing org_members rows for this user
+    await tx.delete(orgMembers).where(eq(orgMembers.userId, userId));
+
+    // Insert into target org
+    await tx.insert(orgMembers).values({
+      orgId: targetOrgId,
+      userId,
+      role,
+      invitedBy: adminEmail,
+      inviteSource: "admin",
+      inviteStatus: "active",
+    });
+
+    // Point profile at the new org
+    await tx
+      .insert(industryProfiles)
+      .values({ userId, orgId: targetOrgId, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: industryProfiles.userId,
+        set: { orgId: targetOrgId, updatedAt: new Date() },
+      });
+  });
+}
+
 // ── Individual → Org Upgrade ──────────────────────────────────────────────────
 // Converts a user with no org (industryProfiles.org_id = null) into an org owner.
 // Migrates their personal pipeline lists to org scope.

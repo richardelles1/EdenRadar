@@ -9,7 +9,7 @@ import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg } from "./storage";
+import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
@@ -10236,6 +10236,42 @@ If a field cannot be determined, use "N/A".`
       });
 
       res.json({ ok: true, org });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Assign Existing User to Existing Org ─────────────────────────────────────
+  // POST /api/admin/users/:userId/assign-org — move a user (with or without a current org)
+  // into an existing org. Replaces any existing org_members row atomically.
+  app.post("/api/admin/users/:userId/assign-org", async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { orgId, role } = z.object({
+        orgId: z.number().int().positive(),
+        role: z.enum(["owner", "member"]).default("member"),
+      }).parse(req.body);
+
+      const adminUser = await getAdminUser(req);
+      if (!adminUser) return res.status(401).json({ error: "Admin authentication required" });
+
+      // Verify the target org exists
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const prevProfile = await storage.getIndustryProfileByUserId(userId);
+      const prevOrgId = prevProfile?.orgId ?? null;
+
+      await assignUserToOrg(userId, orgId, role, adminUser.email);
+
+      await insertAdminEvent({
+        adminUserId: adminUser.id, adminEmail: adminUser.email,
+        action: "org_member_assigned", targetUserId: userId, targetOrgId: orgId,
+        payload: { role, previousOrgId: prevOrgId, orgName: org.name },
+      });
+
+      res.json({ ok: true, orgId, orgName: org.name, role });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
       res.status(500).json({ error: err.message });
