@@ -1079,7 +1079,8 @@ export default function Pipeline() {
   const { data: activityData } = useQuery<{ items: any[]; memberCount: number }>({
     queryKey: ["/api/team/activity", { limit: 5 }],
     queryFn: async () => {
-      const res = await fetch("/api/team/activity?limit=5");
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/team/activity?limit=5", { headers: authHeaders });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
