@@ -260,7 +260,7 @@ export default function AssetDossier() {
     try {
       const res = await fetch(`/api/assets/${encodeURIComponent(fingerprint)}/export-pdf`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token}` },
         body: JSON.stringify({
           asset,
           dossier: dossier ? { narrative: dossier.narrative, generated_at: dossier.generated_at } : null,
