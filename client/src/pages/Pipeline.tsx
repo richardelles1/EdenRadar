@@ -106,6 +106,7 @@ function stagePillClass(stage: string): string {
 }
 
 function getInitials(name: string): string {
+  if (!name) return "?";
   const parts = name.trim().split(/\s+/);
   return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
@@ -1094,7 +1095,13 @@ export default function Pipeline() {
   };
   const typeFilteredCards = filterType === "all" ? gridCards : gridCards.filter((c) => {
     const cat = getSourceCategory(c.sourceName);
-    return cat === filterType;
+    if (cat === filterType) return true;
+    // TTO deck cards match a non-TTO filter if they contain a coupled signal of that type
+    if (filterType !== "tto" && cat === "tto") {
+      const deck = deckAssets.find((d) => d.id === c.id);
+      return deck?.signals.some((s) => getSourceCategory(s.sourceName) === filterType) ?? false;
+    }
+    return false;
   });
 
   const STAGE_SORT_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
