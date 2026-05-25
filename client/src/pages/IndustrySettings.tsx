@@ -37,6 +37,8 @@ import {
   Copy,
   Terminal,
   RefreshCw,
+  Bot,
+  Plug,
 } from "lucide-react";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import type { StripeBillingEvent } from "@shared/schema";
@@ -290,6 +292,8 @@ export default function IndustrySettings() {
   // API key state
   const [apiKeyNewRaw, setApiKeyNewRaw] = useState<string | null>(null);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [mcpConfigCopied, setMcpConfigCopied] = useState(false);
+  const [mcpCodeCopied, setMcpCodeCopied] = useState(false);
 
   const { data: apiKeyData, refetch: refetchApiKey } = useQuery<{
     key: { id: number; prefix: string; tier: string; status: string; scopes: string[]; dailyLimit: number; callsToday: number; createdAt: string; lastUsedAt: string | null } | null;
@@ -342,6 +346,31 @@ export default function IndustrySettings() {
     navigator.clipboard.writeText(apiKeyNewRaw).then(() => {
       setApiKeyCopied(true);
       setTimeout(() => setApiKeyCopied(false), 2000);
+    });
+  }
+
+  function buildMcpConfig(rawKey: string | null, prefix: string) {
+    const keyValue = rawKey ?? `eden_${prefix}_<your-key>`;
+    return JSON.stringify(
+      { mcpServers: { "eden-scout": { url: `${window.location.origin}/mcp`, headers: { Authorization: `Bearer ${keyValue}` } } } },
+      null,
+      2,
+    );
+  }
+
+  function handleCopyMcpConfig(prefix: string) {
+    navigator.clipboard.writeText(buildMcpConfig(apiKeyNewRaw, prefix)).then(() => {
+      setMcpConfigCopied(true);
+      setTimeout(() => setMcpConfigCopied(false), 2000);
+    });
+  }
+
+  function handleCopyMcpCode(prefix: string) {
+    const keyValue = apiKeyNewRaw ?? `eden_${prefix}_<your-key>`;
+    const cmd = `claude mcp add eden-scout --transport http ${window.location.origin}/mcp --header "Authorization: Bearer ${keyValue}"`;
+    navigator.clipboard.writeText(cmd).then(() => {
+      setMcpCodeCopied(true);
+      setTimeout(() => setMcpCodeCopied(false), 2000);
     });
   }
 
@@ -649,9 +678,9 @@ export default function IndustrySettings() {
         </div>
       </div>
 
-      {/* API Access */}
+      {/* Developer — API & MCP */}
       <div className="rounded-xl border border-card-border bg-card p-5">
-        <SectionHeader icon={Terminal} title="API Access" description="Programmatic access to EdenRadar's asset corpus" />
+        <SectionHeader icon={Terminal} title="Developer" description="API access and AI integrations for your tools and workflows" />
         <div className="space-y-4">
           {apiKeyData?.key ? (
             <>
@@ -728,6 +757,83 @@ export default function IndustrySettings() {
                   Revoke
                 </Button>
               </div>
+
+              {/* MCP — AI Integration (only shown when key is active) */}
+              {apiKeyData.key.status === "active" && (
+                <>
+                  <Separator />
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      <Bot className="w-4 h-4 text-violet-500" />
+                      <p className="text-sm font-semibold text-foreground">AI Integration (MCP)</p>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-500/40 text-violet-600 dark:text-violet-400">New</Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Connect Claude or any MCP-compatible AI directly to your Eden Scout data. Search assets, read enriched details, and manage your pipeline — all from a conversation.
+                    </p>
+
+                    {/* Endpoint */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Endpoint</p>
+                      <div className="flex items-center gap-2">
+                        <code className="flex-1 font-mono text-xs bg-muted border border-border rounded px-2.5 py-1.5 text-foreground truncate">
+                          {window.location.origin}/mcp
+                        </code>
+                        <Button
+                          size="sm" variant="outline"
+                          className="shrink-0 h-7 w-7 p-0"
+                          onClick={() => navigator.clipboard.writeText(`${window.location.origin}/mcp`)}
+                        >
+                          <Copy className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Claude Desktop config */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Claude Desktop</p>
+                      <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                        <pre className="font-mono text-[11px] text-foreground whitespace-pre-wrap break-all leading-relaxed">
+                          {buildMcpConfig(apiKeyNewRaw, apiKeyData.key.prefix)}
+                        </pre>
+                        <Button
+                          size="sm" variant="outline"
+                          className="gap-1.5 h-7 text-xs w-full"
+                          onClick={() => handleCopyMcpConfig(apiKeyData.key!.prefix)}
+                        >
+                          {mcpConfigCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          {mcpConfigCopied ? "Copied" : "Copy config"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* Claude Code one-liner */}
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Claude Code (CLI)</p>
+                      <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                        <code className="block font-mono text-[11px] text-foreground break-all leading-relaxed">
+                          claude mcp add eden-scout --transport http {window.location.origin}/mcp --header &quot;Authorization: Bearer {apiKeyNewRaw ?? `eden_${apiKeyData.key.prefix}_<your-key>`}&quot;
+                        </code>
+                        <Button
+                          size="sm" variant="outline"
+                          className="gap-1.5 h-7 text-xs w-full"
+                          onClick={() => handleCopyMcpCode(apiKeyData.key!.prefix)}
+                        >
+                          {mcpCodeCopied ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          {mcpCodeCopied ? "Copied" : "Copy command"}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {!apiKeyNewRaw && (
+                      <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+                        <Plug className="w-3 h-3 mt-0.5 shrink-0 text-muted-foreground" />
+                        Replace <code className="font-mono mx-0.5">&lt;your-key&gt;</code> with your full API key, or regenerate your key above to auto-fill it here.
+                      </p>
+                    )}
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <div className="text-center py-6 space-y-3">
