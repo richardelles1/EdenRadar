@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import { captureException as sentryCaptureException } from "./lib/sentry";
+import mcpRouter from "./mcp/index";
 import rateLimit from "express-rate-limit";
 import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
@@ -368,6 +369,9 @@ export async function registerRoutes(
     app.use(impersonationContext);
     app.use(impersonationAuditMiddleware);
   }
+
+  // ── Eden MCP Server ───────────────────────────────────────────────────────
+  app.use("/mcp", mcpRouter);
 
   app.get("/api/sources", (_req, res) => {
     const sources = Object.values(dataSources).map((s) => ({
