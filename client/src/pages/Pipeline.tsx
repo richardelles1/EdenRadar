@@ -111,9 +111,10 @@ function getInitials(name: string): string {
   return parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
 }
 
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string | undefined | null): string {
+  if (!dateStr) return "just now";
   const diff = Date.now() - new Date(dateStr).getTime();
-  if (diff <= 0) return "just now";
+  if (!Number.isFinite(diff) || diff <= 0) return "just now";
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -710,7 +711,8 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
     mutationFn: async (content: string) => {
       if (!asset) throw new Error("No asset");
       const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content });
-      return res.json();
+      const data = await res.json();
+      return data.note ?? data;
     },
     onSuccess: (createdNote, _content) => {
       setNoteText("");
