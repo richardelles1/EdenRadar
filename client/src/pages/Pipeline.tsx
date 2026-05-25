@@ -417,7 +417,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: 
 
           {/* Pipeline name badge — shown when viewing All Assets */}
           {pipelineName && (
-            <div className="absolute bottom-2 left-3 z-[20] max-w-[calc(100%-3rem)]">
+            <div className={`absolute ${hasMultipleFaces ? "bottom-10" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-3rem)]`}>
               <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-full">{pipelineName}</span>
             </div>
           )}
@@ -1300,7 +1300,7 @@ export default function Pipeline() {
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {totalAssets > 0
-                  ? sortedCards.length < totalAssets
+                  ? (filterPipeline !== "all" || filterType !== "all")
                     ? `${sortedCards.length} of ${totalAssets} assets`
                     : `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${signalCount > 0 ? ` · ${signalCount} signal${signalCount !== 1 ? "s" : ""}` : ""}`
                   : "Save assets from Scout to build your pipeline"}
