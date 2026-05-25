@@ -1863,6 +1863,7 @@ async function migrateAssetStatusValues() {
         created_at timestamptz NOT NULL DEFAULT now()
       )
     `);
+    await mdb.execute(sql`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_type text NOT NULL DEFAULT 'personal'`);
     log("[startup] api_keys tables ready", "startup");
   } catch (e) {
     log(`[startup] api_keys migration warning: ${e}`, "startup");

@@ -9,8 +9,8 @@ import { useToast } from "@/hooks/use-toast";
 import { Link, useLocation } from "wouter";
 import {
   Download, Trash2, FlaskConical, ExternalLink, ArrowRight, Beaker, Loader2,
-  FileText, ChevronLeft, ChevronRight, Send, Link2, X,
-  LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2,
+  FileText, ChevronLeft, ChevronRight, Send, Link2, X, MessageSquare, Plus, Check,
+  LayoutDashboard, LayoutGrid, GripVertical, Layers, Building2, Pencil,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
 import { SAVED_ASSET_STATUSES } from "@shared/schema";
@@ -31,6 +31,8 @@ type SavedAssetsResponse = {
 type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | null };
 type DeckAsset = PipelineAsset & { signals: PipelineAsset[] };
 type ViewMode = "grid" | "board";
+type GridFilterType = "all" | "tto" | "trial" | "patent" | "research";
+type SortOrder = "date" | "az" | "stage";
 type PipelineList = { id: number; name: string; userId: string; createdAt: string };
 type PipelinesResponse = { pipelines: PipelineList[] };
 
@@ -63,7 +65,8 @@ const STAGE_ABBREV: Record<string, string> = {
 const NON_TTO_SRC = ["patent", "clinical_trial", "pubmed", "biorxiv", "medrxiv", "literature", "arxiv", "preprint", "paper"];
 
 function isTtoSource(sourceName?: string | null): boolean {
-  const sn = (sourceName ?? "").toLowerCase();
+  if (!sourceName) return false;
+  const sn = sourceName.toLowerCase();
   return !NON_TTO_SRC.some((s) => sn === s || sn.includes(s));
 }
 
@@ -109,6 +112,7 @@ function getInitials(name: string): string {
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
+  if (diff <= 0) return "just now";
   const m = Math.floor(diff / 60000);
   if (m < 1) return "just now";
   if (m < 60) return `${m}m ago`;
@@ -170,7 +174,7 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
 
 // ── CardFaceContent — pure visual component for a single card face ────────────
 
-function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hovered?: boolean }) {
+function CardFaceContent({ asset, hovered = false, compact = false, inDeck = false }: { asset: PipelineAsset; hovered?: boolean; compact?: boolean; inDeck?: boolean }) {
   const cat = getSourceCategory(asset.sourceName);
   const tint = SCOUT_CARD_TINTS[cat];
   const isTto = isTtoSource(asset.sourceName);
@@ -209,7 +213,7 @@ function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hov
       </div>
 
       {/* Content */}
-      <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] pb-10">
+      <div className={`absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] ${compact ? "pb-3" : "pb-10"}`}>
         <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
           {displayTitle}
         </h3>
@@ -282,10 +286,10 @@ function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hov
           )}
         </div>
 
-        {/* Footer strip for non-TTO signal cards */}
-        {!isTto && (
+        {/* Footer strip for standalone non-TTO cards — suppressed when used as a face inside a TTO deck */}
+        {!isTto && !inDeck && (
           <div className="flex items-center gap-1 pt-2 border-t border-white/20 dark:border-white/10 mt-auto">
-            <span className="text-[10px] text-muted-foreground flex-1">Drag to stack</span>
+            <span className="text-[10px] text-muted-foreground flex-1">Drag onto a TTO asset</span>
             {asset.sourceUrl && (
               <a
                 href={asset.sourceUrl}
@@ -307,11 +311,12 @@ function CardFaceContent({ asset, hovered = false }: { asset: PipelineAsset; hov
 
 // ── PipelineCard — full multi-face deck with animated face transitions ─────────
 
-function PipelineCard({ asset, signals = [], onDelete, onClick }: {
+function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: {
   asset: PipelineAsset;
   signals?: PipelineAsset[];
   onDelete: (id: number) => void;
   onClick?: () => void;
+  pipelineName?: string;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
@@ -376,7 +381,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
           onMouseLeave={handleMouseLeave}
           onMouseDown={() => setPressed(true)}
           onMouseUp={() => setPressed(false)}
-          onClick={isTto ? onClick : undefined}
+          onClick={onClick}
           {...(isTto ? {} : { ...attributes, ...listeners })}
           data-testid={`pipeline-card-${asset.id}`}
         >
@@ -387,12 +392,16 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
               className="absolute inset-0"
               style={{
                 opacity: idx === faceIdx ? 1 : 0,
-                transform: idx === faceIdx ? "translateX(0)" : idx < faceIdx ? "translateX(-10px)" : "translateX(10px)",
-                transition: "opacity 0.25s ease, transform 0.25s ease",
+                transform: idx === faceIdx
+                  ? "translateX(0) scale(1)"
+                  : idx < faceIdx
+                  ? "translateX(-24px) scale(0.97)"
+                  : "translateX(24px) scale(0.97)",
+                transition: "opacity 0.18s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1)",
                 pointerEvents: idx === faceIdx ? "auto" : "none",
               }}
             >
-              <CardFaceContent asset={face} hovered={hovered} />
+              <CardFaceContent asset={face} hovered={hovered} inDeck={idx > 0} />
             </div>
           ))}
 
@@ -406,23 +415,30 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
             <Trash2 className="w-3.5 h-3.5" />
           </button>
 
-          {/* Nav buttons — bottom bar, only when multiple faces */}
+          {/* Pipeline name badge — shown when viewing All Assets */}
+          {pipelineName && (
+            <div className={`absolute ${hasMultipleFaces ? "bottom-10" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-3rem)]`}>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-full">{pipelineName}</span>
+            </div>
+          )}
+
+          {/* Nav buttons — no gradient, solid pill buttons so they're always readable */}
           {hasMultipleFaces && (
-            <div className="absolute bottom-0 left-0 right-0 z-[20] flex items-center justify-between px-2 py-2 bg-gradient-to-t from-black/25 to-transparent rounded-b-[17px]">
+            <div className="absolute bottom-2.5 left-0 right-0 z-[20] flex items-center justify-center gap-1.5 px-2">
               <button
                 onClick={(e) => { e.stopPropagation(); setFaceIdx((i) => Math.max(0, i - 1)); }}
                 onPointerDown={(e) => e.stopPropagation()}
                 disabled={faceIdx === 0}
-                className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white disabled:opacity-20 transition-colors shrink-0"
+                className="w-6 h-6 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/75 disabled:opacity-25 transition-all shrink-0 shadow-sm"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="text-[9px] text-white/60 tabular-nums">{faceIdx + 1}/{faces.length}</span>
+              <span className="px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-sm text-[9px] text-white tabular-nums shadow-sm">{faceIdx + 1}/{faces.length}</span>
               <button
                 onClick={(e) => { e.stopPropagation(); setFaceIdx((i) => Math.min(faces.length - 1, i + 1)); }}
                 onPointerDown={(e) => e.stopPropagation()}
                 disabled={faceIdx === faces.length - 1}
-                className="w-5 h-5 rounded flex items-center justify-center text-white/70 hover:text-white disabled:opacity-20 transition-colors shrink-0"
+                className="w-6 h-6 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/75 disabled:opacity-25 transition-all shrink-0 shadow-sm"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
@@ -452,7 +468,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick }: {
   );
 }
 
-// ── BoardCard — Scout-style compact card for kanban columns ───────────────────
+// ── BoardCard — uses same CardFaceContent visual as the grid ─────────────────
 
 function BoardCard({ asset, signals = [], onClick, onDelete }: {
   asset: PipelineAsset;
@@ -460,66 +476,75 @@ function BoardCard({ asset, signals = [], onClick, onDelete }: {
   onClick: () => void;
   onDelete: (id: number) => void;
 }) {
+  const [hovered, setHovered] = useState(false);
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `tto-${asset.id}`,
     data: { type: "tto", assetId: asset.id },
   });
 
-  const tint = SCOUT_CARD_TINTS["tto"];
   const hasSignals = signals.length > 0;
-  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim() ?? ""] ?? "";
 
   return (
     <div
-      ref={setNodeRef}
-      className={`relative bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 rounded-xl overflow-hidden cursor-pointer transition-opacity ${isDragging ? "opacity-30" : ""}`}
-      style={{ boxShadow: "0 2px 12px rgba(0,0,0,0.08)" }}
-      onClick={onClick}
-      {...attributes}
-      {...listeners}
-      data-testid={`board-card-${asset.id}`}
+      className={`relative transition-opacity ${isDragging ? "opacity-30" : ""}`}
     >
-      <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.stripColor }} />
-      <div className="pl-3 pr-2.5 py-2.5 flex flex-col gap-1.5">
-        <div className="flex items-start justify-between gap-1">
-          {stageAbbr && (
-            <span className="text-[9px] font-mono font-bold shrink-0 px-1 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">{stageAbbr}</span>
-          )}
-          <button
-            onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
-            onPointerDown={(e) => e.stopPropagation()}
-            className="ml-auto w-5 h-5 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all shrink-0"
-            data-testid={`button-delete-board-${asset.id}`}
-          >
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        </div>
+      <div
+        ref={setNodeRef}
+        className="relative w-full h-[210px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10 cursor-pointer"
+        style={{ boxShadow: hovered ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)" : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)", transition: "box-shadow 0.25s ease" }}
+        onClick={onClick}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        {...attributes}
+        {...listeners}
+        data-testid={`board-card-${asset.id}`}
+      >
+        <CardFaceContent asset={asset} hovered={hovered} compact />
 
-        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2">
-          {asset.assetName !== "unknown" ? asset.assetName : "Unnamed"}
-        </p>
+        {/* Delete button */}
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(asset.id); }}
+          onPointerDown={(e) => e.stopPropagation()}
+          className="absolute top-1.5 right-1.5 z-[20] w-7 h-7 rounded-lg flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all active:scale-90"
+          data-testid={`button-delete-board-${asset.id}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
 
-        <div className="flex flex-wrap gap-1">
-          {asset.modality && asset.modality !== "unknown" && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400">{asset.modality}</span>
-          )}
-          {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
-            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-muted text-muted-foreground border border-border line-clamp-1 max-w-[120px] truncate">{asset.diseaseIndication}</span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 pt-1 border-t border-border/50">
-          {hasSignals && (
-            <span className="flex items-center gap-0.5 text-[9px] text-muted-foreground">
-              <Link2 className="w-2 h-2" />{signals.length}
-            </span>
-          )}
-          {(asset.noteCount ?? 0) > 0 && (
-            <span className="text-[9px] text-muted-foreground">{asset.noteCount} note{asset.noteCount !== 1 ? "s" : ""}</span>
-          )}
-          <span className="ml-auto text-[9px]" style={{ color: tint.stripColor + "99" }}>Open →</span>
-        </div>
+        {/* Signal + note count badges — bottom-right */}
+        {(hasSignals || (asset.noteCount ?? 0) > 0) && (
+          <div className="absolute bottom-2 right-2 z-[20] flex items-center gap-1.5">
+            {hasSignals && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[9px] text-white">
+                <Link2 className="w-2.5 h-2.5" />{signals.length}
+              </span>
+            )}
+            {(asset.noteCount ?? 0) > 0 && (
+              <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-[9px] text-white">
+                <MessageSquare className="w-2.5 h-2.5" />{asset.noteCount}
+              </span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Signal color slivers below board cards */}
+      {hasSignals && (
+        <div className="relative -mt-1 mx-1.5">
+          {signals.slice(0, 3).map((sig, idx) => {
+            const sigTint = SCOUT_CARD_TINTS[getSourceCategory(sig.sourceName)];
+            return (
+              <div key={sig.id} style={{
+                background: sigTint.stripColor,
+                height: "5px", marginTop: "1px",
+                marginLeft: `${(idx + 1) * 4}px`, marginRight: `${(idx + 1) * 4}px`,
+                opacity: 0.5 - idx * 0.12,
+                borderRadius: "0 0 4px 4px",
+              }} />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -576,12 +601,13 @@ function KanbanColumn({ col, decks, onDelete, onCardClick }: {
 
 const TAB_TRIGGER_CLS = "text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none";
 
-function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }: {
+function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, pipelines = [] }: {
   asset: PipelineAsset | null;
   signals?: PipelineAsset[];
   onClose: () => void;
   onDetachSignal: (signalId: number) => void;
   onDelete: (id: number) => void;
+  pipelines?: PipelineList[];
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -589,13 +615,23 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
   const [activeTab, setActiveTab] = useState("overview");
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(null);
+  const [localPipelineId, setLocalPipelineId] = useState<number | null | undefined>(undefined);
+  const [drawerCreatingPipeline, setDrawerCreatingPipeline] = useState(false);
+  const [drawerNewPipelineName, setDrawerNewPipelineName] = useState("");
   const notesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (asset) { setLocalStatus(asset.status ?? null); setNoteText(""); setActiveTab("overview"); }
+    if (asset) {
+      setLocalStatus(asset.status ?? null);
+      setLocalPipelineId(asset.pipelineListId ?? null);
+      setNoteText("");
+      setActiveTab("overview");
+    }
   }, [asset?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Fetch eagerly on drawer open so the count badge matches the visible list
+  const effectivePipelineId = localPipelineId !== undefined ? localPipelineId : (asset?.pipelineListId ?? null);
+
+  // Fetch eagerly so the Activity count badge matches the visible list
   const { data: notesData, isLoading: notesLoading } = useQuery<NotesResponse>({
     queryKey: ["/api/saved-assets", asset?.id, "notes"],
     queryFn: async () => {
@@ -604,7 +640,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
       return res.json();
     },
     enabled: !!asset,
-    staleTime: 30000,
+    staleTime: 0,
   });
   const notes = notesData?.notes ?? [];
 
@@ -625,16 +661,68 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
     onError: (err, _, ctx) => { if (ctx) setLocalStatus(ctx.prev); toast({ title: "Status update failed", description: err.message, variant: "destructive" }); },
   });
 
+  const pipelineMutation = useMutation<unknown, Error, number | null, { prev: number | null }>({
+    mutationFn: async (pipelineListId) => {
+      if (!asset) throw new Error("No asset");
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/saved-assets/${asset.id}/pipeline`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ pipeline_list_id: pipelineListId }),
+      });
+      if (!res.ok) throw new Error("Failed to move asset");
+      return res.json();
+    },
+    onMutate: (id) => { const prev = effectivePipelineId; setLocalPipelineId(id); return { prev }; },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      toast({ title: "Pipeline updated" });
+    },
+    onError: (err, _, ctx) => {
+      if (ctx) setLocalPipelineId(ctx.prev);
+      toast({ title: "Pipeline update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const drawerCreatePipelineMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/pipelines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ name, shared: false }),
+      });
+      if (!res.ok) throw new Error("Failed to create pipeline");
+      return res.json();
+    },
+    onSuccess: ({ pipeline }) => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      pipelineMutation.mutate(pipeline.id);
+      setDrawerCreatingPipeline(false);
+      setDrawerNewPipelineName("");
+    },
+    onError: (err: any) => toast({ title: "Failed to create", description: err.message, variant: "destructive" }),
+  });
+
   const noteMutation = useMutation({
     mutationFn: async (content: string) => {
       if (!asset) throw new Error("No asset");
       const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content });
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (createdNote, _content) => {
       setNoteText("");
       if (asset) {
-        qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+        // Immediately append to cache so the note appears without waiting for a refetch
+        qc.setQueryData(
+          ["/api/saved-assets", asset.id, "notes"],
+          (old: NotesResponse | undefined): NotesResponse => ({
+            notes: [...(old?.notes ?? []), createdNote],
+            limit: old?.limit ?? 50,
+            offset: old?.offset ?? 0,
+          }),
+        );
         qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       }
     },
@@ -693,37 +781,37 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
                 {asset.target && asset.target !== "unknown" && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Target</p>
-                    <p className="text-foreground font-medium">{asset.target}</p>
+                    <p className="text-foreground font-semibold">{asset.target}</p>
                   </div>
                 )}
                 {asset.diseaseIndication && asset.diseaseIndication !== "unknown" && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Disease</p>
-                    <p className="text-foreground font-medium">{asset.diseaseIndication}</p>
+                    <p className="text-foreground font-semibold">{asset.diseaseIndication}</p>
                   </div>
                 )}
                 {asset.modality && asset.modality !== "unknown" && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Modality</p>
-                    <p className="text-foreground font-medium">{asset.modality}</p>
+                    <p className="text-foreground font-semibold">{asset.modality}</p>
                   </div>
                 )}
                 {asset.developmentStage && asset.developmentStage !== "unknown" && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Stage</p>
-                    <p className="text-foreground font-medium">{asset.developmentStage}</p>
+                    <p className="text-foreground font-semibold">{asset.developmentStage}</p>
                   </div>
                 )}
                 {asset.sourceJournal && asset.sourceJournal !== "Unknown" && (
                   <div className="col-span-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Institution</p>
-                    <p className="text-foreground font-medium">{toTitleCase(asset.sourceJournal)}</p>
+                    <p className="text-foreground font-semibold">{toTitleCase(asset.sourceJournal)}</p>
                   </div>
                 )}
                 {asset.publicationYear && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">Year</p>
-                    <p className="text-foreground font-medium">{asset.publicationYear}</p>
+                    <p className="text-foreground font-semibold">{asset.publicationYear}</p>
                   </div>
                 )}
               </div>
@@ -732,27 +820,82 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
               {asset.summary && (
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
-                  <p className="text-sm text-foreground leading-relaxed">{asset.summary}</p>
+                  <p className="text-sm text-foreground/90 leading-relaxed">{asset.summary}</p>
                 </div>
               )}
 
-              {/* Supporting signals */}
+              {/* Pipeline assignment */}
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
-                  Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
-                </p>
-                {signals.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic leading-relaxed">
-                    No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
-                  </p>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    {signals.map((sig) => (
-                      <SignalMiniCard key={sig.id} signal={sig} draggable onDetach={() => onDetachSignal(sig.id)} />
-                    ))}
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Pipeline</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => pipelineMutation.mutate(null)}
+                    disabled={pipelineMutation.isPending}
+                    className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${effectivePipelineId === null ? "bg-primary text-primary-foreground border-primary font-semibold" : "border-border text-foreground hover:border-primary/30 hover:bg-muted/40"}`}
+                  >
+                    Uncategorised
+                  </button>
+                  {pipelines.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={() => pipelineMutation.mutate(pl.id)}
+                      disabled={pipelineMutation.isPending}
+                      className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${effectivePipelineId === pl.id ? "bg-primary text-primary-foreground border-primary font-semibold" : "border-border text-foreground hover:border-primary/30 hover:bg-muted/40"}`}
+                    >
+                      {pl.name}
+                    </button>
+                  ))}
+                </div>
+                {drawerCreatingPipeline ? (
+                  <div className="flex gap-1.5 mt-2">
+                    <input
+                      autoFocus
+                      value={drawerNewPipelineName}
+                      onChange={(e) => setDrawerNewPipelineName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && drawerNewPipelineName.trim()) drawerCreatePipelineMutation.mutate(drawerNewPipelineName.trim());
+                        if (e.key === "Escape") { setDrawerCreatingPipeline(false); setDrawerNewPipelineName(""); }
+                      }}
+                      placeholder="Pipeline name…"
+                      className="flex-1 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground"
+                    />
+                    <button
+                      onClick={() => { if (drawerNewPipelineName.trim()) drawerCreatePipelineMutation.mutate(drawerNewPipelineName.trim()); }}
+                      disabled={!drawerNewPipelineName.trim() || drawerCreatePipelineMutation.isPending}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0"
+                    >
+                      {drawerCreatePipelineMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                    </button>
                   </div>
+                ) : (
+                  <button
+                    onClick={() => setDrawerCreatingPipeline(true)}
+                    className="flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors mt-2"
+                  >
+                    <Plus className="w-3 h-3" /> New pipeline
+                  </button>
                 )}
               </div>
+
+              {/* Supporting signals — TTO assets only */}
+              {isTtoSource(asset.sourceName) && (
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                    Supporting Signals{signals.length > 0 ? ` (${signals.length})` : ""}
+                  </p>
+                  {signals.length === 0 ? (
+                    <p className="text-xs text-foreground/60 italic leading-relaxed">
+                      No signals attached. In the Grid view, drag a patent, paper, or clinical trial card onto this asset to attach it as supporting evidence.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-2">
+                      {signals.map((sig) => (
+                        <SignalMiniCard key={sig.id} signal={sig} draggable onDetach={() => onDetachSignal(sig.id)} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Action links — pinned to bottom, always visible */}
@@ -813,9 +956,14 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete }:
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
                 </div>
               ) : notes.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-6 italic">
-                  No activity yet — log a call, add context, or update the deal stage above.
-                </p>
+                <div className="flex flex-col items-center justify-center py-10 gap-2 text-center">
+                  <div className="w-8 h-8 rounded-lg bg-muted/60 flex items-center justify-center">
+                    <FileText className="w-4 h-4 text-muted-foreground" />
+                  </div>
+                  <p className="text-xs text-foreground/70 leading-relaxed max-w-[200px]">
+                    No activity yet — add a note below or set a deal stage above.
+                  </p>
+                </div>
               ) : (
                 notes.map((note) => (
                   <div key={note.id}>
@@ -877,12 +1025,19 @@ export default function Pipeline() {
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
+  const [filterType, setFilterType] = useState<GridFilterType>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("date");
   const [activeAssetId, setActiveAssetId] = useState<number | null>(null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [parentOverrides, setParentOverrides] = useState<Map<number, number | null>>(new Map());
   const [statusOverrides, setStatusOverrides] = useState<Map<number, string | null>>(new Map());
+  const [creatingPipeline, setCreatingPipeline] = useState(false);
+  const [newPipelineName, setNewPipelineName] = useState("");
+  const [renamingPipelineId, setRenamingPipelineId] = useState<number | null>(null);
+  const [renamePipelineName, setRenamePipelineName] = useState("");
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
+  useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -897,6 +1052,7 @@ export default function Pipeline() {
     staleTime: 30000,
   });
   const pipelines = pipelinesData?.pipelines ?? [];
+  const pipelinesMap = new Map(pipelines.map((pl) => [pl.id, pl.name]));
   const savedAssets = data?.assets ?? [];
 
   // ── Data grouping ──────────────────────────────────────────────────────────
@@ -933,8 +1089,31 @@ export default function Pipeline() {
   // Grid shows TTO cards first, then unlinked signals
   const gridCards: PipelineAsset[] = [...filteredDecks, ...filteredSignals];
 
-  // Drawer
-  const activeAsset = activeAssetId ? (deckAssets.find((d) => d.id === activeAssetId) ?? null) : null;
+  const TYPE_FILTER_LABELS: Record<GridFilterType, string> = {
+    all: "All", tto: "TTO Assets", trial: "Clinical Trials", patent: "Patents", research: "Research",
+  };
+  const typeFilteredCards = filterType === "all" ? gridCards : gridCards.filter((c) => {
+    const cat = getSourceCategory(c.sourceName);
+    return cat === filterType;
+  });
+
+  const STAGE_SORT_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
+  function applySort<T extends PipelineAsset>(items: T[]): T[] {
+    return [...items].sort((a, b) => {
+      if (sortOrder === "az") return a.assetName.localeCompare(b.assetName);
+      if (sortOrder === "stage") {
+        const ai = STAGE_SORT_ORDER.findIndex((s) => a.developmentStage?.toLowerCase().includes(s));
+        const bi = STAGE_SORT_ORDER.findIndex((s) => b.developmentStage?.toLowerCase().includes(s));
+        return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
+      }
+      return b.id - a.id;
+    });
+  }
+  const sortedCards = applySort(typeFilteredCards);
+  const sortedDecks = applySort(filteredDecks);
+
+  // Drawer — search all saved assets so signal cards can open the drawer too
+  const activeAsset = activeAssetId ? (savedAssets.find((a) => a.id === activeAssetId) ?? null) : null;
   const activeSignals = activeAsset ? (signalsByParent.get(activeAsset.id) ?? []) : [];
 
   // ── Mutations ──────────────────────────────────────────────────────────────
@@ -991,11 +1170,70 @@ export default function Pipeline() {
     onSuccess: (_, vars) => {
       setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      toast({ title: "Stage updated" });
     },
     onError: (err: any, _vars, ctx: any) => {
       if (ctx) setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
       toast({ title: "Status update failed", description: err.message, variant: "destructive" });
     },
+  });
+
+  const createPipelineMutation = useMutation({
+    mutationFn: async (name: string) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/pipelines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ name, shared: false }),
+      });
+      if (!res.ok) throw new Error("Failed to create pipeline");
+      return res.json();
+    },
+    onSuccess: ({ pipeline }) => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      setFilterPipeline(pipeline.id);
+      setCreatingPipeline(false);
+      setNewPipelineName("");
+      toast({ title: `"${pipeline.name}" created` });
+    },
+    onError: (err: any) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const renamePipelineMutation = useMutation({
+    mutationFn: async ({ id, name }: { id: number; name: string }) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/pipelines/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) throw new Error("Failed to rename pipeline");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      setRenamingPipelineId(null);
+      setRenamePipelineName("");
+    },
+    onError: (err: any) => toast({ title: "Rename failed", description: err.message, variant: "destructive" }),
+  });
+
+  const deletePipelineMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/pipelines/${id}`, {
+        method: "DELETE",
+        headers: { ...authHeaders },
+      });
+      if (!res.ok) throw new Error("Failed to delete pipeline");
+    },
+    onSuccess: (_, id) => {
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      if (filterPipeline === id) setFilterPipeline("all");
+      toast({ title: "Pipeline deleted" });
+    },
+    onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const handleDetachSignal = useCallback((signalId: number) => {
@@ -1025,9 +1263,9 @@ export default function Pipeline() {
   // ── Exports ───────────────────────────────────────────────────────────────
 
   const handleExportCsv = () => {
-    if (savedAssets.length === 0) return;
+    if (sortedCards.length === 0) return;
     const headers = ["Asset Name", "Target", "Modality", "Stage", "Disease", "Summary", "Journal", "Year", "Source", "URL"];
-    const rows = savedAssets.map((a) => [
+    const rows = sortedCards.map((a) => [
       a.assetName, a.target, a.modality, a.developmentStage, a.diseaseIndication,
       `"${(a.summary ?? "").replace(/"/g, '""')}"`,
       a.sourceJournal, a.publicationYear, a.sourceName, a.sourceUrl ?? "",
@@ -1039,7 +1277,7 @@ export default function Pipeline() {
   };
 
   const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify(savedAssets, null, 2)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(sortedCards, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a"); a.href = url; a.download = "eden-pipeline.json"; a.click(); URL.revokeObjectURL(url);
   };
@@ -1062,7 +1300,9 @@ export default function Pipeline() {
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {totalAssets > 0
-                  ? `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${signalCount > 0 ? ` · ${signalCount} signal${signalCount !== 1 ? "s" : ""}` : ""}`
+                  ? (filterPipeline !== "all" || filterType !== "all")
+                    ? `${sortedCards.length} of ${totalAssets} assets`
+                    : `${ttoCount} TTO asset${ttoCount !== 1 ? "s" : ""}${signalCount > 0 ? ` · ${signalCount} signal${signalCount !== 1 ? "s" : ""}` : ""}`
                   : "Save assets from Scout to build your pipeline"}
               </p>
             </div>
@@ -1090,6 +1330,11 @@ export default function Pipeline() {
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
                   <Download className="w-3 h-3" />JSON
                 </Button>
+                <Link href="/pipeline/brief/print">
+                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" data-testid="button-pipeline-brief">
+                    <FileText className="w-3 h-3" />Brief
+                  </Button>
+                </Link>
               </div>
             )}
           </div>
@@ -1148,22 +1393,99 @@ export default function Pipeline() {
                     {pipelines.length > 0 && <div className="my-1.5 border-t border-border" />}
                     {pipelines.map((pl) => {
                       const count = savedAssets.filter((a) => a.pipelineListId === pl.id).length;
+                      const isActive = filterPipeline === pl.id;
+                      const isRenaming = renamingPipelineId === pl.id;
+                      if (isRenaming) {
+                        return (
+                          <div key={pl.id} className="flex gap-1.5 px-1">
+                            <input
+                              autoFocus
+                              value={renamePipelineName}
+                              onChange={(e) => setRenamePipelineName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" && renamePipelineName.trim()) renamePipelineMutation.mutate({ id: pl.id, name: renamePipelineName.trim() });
+                                if (e.key === "Escape") { setRenamingPipelineId(null); setRenamePipelineName(""); }
+                              }}
+                              className="flex-1 min-w-0 text-xs border border-primary/40 rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none text-foreground"
+                            />
+                            <button
+                              onClick={() => { if (renamePipelineName.trim()) renamePipelineMutation.mutate({ id: pl.id, name: renamePipelineName.trim() }); }}
+                              disabled={!renamePipelineName.trim() || renamePipelineMutation.isPending}
+                              className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 shrink-0"
+                            >
+                              {renamePipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        );
+                      }
                       return (
-                        <button
-                          key={pl.id}
-                          onClick={() => setFilterPipeline(pl.id)}
-                          className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${filterPipeline === pl.id ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
-                          data-testid={`filter-pipeline-${pl.id}`}
-                        >
-                          <span className="truncate">{pl.name}</span>
-                          <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${filterPipeline === pl.id ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                            {count}
-                          </span>
-                        </button>
+                        <div key={pl.id} className="group relative">
+                          <button
+                            onClick={() => setFilterPipeline(pl.id)}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg text-sm transition-colors text-left ${isActive ? "bg-primary text-primary-foreground" : "text-foreground hover:bg-muted/60"}`}
+                            data-testid={`filter-pipeline-${pl.id}`}
+                          >
+                            <span className="truncate flex-1 pr-6">{pl.name}</span>
+                            <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center group-hover:hidden ${isActive ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
+                              {count}
+                            </span>
+                          </button>
+                          <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setRenamingPipelineId(pl.id); setRenamePipelineName(pl.name); }}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-primary-foreground hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-foreground hover:bg-muted"}`}
+                              title="Rename"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); deletePipelineMutation.mutate(pl.id); }}
+                              disabled={deletePipelineMutation.isPending}
+                              className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${isActive ? "text-primary-foreground/70 hover:text-red-300 hover:bg-primary-foreground/15" : "text-muted-foreground hover:text-destructive hover:bg-muted"}`}
+                              title="Delete pipeline"
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
                 </ScrollArea>
+                {/* Create new pipeline */}
+                <div className="px-2 py-2 border-t border-border shrink-0">
+                  {creatingPipeline ? (
+                    <div className="flex gap-1.5">
+                      <input
+                        autoFocus
+                        value={newPipelineName}
+                        onChange={(e) => setNewPipelineName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" && newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim());
+                          if (e.key === "Escape") { setCreatingPipeline(false); setNewPipelineName(""); }
+                        }}
+                        placeholder="Pipeline name…"
+                        className="flex-1 min-w-0 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground"
+                      />
+                      <button
+                        onClick={() => { if (newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim()); }}
+                        disabled={!newPipelineName.trim() || createPipelineMutation.isPending}
+                        className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0"
+                      >
+                        {createPipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setCreatingPipeline(true)}
+                      className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+                      data-testid="button-sidebar-new-pipeline"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      New pipeline
+                    </button>
+                  )}
+                </div>
               </aside>
 
               {/* ── Main content area ─────────────────────────────────────── */}
@@ -1186,21 +1508,66 @@ export default function Pipeline() {
                         </button>
                       </div>
                     ) : (
-                      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                        {gridCards.map((card) => {
-                          const isTto = isTtoSource(card.sourceName);
-                          const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
-                          return (
-                            <PipelineCard
-                              key={card.id}
-                              asset={card}
-                              signals={deck?.signals ?? []}
-                              onDelete={(id) => deleteMutation.mutate(id)}
-                              onClick={isTto ? () => setActiveAssetId(card.id) : undefined}
-                            />
-                          );
-                        })}
-                      </div>
+                      <>
+                        {/* Filter bar + sort controls */}
+                        <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {(["all", "tto", "trial", "patent", "research"] as const).map((type) => {
+                              const count = type === "all" ? gridCards.length : gridCards.filter((c) => getSourceCategory(c.sourceName) === type).length;
+                              if (type !== "all" && count === 0) return null;
+                              return (
+                                <button
+                                  key={type}
+                                  onClick={() => setFilterType(type)}
+                                  className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${filterType === type ? "bg-primary text-primary-foreground border-primary font-medium" : "border-border text-foreground hover:border-primary/30 hover:bg-muted/40"}`}
+                                >
+                                  {TYPE_FILTER_LABELS[type]}{count > 0 && <span className={`ml-1 ${filterType === type ? "opacity-70" : "text-muted-foreground"}`}>({count})</span>}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card shrink-0">
+                            {(["date", "az", "stage"] as const).map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setSortOrder(s)}
+                                className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${sortOrder === s ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                              >
+                                {s === "date" ? "Date" : s === "az" ? "A–Z" : "Stage"}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {sortedCards.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                            <p className="text-sm text-muted-foreground">No {TYPE_FILTER_LABELS[filterType].toLowerCase()} in this view.</p>
+                            <button onClick={() => setFilterType("all")} className="text-xs text-primary hover:text-primary/80 transition-colors">
+                              Show all types
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                            {sortedCards.map((card) => {
+                              const isTto = isTtoSource(card.sourceName);
+                              const deck = isTto ? deckAssets.find((d) => d.id === card.id) : null;
+                              const cardPipelineName = filterPipeline === "all" && card.pipelineListId
+                                ? pipelinesMap.get(card.pipelineListId)
+                                : undefined;
+                              return (
+                                <PipelineCard
+                                  key={card.id}
+                                  asset={card}
+                                  signals={deck?.signals ?? []}
+                                  onDelete={(id) => deleteMutation.mutate(id)}
+                                  onClick={() => setActiveAssetId(card.id)}
+                                  pipelineName={cardPipelineName}
+                                />
+                              );
+                            })}
+                          </div>
+                        )}
+                      </>
                     )
                   )}
 
@@ -1220,22 +1587,38 @@ export default function Pipeline() {
                         </button>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <div className="flex gap-3 min-w-max pb-4">
-                          {BOARD_COLUMNS.map((col) => {
-                            const colDecks = filteredDecks.filter((d) => (d.status ?? null) === col.key);
-                            return (
-                              <KanbanColumn
-                                key={col.key ?? "unassigned"}
-                                col={col}
-                                decks={colDecks}
-                                onDelete={(id) => deleteMutation.mutate(id)}
-                                onCardClick={(asset) => setActiveAssetId(asset.id)}
-                              />
-                            );
-                          })}
+                      <>
+                        {/* Board sort bar */}
+                        <div className="flex items-center justify-end mb-4">
+                          <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card shrink-0">
+                            {(["date", "az", "stage"] as const).map((s) => (
+                              <button
+                                key={s}
+                                onClick={() => setSortOrder(s)}
+                                className={`px-2 py-1 rounded text-[10px] font-medium transition-colors ${sortOrder === s ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                              >
+                                {s === "date" ? "Date" : s === "az" ? "A–Z" : "Stage"}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                        <div className="overflow-x-auto">
+                          <div className="flex gap-3 min-w-max pb-4">
+                            {BOARD_COLUMNS.map((col) => {
+                              const colDecks = sortedDecks.filter((d) => (d.status ?? null) === col.key);
+                              return (
+                                <KanbanColumn
+                                  key={col.key ?? "unassigned"}
+                                  col={col}
+                                  decks={colDecks}
+                                  onDelete={(id) => deleteMutation.mutate(id)}
+                                  onCardClick={(asset) => setActiveAssetId(asset.id)}
+                                />
+                              );
+                            })}
+                          </div>
+                        </div>
+                      </>
                     )
                   )}
                 </div>
@@ -1244,16 +1627,19 @@ export default function Pipeline() {
 
             {/* Drag overlay — full card visual */}
             <DragOverlay>
-              {activeDragAsset && (
-                <div className="opacity-90 rotate-1 scale-[0.97]" style={{ width: "200px" }}>
-                  <div
-                    className="relative w-full h-[260px] rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10"
-                    style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.28)" }}
-                  >
-                    <CardFaceContent asset={activeDragAsset} />
+              {activeDragAsset && (() => {
+                const isBoardDrag = activeDragId?.startsWith("tto-");
+                return (
+                  <div className="opacity-90 rotate-1 scale-[0.97]" style={{ width: "200px" }}>
+                    <div
+                      className="relative w-full rounded-[17px] overflow-hidden border border-white/90 dark:border-white/10"
+                      style={{ height: isBoardDrag ? "210px" : "260px", boxShadow: "0 20px 60px rgba(0,0,0,0.28)" }}
+                    >
+                      <CardFaceContent asset={activeDragAsset} compact={!!isBoardDrag} />
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </DragOverlay>
           </DndContext>
         )}
@@ -1266,6 +1652,7 @@ export default function Pipeline() {
         onClose={() => setActiveAssetId(null)}
         onDetachSignal={handleDetachSignal}
         onDelete={(id) => deleteMutation.mutate(id)}
+        pipelines={pipelines}
       />
     </div>
   );
