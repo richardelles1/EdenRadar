@@ -693,7 +693,7 @@ const DEFINITIONAL_PATTERNS = [
   /^what'?s?\s+(?:a|an|the)?\s*([\w\s\-\/]+?)\s*\?$/i,
   /^(?:tell\s+me\s+)?what\s+(?:exactly\s+)?(?:is|are)\s+([\w\s,\-\/]+?)(?:\?|\s*$)/i,
 ];
-const COMBINED_SEARCH_INTENT = /\b(?:do\s+you\s+have|find\s+me|show\s+me|any\s+(?:assets?|examples?|technologies?)|in\s+your\s+(?:portfolio|database|index))\b/i;
+const COMBINED_SEARCH_INTENT = /\b(?:do\s+you\s+have|find\s+me|show\s+me|any\s+(?:assets?|examples?|technologies?)|in\s+your\s+(?:portfolio|database|index)|assets?\s+(?:from|in|at|by|for)|technologies?\s+(?:from|in|at|by|for))\b/i;
 
 export function isDefinitionalQuery(query: string): boolean {
   if (COMBINED_SEARCH_INTENT.test(query)) return false;
@@ -716,7 +716,7 @@ const BACK_REF_PATTERNS = [
   /\b(?:expand|dig)\s+(?:deeper|more)?\s*(?:on|into)\s+(?:that|this|it)\b/i,
   /\bpull\s+(?:a\s+)?(?:full\s+)?(?:profile|dossier)\s+(?:on|for)?\s*(?:it|that|this)\b/i,
   /\b(?:number|#)\s*[123]\b/i,
-  /\bwhat\s+about\s+(?:the\s+)?(?:first|second|third|1st|2nd|3rd)\s+(?:one|asset)?\b/i,
+  /\bwhat\s+about\s+(?:the\s+)?(?:first|second|third|1st|2nd|3rd)\s+(?:one|asset|result|technology|tech|option|compound)\b/i,
   /\bgo\s+(?:deeper|further)\s+on\s+(?:that|this|it)\b/i,
   // Institution-qualified back-references (anaphora with institution name)
   /\bthe\s+one\s+from\s+\w/i,
@@ -972,6 +972,9 @@ const BIOTECH_SIGNALS = [
   "stem cell", "diagnostic", "assay", "platform", "tto", "tech transfer", "technology",
   "how many", "gpl", "glp", "cnc", "cns", "hiv", "covid", "autoimmune",
   "inflammation", "cardiac", "neuro", "stanford", "mit", "harvard", "columbia",
+  // Stage and organ terms that indicate search intent even in short messages
+  "discovery", "liver", "kidney", "lung", "brain", "breast", "prostate",
+  "rare", "orphan", "pediatric", "solid tumor", "hematologic",
 ];
 
 const FUN_FACT_PATTERNS = [
@@ -992,10 +995,85 @@ export function isConversational(query: string): boolean {
   if (FUN_FACT_PATTERNS.some((rx) => rx.test(lower))) return true;
   const words = query.trim().split(/\s+/);
   if (words.length > 8) return false;
+  // Two-sided word boundary so plurals/inflected forms (antibodies → antibody,
+  // inhibitors → inhibitor) match, but common-word prefixes like "generally"
+  // don't false-positive on "gene".
   return !BIOTECH_SIGNALS.some((kw) => {
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
-    return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i").test(lower);
+    return new RegExp(`\\b${escaped}\\b`, "i").test(lower);
   });
+}
+
+// ── LLM Intent Router ────────────────────────────────────────────────────
+//
+// Replaces the regex cascade (isConversational, isAggregationQuery, etc.) with
+// a single gpt-4o-mini call that returns structured JSON. Falls back to
+// { intent: "search" } on any failure — the safest default.
+
+export type IntentClassification = {
+  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational";
+  filters: QueryFilters;
+  backRefPosition: number | null; // 0=first, 1=second, 2=third
+};
+
+const ROUTER_SYSTEM_PROMPT = `You are a biotech search intent classifier for a TTO (technology transfer office) asset discovery platform. Given a user message, classify the intent and extract search filters. Respond with JSON only.
+
+INTENTS:
+- search: user wants to find/browse specific biotech assets (default when unclear)
+- aggregation: wants counts or statistics ("how many", "breakdown by", "top institutions")
+- back_ref: refers to a previously shown asset by position/anaphora ("the second one", "tell me more about it", "that one") — ONLY valid when hasPriorAssets=true
+- comparative: wants head-to-head comparison ("compare", "vs", "which is better")
+- definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
+- conversational: greeting, thanks, out-of-scope chat with no biotech search intent
+
+FILTER EXTRACTION (null if not mentioned in the message):
+- modality: Gene Therapy | Gene Editing | Cell Therapy | CAR-T | Small Molecule | Antibody | mRNA | RNA Therapeutics | siRNA | Antisense | PROTAC | ADC | Bispecific Antibody | Vaccine | Peptide | Nanoparticle | Protein/Biologics
+- stage: discovery | preclinical | IND-enabling | phase 1 | phase 2 | phase 3 | approved
+- indication: free-text disease/area (e.g. "liver cancer", "oncology", "alzheimer", "rare disease", "autoimmune")
+- institution: university or TTO name if explicitly mentioned
+- geography: us | eu | uk | asia (only if a region or country is explicitly mentioned)
+- biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation")
+
+back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
+
+Return exactly this shape:
+{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null},"back_ref_position":null}`;
+
+export async function classifyIntent(
+  message: string,
+  hasPriorAssets: boolean,
+): Promise<IntentClassification> {
+  const fallback: IntentClassification = { intent: "search", filters: {}, backRefPosition: null };
+  try {
+    const resp = await client.chat.completions.create({
+      model: "gpt-4o-mini",
+      response_format: { type: "json_object" },
+      temperature: 0,
+      max_tokens: 150,
+      messages: [
+        { role: "system", content: ROUTER_SYSTEM_PROMPT },
+        { role: "user", content: `hasPriorAssets: ${hasPriorAssets}\n\nMessage: ${message}` },
+      ],
+    });
+    const raw = resp.choices[0]?.message?.content ?? "{}";
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const f = (parsed.filters ?? {}) as Record<string, unknown>;
+    return {
+      intent: (parsed.intent as IntentClassification["intent"]) ?? "search",
+      filters: {
+        modality: (f.modality as string) || undefined,
+        stage: (f.stage as string) || undefined,
+        indication: (f.indication as string) || undefined,
+        institution: (f.institution as string) || undefined,
+        geography: (f.geography as QueryFilters["geography"]) || undefined,
+        biology: (f.biology as string) || undefined,
+      },
+      backRefPosition: typeof parsed.back_ref_position === "number" ? parsed.back_ref_position : null,
+    };
+  } catch (err) {
+    console.warn("[eden/router] classifyIntent failed, using search fallback:", (err as Error)?.message);
+    return fallback;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -1078,7 +1156,7 @@ export function rerankAssets(
 
   const activeBioLower = activeBiology?.toLowerCase();
 
-  const scored = assets.map((a) => {
+  const scored = assets.map((a, idx) => {
     let boost = 0;
 
     // Tier 1: static user-profile boost
@@ -1109,10 +1187,11 @@ export function rerankAssets(
       if (bio.includes(activeBioLower) || activeBioLower.includes(bio)) boost += 2;
     }
 
-    return { asset: a, boost };
+    // idx preserves semantic-similarity order as tiebreaker for equal-boost assets
+    return { asset: a, boost, idx };
   });
 
-  scored.sort((a, b) => b.boost - a.boost);
+  scored.sort((a, b) => b.boost - a.boost || a.idx - b.idx);
   return scored.slice(0, LIMIT).map((s) => s.asset);
 }
 
@@ -1261,7 +1340,7 @@ export async function* ragQuery(
       role: "user",
       content: assets.length > 0
         ? `Based on the following retrieved TTO assets, answer the question.\n\nRETRIEVED ASSETS:\n${context}\n\nQUESTION: ${question}`
-        : question,
+        : `NO ASSETS RETRIEVED: The database search returned no results for this query. Do NOT invent, fabricate, or suggest any specific asset names, institution names, or technology descriptions. Either ask a clarifying question to narrow the search, or explain that you couldn't find a match and offer an alternative angle.\n\nQUESTION: ${question}`,
     },
   ];
 
@@ -1489,11 +1568,11 @@ export async function* conceptQuery(
   ];
 
   const conceptStream = await client.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: "gpt-4o",
     messages,
     stream: true,
     temperature: 0.4,
-    max_tokens: 400,
+    max_tokens: 500,
   });
 
   for await (const chunk of conceptStream) {

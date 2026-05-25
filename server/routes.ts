@@ -2611,6 +2611,7 @@ export async function registerRoutes(
 
   app.post("/api/saved-assets", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const body = saveAssetBodySchema.parse(req.body);
       const userId = await tryGetUserId(req);
       const asset = await storage.createSavedAsset({
@@ -2791,6 +2792,7 @@ export async function registerRoutes(
 
   app.patch("/api/saved-assets/:id/status", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { status } = z.object({
@@ -2889,6 +2891,7 @@ export async function registerRoutes(
 
   app.post("/api/saved-assets/:id/notes", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { content } = z.object({
@@ -2958,6 +2961,7 @@ export async function registerRoutes(
 
   app.delete("/api/saved-assets/:id", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const userId = await tryGetUserId(req);
@@ -3060,6 +3064,7 @@ export async function registerRoutes(
 
   app.post("/api/pipelines", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const { name, shared } = z.object({ name: z.string().min(1).max(100), shared: z.boolean().optional() }).parse(req.body);
       const userId = await tryGetUserId(req);
       let orgId: number | undefined;
@@ -3077,6 +3082,7 @@ export async function registerRoutes(
 
   app.patch("/api/pipelines/:id", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
@@ -3095,6 +3101,7 @@ export async function registerRoutes(
 
   app.delete("/api/pipelines/:id", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const userId = await tryGetUserId(req);
@@ -10484,6 +10491,28 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // PATCH /api/industry/org — update org name / billing email (owner only)
+  app.patch("/api/industry/org", verifyAnyAuth, async (req, res) => {
+    try {
+      const ctx = await requireOrgOwner(req, res);
+      if (!ctx) return;
+      const { org } = ctx;
+      const body = z.object({
+        name: z.string().min(1).max(200).optional(),
+        billingEmail: z.union([z.string().email(), z.literal("")]).optional(),
+      }).parse(req.body);
+      const updates: Record<string, any> = {};
+      if (body.name !== undefined) updates.name = body.name;
+      if (body.billingEmail !== undefined) updates.billingEmail = body.billingEmail || null;
+      if (Object.keys(updates).length === 0) return res.json({ ok: true });
+      const updated = await storage.updateOrganization(org.id, updates);
+      res.json(updated);
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Activate invite — called by /set-password page after the user sets their password.
   // Flips the caller's org_members.invite_status from "pending" → "active" immediately
   // so they have full access when they land on the dashboard.
@@ -10589,6 +10618,20 @@ If a field cannot be determined, use "N/A".`
       return null;
     }
     return { org, userId };
+  }
+
+  // Returns false and sends 403 if the calling user is a viewer (read-only org role)
+  async function requireNotViewer(req: any, res: any): Promise<boolean> {
+    const userId = req.headers["x-user-id"] as string | undefined;
+    if (!userId) return true; // unauthenticated — let downstream handle
+    const org = await storage.getOrgForUser(userId);
+    if (!org) return true; // solo user, no viewer concept
+    const member = await storage.getOrgMemberByUserId(org.id, userId);
+    if (member?.role === "viewer") {
+      res.status(403).json({ error: "Viewers have read-only access" });
+      return false;
+    }
+    return true;
   }
 
   // POST /api/org/members — invite a new team member (admin or owner)
@@ -10707,6 +10750,45 @@ If a field cannot be determined, use "N/A".`
 
       res.json({ ok: true, email: member.email });
     } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/org/members/:memberId/role — change a member's role (owner only)
+  // Transferring ownership (role:"owner") automatically demotes the caller to "admin".
+  app.patch("/api/org/members/:memberId/role", verifyAnyAuth, async (req, res) => {
+    try {
+      const ctx = await requireOrgOwner(req, res);
+      if (!ctx) return;
+      const { org, userId: callerId } = ctx;
+      const memberId = req.params.memberId as string;
+      const { role } = z.object({
+        role: z.enum(["owner", "admin", "member", "viewer"]),
+      }).parse(req.body);
+
+      if (memberId === callerId) return res.status(400).json({ error: "Cannot change your own role this way" });
+
+      const allMembers = await storage.getOrgMembers(org.id);
+      const target = allMembers.find((m) => m.userId === memberId);
+      if (!target) return res.status(404).json({ error: "Member not found" });
+
+      // Guard: cannot demote last owner
+      if (target.role === "owner" && role !== "owner") {
+        const ownerCount = allMembers.filter((m) => m.role === "owner").length;
+        if (ownerCount <= 1) return res.status(400).json({ error: "Cannot demote the only owner. Transfer ownership first." });
+      }
+
+      await storage.updateOrgMemberRole(org.id, memberId, role);
+
+      // Transferring ownership — demote caller to admin
+      if (role === "owner") {
+        await storage.updateOrgMemberRole(org.id, callerId, "admin");
+      }
+
+      // Invalidate org cache
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
       res.status(500).json({ error: err.message });
     }
   });
