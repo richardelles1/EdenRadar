@@ -2240,6 +2240,121 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/assets/:fingerprint/export-pdf — server-side Playwright PDF generation
+  app.post("/api/assets/:fingerprint/export-pdf", verifyAnyAuth, async (req, res) => {
+    try {
+      const { fingerprint } = req.params;
+      const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
+      if (!fingerprintStr) return res.status(400).json({ error: "Fingerprint required" });
+
+      const { asset, dossier } = req.body as {
+        asset?: import("./lib/types").ScoredAsset;
+        dossier?: { narrative: string; generated_at: string } | null;
+      };
+
+      // Fetch enriched record and competing assets from DB
+      let rec = await db.select().from(ingestedAssets)
+        .where(eq(ingestedAssets.fingerprint, fingerprintStr)).limit(1).then((r) => r[0]);
+      if (!rec) {
+        const n = parseInt(fingerprintStr, 10);
+        if (!isNaN(n)) rec = await db.select().from(ingestedAssets)
+          .where(eq(ingestedAssets.id, n)).limit(1).then((r) => r[0]);
+      }
+
+      let competing: typeof rec[] = [];
+      if (rec?.target && rec.target !== "unknown") {
+        competing = await db.select().from(ingestedAssets).where(
+          and(
+            eq(ingestedAssets.target, rec.target),
+            sql`${ingestedAssets.institution} != ${rec.institution}`,
+            eq(ingestedAssets.relevant, true),
+            sql`${ingestedAssets.fingerprint} != ${fingerprintStr}`,
+          )
+        ).limit(5);
+      }
+
+      // Best-effort literature fetch (non-blocking)
+      let literature: Array<{ title: string; url: string; date: string; source_type: string }> = [];
+      if (rec) {
+        const terms = [rec.target, rec.indication].filter((v) => v && v !== "unknown").join(" ");
+        if (terms) {
+          try {
+            const pubmed = dataSources["pubmed" as SourceKey];
+            if (pubmed) {
+              const sigs = await Promise.race([
+                pubmed.search(terms, 4),
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5000)),
+              ]);
+              literature = (sigs as import("./lib/types").RawSignal[]).map((s) => ({
+                title: s.title, url: s.url, date: s.date, source_type: s.source_type,
+              }));
+            }
+          } catch { /* skip literature on timeout */ }
+        }
+      }
+
+      const { generateDossierPdf } = await import("./pdfExport");
+
+      const pdf = await generateDossierPdf({
+        fingerprint: fingerprintStr,
+        assetName: rec?.assetName ?? asset?.asset_name ?? "Asset Dossier",
+        institution: rec?.institution ?? asset?.institution ?? null,
+        indication: rec?.indication ?? asset?.indication ?? null,
+        target: rec?.target ?? asset?.target ?? null,
+        modality: rec?.modality ?? asset?.modality ?? null,
+        stage: rec?.developmentStage ?? asset?.development_stage ?? null,
+        patentStatus: rec?.patentStatus ?? asset?.patent_status ?? null,
+        licensingStatus: rec?.licensingStatus ?? asset?.licensing_status ?? null,
+        contactEmail: rec?.contactEmail ?? asset?.contact_office ?? null,
+        sourceTypes: asset?.source_types ?? [],
+        evidenceCount: asset?.evidence_count ?? 0,
+        sourceUrls: asset?.source_urls ?? (rec?.sourceUrl ? [rec.sourceUrl] : []),
+        score: asset?.score ?? 0,
+        scoreBreakdown: asset?.score_breakdown ? {
+          novelty: asset.score_breakdown.novelty,
+          freshness: asset.score_breakdown.freshness,
+          readiness: asset.score_breakdown.readiness,
+          licensability: asset.score_breakdown.licensability,
+          fit: asset.score_breakdown.fit,
+          competition: asset.score_breakdown.competition,
+          total: asset.score_breakdown.total,
+          signal_coverage: asset.score_breakdown.signal_coverage ?? 0,
+          scored_dimensions: asset.score_breakdown.scored_dimensions ?? [],
+        } : null,
+        mechanismOfAction: rec?.mechanismOfAction ?? null,
+        abstract: rec?.abstract ?? null,
+        ipType: rec?.ipType ?? null,
+        licensingReadiness: rec?.licensingReadiness ?? null,
+        inventors: rec?.inventors ?? null,
+        innovationClaim: rec?.innovationClaim ?? null,
+        unmetNeed: rec?.unmetNeed ?? null,
+        comparableDrugs: rec?.comparableDrugs ?? null,
+        whyItMatters: asset?.why_it_matters ?? null,
+        literature,
+        competingAssets: competing.map((c) => ({
+          assetName: c.assetName ?? "",
+          target: c.target ?? "",
+          modality: c.modality ?? "",
+          developmentStage: c.developmentStage ?? "",
+          institution: c.institution ?? "",
+        })),
+        narrative: dossier?.narrative ?? null,
+        narrativeGeneratedAt: dossier?.generated_at ?? null,
+      });
+
+      const safeName = (rec?.assetName ?? asset?.asset_name ?? "dossier")
+        .replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").slice(0, 60);
+      const date = new Date().toISOString().slice(0, 10);
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="EdenScout_${safeName}_${date}.pdf"`);
+      res.setHeader("Content-Length", pdf.length);
+      return res.end(pdf);
+    } catch (err: any) {
+      console.error("[export-pdf] Error:", err);
+      return res.status(500).json({ error: err.message ?? "PDF generation failed" });
+    }
+  });
+
   // GET /api/assets/:fingerprint/regulatory — Orphan Drug designations matched to this asset
   app.get("/api/assets/:fingerprint/regulatory", async (req, res) => {
     try {
@@ -9592,7 +9707,15 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
       if (error) return res.status(500).json({ error: error.message });
-      const users = (data?.users ?? []).map((u) => {
+      const authUsers = data?.users ?? [];
+      const userIds = authUsers.map((u) => u.id);
+      const profileRows = userIds.length > 0
+        ? await db.select({ userId: industryProfiles.userId, status: industryProfiles.status })
+            .from(industryProfiles)
+            .where(inArray(industryProfiles.userId, userIds))
+        : [];
+      const statusByUserId = new Map(profileRows.map((r) => [r.userId, r.status]));
+      const users = authUsers.map((u) => {
         const meta = (u.user_metadata ?? {}) as Record<string, unknown>;
         const name =
           (typeof meta.name === "string" && meta.name) ||
@@ -9616,6 +9739,7 @@ If a field cannot be determined, use "N/A".`
           role: (typeof meta.role === "string" ? meta.role : null),
           subscribedToDigest: meta.subscribedToDigest === true,
           marketEntitlement,
+          status: statusByUserId.get(u.id) ?? "active",
           createdAt: u.created_at,
           lastSignInAt: u.last_sign_in_at ?? null,
         };

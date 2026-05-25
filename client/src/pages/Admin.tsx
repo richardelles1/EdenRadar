@@ -5,7 +5,7 @@ import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
 import { ApiManagementTab } from "@/components/admin/ApiManagementTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, Key, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, Key, PowerOff, RotateCcw, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -7329,6 +7329,7 @@ interface AdminUser {
   role: PortalRole | null;
   subscribedToDigest: boolean;
   marketEntitlement?: { active: boolean; source: "admin" | "stripe" | null; grantedAt: string | null } | null;
+  status: string;
   createdAt: string;
   lastSignInAt: string | null;
 }
@@ -7351,6 +7352,7 @@ function AccountCenter({ pw }: { pw: string }) {
   const [inviteRole, setInviteRole] = useState<PortalRole>("concept");
   const [copiedRole, setCopiedRole] = useState<string | null>(null);
   const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
+  const [deactivateUserId, setDeactivateUserId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
@@ -7528,6 +7530,34 @@ function AccountCenter({ pw }: { pw: string }) {
     },
   });
 
+  const setStatusMutation = useMutation({
+    mutationFn: async ({ userId, status }: { userId: string; status: "active" | "deactivated" }) => {
+      const res = await fetch(`/api/admin/users/${userId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to update status");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setDeactivateUserId(null);
+      toast({
+        title: variables.status === "deactivated" ? "Account deactivated" : "Account reactivated",
+        description: variables.status === "deactivated"
+          ? "The user is blocked from logging in. Their data is preserved."
+          : "The user can log in again.",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const inviteUser = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/users/invite", {
@@ -7699,9 +7729,10 @@ function AccountCenter({ pw }: { pw: string }) {
                 <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[160px]">Portal</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Digest</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Market</th>
+                <th className="text-center py-3 px-4 font-semibold text-foreground">Status</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Joined</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Last Seen</th>
-                <th className="w-10 py-3 px-4"></th>
+                <th className="w-16 py-3 px-4"></th>
               </tr>
             </thead>
             <tbody>
@@ -7850,6 +7881,21 @@ function AccountCenter({ pw }: { pw: string }) {
                         )}
                       </div>
                     </td>
+                    <td className="text-center py-2.5 px-4">
+                      {user.status === "deactivated" ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20" data-testid={`badge-status-${user.id}`}>
+                          Inactive
+                        </span>
+                      ) : user.status === "suspended" ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20" data-testid={`badge-status-${user.id}`}>
+                          Suspended
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" data-testid={`badge-status-${user.id}`}>
+                          Active
+                        </span>
+                      )}
+                    </td>
                     <td className="text-center py-2.5 px-4 text-xs text-muted-foreground">
                       {formatDate(user.createdAt)}
                     </td>
@@ -7857,21 +7903,42 @@ function AccountCenter({ pw }: { pw: string }) {
                       {timeAgoShort(user.lastSignInAt)}
                     </td>
                     <td className="py-2.5 px-2 text-center">
-                      <button
-                        onClick={() => setDeleteUserId(user.id)}
-                        className="text-destructive/40 hover:text-destructive hover:bg-destructive/10 rounded p-1 transition-colors"
-                        title="Delete account permanently"
-                        data-testid={`button-delete-user-${user.id}`}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      <div className="flex items-center justify-center gap-0.5">
+                        {user.status === "deactivated" ? (
+                          <button
+                            onClick={() => setStatusMutation.mutate({ userId: user.id, status: "active" })}
+                            className="text-emerald-600/50 hover:text-emerald-600 hover:bg-emerald-500/10 rounded p-1 transition-colors"
+                            title="Reactivate account"
+                            data-testid={`button-reactivate-user-${user.id}`}
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setDeactivateUserId(user.id)}
+                            className="text-amber-500/40 hover:text-amber-500 hover:bg-amber-500/10 rounded p-1 transition-colors"
+                            title="Deactivate account (preserves data)"
+                            data-testid={`button-deactivate-user-${user.id}`}
+                          >
+                            <PowerOff className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => setDeleteUserId(user.id)}
+                          className="text-destructive/40 hover:text-destructive hover:bg-destructive/10 rounded p-1 transition-colors"
+                          title="Delete account permanently"
+                          data-testid={`button-delete-user-${user.id}`}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="text-center py-8 text-muted-foreground">No users found</td>
+                  <td colSpan={9} className="text-center py-8 text-muted-foreground">No users found</td>
                 </tr>
               )}
             </tbody>
@@ -7939,6 +8006,28 @@ function AccountCenter({ pw }: { pw: string }) {
               data-testid="button-confirm-delete-user"
             >
               {deleteUserMutation.isPending ? "Deleting..." : "Delete Account"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deactivateUserId !== null} onOpenChange={(o) => { if (!o) setDeactivateUserId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate this account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The user will be blocked from logging in immediately. Their data, pipeline lists, and history are preserved and the account can be reactivated at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-amber-500 text-white hover:bg-amber-600"
+              disabled={setStatusMutation.isPending}
+              onClick={() => deactivateUserId && setStatusMutation.mutate({ userId: deactivateUserId, status: "deactivated" })}
+              data-testid="button-confirm-deactivate-user"
+            >
+              {setStatusMutation.isPending ? "Deactivating..." : "Deactivate Account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
