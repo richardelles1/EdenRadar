@@ -40,6 +40,7 @@ type PortfolioStats = {
   byModality: { modality: string; count: number }[];
   byStage: { stage: string; count: number }[];
   byTherapyArea: { area: string; count: number }[];
+  byBiology: { biology: string; count: number }[];
   topInstitutions: { institution: string; count: number }[];
   lastFetched: number;
 };
@@ -1323,9 +1324,11 @@ export default function IndustryDashboard() {
                   const stageLabel = (item.metadata?.toStage as string | null) ?? null;
                   const fromLabel = (item.metadata?.fromStage as string | null) ?? null;
                   const actionDescription =
-                    item.action === "moved_asset" && stageLabel
-                      ? `moved to ${stageLabel}`
-                      : item.action === "moved_asset" && !stageLabel && fromLabel
+                    item.action === "moved_asset" && stageLabel && fromLabel
+                      ? `moved from ${fromLabel} → ${stageLabel} on`
+                      : item.action === "moved_asset" && stageLabel
+                      ? `moved to ${stageLabel} on`
+                      : item.action === "moved_asset" && fromLabel
                       ? "cleared status on"
                       : actionMeta.label;
 

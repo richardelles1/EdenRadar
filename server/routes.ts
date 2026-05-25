@@ -40,7 +40,7 @@ import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from ".
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, classifyIntent, type UserContext, type SessionFocusContext, type IntentClassification } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser, getAdminEmails } from "./lib/supabaseAuth";
 import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import {
@@ -7390,6 +7390,7 @@ Do not respond with anything else.`;
     }
 
     const sid = (typeof sessionId === "string" && sessionId) || crypto.randomUUID();
+    const requestUserId = req.headers["x-user-id"] as string | undefined;
     const ctx: UserContext | undefined = userContext && typeof userContext === "object" ? userContext as UserContext : undefined;
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -7402,13 +7403,28 @@ Do not respond with anything else.`;
     };
 
     try {
-      const [session, portfolioStats] = await Promise.all([
+      const [session, portfolioStats, userProfile] = await Promise.all([
         storage.getOrCreateEdenSession(sid),
         fetchPortfolioStats().catch((err) => {
           console.error("[eden] Portfolio stats preload failed:", err?.message ?? err);
           return undefined;
         }),
+        requestUserId
+          ? storage.getIndustryProfileByUserId(requestUserId).catch(() => undefined)
+          : Promise.resolve(undefined),
       ]);
+
+      // Merge DB industry profile into UserContext so reranking + response generation
+      // reflect the user's actual therapeutic focus, preferred modalities, and deal stages.
+      const resolvedCtx: UserContext | undefined = userProfile
+        ? {
+            companyName: userProfile.companyName ?? ctx?.companyName,
+            companyType: userProfile.companyType ?? ctx?.companyType,
+            therapeuticAreas: userProfile.therapeuticAreas?.length ? userProfile.therapeuticAreas : ctx?.therapeuticAreas,
+            modalities: userProfile.modalities?.length ? userProfile.modalities : ctx?.modalities,
+            dealStages: userProfile.dealStages?.length ? userProfile.dealStages : ctx?.dealStages,
+          }
+        : ctx;
       const allMessages = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
 
       // ── Session summarization: at turn 8, compress older turns into a context note ──
@@ -7426,8 +7442,9 @@ Do not respond with anything else.`;
       } else {
         history = allMessages.slice(-6);
       }
-      // Trigger async summarization once we hit turn 8 (fire-and-forget, stores in focusContext._summary)
-      if (assistantTurnCount === 8 && !storedSummary) {
+      // Trigger async summarization at turn 8+ when no summary exists yet.
+      // Uses >= so a server restart between turns 8 and 9 doesn't permanently skip it.
+      if (assistantTurnCount >= 8 && !storedSummary) {
         summarizeSession(allMessages).then(async (summary) => {
           if (summary) {
             const updatedFocus = { ...(session.focusContext ?? {}), _summary: summary } as SessionFocusContext;
@@ -7442,24 +7459,54 @@ Do not respond with anything else.`;
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
       // ── Portfolio institution names for two-pass detection ────────────────
-      // Defined first so pass-2 can be used in focus extraction AND filter override.
       const portfolioInstitutionNames: string[] = portfolioStats?.topInstitutions?.map((i: { institution: string }) => i.institution) ?? [];
 
-      // ── Session focus context + filter extraction ──────────────────────────
-      // Pass portfolio institution names so pass-2 detected institutions persist to focusContext
+      // ── Session focus context (accumulated across turns) ──────────────────
       const focusContext = getOrUpdateSessionFocus(sid, message.trim(), portfolioInstitutionNames);
-      // Unconditional reset: any reset-intent message clears adaptive engagement
-      // signals regardless of whether focus itself transitioned to empty.
-      // This covers "start fresh with gene therapy" (focus becomes non-empty
-      // but old engagement signals must still be wiped).
       if (isEngagementResetMessage(message.trim())) {
         markEngagementReset(sid);
       }
-      const filters = parseQueryFilters(message.trim(), focusContext);
 
-      // Override filters.institution with two-pass detection if not already set.
-      // Must happen BEFORE filtersActive computation so pass-2 institutions
-      // consistently trigger filtered semantic search.
+      // Persist updated focus fire-and-forget
+      persistSessionFocus(sid, focusContext).catch((e) =>
+        console.warn("[eden] focus persist failed:", e?.message ?? e)
+      );
+
+      // Pre-compute prior-asset state for back-ref and comparative routing.
+      const lastAssistantWithAssets = [...(session.messages ?? [])].reverse().find(
+        (m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0
+      );
+      const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 3);
+
+      // ── LLM Intent Router + Embedding (parallel) ──────────────────────────
+      // classifyIntent replaces the regex cascade. embedQuery runs speculatively
+      // so it's ready when we reach the search path — cost is negligible if discarded.
+      const [intentResult, precomputedEmbedding] = await Promise.allSettled([
+        classifyIntent(message.trim(), priorIds.length > 0),
+        embedQuery(message.trim()),
+      ]);
+      const intentClass: IntentClassification = intentResult.status === "fulfilled"
+        ? intentResult.value
+        : isConversational(message.trim())
+          ? { intent: "conversational", filters: {}, backRefPosition: null }
+          : { intent: "search", filters: {}, backRefPosition: null };
+      const cachedEmbedding: number[] | null = precomputedEmbedding.status === "fulfilled"
+        ? precomputedEmbedding.value
+        : null;
+
+      // ── Merge LLM filters with accumulated session focus ──────────────────
+      // LLM extracts what's in the current message; focusContext fills gaps with
+      // prior accumulated context (e.g. a stage set two turns ago stays active).
+      const filters = {
+        modality: intentClass.filters.modality ?? focusContext.modality,
+        stage: intentClass.filters.stage ?? focusContext.stage,
+        indication: intentClass.filters.indication ?? focusContext.indication,
+        institution: intentClass.filters.institution ?? focusContext.institution,
+        geography: intentClass.filters.geography ?? focusContext.geography,
+        biology: intentClass.filters.biology ?? focusContext.biology,
+      };
+
+      // Two-pass institution detection: if LLM didn't catch it, try pattern + portfolio scan.
       if (!filters.institution) {
         const detected = detectInstitutionName(message.trim(), portfolioInstitutionNames);
         if (detected) filters.institution = detected;
@@ -7468,34 +7515,9 @@ Do not respond with anything else.`;
       const filtersActive = hasMeaningfulFilters(filters);
       const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
 
-      // Fire-and-forget focus persistence to DB
-      persistSessionFocus(sid, focusContext).catch((e) =>
-        console.warn("[eden] focus persist failed:", e?.message ?? e)
-      );
-
-      // ── Intent classification (order matters) ─────────────────────────────
-      // Routing priority (evaluated top-to-bottom, first match wins):
-      //   1. Back-reference  — must be first; anaphoric phrases like "tell me more about
-      //      the second one" look conversational to isConversational(), so checking them
-      //      before conversational routing is essential. Comparative queries are excluded
-      //      here — they resolve their own entities in Path 3.
-      //   2. Aggregation     — count phrases lack biotech signals; must beat conversational.
-      //   3. Comparative     — head-to-head asset comparisons with prior-context resolution.
-      //   4. Definitional    — "what is a PROTAC?" beats conversational/RAG.
-      //   5. Conversational  — general chitchat, greetings, out-of-scope.
-      //   6. Standard RAG    — default retrieval path.
-
-      // Pre-compute back-reference state so we can use it in the routing guard.
-      // Find the most recent assistant turn with non-empty assetIds — skips
-      // intervening conversational/definitional turns that have empty assetIds.
-      const lastAssistantWithAssets = [...(session.messages ?? [])].reverse().find(
-        (m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0
-      );
-      const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 3);
-      // Comparative queries do their own multi-asset entity resolution — exclude from back-ref
-      // so "compare the first to the second" reaches Path 3 rather than Path 1.
-      const isComparative = isComparativeQuery(message.trim());
-      const isBackRef = !isComparative && priorIds.length > 0 && detectBackReference(message.trim());
+      // ── Routing decisions from LLM intent ────────────────────────────────
+      const isBackRef = intentClass.intent === "back_ref" && priorIds.length > 0;
+      const isComparative = intentClass.intent === "comparative";
 
       // ── Path 1: Back-reference ─────────────────────────────────────────────
       if (isBackRef) {
@@ -7524,7 +7546,7 @@ Do not respond with anything else.`;
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), targeted, history, ctx, portfolioStats, focusContext)) {
+        for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -7536,9 +7558,9 @@ Do not respond with anything else.`;
         return;
       }
 
-      const aggQuery = isAggregationQuery(message.trim());
-      const definitional = !aggQuery && isDefinitionalQuery(message.trim());
-      const chat = !aggQuery && !definitional && isConversational(message.trim());
+      const aggQuery = intentClass.intent === "aggregation";
+      const definitional = intentClass.intent === "definitional";
+      const chat = intentClass.intent === "conversational";
 
       // ── Path 2: Aggregation / count queries ──────────────────────────────
       if (aggQuery) {
@@ -7546,7 +7568,7 @@ Do not respond with anything else.`;
         if (resolvedResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, ctx, portfolioStats, focusContext)) {
+          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, resolvedCtx, portfolioStats, focusContext)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -7555,7 +7577,7 @@ Do not respond with anything else.`;
           return;
         }
 
-        const count = await storage.filteredCount(geoRx, filters.modality, filters.stage, filters.indication, filters.institution).catch(() => null);
+        const count = await storage.filteredCount(geoRx, filters.modality, filters.stage, filters.indication, filters.institution, filters.biology).catch(() => null);
         if (count !== null) {
           const filterDesc = [
             filters.geography ? `${filters.geography.toUpperCase()} institution` : "",
@@ -7567,7 +7589,7 @@ Do not respond with anything else.`;
             : `Total relevant assets indexed in the portfolio: **${count.toLocaleString()}**`;
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, ctx, portfolioStats, focusContext)) {
+          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, resolvedCtx, portfolioStats, focusContext)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -7643,7 +7665,7 @@ Do not respond with anything else.`;
             // Try portfolio semantic search to find a relevant counterpart.
             hasExplicitRefs = true;
             try {
-              const namedEmbedding = await embedQuery(message.trim());
+              const namedEmbedding = cachedEmbedding ?? await embedQuery(message.trim());
               const namedHits = await storage.semanticSearch(namedEmbedding, 5);
               const NAMED_SIM_THRESHOLD = 0.45;
               const portfolioCandidate = namedHits.find(
@@ -7748,7 +7770,7 @@ Do not respond with anything else.`;
         // "compare gene therapy assets for ALS" with no prior context.
         if (compareIds.length < 2 && !terminalError && !hasExplicitRefs) {
           try {
-            const compareEmbedding = await embedQuery(message.trim());
+            const compareEmbedding = cachedEmbedding ?? await embedQuery(message.trim());
             const semanticHits = await storage.semanticSearch(compareEmbedding, 3);
             const COMPARE_SIM_THRESHOLD = 0.45;
             const passing = semanticHits.filter((a) => a.similarity >= COMPARE_SIM_THRESHOLD);
@@ -7786,7 +7808,7 @@ Do not respond with anything else.`;
             }));
             sendEvent("context", { sessionId: sid, assets: compareAssetPayload });
             let fullResponse = "";
-            for await (const token of compareQuery(message.trim(), fetchedForCompare, history, ctx, portfolioStats, focusContext)) {
+            for await (const token of compareQuery(message.trim(), fetchedForCompare, history, resolvedCtx, portfolioStats, focusContext)) {
               fullResponse += token;
               sendEvent("token", { text: token });
             }
@@ -7804,13 +7826,15 @@ Do not respond with anything else.`;
 
       // ── Path 4: Definitional / educational ──────────────────────────────
       if (definitional) {
-        // Start embedding in parallel with the concept stream so portfolio
-        // lookup adds minimal latency after the explanation finishes.
-        const conceptEmbeddingPromise = embedQuery(message.trim());
+        // Reuse speculative embedding from the parallel phase; only fall back to a
+        // fresh call if the earlier embedQuery failed (cachedEmbedding is null).
+        const conceptEmbeddingPromise = cachedEmbedding
+          ? Promise.resolve(cachedEmbedding)
+          : embedQuery(message.trim());
 
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
-        for await (const token of conceptQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
+        for await (const token of conceptQuery(message.trim(), history, resolvedCtx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -7852,7 +7876,7 @@ Do not respond with anything else.`;
           fullResponse += bridgeIntro;
 
           const bridgePrompt = `You just explained a concept. Now briefly introduce these ${relatedAssets.length} portfolio asset${relatedAssets.length > 1 ? "s" : ""} that relate to it. Lead with "There ${relatedAssets.length === 1 ? "is" : "are"} ${relatedAssets.length} related asset${relatedAssets.length > 1 ? "s" : ""} in the portfolio:" then list each with one concise hook sentence (standard **Asset Name** (Institution) — hook format). Keep it under 80 words total.`;
-          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], ctx, portfolioStats, focusContext)) {
+          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -7874,7 +7898,7 @@ Do not respond with anything else.`;
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
-        for await (const token of directQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
+        for await (const token of directQuery(message.trim(), history, resolvedCtx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -7885,28 +7909,26 @@ Do not respond with anything else.`;
 
       // ── Path 6: Standard RAG (semantic retrieval) ─────────────────────────
 
-      // Standard semantic retrieval (two-pass institution detection with portfolio names)
-      const institutionName = detectInstitutionName(message.trim(), portfolioInstitutionNames);
+      const institutionName = filters.institution ?? detectInstitutionName(message.trim(), portfolioInstitutionNames);
 
       let allSemantic: import("./storage").RetrievedAsset[];
       let institutionAssets: import("./storage").RetrievedAsset[] = [];
 
       try {
-        const [queryEmbedding, instAssets] = await Promise.all([
-          embedQuery(message.trim()),
-          institutionName
-            ? storage.searchIngestedAssetsByInstitution(institutionName, 10)
-            : Promise.resolve([] as import("./storage").RetrievedAsset[]),
-        ]);
+        // Use the embedding pre-computed alongside classifyIntent; fall back to a fresh call
+        // if the speculative embed failed (e.g. API timeout).
+        const queryEmbedding = cachedEmbedding ?? await embedQuery(message.trim());
+        const instAssets = institutionName
+          ? await storage.searchIngestedAssetsByInstitution(institutionName, 10).catch(() => [])
+          : [];
         institutionAssets = instAssets;
         if (filtersActive) {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology);
         } else {
-          allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+          allSemantic = await storage.semanticSearch(queryEmbedding, 20);
         }
       } catch (embedErr) {
         console.warn("[eden/rag] embedding failed, falling back to keyword search:", (embedErr as Error)?.message ?? embedErr);
-        // Keyword fallback: uses ILIKE against asset_name, indication, target, summary, institution
         const kwResults = await storage.keywordSearchIngestedAssets(message.trim(), 15, {
           modality: filters.modality,
           stage: filters.stage,
@@ -7921,16 +7943,34 @@ Do not respond with anything else.`;
 
       const threshold = institutionName ? 0.38 : 0.45;
       const institutionIds = new Set(institutionAssets.map((a) => a.id));
-      // Cap merged candidates at 15 before reranking (spec adherence)
-      const merged = [
+      let merged = [
         ...institutionAssets,
         ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
       ].slice(0, 15);
 
-      // Derive engagement signals from session message history (includes back-refs
-      // and follow-up turns already persisted to DB) then rerank with profile + adaptive + biology tiers.
+      // ── Auto-broadening: if nothing clears threshold, widen the net ─────────
+      // Retry 1: lower threshold (catches relevant assets with weaker similarity scores)
+      if (merged.length === 0 && allSemantic.length > 0) {
+        const broadThreshold = institutionName ? 0.30 : 0.35;
+        merged = [
+          ...institutionAssets,
+          ...allSemantic.filter((a) => a.similarity > broadThreshold && !institutionIds.has(a.id)),
+        ].slice(0, 8);
+      }
+      // Retry 2: keyword search (catches assets where embedding similarity is low but text matches well)
+      if (merged.length === 0) {
+        const kwFallback = await storage.keywordSearchIngestedAssets(message.trim(), 10, {
+          modality: filters.modality,
+          stage: filters.stage,
+          indication: filters.indication,
+          institution: filters.institution ?? (institutionName ?? undefined),
+        }).catch(() => [] as import("./storage").RetrievedAsset[]);
+        merged = kwFallback.map((a) => ({ ...a, similarity: 0.5 }));
+      }
+
+      // Derive engagement signals and rerank with profile + adaptive + biology tiers.
       const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
-      const retrieved = rerankAssets(merged, ctx, engagementSignals, focusContext?.biology);
+      const retrieved = rerankAssets(merged, resolvedCtx, engagementSignals, focusContext?.biology);
 
       const assetPayload = retrieved.map((a) => ({
         id: a.id, assetName: a.assetName, institution: a.institution,
@@ -7941,13 +7981,12 @@ Do not respond with anything else.`;
 
       sendEvent("context", { sessionId: sid, assets: assetPayload });
       let fullResponse = "";
-      for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats, focusContext)) {
+      for await (const token of ragQuery(message.trim(), retrieved, history, resolvedCtx, portfolioStats, focusContext)) {
         fullResponse += token;
         sendEvent("token", { text: token });
       }
       await storage.appendEdenMessage(sid, {
         role: "assistant", content: fullResponse,
-        // Store exactly last 3 IDs for turn-memory contract (ordinal back-refs: first/second/third)
         assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
       });
 
@@ -10524,7 +10563,7 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  // ── Self-service team invite routes (owner-only, no admin password required) ──
+  // ── Self-service team invite routes ────────────────────────────────────────────
 
   async function requireOrgOwner(req: any, res: any): Promise<{ org: any; userId: string } | null> {
     const userId = req.headers["x-user-id"] as string;
@@ -10533,16 +10572,29 @@ If a field cannot be determined, use "N/A".`
     if (!org) { res.status(404).json({ error: "No organization found for this user" }); return null; }
     const member = await storage.getOrgMemberByUserId(org.id, userId);
     if (!member || member.role !== "owner") {
-      res.status(403).json({ error: "Only the org owner can manage team members" });
+      res.status(403).json({ error: "Only the org owner can perform this action" });
       return null;
     }
     return { org, userId };
   }
 
-  // POST /api/org/members — invite a new team member (owner only)
+  async function requireOrgAdminOrOwner(req: any, res: any): Promise<{ org: any; userId: string } | null> {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId) { res.status(401).json({ error: "Not authenticated" }); return null; }
+    const org = await storage.getOrgForUser(userId);
+    if (!org) { res.status(404).json({ error: "No organization found for this user" }); return null; }
+    const member = await storage.getOrgMemberByUserId(org.id, userId);
+    if (!member || (member.role !== "owner" && member.role !== "admin")) {
+      res.status(403).json({ error: "Only org owners and admins can invite team members" });
+      return null;
+    }
+    return { org, userId };
+  }
+
+  // POST /api/org/members — invite a new team member (admin or owner)
   app.post("/api/org/members", verifyAnyAuth, async (req, res) => {
     try {
-      const ctx = await requireOrgOwner(req, res);
+      const ctx = await requireOrgAdminOrOwner(req, res);
       if (!ctx) return;
       const { org } = ctx;
 
@@ -10577,7 +10629,7 @@ If a field cannot be determined, use "N/A".`
       await storage.createInviteToken({ token: inviteToken, userId: newUserId, email, orgId: org.id, expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) });
       const setPasswordLink = `${APP_URL}/set-password?invite_token=${inviteToken}`;
 
-      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "active" });
+      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "pending" });
       await storage.setIndustryProfileOrg(newUserId, org.id);
       await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
         console.error("[email] Self-service invite email failed:", err)
@@ -10607,17 +10659,35 @@ If a field cannot be determined, use "N/A".`
       if (!targetMember) {
         return res.status(404).json({ error: "Member not found in your organization" });
       }
+      // Block removal of the last owner — org would be permanently orphaned
+      if (targetMember.role === "owner") {
+        const allMembers = await storage.getOrgMembers(org.id);
+        const ownerCount = allMembers.filter((m) => m.role === "owner").length;
+        if (ownerCount <= 1) {
+          return res.status(400).json({ error: "Cannot remove the only owner. Transfer ownership to another member first." });
+        }
+      }
       await storage.removeOrgMember(org.id, memberId);
+      // Reassign the removed member's saved assets in org pipelines to org-owned (userId=null)
+      // so they remain visible to the team rather than becoming orphaned.
+      await db.execute(sql`
+        UPDATE saved_assets sa
+        SET user_id = NULL
+        FROM pipeline_lists pl
+        WHERE sa.pipeline_list_id = pl.id
+          AND pl.org_id = ${org.id}
+          AND sa.user_id = ${memberId}
+      `);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // POST /api/org/members/:userId/resend — resend invite email (owner only)
+  // POST /api/org/members/:userId/resend — resend invite email (admin or owner)
   app.post("/api/org/members/:memberId/resend", verifyAnyAuth, async (req, res) => {
     try {
-      const ctx = await requireOrgOwner(req, res);
+      const ctx = await requireOrgAdminOrOwner(req, res);
       if (!ctx) return;
       const { org } = ctx;
       const memberId = req.params.memberId as string;

@@ -395,10 +395,12 @@ export default function IndustrySettings() {
   });
 
   const isOwner = org?.members?.some((m: any) => m.userId === user?.id && m.role === "owner") ?? false;
+  const isAdminOrOwner = org?.members?.some((m: any) => m.userId === user?.id && (m.role === "owner" || m.role === "admin")) ?? false;
   const isTeamPlan = org?.planTier === "team5" || org?.planTier === "team10";
   const seatsUsed = org?.seatCount ?? 0;
   const seatLimit = org?.seatLimit ?? 1;
-  const canInvite = isOwner && isTeamPlan && seatsUsed < seatLimit;
+  const ownerCount = org?.members?.filter((m: any) => m.role === "owner").length ?? 0;
+  const canInvite = isAdminOrOwner && isTeamPlan && seatsUsed < seatLimit;
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
@@ -1214,6 +1216,7 @@ export default function IndustrySettings() {
               const isSelf = member.userId === user?.id;
               const isBeingRemoved = removingId === member.userId;
               const isBeingResent = resendingId === member.userId;
+              const isLastOwner = member.role === "owner" && ownerCount <= 1;
               return (
                 <div
                   key={member.userId}
@@ -1247,7 +1250,7 @@ export default function IndustrySettings() {
                   >
                     {member.role}
                   </Badge>
-                  {isOwner && !isSelf && (
+                  {isAdminOrOwner && !isSelf && (
                     <div className="flex items-center gap-1 shrink-0">
                       {member.inviteStatus === "pending" && (
                         <button
@@ -1260,15 +1263,22 @@ export default function IndustrySettings() {
                           {isBeingResent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
                         </button>
                       )}
-                      <button
-                        onClick={() => handleRemove(member.userId, displayName)}
-                        disabled={isBeingRemoved || isBeingResent}
-                        title="Remove member"
-                        data-testid={`button-remove-${member.userId}`}
-                        className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
-                      >
-                        {isBeingRemoved ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                      </button>
+                      {isOwner && (
+                        <button
+                          onClick={() => !isLastOwner && handleRemove(member.userId, displayName)}
+                          disabled={isBeingRemoved || isBeingResent || isLastOwner}
+                          title={isLastOwner ? "Transfer ownership before removing this member" : "Remove member"}
+                          data-testid={`button-remove-${member.userId}`}
+                          className={cn(
+                            "p-1 rounded transition-colors",
+                            isLastOwner
+                              ? "text-muted-foreground/30 cursor-not-allowed"
+                              : "text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          )}
+                        >
+                          {isBeingRemoved ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
