@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Lock, Unlock, FileSignature, Upload, File, Trash2,
   Send, CheckCircle2, Clock, AlertCircle, Shield, Building2, Download, History,
-  Eye, ChevronDown, ChevronRight,
+  Eye, ChevronDown, ChevronRight, BarChart3, Users, Star, TrendingUp, Plus, X, Sparkles,
 } from "lucide-react";
 import type { MarketDeal, MarketDealDocument, MarketDealMessage, DealStatusHistoryEntry } from "@shared/schema";
 
@@ -70,6 +70,84 @@ type PartialEoi = {
 
 type StatusHistoryEntry = DealStatusHistoryEntry;
 type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null; ndaDocumentUrl?: string | null; sellerOrgName?: string | null; buyerOrgName?: string | null };
+
+type DealComp = {
+  id: number;
+  filingDate: string | null;
+  licensor: string | null;
+  licensee: string | null;
+  assetName: string | null;
+  indication: string | null;
+  modality: string | null;
+  developmentStage: string | null;
+  upfrontUsd: number | null;
+  totalValueUsd: number | null;
+  milestoneDetails: string | null;
+  geography: string | null;
+  filingUrl: string | null;
+};
+
+type DealCompsData = {
+  comps: DealComp[];
+  benchmarks: { avgUpfrontM: number | null; avgTotalM: number | null; count: number };
+};
+
+type TermSheetFields = {
+  upfrontUsdM?: number | null;
+  milestonesUsdM?: number | null;
+  royaltyPct?: number | null;
+  territory?: string | null;
+  exclusivity?: string | null;
+  ipOwnership?: string | null;
+  sublicensingRights?: string | null;
+  diligenceRights?: string | null;
+  notes?: string | null;
+};
+
+type TermSheet = {
+  id: number;
+  dealId: number;
+  fields: TermSheetFields;
+  sellerAgreedAt: string | null;
+  buyerAgreedAt: string | null;
+  lockedAt: string | null;
+  lastEditedBy: string | null;
+};
+
+type Observer = {
+  id: number;
+  dealId: number;
+  invitedBy: string;
+  observerEmail: string;
+  observerName: string;
+  role: string;
+  acceptedAt: string | null;
+  invitedAt: string;
+};
+
+type DealFeedback = {
+  id: number;
+  dealId: number;
+  responderId: string;
+  responderRole: string;
+  outcomeType: string;
+  overallRating: number | null;
+  timeToLoiDays: number | null;
+  dealValueUsdM: number | null;
+  mainBlocker: string | null;
+  platformRating: number | null;
+  platformComment: string | null;
+  wouldRecommend: boolean | null;
+};
+
+type AiTermSuggestions = {
+  upfrontUsdM?: { min: number; max: number; suggested: number };
+  milestonesUsdM?: { min: number; max: number; suggested: number };
+  royaltyPct?: { min: number; max: number; suggested: number };
+  territory?: string;
+  exclusivity?: string;
+  rationale?: string;
+};
 
 const ACCENT = "hsl(234 80% 58%)";
 
@@ -134,6 +212,28 @@ export default function MarketDealRoom() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Term sheet editing state
+  const [tsEditing, setTsEditing] = useState(false);
+  const [tsDraft, setTsDraft] = useState<TermSheetFields>({});
+  const [tsAiSuggestions, setTsAiSuggestions] = useState<AiTermSuggestions | null>(null);
+  const [loadingAiSuggestions, setLoadingAiSuggestions] = useState(false);
+
+  // Observers state
+  const [obsEmail, setObsEmail] = useState("");
+  const [obsName, setObsName] = useState("");
+  const [obsRole, setObsRole] = useState<"counsel" | "advisor" | "other">("counsel");
+  const [obsInviting, setObsInviting] = useState(false);
+
+  // Feedback state
+  const [fbOutcome, setFbOutcome] = useState<string>("closed");
+  const [fbOverallRating, setFbOverallRating] = useState<number | null>(null);
+  const [fbPlatformRating, setFbPlatformRating] = useState<number | null>(null);
+  const [fbMainBlocker, setFbMainBlocker] = useState("");
+  const [fbPlatformComment, setFbPlatformComment] = useState("");
+  const [fbWouldRecommend, setFbWouldRecommend] = useState<boolean | null>(null);
+  const [fbTimeToLoi, setFbTimeToLoi] = useState<string>("");
+  const [fbDealValue, setFbDealValue] = useState<string>("");
+
   const authHeaders = {
     Authorization: `Bearer ${session!.access_token}`,
     "x-user-id": userId,
@@ -166,6 +266,45 @@ export default function MarketDealRoom() {
       return res.json();
     },
     enabled: !!roomData?.deal?.ndaSignedAt,
+  });
+
+  const { data: compsData } = useQuery<DealCompsData>({
+    queryKey: ["/api/market/deals", dealId, "comps"],
+    queryFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/comps`, { headers: authHeaders });
+      if (!res.ok) return { comps: [], benchmarks: { avgUpfrontM: null, avgTotalM: null, count: 0 } };
+      return res.json();
+    },
+    enabled: !!roomData?.deal?.ndaSignedAt,
+  });
+
+  const { data: termSheet, refetch: refetchTermSheet } = useQuery<TermSheet | null>({
+    queryKey: ["/api/market/deals", dealId, "term-sheet"],
+    queryFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/term-sheet`, { headers: authHeaders });
+      if (!res.ok) return null;
+      return res.json();
+    },
+    enabled: !!roomData?.deal?.ndaSignedAt,
+  });
+
+  const { data: observers = [], refetch: refetchObservers } = useQuery<Observer[]>({
+    queryKey: ["/api/market/deals", dealId, "observers"],
+    queryFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/observers`, { headers: authHeaders });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!roomData?.deal?.ndaSignedAt,
+  });
+
+  const { data: feedbackData, refetch: refetchFeedback } = useQuery<{ submitted: boolean; feedback: DealFeedback | null }>({
+    queryKey: ["/api/market/deals", dealId, "feedback"],
+    queryFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/feedback`, { headers: authHeaders });
+      if (!res.ok) return { submitted: false, feedback: null };
+      return res.json();
+    },
   });
 
   useEffect(() => {
@@ -301,6 +440,114 @@ export default function MarketDealRoom() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId, "documents"] }),
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  const { mutate: saveTermSheet, isPending: savingTs } = useMutation({
+    mutationFn: async (fields: TermSheetFields) => {
+      const res = await fetch(`/api/market/deals/${dealId}/term-sheet`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify(fields),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchTermSheet();
+      setTsEditing(false);
+      toast({ title: "Term sheet saved" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { mutate: agreeTermSheet, isPending: agreeingTs } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/term-sheet/agree`, {
+        method: "POST",
+        headers: authHeaders,
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchTermSheet();
+      toast({ title: "Agreement recorded" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { mutate: inviteObserver } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/observers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ observerEmail: obsEmail, observerName: obsName, role: obsRole }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchObservers();
+      setObsEmail(""); setObsName(""); setObsRole("counsel"); setObsInviting(false);
+      toast({ title: "Observer invited", description: `An invitation has been sent to ${obsEmail}` });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { mutate: revokeObserver } = useMutation({
+    mutationFn: async (obsId: number) => {
+      const res = await fetch(`/api/market/deals/${dealId}/observers/${obsId}`, {
+        method: "DELETE",
+        headers: authHeaders,
+      });
+      if (!res.ok) throw new Error("Failed to revoke");
+    },
+    onSuccess: () => refetchObservers(),
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { mutate: submitFeedback, isPending: submittingFb } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/market/deals/${dealId}/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({
+          outcomeType: fbOutcome,
+          overallRating: fbOverallRating,
+          platformRating: fbPlatformRating,
+          mainBlocker: fbMainBlocker || null,
+          platformComment: fbPlatformComment || null,
+          wouldRecommend: fbWouldRecommend,
+          timeToLoiDays: fbTimeToLoi ? parseInt(fbTimeToLoi, 10) : null,
+          dealValueUsdM: fbDealValue ? parseFloat(fbDealValue) : null,
+        }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchFeedback();
+      toast({ title: "Feedback submitted — thank you!" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  async function getAiSuggestions() {
+    setLoadingAiSuggestions(true);
+    setTsAiSuggestions(null);
+    try {
+      const res = await fetch(`/api/market/deals/${dealId}/term-sheet/suggest`, {
+        method: "POST",
+        headers: authHeaders,
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      const { suggestions } = await res.json();
+      setTsAiSuggestions(suggestions);
+    } catch (err: any) {
+      toast({ title: "AI suggestions unavailable", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingAiSuggestions(false);
+    }
+  }
 
   async function openDocument(doc: DealDocumentWithViews) {
     // Fire-and-forget tracking — never block the open if it fails. The
@@ -521,6 +768,31 @@ export default function MarketDealRoom() {
                   Download executed NDA
                 </a>
               )}
+              {/* E-Signature Audit Certificate */}
+              {(() => {
+                type SigEntry = { status: string; changedAt: string; signerName?: string; signerIp?: string };
+                const history = (deal.statusHistory ?? []) as SigEntry[];
+                const sellerSig = history.find(e => e.status === "seller_signed_nda");
+                const buyerSig = history.find(e => e.status === "buyer_signed_nda");
+                if (!sellerSig && !buyerSig) return null;
+                return (
+                  <div className="mt-3 rounded-lg border border-border bg-background/60 p-3 space-y-2">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">E-Signature Audit Trail · Doc ID: DEAL-{deal.id}-NDA</p>
+                    {sellerSig && (
+                      <div className="text-[10px] text-muted-foreground">
+                        <p><span className="font-medium text-foreground">Party A (Seller):</span> {sellerSig.signerName} — {new Date(sellerSig.changedAt).toLocaleString()}</p>
+                        {sellerSig.signerIp && <p className="text-muted-foreground/70">IP: {sellerSig.signerIp}</p>}
+                      </div>
+                    )}
+                    {buyerSig && (
+                      <div className="text-[10px] text-muted-foreground">
+                        <p><span className="font-medium text-foreground">Party B (Buyer):</span> {buyerSig.signerName} — {new Date(buyerSig.changedAt).toLocaleString()}</p>
+                        {buyerSig.signerIp && <p className="text-muted-foreground/70">IP: {buyerSig.signerIp}</p>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           ) : (
             <div className="space-y-4">
@@ -754,6 +1026,283 @@ export default function MarketDealRoom() {
           )}
         </div>
 
+        {/* Term Sheet */}
+        <div className={cn("rounded-xl border border-card-border bg-card p-5 space-y-4", !ndaUnlocked && "opacity-50 pointer-events-none")}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FileSignature className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Term Sheet</span>
+              {!ndaUnlocked && <span className="text-xs text-muted-foreground">(available after NDA signing)</span>}
+              {termSheet?.lockedAt && <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-400">Agreed — Locked</Badge>}
+            </div>
+            {ndaUnlocked && !termSheet?.lockedAt && (
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setTsDraft(termSheet?.fields ?? {}); setTsEditing(true); }}>
+                {termSheet ? "Edit" : "Create Term Sheet"}
+              </Button>
+            )}
+          </div>
+
+          {!termSheet && ndaUnlocked && (
+            <p className="text-xs text-muted-foreground text-center py-4">No term sheet yet. Click <strong>Create Term Sheet</strong> to start drafting proposed deal terms.</p>
+          )}
+
+          {termSheet && !tsEditing && (
+            <div className="space-y-2">
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {termSheet.fields.upfrontUsdM != null && <div className="rounded-lg bg-muted/40 border border-border p-2.5"><p className="text-muted-foreground text-[10px] uppercase font-semibold mb-0.5">Upfront</p><p className="font-medium">${termSheet.fields.upfrontUsdM}M</p></div>}
+                {termSheet.fields.milestonesUsdM != null && <div className="rounded-lg bg-muted/40 border border-border p-2.5"><p className="text-muted-foreground text-[10px] uppercase font-semibold mb-0.5">Milestones</p><p className="font-medium">${termSheet.fields.milestonesUsdM}M</p></div>}
+                {termSheet.fields.royaltyPct != null && <div className="rounded-lg bg-muted/40 border border-border p-2.5"><p className="text-muted-foreground text-[10px] uppercase font-semibold mb-0.5">Royalty</p><p className="font-medium">{termSheet.fields.royaltyPct}%</p></div>}
+                {termSheet.fields.territory && <div className="rounded-lg bg-muted/40 border border-border p-2.5"><p className="text-muted-foreground text-[10px] uppercase font-semibold mb-0.5">Territory</p><p className="font-medium">{termSheet.fields.territory}</p></div>}
+                {termSheet.fields.exclusivity && <div className="rounded-lg bg-muted/40 border border-border p-2.5"><p className="text-muted-foreground text-[10px] uppercase font-semibold mb-0.5">Exclusivity</p><p className="font-medium">{termSheet.fields.exclusivity}</p></div>}
+                {termSheet.fields.ipOwnership && <div className="rounded-lg bg-muted/40 border border-border p-2.5"><p className="text-muted-foreground text-[10px] uppercase font-semibold mb-0.5">IP Ownership</p><p className="font-medium">{termSheet.fields.ipOwnership}</p></div>}
+              </div>
+              {termSheet.fields.notes && <p className="text-xs text-muted-foreground bg-muted/30 rounded-lg border border-border p-2.5">{termSheet.fields.notes}</p>}
+              <div className="flex items-center gap-3 pt-1">
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  {termSheet.sellerAgreedAt ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Clock className="w-3 h-3 text-muted-foreground" />}
+                  <span className={termSheet.sellerAgreedAt ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>Seller {termSheet.sellerAgreedAt ? "agreed" : "pending"}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px]">
+                  {termSheet.buyerAgreedAt ? <CheckCircle2 className="w-3 h-3 text-emerald-600" /> : <Clock className="w-3 h-3 text-muted-foreground" />}
+                  <span className={termSheet.buyerAgreedAt ? "text-emerald-700 dark:text-emerald-400" : "text-muted-foreground"}>Buyer {termSheet.buyerAgreedAt ? "agreed" : "pending"}</span>
+                </div>
+                {!termSheet.lockedAt && !((isSeller && termSheet.sellerAgreedAt) || (!isSeller && termSheet.buyerAgreedAt)) && (
+                  <Button size="sm" variant="outline" className="h-6 text-[10px] ml-auto gap-1" onClick={() => agreeTermSheet()} disabled={agreeingTs}>
+                    <CheckCircle2 className="w-3 h-3" />Mark Agreed
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {tsEditing && (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Upfront ($M)", key: "upfrontUsdM", type: "number" },
+                  { label: "Milestones ($M)", key: "milestonesUsdM", type: "number" },
+                  { label: "Royalty (%)", key: "royaltyPct", type: "number" },
+                  { label: "Territory", key: "territory", type: "text" },
+                  { label: "Exclusivity", key: "exclusivity", type: "text" },
+                  { label: "IP Ownership", key: "ipOwnership", type: "text" },
+                  { label: "Sublicensing Rights", key: "sublicensingRights", type: "text" },
+                  { label: "Diligence Rights", key: "diligenceRights", type: "text" },
+                ].map(({ label, key, type }) => (
+                  <div key={key}>
+                    <label className="text-[10px] font-medium text-muted-foreground uppercase">{label}</label>
+                    <Input
+                      type={type}
+                      value={(tsDraft as Record<string, unknown>)[key] as string ?? ""}
+                      onChange={e => setTsDraft(prev => ({ ...prev, [key]: type === "number" ? (e.target.value ? parseFloat(e.target.value) : null) : e.target.value || null }))}
+                      className="h-7 text-xs mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase">Notes</label>
+                <Textarea value={tsDraft.notes ?? ""} onChange={e => setTsDraft(prev => ({ ...prev, notes: e.target.value || null }))} className="h-16 text-xs mt-1 resize-none" />
+              </div>
+              {/* AI Term Suggestions */}
+              <Button
+                type="button" variant="outline" size="sm"
+                className="h-7 text-xs gap-1.5 w-full border-indigo-500/30 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-500/5"
+                onClick={getAiSuggestions}
+                disabled={loadingAiSuggestions}
+              >
+                <Sparkles className="w-3 h-3" />
+                {loadingAiSuggestions ? "Getting AI suggestions…" : "Get AI Term Suggestions"}
+              </Button>
+
+              {tsAiSuggestions && (
+                <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-3 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <Sparkles className="w-3 h-3 text-indigo-500" />
+                      <span className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-400 uppercase tracking-wide">AI Suggested Terms</span>
+                    </div>
+                    <button onClick={() => setTsAiSuggestions(null)} className="text-muted-foreground hover:text-foreground">
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                  {tsAiSuggestions.rationale && (
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">{tsAiSuggestions.rationale}</p>
+                  )}
+                  <div className="grid grid-cols-3 gap-2">
+                    {tsAiSuggestions.upfrontUsdM && (
+                      <div className="rounded bg-background border border-border p-2 text-center space-y-0.5">
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold">Upfront</p>
+                        <p className="text-xs font-bold text-foreground">${tsAiSuggestions.upfrontUsdM.suggested}M</p>
+                        <p className="text-[9px] text-muted-foreground">${tsAiSuggestions.upfrontUsdM.min}–{tsAiSuggestions.upfrontUsdM.max}M</p>
+                        <button className="text-[9px] text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setTsDraft(prev => ({ ...prev, upfrontUsdM: tsAiSuggestions.upfrontUsdM!.suggested }))}>Apply</button>
+                      </div>
+                    )}
+                    {tsAiSuggestions.milestonesUsdM && (
+                      <div className="rounded bg-background border border-border p-2 text-center space-y-0.5">
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold">Milestones</p>
+                        <p className="text-xs font-bold text-foreground">${tsAiSuggestions.milestonesUsdM.suggested}M</p>
+                        <p className="text-[9px] text-muted-foreground">${tsAiSuggestions.milestonesUsdM.min}–{tsAiSuggestions.milestonesUsdM.max}M</p>
+                        <button className="text-[9px] text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setTsDraft(prev => ({ ...prev, milestonesUsdM: tsAiSuggestions.milestonesUsdM!.suggested }))}>Apply</button>
+                      </div>
+                    )}
+                    {tsAiSuggestions.royaltyPct && (
+                      <div className="rounded bg-background border border-border p-2 text-center space-y-0.5">
+                        <p className="text-[9px] text-muted-foreground uppercase font-semibold">Royalty</p>
+                        <p className="text-xs font-bold text-foreground">{tsAiSuggestions.royaltyPct.suggested}%</p>
+                        <p className="text-[9px] text-muted-foreground">{tsAiSuggestions.royaltyPct.min}–{tsAiSuggestions.royaltyPct.max}%</p>
+                        <button className="text-[9px] text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setTsDraft(prev => ({ ...prev, royaltyPct: tsAiSuggestions.royaltyPct!.suggested }))}>Apply</button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-1">
+                    {tsAiSuggestions.territory && (
+                      <span className="text-[10px] text-muted-foreground">Territory: <strong className="text-foreground">{tsAiSuggestions.territory}</strong>{" "}
+                        <button className="text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setTsDraft(prev => ({ ...prev, territory: tsAiSuggestions.territory }))}>Apply</button>
+                      </span>
+                    )}
+                    {tsAiSuggestions.exclusivity && (
+                      <span className="text-[10px] text-muted-foreground">Exclusivity: <strong className="text-foreground">{tsAiSuggestions.exclusivity}</strong>{" "}
+                        <button className="text-indigo-600 dark:text-indigo-400 hover:underline" onClick={() => setTsDraft(prev => ({ ...prev, exclusivity: tsAiSuggestions.exclusivity }))}>Apply</button>
+                      </span>
+                    )}
+                  </div>
+                  <Button size="sm" variant="outline" className="w-full h-7 text-[10px] gap-1.5 border-indigo-500/30" onClick={() => {
+                    const f: TermSheetFields = {};
+                    if (tsAiSuggestions.upfrontUsdM) f.upfrontUsdM = tsAiSuggestions.upfrontUsdM.suggested;
+                    if (tsAiSuggestions.milestonesUsdM) f.milestonesUsdM = tsAiSuggestions.milestonesUsdM.suggested;
+                    if (tsAiSuggestions.royaltyPct) f.royaltyPct = tsAiSuggestions.royaltyPct.suggested;
+                    if (tsAiSuggestions.territory) f.territory = tsAiSuggestions.territory;
+                    if (tsAiSuggestions.exclusivity) f.exclusivity = tsAiSuggestions.exclusivity;
+                    setTsDraft(prev => ({ ...prev, ...f }));
+                    toast({ title: "All AI suggestions applied" });
+                  }}>
+                    <Sparkles className="w-3 h-3" /> Apply All
+                  </Button>
+                </div>
+              )}
+
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => { setTsEditing(false); setTsAiSuggestions(null); }}>Cancel</Button>
+                <Button size="sm" className="h-7 text-xs text-white" style={{ background: ACCENT }} onClick={() => saveTermSheet(tsDraft)} disabled={savingTs}>
+                  {savingTs ? "Saving…" : "Save Term Sheet"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Deal Comps */}
+        {ndaUnlocked && compsData && compsData.comps.length > 0 && (
+          <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Deal Benchmarks</span>
+              <Badge variant="outline" className="text-[10px]">{compsData.benchmarks.count} comparable deals</Badge>
+            </div>
+            {(compsData.benchmarks.avgUpfrontM || compsData.benchmarks.avgTotalM) && (
+              <div className="grid grid-cols-2 gap-3">
+                {compsData.benchmarks.avgUpfrontM != null && (
+                  <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/15 p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Avg Upfront</p>
+                    <p className="text-lg font-bold" style={{ color: ACCENT }}>${compsData.benchmarks.avgUpfrontM}M</p>
+                    <p className="text-[10px] text-muted-foreground">across {compsData.benchmarks.count} deals</p>
+                  </div>
+                )}
+                {compsData.benchmarks.avgTotalM != null && (
+                  <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/15 p-3 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Avg Total Value</p>
+                    <p className="text-lg font-bold" style={{ color: ACCENT }}>${compsData.benchmarks.avgTotalM}M</p>
+                    <p className="text-[10px] text-muted-foreground">across {compsData.benchmarks.count} deals</p>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+              {compsData.comps.slice(0, 10).map(comp => (
+                <div key={comp.id} className="rounded-lg border border-border px-3 py-2 flex items-start gap-3">
+                  <TrendingUp className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-xs font-medium text-foreground truncate">{comp.assetName ?? "Unknown Asset"}</span>
+                      {comp.modality && <Badge variant="outline" className="text-[9px] px-1 py-0 border-border">{comp.modality}</Badge>}
+                      {comp.developmentStage && <Badge variant="outline" className="text-[9px] px-1 py-0 border-border">{comp.developmentStage}</Badge>}
+                    </div>
+                    <div className="flex items-center gap-2 mt-0.5 text-[10px] text-muted-foreground flex-wrap">
+                      {comp.licensor && <span>{comp.licensor} → {comp.licensee}</span>}
+                      {comp.upfrontUsd != null && <span className="text-emerald-700 dark:text-emerald-400 font-medium">${(comp.upfrontUsd / 1e6).toFixed(1)}M upfront</span>}
+                      {comp.totalValueUsd != null && <span>/ ${(comp.totalValueUsd / 1e6).toFixed(0)}M total</span>}
+                      {comp.filingDate && <span>{comp.filingDate}</span>}
+                      {comp.filingUrl && <a href={comp.filingUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">SEC filing</a>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Observers */}
+        {ndaUnlocked && (
+          <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-muted-foreground" />
+                <span className="text-sm font-semibold text-foreground">Counsel & Observers</span>
+                <span className="text-xs text-muted-foreground">Your side only</span>
+              </div>
+              {!obsInviting && (
+                <Button variant="outline" size="sm" className="h-7 text-xs gap-1" onClick={() => setObsInviting(true)}>
+                  <Plus className="w-3 h-3" />Invite
+                </Button>
+              )}
+            </div>
+            {obsInviting && (
+              <div className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
+                <div className="grid grid-cols-2 gap-2">
+                  <div><label className="text-[10px] font-medium text-muted-foreground uppercase">Email</label><Input value={obsEmail} onChange={e => setObsEmail(e.target.value)} className="h-7 text-xs mt-1" placeholder="counsel@firm.com" /></div>
+                  <div><label className="text-[10px] font-medium text-muted-foreground uppercase">Name</label><Input value={obsName} onChange={e => setObsName(e.target.value)} className="h-7 text-xs mt-1" placeholder="Jane Smith" /></div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Role</label>
+                  <Select value={obsRole} onValueChange={(v) => setObsRole(v as typeof obsRole)}>
+                    <SelectTrigger className="h-7 text-xs mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="counsel">Legal Counsel</SelectItem>
+                      <SelectItem value="advisor">Advisor</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setObsInviting(false)}>Cancel</Button>
+                  <Button size="sm" className="h-7 text-xs text-white" style={{ background: ACCENT }}
+                    onClick={() => inviteObserver()}
+                    disabled={!obsEmail || !obsName}>
+                    Send Invite
+                  </Button>
+                </div>
+              </div>
+            )}
+            {observers.length === 0 && !obsInviting && (
+              <p className="text-xs text-muted-foreground text-center py-3">No observers invited yet. Add legal counsel or advisors for read-only access.</p>
+            )}
+            {observers.map(obs => (
+              <div key={obs.id} className="flex items-center gap-3 rounded-lg border border-border px-3 py-2">
+                <Users className="w-3 h-3 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground">{obs.observerName}</p>
+                  <p className="text-[10px] text-muted-foreground">{obs.observerEmail} · {obs.role}</p>
+                  {obs.acceptedAt && <p className="text-[10px] text-emerald-700 dark:text-emerald-400">Accepted {new Date(obs.acceptedAt).toLocaleDateString()}</p>}
+                  {!obs.acceptedAt && <p className="text-[10px] text-amber-600">Invite pending</p>}
+                </div>
+                <button onClick={() => { if (confirm("Revoke this observer's access?")) revokeObserver(obs.id); }} className="text-muted-foreground hover:text-destructive transition-colors">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Messaging */}
         <div className={cn("rounded-xl border border-card-border bg-card overflow-hidden", !ndaUnlocked && "opacity-50 pointer-events-none")}>
           <div className="px-5 py-3 border-b border-border flex items-center gap-2">
@@ -817,6 +1366,102 @@ export default function MarketDealRoom() {
             </div>
           )}
         </div>
+        {/* Post-Deal Feedback */}
+        <div className="rounded-xl border border-card-border bg-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Star className="w-4 h-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">Deal Feedback</span>
+            {feedbackData?.submitted && <Badge variant="outline" className="text-[10px] border-emerald-500/30 text-emerald-700 dark:text-emerald-400">Submitted</Badge>}
+          </div>
+          {feedbackData?.submitted ? (
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>Thank you for sharing your feedback on this deal. Your responses are kept confidential and used to improve EdenMarket intelligence.</p>
+              {feedbackData.feedback?.overallRating && (
+                <p><span className="font-medium text-foreground">Overall rating:</span> {"★".repeat(feedbackData.feedback.overallRating)}{"☆".repeat(5 - feedbackData.feedback.overallRating)}</p>
+              )}
+              {feedbackData.feedback?.platformRating && (
+                <p><span className="font-medium text-foreground">Platform rating:</span> {"★".repeat(feedbackData.feedback.platformRating)}{"☆".repeat(5 - feedbackData.feedback.platformRating)}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">Share your experience to help improve EdenMarket's deal intelligence for the whole community. Takes ~2 minutes.</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Outcome</label>
+                  <Select value={fbOutcome} onValueChange={setFbOutcome}>
+                    <SelectTrigger className="h-7 text-xs mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="closed">Deal Closed</SelectItem>
+                      <SelectItem value="abandoned_nda">Stopped after NDA</SelectItem>
+                      <SelectItem value="abandoned_diligence">Stopped during Due Diligence</SelectItem>
+                      <SelectItem value="abandoned_terms">Stopped during Terms Negotiation</SelectItem>
+                      <SelectItem value="abandoned_other">Stopped for other reasons</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Deal Value ($M, if closed)</label>
+                  <Input type="number" value={fbDealValue} onChange={e => setFbDealValue(e.target.value)} className="h-7 text-xs mt-1" placeholder="e.g. 12" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Time to LOI (days)</label>
+                  <Input type="number" value={fbTimeToLoi} onChange={e => setFbTimeToLoi(e.target.value)} className="h-7 text-xs mt-1" placeholder="e.g. 45" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Would Recommend EdenMarket?</label>
+                  <Select value={fbWouldRecommend === null ? "" : String(fbWouldRecommend)} onValueChange={v => setFbWouldRecommend(v === "" ? null : v === "true")}>
+                    <SelectTrigger className="h-7 text-xs mt-1"><SelectValue placeholder="Select…" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="true">Yes</SelectItem>
+                      <SelectItem value="false">No</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Overall Deal Rating (1–5)</label>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <button key={n} onClick={() => setFbOverallRating(fbOverallRating === n ? null : n)}
+                        className={cn("w-6 h-6 rounded text-xs font-medium border transition-colors",
+                          fbOverallRating !== null && n <= fbOverallRating ? "border-amber-400 bg-amber-400/20 text-amber-700 dark:text-amber-400" : "border-border text-muted-foreground hover:border-amber-400/50")}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[10px] font-medium text-muted-foreground uppercase">Platform Rating (1–5)</label>
+                  <div className="flex gap-1.5 mt-1.5">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <button key={n} onClick={() => setFbPlatformRating(fbPlatformRating === n ? null : n)}
+                        className={cn("w-6 h-6 rounded text-xs font-medium border transition-colors",
+                          fbPlatformRating !== null && n <= fbPlatformRating ? "border-indigo-400 bg-indigo-400/20 text-indigo-700 dark:text-indigo-400" : "border-border text-muted-foreground hover:border-indigo-400/50")}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase">Main blocker or key friction point (optional)</label>
+                <Input value={fbMainBlocker} onChange={e => setFbMainBlocker(e.target.value)} className="h-7 text-xs mt-1" placeholder="e.g. Valuation disagreement, timeline mismatch…" />
+              </div>
+              <div>
+                <label className="text-[10px] font-medium text-muted-foreground uppercase">Comments on EdenMarket (optional)</label>
+                <Textarea value={fbPlatformComment} onChange={e => setFbPlatformComment(e.target.value)} className="h-14 text-xs mt-1 resize-none" placeholder="What would have made this experience better?" />
+              </div>
+              <div className="flex justify-end">
+                <Button size="sm" className="text-white text-xs" style={{ background: ACCENT }} onClick={() => submitFeedback()} disabled={submittingFb}>
+                  {submittingFb ? "Submitting…" : "Submit Feedback"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+
       </div>
 
       {/* Close-deal modal: collect final deal size, preview success-fee tier */}

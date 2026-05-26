@@ -52,6 +52,7 @@ export const industryProfiles = pgTable("industry_profiles", {
   statusChangedAt: timestamp("status_changed_at"),
   statusChangedBy: text("status_changed_by"),
   statusNote: text("status_note"),
+  buyerProfile: jsonb("buyer_profile").$type<Record<string, unknown>>(),
 });
 
 export type IndustryProfileRow = typeof industryProfiles.$inferSelect;
@@ -1099,6 +1100,11 @@ export const marketListings = pgTable("market_listings", {
   aiSummary: text("ai_summary"),
   status: text("status").notNull().default("draft"),
   adminNote: text("admin_note"),
+  // TTO (Technology Transfer Office) metadata — optional, shown when seller self-identifies as a TTO
+  trlLevel: integer("trl_level"),
+  patentNumbers: text("patent_numbers"),
+  inventorAffiliation: text("inventor_affiliation"),
+  ttoRefNumber: text("tto_ref_number"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -1111,6 +1117,7 @@ export const insertMarketListingSchema = createInsertSchema(marketListings).omit
     exactPatentIds: z.boolean().optional(),
     mechanismDetail: z.boolean().optional(),
   }).optional(),
+  trlLevel: z.number().int().min(1).max(9).optional().nullable(),
 });
 export type InsertMarketListing = z.infer<typeof insertMarketListingSchema>;
 export type InsertMarketListingFull = InsertMarketListing & {
@@ -1185,7 +1192,14 @@ export type SavedReport = typeof savedReports.$inferSelect;
 
 export const MARKET_DEAL_STATUSES = ["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"] as const;
 export type MarketDealStatus = (typeof MARKET_DEAL_STATUSES)[number];
-export type DealStatusHistoryEntry = { status: string; changedAt: string; changedBy: string };
+export type DealStatusHistoryEntry = {
+  status: string;
+  changedAt: string;
+  changedBy: string;
+  signerName?: string;
+  signerIp?: string;
+  signerUserAgent?: string;
+};
 
 export const marketDeals = pgTable("market_deals", {
   id: serial("id").primaryKey(),
@@ -1256,6 +1270,107 @@ export const marketDealMessages = pgTable("market_deal_messages", {
 export const insertMarketDealMessageSchema = createInsertSchema(marketDealMessages).omit({ id: true, sentAt: true });
 export type InsertMarketDealMessage = z.infer<typeof insertMarketDealMessageSchema>;
 export type MarketDealMessage = typeof marketDealMessages.$inferSelect;
+
+// ── EdenMarket — Deal Room Observers (counsel / advisor read-only access) ─────
+// Seller or buyer can invite a third-party observer (legal counsel, licensing
+// advisor) who gets read-only access to documents and messages without being
+// able to send or upload. Observers never see each other — each party manages
+// their own side.
+export const MARKET_DEAL_OBSERVER_ROLES = ["counsel", "advisor", "other"] as const;
+export type MarketDealObserverRole = typeof MARKET_DEAL_OBSERVER_ROLES[number];
+
+export const marketDealObservers = pgTable("market_deal_observers", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull().references(() => marketDeals.id, { onDelete: "cascade" }),
+  invitedBy: text("invited_by").notNull(),
+  observerEmail: text("observer_email").notNull(),
+  observerName: text("observer_name").notNull(),
+  role: text("role").notNull().default("counsel"),
+  inviteToken: text("invite_token").notNull().unique(),
+  acceptedAt: timestamp("accepted_at"),
+  revokedAt: timestamp("revoked_at"),
+  invitedAt: timestamp("invited_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  dealEmailUniq: uniqueIndex("market_deal_observers_deal_email_unique").on(t.dealId, t.observerEmail),
+}));
+
+export type MarketDealObserver = typeof marketDealObservers.$inferSelect;
+export const insertMarketDealObserverSchema = createInsertSchema(marketDealObservers)
+  .omit({ id: true, invitedAt: true, acceptedAt: true, revokedAt: true })
+  .extend({
+    observerEmail: z.string().email(),
+    observerName: z.string().min(1).max(120),
+    role: z.enum(MARKET_DEAL_OBSERVER_ROLES).optional().default("counsel"),
+  });
+export type InsertMarketDealObserver = z.infer<typeof insertMarketDealObserverSchema>;
+
+// ── EdenMarket — Collaborative Term Sheet ──────────────────────────────────────
+// One term sheet per deal. Either party can edit fields; changes are last-write-
+// wins per field (no conflict resolution needed at this scale). Locked once both
+// parties mark it as agreed; a locked term sheet cannot be edited.
+export type TermSheetFields = {
+  upfrontUsdM?: number | null;
+  milestonesUsdM?: number | null;
+  royaltyPct?: number | null;
+  territory?: string | null;
+  exclusivity?: string | null;
+  ipOwnership?: string | null;
+  sublicensingRights?: string | null;
+  diligenceRights?: string | null;
+  notes?: string | null;
+};
+
+export const marketDealTermSheets = pgTable("market_deal_term_sheets", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull().references(() => marketDeals.id, { onDelete: "cascade" }).unique(),
+  fields: jsonb("fields").$type<TermSheetFields>().notNull().default({}),
+  sellerAgreedAt: timestamp("seller_agreed_at"),
+  buyerAgreedAt: timestamp("buyer_agreed_at"),
+  lockedAt: timestamp("locked_at"),
+  lastEditedBy: text("last_edited_by"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type MarketDealTermSheet = typeof marketDealTermSheets.$inferSelect;
+
+// ── EdenMarket — Post-Deal Feedback ──────────────────────────────────────────
+// Requested from both seller and buyer when a deal reaches "closed" or is
+// abandoned. Structured data that feeds platform-level benchmarking and improves
+// deal comp accuracy beyond what SEC 8-K filings alone provide.
+export const DEAL_OUTCOME_TYPES = ["closed", "abandoned_nda", "abandoned_diligence", "abandoned_terms", "abandoned_other"] as const;
+export type DealOutcomeType = typeof DEAL_OUTCOME_TYPES[number];
+
+export const marketDealFeedback = pgTable("market_deal_feedback", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull().references(() => marketDeals.id, { onDelete: "cascade" }),
+  responderId: text("responder_id").notNull(),
+  responderRole: text("responder_role").notNull(),
+  outcomeType: text("outcome_type").notNull(),
+  overallRating: integer("overall_rating"),
+  timeToLoiDays: integer("time_to_loi_days"),
+  dealValueUsdM: real("deal_value_usd_m"),
+  mainBlocker: text("main_blocker"),
+  platformRating: integer("platform_rating"),
+  platformComment: text("platform_comment"),
+  wouldRecommend: boolean("would_recommend"),
+  submittedAt: timestamp("submitted_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  dealResponderUniq: uniqueIndex("market_deal_feedback_deal_responder_unique").on(t.dealId, t.responderId),
+}));
+
+export type MarketDealFeedback = typeof marketDealFeedback.$inferSelect;
+export const insertMarketDealFeedbackSchema = createInsertSchema(marketDealFeedback)
+  .omit({ id: true, submittedAt: true })
+  .extend({
+    outcomeType: z.enum(DEAL_OUTCOME_TYPES),
+    overallRating: z.number().int().min(1).max(5).optional().nullable(),
+    platformRating: z.number().int().min(1).max(5).optional().nullable(),
+    timeToLoiDays: z.number().int().nonnegative().optional().nullable(),
+    dealValueUsdM: z.number().nonnegative().optional().nullable(),
+    wouldRecommend: z.boolean().optional().nullable(),
+  });
+export type InsertMarketDealFeedback = z.infer<typeof insertMarketDealFeedbackSchema>;
 
 // In-app notifications: EdenScout → EdenMarket availability signal (one per user per listing activation)
 export const marketAvailabilityNotifications = pgTable("market_availability_notifications", {

@@ -858,6 +858,101 @@ export function sendWeeklyRecapEmail(
   });
 }
 
+export function sendMarketEoiDeclinedEmail(
+  to: string,
+  recipientName: string,
+  assetLabel: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Expression of Interest update — EdenMarket</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} the seller has reviewed your Expression of Interest for <strong>${assetLabel}</strong>
+      and has decided not to proceed with your submission at this time.
+    </p>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      There are many reasons a seller may decline an EOI unrelated to your organisation — timing, exclusivity, or existing negotiations. We encourage you to continue exploring other listings that match your focus.
+    </p>
+    <a href="${APP_URL}/market"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Browse EdenMarket
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `EOI update — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
+export function sendMarketObserverInviteEmail(
+  to: string,
+  observerName: string,
+  inviterOrgName: string,
+  assetLabel: string,
+  role: string,
+  acceptUrl: string,
+): Promise<void> {
+  const greeting = observerName?.trim() ? `Hi ${observerName},` : "Hi,";
+  const roleLabel = role === "counsel" ? "legal counsel" : role === "advisor" ? "advisor" : "observer";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You've been invited to a deal room</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} <strong>${inviterOrgName}</strong> has invited you as <strong>${roleLabel}</strong> to access the EdenMarket deal room for <strong>${assetLabel}</strong>.
+    </p>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      As an observer, you will have read-only access to deal room documents and communications. Your access link is unique — do not share it.
+    </p>
+    <a href="${acceptUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Accept Invitation
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      This link expires in 7 days. Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `Deal room access — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
+export function sendMarketFeedbackRequestEmail(
+  to: string,
+  recipientName: string,
+  assetLabel: string,
+  dealId: number,
+  role: "seller" | "buyer",
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const feedbackUrl = `${APP_URL}/market/deals/${dealId}?tab=feedback`;
+  const context = role === "seller"
+    ? "As the seller, your perspective on how the deal progressed is invaluable."
+    : "As the buyer, your experience throughout the process helps us improve EdenMarket for everyone.";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Share your deal experience — EdenMarket</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} your deal for <strong>${assetLabel}</strong> has been marked as complete.
+    </p>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${context} Your feedback takes less than 2 minutes and helps EdenMarket surface better deal intelligence for the whole community.
+    </p>
+    <a href="${feedbackUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Share Feedback
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      All responses are kept confidential. Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `How did your deal go? — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
 export function sendAdminNotificationEmail(
   subject: string,
   bodyHtml: string,

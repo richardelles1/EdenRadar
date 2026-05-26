@@ -461,7 +461,8 @@ export interface IStorage {
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
-  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt" | "status" | "statusChangedAt" | "statusChangedBy" | "statusNote">): Promise<IndustryProfileRow>;
+  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt" | "status" | "statusChangedAt" | "statusChangedBy" | "statusNote" | "buyerProfile">): Promise<IndustryProfileRow>;
+  saveBuyerProfile(userId: string, profile: Record<string, unknown>): Promise<void>;
   getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
   setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void>;
 
@@ -4134,7 +4135,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt" | "status" | "statusChangedAt" | "statusChangedBy" | "statusNote">): Promise<IndustryProfileRow> {
+  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt" | "status" | "statusChangedAt" | "statusChangedBy" | "statusNote" | "buyerProfile">): Promise<IndustryProfileRow> {
     const [row] = await db
       .insert(industryProfiles)
       .values({ userId, ...data, updatedAt: new Date() })
@@ -4144,6 +4145,16 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  async saveBuyerProfile(userId: string, profile: Record<string, unknown>): Promise<void> {
+    await db
+      .insert(industryProfiles)
+      .values({ userId, buyerProfile: profile, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: industryProfiles.userId,
+        set: { buyerProfile: profile, updatedAt: new Date() },
+      });
   }
 
   async setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void> {

@@ -10,7 +10,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter, type RetrievedAsset, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, scoutSavedSearches, insertScoutSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketDeals, marketDealTermSheets, marketDealObservers, marketDealFeedback, dealComparables, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, scoutSavedSearches, insertScoutSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -56,7 +56,7 @@ import {
 import { registerClient, unregisterClient, broadcastToOrg, registerUserClient, unregisterUserClient, broadcastToUsers } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, verifyUnsubscribeTokenForEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, sendMarketEoiDeclinedEmail, sendMarketObserverInviteEmail, sendMarketFeedbackRequestEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, verifyUnsubscribeTokenForEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "./email";
 
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
@@ -11068,6 +11068,46 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // GET /api/me/buyer-profile — load persisted buyer thesis for the signed-in user.
+  // Returns null when no server profile exists yet (client falls back to localStorage).
+  app.get("/api/me/buyer-profile", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const profile = await storage.getIndustryProfileByUserId(userId);
+      if (!profile) return res.json(null);
+      // Return stored JSONB if present; otherwise derive from profile onboarding fields
+      const bp = profile.buyerProfile ?? {
+        therapeutic_areas: profile.therapeuticAreas ?? [],
+        modalities: profile.modalities ?? [],
+        preferred_stages: profile.dealStages ?? [],
+        excluded_stages: [],
+        owner_type_preference: "any",
+        freshness_days: 365,
+        indication_keywords: [],
+        target_keywords: [],
+        notes: "",
+      };
+      return res.json(bp);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PUT /api/me/buyer-profile — persist buyer thesis to the database.
+  app.put("/api/me/buyer-profile", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const profile = req.body;
+      if (!profile || typeof profile !== "object" || Array.isArray(profile)) {
+        return res.status(400).json({ error: "Invalid buyer profile payload" });
+      }
+      await storage.saveBuyerProfile(userId, profile as Record<string, unknown>);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Industry-facing org context route — requires verified JWT via verifyAnyAuth
   app.get("/api/industry/org", verifyAnyAuth, async (req, res) => {
     try {
@@ -15153,6 +15193,11 @@ If multiple assets appear, return each as a separate array item.`;
         priceRangeMax: z.number().int().optional().nullable(),
         engagementStatus: z.string().default("actively_seeking"),
         status: z.enum(["draft", "pending"]).optional(),
+        // TTO fields
+        trlLevel: z.number().int().min(1).max(9).optional().nullable(),
+        patentNumbers: z.string().optional().nullable(),
+        inventorAffiliation: z.string().optional().nullable(),
+        ttoRefNumber: z.string().optional().nullable(),
       });
 
       const data = schema.parse(req.body);
@@ -16085,6 +16130,19 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (eoiRow.status === "accepted") return res.status(400).json({ error: "Cannot decline an already accepted EOI" });
 
       await db.update(marketEois).set({ status: "declined" }).where(eq(marketEois.id, eoiId));
+
+      // Notify buyer that their EOI was declined
+      try {
+        const buyerOrg = await storage.getOrgForUser(eoiRow.buyerId);
+        if (buyerOrg?.billingEmail) {
+          const listing = await storage.getMarketListing(eoiRow.listingId);
+          const assetLabel = listing?.blind
+            ? `a ${listing.therapeuticArea} ${listing.modality} listing`
+            : (listing?.assetName || `Listing #${eoiRow.listingId}`);
+          await sendMarketEoiDeclinedEmail(buyerOrg.billingEmail, buyerOrg.name ?? "", assetLabel);
+        }
+      } catch (e) { console.warn("[market] buyer EOI-declined email failed", e); }
+
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -16255,6 +16313,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const isSeller = deal.sellerId === userId;
       const now = new Date();
 
+      // Capture IP and user-agent for e-signature audit trail
+      const signerIp = ((req.headers["x-forwarded-for"] as string | undefined) ?? "").split(",")[0].trim() || req.ip || "unknown";
+      const signerUserAgent = (req.get("user-agent") ?? "unknown").slice(0, 200);
+
       const updateData: Record<string, unknown> = {};
       if (isSeller && !deal.sellerSignedAt) {
         updateData.sellerSignedAt = now;
@@ -16266,6 +16328,17 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         return res.json({ deal, alreadySigned: true });
       }
 
+      // Add individual signing event to statusHistory for the audit trail
+      const signerEntry: import("@shared/schema").DealStatusHistoryEntry = {
+        status: isSeller ? "seller_signed_nda" : "buyer_signed_nda",
+        changedAt: now.toISOString(),
+        changedBy: userId,
+        signerName: signedName,
+        signerIp,
+        signerUserAgent,
+      };
+      updateData.statusHistory = [...(Array.isArray(deal.statusHistory) ? deal.statusHistory : []), signerEntry];
+
       let updatedDeal = await storage.updateMarketDeal(dealId, updateData);
       if (!updatedDeal) return res.status(500).json({ error: "Update failed" });
 
@@ -16275,7 +16348,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         updatedDeal = await storage.updateMarketDeal(dealId, {
           ndaSignedAt: now,
           status: "nda_signed",
-          statusHistory: [...(Array.isArray(deal.statusHistory) ? deal.statusHistory : []), ndaHistoryEntry],
+          // Use updatedDeal.statusHistory (has the current signer's entry) instead of the stale deal.statusHistory
+          statusHistory: [...(Array.isArray(updatedDeal.statusHistory) ? updatedDeal.statusHistory : []), ndaHistoryEntry],
         }) ?? updatedDeal;
 
         // Generate and store NDA artifact as PDF
@@ -16336,6 +16410,18 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
               doc.moveDown(0.5);
               doc.text(`Party B (Buyer):  ${buyerSigName}   Signed: ${buyerSigDate}`);
               doc.moveDown();
+              // E-Signature Audit Trail section
+              const fullHistory = (updatedDeal?.statusHistory ?? []) as import("@shared/schema").DealStatusHistoryEntry[];
+              const sellerSigEvt = fullHistory.find(e => e.status === "seller_signed_nda");
+              const buyerSigEvt = fullHistory.find(e => e.status === "buyer_signed_nda");
+              if (sellerSigEvt?.signerIp || buyerSigEvt?.signerIp) {
+                doc.font("Helvetica-Bold").fontSize(9).fillColor("black").text("E-Signature Audit Trail");
+                doc.moveDown(0.3);
+                doc.font("Helvetica").fontSize(8).fillColor("grey");
+                if (sellerSigEvt) doc.text(`Party A IP: ${sellerSigEvt.signerIp ?? "N/A"}  ·  UA: ${(sellerSigEvt.signerUserAgent ?? "").slice(0, 80)}`);
+                if (buyerSigEvt) doc.text(`Party B IP: ${buyerSigEvt.signerIp ?? "N/A"}  ·  UA: ${(buyerSigEvt.signerUserAgent ?? "").slice(0, 80)}`);
+                doc.moveDown(0.3);
+              }
               doc.font("Helvetica").fontSize(8).fillColor("grey")
                 .text(`Document ID: DEAL-${dealId}-NDA · EdenMarket · Generated: ${new Date().toISOString()}`, { align: "center" });
               doc.end();
@@ -16448,6 +16534,25 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             `<p>Deal #${dealId} (${label}) has been moved to <strong>${status}</strong>.</p><p><a href="${APP_URL}/admin">View in admin panel</a></p>`
           );
         } catch (e) { console.warn("[market] admin status-change email failed", e); }
+
+        // Request feedback from both parties when closed
+        if (status === "closed") {
+          const assetFeedbackLabel = listing?.blind
+            ? `a ${listing?.therapeuticArea ?? ""} ${listing?.modality ?? ""} asset`
+            : (listing?.assetName || `Listing #${deal.listingId}`);
+          try {
+            const sellerOrg = await storage.getOrgForUser(deal.sellerId);
+            if (sellerOrg?.billingEmail) {
+              await sendMarketFeedbackRequestEmail(sellerOrg.billingEmail, sellerOrg.name ?? "", assetFeedbackLabel, dealId, "seller");
+            }
+          } catch (e) { console.warn("[market] seller feedback-request email failed", e); }
+          try {
+            const buyerOrg = await storage.getOrgForUser(deal.buyerId);
+            if (buyerOrg?.billingEmail) {
+              await sendMarketFeedbackRequestEmail(buyerOrg.billingEmail, buyerOrg.name ?? "", assetFeedbackLabel, dealId, "buyer");
+            }
+          } catch (e) { console.warn("[market] buyer feedback-request email failed", e); }
+        }
       }
 
       // Auto-fire success-fee invoice on close. We do NOT roll back the status
@@ -16501,6 +16606,624 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       }
 
       res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Deal Comps — surface deal comparables inside the deal room ──────────────
+
+  // GET /api/market/deals/:id/comps — comparable deals for a deal room listing
+  app.get("/api/market/deals/:id/comps", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA required" });
+
+      const listing = await storage.getMarketListing(deal.listingId);
+      if (!listing) return res.json([]);
+
+      // Filter comps by matching modality and/or therapeutic area, order by date desc
+      const comps = await db.select().from(dealComparables)
+        .where(
+          or(
+            listing.modality ? ilike(dealComparables.modality, `%${listing.modality}%`) : sql`false`,
+            listing.therapeuticArea ? ilike(dealComparables.therapeuticArea, `%${listing.therapeuticArea}%`) : sql`false`,
+          )
+        )
+        .orderBy(desc(dealComparables.filingDate))
+        .limit(20);
+
+      // Compute market benchmarks for the sidebar summary
+      const withValues = comps.filter(c => c.upfrontUsd || c.totalValueUsd);
+      const avgUpfront = withValues.length
+        ? Math.round(withValues.reduce((s, c) => s + (c.upfrontUsd ?? 0), 0) / withValues.length / 1_000_000)
+        : null;
+      const avgTotal = withValues.length
+        ? Math.round(withValues.reduce((s, c) => s + (c.totalValueUsd ?? 0), 0) / withValues.length / 1_000_000)
+        : null;
+
+      res.json({ comps, benchmarks: { avgUpfrontM: avgUpfront, avgTotalM: avgTotal, count: comps.length } });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Term Sheet — collaborative term builder inside the deal room ─────────────
+
+  // GET /api/market/deals/:id/term-sheet
+  app.get("/api/market/deals/:id/term-sheet", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA required" });
+
+      const [ts] = await db.select().from(marketDealTermSheets).where(eq(marketDealTermSheets.dealId, dealId)).limit(1);
+      res.json(ts ?? null);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/market/deals/:id/term-sheet — upsert fields (last-write-wins)
+  app.patch("/api/market/deals/:id/term-sheet", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      const tsAccessState = getMarketAccessState(org);
+      if (!tsAccessState.hasFullAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA required" });
+
+      const fieldsSchema = z.object({
+        upfrontUsdM: z.number().nonnegative().optional().nullable(),
+        milestonesUsdM: z.number().nonnegative().optional().nullable(),
+        royaltyPct: z.number().nonnegative().max(100).optional().nullable(),
+        territory: z.string().max(240).optional().nullable(),
+        exclusivity: z.string().max(240).optional().nullable(),
+        ipOwnership: z.string().max(240).optional().nullable(),
+        sublicensingRights: z.string().max(240).optional().nullable(),
+        diligenceRights: z.string().max(240).optional().nullable(),
+        notes: z.string().max(2000).optional().nullable(),
+      }).strip();
+
+      const incoming = fieldsSchema.parse(req.body);
+
+      // Check if term sheet is locked
+      const [existing] = await db.select().from(marketDealTermSheets).where(eq(marketDealTermSheets.dealId, dealId)).limit(1);
+      if (existing?.lockedAt) return res.status(400).json({ error: "Term sheet is locked — both parties have agreed" });
+
+      const now = new Date();
+      let ts: typeof marketDealTermSheets.$inferSelect;
+      if (!existing) {
+        [ts] = await db.insert(marketDealTermSheets).values({
+          dealId,
+          fields: incoming,
+          lastEditedBy: userId,
+          createdAt: now,
+          updatedAt: now,
+        }).returning();
+      } else {
+        // Merge: null-valued keys remove the field, others overwrite
+        const merged = { ...existing.fields };
+        for (const [k, v] of Object.entries(incoming)) {
+          if (v === null) delete (merged as Record<string, unknown>)[k];
+          else (merged as Record<string, unknown>)[k] = v;
+        }
+        [ts] = await db.update(marketDealTermSheets)
+          .set({ fields: merged, lastEditedBy: userId, updatedAt: now, sellerAgreedAt: null, buyerAgreedAt: null, lockedAt: null })
+          .where(eq(marketDealTermSheets.dealId, dealId))
+          .returning();
+      }
+
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_updated", { dealId, event: "term_sheet_updated" });
+      res.json(ts);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/term-sheet/agree — mark current term sheet as agreed by caller
+  app.post("/api/market/deals/:id/term-sheet/agree", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      const tsAgreeState = getMarketAccessState(org);
+      if (!tsAgreeState.hasFullAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA required" });
+
+      const [ts] = await db.select().from(marketDealTermSheets).where(eq(marketDealTermSheets.dealId, dealId)).limit(1);
+      if (!ts) return res.status(404).json({ error: "No term sheet exists yet" });
+      if (ts.lockedAt) return res.json({ ts, alreadyLocked: true });
+
+      const isSeller = deal.sellerId === userId;
+      const now = new Date();
+      const update: Partial<typeof marketDealTermSheets.$inferSelect> = {};
+      if (isSeller && !ts.sellerAgreedAt) update.sellerAgreedAt = now;
+      if (!isSeller && !ts.buyerAgreedAt) update.buyerAgreedAt = now;
+
+      const [updated] = await db.update(marketDealTermSheets)
+        .set(update)
+        .where(eq(marketDealTermSheets.dealId, dealId))
+        .returning();
+
+      // Both agreed — lock the term sheet
+      const final = await (async () => {
+        if (updated.sellerAgreedAt && updated.buyerAgreedAt && !updated.lockedAt) {
+          const [locked] = await db.update(marketDealTermSheets)
+            .set({ lockedAt: now })
+            .where(eq(marketDealTermSheets.dealId, dealId))
+            .returning();
+          return locked;
+        }
+        return updated;
+      })();
+
+      broadcastToUsers([deal.sellerId, deal.buyerId], "deal_updated", { dealId, event: "term_sheet_agreed" });
+      res.json({ ts: final, locked: !!final.lockedAt });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/term-sheet/suggest — AI-powered deal term suggestions
+  app.post("/api/market/deals/:id/term-sheet/suggest", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      const accessState = getMarketAccessState(org);
+      if (!accessState.hasFullAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA required" });
+
+      const listing = await storage.getMarketListing(deal.listingId);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+
+      const comps = await db.select({
+        developmentStage: dealComparables.developmentStage,
+        upfrontUsd: dealComparables.upfrontUsd,
+        totalValueUsd: dealComparables.totalValueUsd,
+        geography: dealComparables.geography,
+      }).from(dealComparables)
+        .where(or(
+          listing.modality ? ilike(dealComparables.modality, `%${listing.modality}%`) : sql`false`,
+          listing.therapeuticArea ? ilike(dealComparables.therapeuticArea, `%${listing.therapeuticArea}%`) : sql`false`,
+        ))
+        .orderBy(desc(dealComparables.filingDate))
+        .limit(15);
+
+      const compsText = comps.length > 0
+        ? comps.map(c =>
+            `Stage: ${c.developmentStage ?? "unknown"}, Upfront: $${c.upfrontUsd ? (c.upfrontUsd / 1_000_000).toFixed(1) : "?"}M, Total: $${c.totalValueUsd ? (c.totalValueUsd / 1_000_000).toFixed(1) : "?"}M, Territory: ${c.geography ?? "global"}`
+          ).join("\n")
+        : "No specific comparables found — use industry norms.";
+
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const aiResp = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
+        temperature: 0.3,
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert biotech licensing analyst specializing in IP deal structuring. Given deal context and comparable transactions, provide data-driven term suggestions. Always respond with valid JSON only.",
+          },
+          {
+            role: "user",
+            content: `Asset context:\n- Therapeutic area: ${listing.therapeuticArea}\n- Modality: ${listing.modality}\n- Development stage: ${listing.stage}\n- IP status: ${listing.ipStatus ?? "not specified"}\n\nComparable deal terms (${comps.length} deals found):\n${compsText}\n\nSuggest reasonable deal terms. Return JSON exactly as:\n{"upfrontUsdM":{"min":number,"max":number,"suggested":number},"milestonesUsdM":{"min":number,"max":number,"suggested":number},"royaltyPct":{"min":number,"max":number,"suggested":number},"territory":"string","exclusivity":"Exclusive or Non-exclusive","rationale":"1-2 sentence explanation citing comparable data"}`,
+          },
+        ],
+      });
+
+      const raw = aiResp.choices[0].message.content ?? "{}";
+      let suggestions: Record<string, unknown>;
+      try { suggestions = JSON.parse(raw); } catch { return res.status(500).json({ error: "AI returned malformed suggestions" }); }
+
+      res.json({ suggestions, compsCount: comps.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Deal Room Observers ───────────────────────────────────────────────────────
+
+  // GET /api/market/deals/:id/observers — list observers for a deal
+  app.get("/api/market/deals/:id/observers", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+
+      // Each party only sees their own observers
+      const observers = await db.select().from(marketDealObservers)
+        .where(and(eq(marketDealObservers.dealId, dealId), eq(marketDealObservers.invitedBy, userId)))
+        .orderBy(marketDealObservers.invitedAt);
+
+      res.json(observers.filter(o => !o.revokedAt));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/observers — invite an observer
+  app.post("/api/market/deals/:id/observers", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      const obsAccessState = getMarketAccessState(org);
+      if (!obsAccessState.hasFullAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before inviting observers" });
+
+      const { observerEmail, observerName, role } = z.object({
+        observerEmail: z.string().email(),
+        observerName: z.string().min(1).max(120),
+        role: z.enum(["counsel", "advisor", "other"]).optional().default("counsel"),
+      }).parse(req.body);
+
+      // Limit per inviter: max 3 observers per deal
+      const existing = await db.select().from(marketDealObservers)
+        .where(and(eq(marketDealObservers.dealId, dealId), eq(marketDealObservers.invitedBy, userId)));
+      const active = existing.filter(o => !o.revokedAt);
+      if (active.length >= 3) return res.status(400).json({ error: "Maximum 3 observers per party per deal" });
+
+      const inviteToken = require("crypto").randomBytes(32).toString("hex");
+      const acceptUrl = `${APP_URL}/market/observer-accept?token=${inviteToken}`;
+
+      const inviterOrg = await storage.getOrgForUser(userId);
+      const listing = await storage.getMarketListing(deal.listingId);
+      const assetLabel = listing?.blind
+        ? `a ${listing.therapeuticArea} ${listing.modality} opportunity`
+        : (listing?.assetName || `Listing #${deal.listingId}`);
+
+      const [observer] = await db.insert(marketDealObservers).values({
+        dealId,
+        invitedBy: userId,
+        observerEmail,
+        observerName,
+        role: role ?? "counsel",
+        inviteToken,
+      }).returning();
+
+      try {
+        await sendMarketObserverInviteEmail(observerEmail, observerName, inviterOrg?.name ?? "EdenMarket", assetLabel, role ?? "counsel", acceptUrl);
+      } catch (e) { console.warn("[market] observer invite email failed", e); }
+
+      res.json(observer);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/market/deals/:id/observers/:observerId — revoke observer access
+  app.delete("/api/market/deals/:id/observers/:observerId", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const observerId = parseInt(String(req.params.observerId), 10);
+      const [obs] = await db.select().from(marketDealObservers).where(eq(marketDealObservers.id, observerId)).limit(1);
+      if (!obs || obs.dealId !== dealId || obs.invitedBy !== userId) return res.status(403).json({ error: "Access denied" });
+      await db.update(marketDealObservers).set({ revokedAt: new Date() }).where(eq(marketDealObservers.id, observerId));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/observer-accept — observer accepts invite via token link
+  app.get("/api/market/observer-accept", async (req, res) => {
+    try {
+      const token = String(req.query.token ?? "");
+      if (!token) return res.status(400).json({ error: "Missing token" });
+      const [obs] = await db.select().from(marketDealObservers).where(eq(marketDealObservers.inviteToken, token)).limit(1);
+      if (!obs || obs.revokedAt) return res.status(404).json({ error: "Invitation not found or revoked" });
+      if (!obs.acceptedAt) {
+        await db.update(marketDealObservers).set({ acceptedAt: new Date() }).where(eq(marketDealObservers.id, obs.id));
+      }
+      // Redirect to the deal room; the observer can view via a separate read-only session
+      res.redirect(302, `${APP_URL}/market/deals/${obs.dealId}?observer=${token}`);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Post-Deal Feedback ────────────────────────────────────────────────────────
+
+  // GET /api/market/deals/:id/feedback — get submitted feedback for this deal
+  app.get("/api/market/deals/:id/feedback", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+
+      const [mine] = await db.select().from(marketDealFeedback)
+        .where(and(eq(marketDealFeedback.dealId, dealId), eq(marketDealFeedback.responderId, userId)))
+        .limit(1);
+      res.json({ submitted: !!mine, feedback: mine ?? null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/feedback — submit deal feedback
+  app.post("/api/market/deals/:id/feedback", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+
+      const schema = z.object({
+        outcomeType: z.enum(["closed", "abandoned_nda", "abandoned_diligence", "abandoned_terms", "abandoned_other"]),
+        overallRating: z.number().int().min(1).max(5).optional().nullable(),
+        timeToLoiDays: z.number().int().nonnegative().optional().nullable(),
+        dealValueUsdM: z.number().nonnegative().optional().nullable(),
+        mainBlocker: z.string().max(500).optional().nullable(),
+        platformRating: z.number().int().min(1).max(5).optional().nullable(),
+        platformComment: z.string().max(1000).optional().nullable(),
+        wouldRecommend: z.boolean().optional().nullable(),
+      });
+
+      const data = schema.parse(req.body);
+      const responderRole = deal.sellerId === userId ? "seller" : "buyer";
+
+      const [feedback] = await db.insert(marketDealFeedback).values({
+        dealId,
+        responderId: userId,
+        responderRole,
+        ...data,
+      }).onConflictDoUpdate({
+        target: [marketDealFeedback.dealId, marketDealFeedback.responderId],
+        set: { ...data },
+      }).returning();
+
+      res.json(feedback);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Seller Analytics ──────────────────────────────────────────────────────────
+
+  // GET /api/market/seller/analytics — funnel & interest analytics for seller
+  app.get("/api/market/seller/analytics", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const listings = await storage.getMarketListingsBySeller(userId);
+      const listingIds = listings.map(l => l.id);
+
+      if (!listingIds.length) return res.json({ listings: [], totals: { listings: 0, eois: 0, accepted: 0, deals: 0, closed: 0 } });
+
+      // EOIs per listing
+      const allEois = listingIds.length > 0
+        ? await db.select().from(marketEois).where(inArray(marketEois.listingId, listingIds))
+        : [];
+
+      // Active deals
+      const allDeals = await db.select().from(marketDeals).where(eq(marketDeals.sellerId, userId));
+
+      // Closed deals
+      const closedDeals = allDeals.filter(d => d.status === "closed");
+
+      // EOI breakdown by status
+      const eoiByStatus = { submitted: 0, viewed: 0, accepted: 0, declined: 0 };
+      for (const e of allEois) {
+        if (e.status in eoiByStatus) eoiByStatus[e.status as keyof typeof eoiByStatus]++;
+      }
+
+      // Per-listing analytics
+      const perListing = listings.map(l => {
+        const lEois = allEois.filter(e => e.listingId === l.id);
+        const lDeals = allDeals.filter(d => d.listingId === l.id);
+        return {
+          listing: { id: l.id, therapeuticArea: l.therapeuticArea, modality: l.modality, stage: l.stage, assetName: l.assetName, blind: l.blind, status: l.status, engagementStatus: l.engagementStatus },
+          eoiCount: lEois.length,
+          eoiByStatus: {
+            submitted: lEois.filter(e => e.status === "submitted").length,
+            accepted: lEois.filter(e => e.status === "accepted").length,
+            declined: lEois.filter(e => e.status === "declined").length,
+          },
+          dealCount: lDeals.length,
+          activeDealCount: lDeals.filter(d => !["closed", "paused"].includes(d.status)).length,
+          closedDealCount: lDeals.filter(d => d.status === "closed").length,
+          avgDaysToEoi: (() => {
+            const diffs = lEois.map(e => (new Date(e.createdAt).getTime() - new Date(l.createdAt).getTime()) / 86400_000);
+            return diffs.length ? Math.round(diffs.reduce((s, d) => s + d, 0) / diffs.length) : null;
+          })(),
+        };
+      });
+
+      // TA breakdown of EOI interest
+      const taInterest: Record<string, number> = {};
+      for (const l of listings) {
+        const count = allEois.filter(e => e.listingId === l.id).length;
+        if (count > 0) {
+          taInterest[l.therapeuticArea] = (taInterest[l.therapeuticArea] ?? 0) + count;
+        }
+      }
+
+      res.json({
+        perListing,
+        totals: {
+          listings: listings.length,
+          eois: allEois.length,
+          eoiByStatus,
+          deals: allDeals.length,
+          closed: closedDeals.length,
+        },
+        taInterest,
+        successFeeCollected: closedDeals.reduce((s, d) => s + (d.successFeeAmount ?? 0), 0),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Buyer Intel on EOI (for seller review) ───────────────────────────────────
+
+  // GET /api/market/seller/eois/:eoiId/buyer-intel — brief company profile for EOI buyer
+  app.get("/api/market/seller/eois/:eoiId/buyer-intel", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const eoiId = parseInt(String(req.params.eoiId), 10);
+      const [eoi] = await db.select().from(marketEois).where(eq(marketEois.id, eoiId)).limit(1);
+      if (!eoi) return res.status(404).json({ error: "EOI not found" });
+
+      // Verify the EOI is on one of the seller's listings
+      const listings = await storage.getMarketListingsBySeller(userId);
+      if (!listings.find(l => l.id === eoi.listingId)) return res.status(403).json({ error: "Not your listing" });
+
+      // Fetch buyer's org and industry profile for intel
+      const buyerOrg = await storage.getOrgForUser(eoi.buyerId);
+      const [buyerProfile] = await db.select().from(industryProfiles).where(eq(industryProfiles.userId, eoi.buyerId)).limit(1);
+
+      // Count how many active pipeline items buyer has saved in related TAs
+      let pipelineSignals: { total: number; relevantTa: number } = { total: 0, relevantTa: 0 };
+      try {
+        const listing = listings.find(l => l.id === eoi.listingId);
+        const saved = await db.select().from(savedAssets).where(eq(savedAssets.userId, eoi.buyerId));
+        pipelineSignals.total = saved.length;
+        if (listing?.therapeuticArea) {
+          pipelineSignals.relevantTa = saved.filter(s => {
+            const ta = (s as unknown as Record<string, unknown>).therapeuticArea;
+            return typeof ta === "string" && ta.toLowerCase().includes(listing.therapeuticArea.toLowerCase());
+          }).length;
+        }
+      } catch (e) { /* non-critical */ }
+
+      res.json({
+        buyerCompany: eoi.company,
+        buyerRole: eoi.role,
+        buyerOrgName: buyerOrg?.name ?? null,
+        buyerOrgType: (buyerProfile as Record<string, unknown> | null)?.companyType ?? null,
+        buyerTherapeuticAreas: (buyerProfile as Record<string, unknown> | null)?.therapeuticAreas ?? [],
+        buyerModalities: (buyerProfile as Record<string, unknown> | null)?.modalities ?? [],
+        buyerDealStages: (buyerProfile as Record<string, unknown> | null)?.dealStages ?? [],
+        pipelineSignals,
+        eoi: { id: eoi.id, rationale: eoi.rationale, budgetRange: eoi.budgetRange, timeline: eoi.timeline, status: eoi.status, createdAt: eoi.createdAt },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Admin — Listing Review Queue ──────────────────────────────────────────────
+
+  // PATCH /api/admin/market/listings/:id/activate — admin activates a pending listing
+  app.patch("/api/admin/market/listings/:id/activate", requireAdmin, async (req, res) => {
+    try {
+      const listingId = parseInt(String(req.params.id), 10);
+      const listing = await storage.getMarketListing(listingId);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+      if (!["pending", "paused"].includes(listing.status)) return res.status(400).json({ error: `Cannot activate from status: ${listing.status}` });
+
+      const [updated] = await db.update(marketListings).set({ status: "active", updatedAt: new Date() })
+        .where(eq(marketListings.id, listingId)).returning();
+
+      // Notify seller
+      try {
+        const sellerOrg = await storage.getOrgForUser(listing.sellerId);
+        if (sellerOrg?.billingEmail) {
+          const assetLabel = listing.assetName || `Listing #${listing.id}`;
+          await sendMarketAdHocEmail(
+            sellerOrg.billingEmail,
+            `Your listing is live — ${assetLabel} — EdenMarket`,
+            `<h2 style="margin:0 0 14px;font-size:18px;font-weight:700;color:#111827;">Your listing is now live</h2>
+             <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+               Great news! <strong>${assetLabel}</strong> has been reviewed and is now visible to qualified buyers on EdenMarket.
+             </p>
+             <a href="${APP_URL}/market/seller" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+               View Seller Dashboard
+             </a>`
+          );
+        }
+      } catch (e) { console.warn("[admin] listing-activated seller email failed", e); }
+
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/admin/market/listings/:id/request-changes — admin requests changes on a listing
+  app.patch("/api/admin/market/listings/:id/request-changes", requireAdmin, async (req, res) => {
+    try {
+      const listingId = parseInt(String(req.params.id), 10);
+      const listing = await storage.getMarketListing(listingId);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+
+      const { note } = z.object({ note: z.string().min(1).max(1000) }).parse(req.body);
+
+      await db.update(marketListings).set({ status: "draft", adminNote: note, updatedAt: new Date() })
+        .where(eq(marketListings.id, listingId));
+
+      // Notify seller
+      try {
+        const sellerOrg = await storage.getOrgForUser(listing.sellerId);
+        if (sellerOrg?.billingEmail) {
+          const assetLabel = listing.assetName || `Listing #${listing.id}`;
+          await sendMarketAdHocEmail(
+            sellerOrg.billingEmail,
+            `Listing review — action required — ${assetLabel} — EdenMarket`,
+            `<h2 style="margin:0 0 14px;font-size:18px;font-weight:700;color:#111827;">Your listing needs a few changes</h2>
+             <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+               Our team has reviewed <strong>${assetLabel}</strong> and has some feedback before we can publish it.
+             </p>
+             <div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:14px 16px;margin:0 0 24px;">
+               <p style="margin:0;font-size:14px;color:#713f12;">${note}</p>
+             </div>
+             <a href="${APP_URL}/market/seller" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+               Edit Listing
+             </a>`
+          );
+        }
+      } catch (e) { console.warn("[admin] listing-request-changes seller email failed", e); }
+
+      res.json({ ok: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
