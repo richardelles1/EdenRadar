@@ -3,8 +3,10 @@ import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Award, Radar, Sprout, Globe, Users } from "lucide-react";
+import { ArrowRight, Award, Sprout, Globe, Users } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { Spotlight } from "@/components/ui/spotlight";
+import { CardTilt } from "@/components/ui/card-tilt";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 
@@ -126,16 +128,6 @@ export default function About() {
 
         {/* Hero */}
         <section className="relative overflow-hidden pt-24 pb-20 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
-          <div
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border mb-8"
-            style={{ background: "hsl(var(--portal-scout) / 0.08)", borderColor: "hsl(var(--portal-scout) / 0.25)" }}
-          >
-            <Radar className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-              Founded Early 2026
-            </span>
-          </div>
-
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             Built by industry insiders,{" "}
             <span className="gradient-text">for the industry.</span>
@@ -160,12 +152,13 @@ export default function About() {
           className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16"
         >
           <div
-            className="rounded-2xl p-8 sm:p-12 text-center"
+            className="rounded-2xl p-8 sm:p-12 text-center relative overflow-hidden"
             style={{
               background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
               border: "1px solid hsl(var(--portal-scout) / 0.2)",
             }}
           >
+            <Spotlight className="-top-24 left-1/2 -translate-x-1/2" fill="hsl(142, 65%, 55%)" />
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">Our Mission</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 leading-tight max-w-3xl mx-auto">
               Accelerate science to patient impact by eliminating the discovery gap between university research and industry development.
@@ -271,18 +264,17 @@ export default function About() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {VALUES.map((v, i) => (
-              <div
-                key={i}
-                className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200"
-              >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <v.icon className="w-5 h-5 text-primary" />
+              <CardTilt key={i} className="rounded-xl">
+                <div className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <v.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1.5">{v.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1.5">{v.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
-                </div>
-              </div>
+              </CardTilt>
             ))}
           </div>
         </section>

@@ -142,7 +142,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
                 ...last,
                 assets: d.assets ?? [],
                 externalResults: d.externalResults ?? [],
-                activeSource: d.activeSource ?? "tto",
+                activeSource: d.activeSource,
               };
               return upd;
             });

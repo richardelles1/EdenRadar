@@ -5,9 +5,13 @@ import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { Spotlight } from "@/components/ui/spotlight";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { WordRotate } from "@/components/ui/word-rotate";
+import { AnimatedTabs } from "@/components/ui/animated-tabs";
+import { CardTilt } from "@/components/ui/card-tilt";
 import {
   ArrowRight,
-  Radar,
   Lightbulb,
   FlaskConical,
   TrendingUp,
@@ -71,20 +75,65 @@ interface AssetCardData {
   icon: typeof Dna;
 }
 
-const DEMO_ASSETS: AssetCardData[] = [
-  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins University", area: "Oncology", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: "hsl(142 65% 48%)", icon: Dna },
-  { id: 2, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins University", area: "Oncology", stage: "Discovery", score: 85, modality: "Small Molecule", color: "hsl(265 60% 60%)", icon: Shield },
-  { id: 3, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins University", area: "Oncology", stage: "IND-Enabling", score: 88, modality: "Antibody", color: "hsl(38 92% 50%)", icon: TrendingUp },
+interface ChatMessage {
+  role: "eden" | "user";
+  text: string;
+  delay: number;
+  assetCards?: AssetCardData[];
+}
+
+interface DemoScenario {
+  id: string;
+  label: string;
+  messages: ChatMessage[];
+}
+
+const DEMO_ASSETS_JHU: AssetCardData[] = [
+  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", area: "Oncology", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: "hsl(142 65% 48%)", icon: Dna },
+  { id: 2, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", area: "Oncology", stage: "Discovery", score: 85, modality: "Small Molecule", color: "hsl(265 60% 60%)", icon: Shield },
+  { id: 3, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", area: "Oncology", stage: "IND-Enabling", score: 88, modality: "Antibody", color: "hsl(38 92% 50%)", icon: TrendingUp },
 ];
 
-const CHAT_MESSAGES = [
-  { role: "eden" as const, text: "I'm EDEN, EdenRadar's research intelligence engine. I monitor and enrich biotech assets across 300+ tech transfer offices in real time. How can I help your team today?", delay: 400 },
-  { role: "user" as const, text: "How many total assets do you have indexed right now?", delay: 1800 },
-  { role: "eden" as const, text: "EdenRadar continuously monitors 300+ research institutions globally. All assets are EDEN-enriched and scored for licensing readiness. What would you like to explore?", delay: 3200 },
-  { role: "user" as const, text: "Interesting. How many of those are in oncology from Johns Hopkins specifically?", delay: 5000 },
-  { role: "eden" as const, text: "Johns Hopkins Technology Ventures has a significant oncology portfolio in the index, spanning cell therapy, small molecule, antibody, and gene therapy modalities. Would you like me to surface the top-ranked assets by EDEN readiness score?", delay: 6600 },
-  { role: "user" as const, text: "Yes, show me the top 3.", delay: 8400 },
-  { role: "eden" as const, text: "Here are the top 3 Johns Hopkins oncology assets ranked by EDEN readiness score:", assetCards: DEMO_ASSETS, delay: 9800 },
+const DEMO_ASSETS_CNS: AssetCardData[] = [
+  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", area: "Neurology", stage: "Preclinical", score: 93, modality: "Antibody", color: "hsl(142 65% 48%)", icon: Dna },
+  { id: 5, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", area: "Neurology", stage: "Discovery", score: 87, modality: "Small Molecule", color: "hsl(265 60% 60%)", icon: Shield },
+  { id: 6, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", area: "Neurology", stage: "IND-Enabling", score: 89, modality: "Gene Therapy", color: "hsl(38 92% 50%)", icon: TrendingUp },
+];
+
+const DEMO_ASSETS_ADC: AssetCardData[] = [
+  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", area: "Oncology", stage: "IND-Enabling", score: 92, modality: "ADC", color: "hsl(142 65% 48%)", icon: Dna },
+  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", area: "Oncology", stage: "Preclinical", score: 86, modality: "ADC", color: "hsl(265 60% 60%)", icon: Shield },
+  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", area: "Oncology", stage: "Discovery", score: 84, modality: "ADC", color: "hsl(38 92% 50%)", icon: TrendingUp },
+];
+
+const DEMO_SCENARIOS: DemoScenario[] = [
+  {
+    id: "institution",
+    label: "Institution Search",
+    messages: [
+      { role: "eden", text: "I'm EDEN, EdenRadar's intelligence engine. I monitor 350+ tech transfer offices in real time, enriching every asset with target, modality, stage, and readiness data. What are you looking for?", delay: 400 },
+      { role: "user", text: "Show me top-ranked oncology assets from Johns Hopkins.", delay: 1800 },
+      { role: "eden", text: "Johns Hopkins Technology Ventures has one of the strongest oncology portfolios in the index, spanning cell therapy, small molecule, antibody, and gene therapy modalities. Top 3 by EDEN readiness score:", assetCards: DEMO_ASSETS_JHU, delay: 3200 },
+    ],
+  },
+  {
+    id: "cross-tto",
+    label: "Cross-TTO Query",
+    messages: [
+      { role: "eden", text: "EDEN can query across all 350+ indexed institutions simultaneously. I'll rank results by readiness score regardless of which institution they come from. What are you searching for?", delay: 400 },
+      { role: "user", text: "Find preclinical CNS assets with EDEN scores above 85 — any institution.", delay: 1800 },
+      { role: "eden", text: "Searching 350+ institutions for CNS and neurodegenerative disease assets at preclinical or IND-enabling stage, filtered by EDEN readiness above 85. Strong cluster across Mayo Clinic, Stanford, and Columbia. Top results:", assetCards: DEMO_ASSETS_CNS, delay: 3200 },
+    ],
+  },
+  {
+    id: "modality",
+    label: "Modality Filter",
+    messages: [
+      { role: "eden", text: "EDEN can filter by modality, stage, therapeutic area, institution type, or any combination across the full index. What modality or platform type are you focused on?", delay: 400 },
+      { role: "user", text: "What ADC platforms are available at IND-enabling or preclinical stage?", delay: 1800 },
+      { role: "eden", text: "Filtering for antibody-drug conjugate platforms at IND-enabling through preclinical stage. Prioritizing assets with validated linker-payload chemistry and preclinical proof-of-concept data. Top results by EDEN readiness:", assetCards: DEMO_ASSETS_ADC, delay: 3200 },
+    ],
+  },
 ];
 
 function DemoAssetCard({ asset }: { asset: AssetCardData }) {
@@ -113,34 +162,42 @@ function DemoAssetCard({ asset }: { asset: AssetCardData }) {
   );
 }
 
-function EdenChatDemo() {
+function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
-  const hasStarted = useRef(false);
+  const timeoutIds = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   useEffect(() => {
-    if (hasStarted.current) return;
+    timeoutIds.current.forEach(clearTimeout);
+    timeoutIds.current = [];
+    setVisibleCount(0);
+
     const startChat = () => {
-      hasStarted.current = true;
-      CHAT_MESSAGES.forEach((msg, i) => {
-        setTimeout(() => {
+      messages.forEach((msg, i) => {
+        const id = setTimeout(() => {
           setVisibleCount(i + 1);
           requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => {
             if (chatRef.current) chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
           })));
         }, msg.delay);
+        timeoutIds.current.push(id);
       });
     };
+
     const el = chatRef.current?.closest(".chat-demo-wrapper") as HTMLElement | null;
     if (!el) { startChat(); return; }
-    const obs = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { startChat(); obs.disconnect(); } }, { threshold: 0.3 });
+    const obs = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { startChat(); obs.disconnect(); } }, { threshold: 0.2 });
     obs.observe(el);
     return () => obs.disconnect();
+  }, [messages]);
+
+  useEffect(() => {
+    return () => { timeoutIds.current.forEach(clearTimeout); };
   }, []);
 
-  const visibleMessages = CHAT_MESSAGES.slice(0, visibleCount);
+  const visibleMessages = messages.slice(0, visibleCount);
   return (
-    <div className="flex flex-col rounded-2xl overflow-hidden border border-border" style={{ background: "hsl(var(--card))", height: 480 }}>
+    <div className="flex flex-col rounded-2xl overflow-hidden border border-border" style={{ background: "hsl(var(--card))", height: 420 }}>
       <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-primary/[0.06]">
         <EdenAvatar size={28} />
         <div>
@@ -157,7 +214,7 @@ function EdenChatDemo() {
         {visibleMessages.map((msg, i) => (
           <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`} style={{ animation: "fade-up 0.35s ease-out forwards" }}>
             {msg.role === "eden" && <EdenAvatar size={26} isThinking={false} />}
-            <div className="flex flex-col gap-2 max-w-[80%]">
+            <div className="flex flex-col gap-2 max-w-[85%]">
               <div
                 className="px-3.5 py-2.5 rounded-xl text-xs leading-relaxed"
                 style={msg.role === "user"
@@ -166,7 +223,7 @@ function EdenChatDemo() {
               >
                 {msg.text}
               </div>
-              {"assetCards" in msg && msg.assetCards && (
+              {msg.assetCards && (
                 <div className="space-y-2">
                   {msg.assetCards.map((asset) => <DemoAssetCard key={asset.id} asset={asset} />)}
                 </div>
@@ -174,7 +231,7 @@ function EdenChatDemo() {
             </div>
           </div>
         ))}
-        {visibleCount < CHAT_MESSAGES.length && (
+        {visibleCount < messages.length && (
           <div className="flex gap-2.5">
             <EdenAvatar size={26} isThinking />
             <div className="px-3.5 py-2.5 rounded-xl text-xs" style={{ background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))", borderRadius: "14px 14px 14px 4px" }}>
@@ -228,7 +285,7 @@ const TIER_OVERVIEW = [
     color: "hsl(var(--portal-scout))",
     colorDim: "hsl(var(--portal-scout) / 0.08)",
     borderColor: "hsl(var(--portal-scout) / 0.3)",
-    features: ["EDEN queries across 300+ TTOs", "EDEN-scored dossiers + competitive cross-reference", "Alerts, CSV export, pipeline tracking"],
+    features: ["EDEN queries across 350+ TTOs", "EDEN-scored dossiers + competitive cross-reference", "Alerts, CSV export, pipeline tracking"],
   },
   {
     icon: ShoppingBag,
@@ -238,7 +295,7 @@ const TIER_OVERVIEW = [
     color: "hsl(var(--portal-market))",
     colorDim: "hsl(var(--portal-market) / 0.08)",
     borderColor: "hsl(var(--portal-market) / 0.3)",
-    features: ["Anonymous listings — identity NDA-gated", "Secure deal rooms with audit trail", "Success-fee aligned — free to list"],
+    features: ["Anonymous listings (identity NDA-gated)", "Secure deal rooms with audit trail", "Success-fee aligned: free to list"],
   },
 ];
 
@@ -248,12 +305,12 @@ const HOW_STEPS = [
   {
     number: "01",
     title: "Sign up and choose your tier",
-    desc: "Create your account in under two minutes. Select the tier that fits your workflow — free for researchers, paid for industry intelligence.",
+    desc: "Create your account in under two minutes. Select the tier that fits your workflow: free for researchers, paid for industry intelligence.",
   },
   {
     number: "02",
-    title: "Tell EDEN what you're looking for",
-    desc: "Ask in plain English. \"Show me CNS assets from MIT in preclinical stage.\" EDEN searches thousands of enriched records instantly and returns ranked results.",
+    title: "Query across the full index",
+    desc: "Ask in plain English across all 350+ indexed institutions at once. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
   },
   {
     number: "03",
@@ -262,9 +319,17 @@ const HOW_STEPS = [
   },
   {
     number: "04",
-    title: "Save, export, and act",
-    desc: "Save to watchlists, export pipeline reports to CSV or PDF, and set push alerts for new matching assets. Your BD team is now running on intelligence, not guesswork.",
+    title: "Save, export, and stay ahead",
+    desc: "Set standing alerts — the moment a new matching asset appears from any monitored institution, your team is notified before it hits the market. Export pipeline reports to CSV or PDF, or share dossier links directly with colleagues.",
   },
+];
+
+/* ─── Stats ──────────────────────────────────────────────────── */
+
+const STATS = [
+  { value: "350+", label: "Tech Transfer Offices" },
+  { value: "33K+", label: "Scored Assets" },
+  { value: "40+",  label: "Live Data Sources" },
 ];
 
 /* ─── Main Page ──────────────────────────────────────────────── */
@@ -272,12 +337,15 @@ const HOW_STEPS = [
 export default function HowItWorks() {
   useDocumentMeta({
     title: "How It Works — EdenRadar Platform Walkthrough",
-    description: "See how EDEN monitors 300+ tech transfer offices, scores assets 0–100, and delivers structured intelligence to BD teams, researchers, and concept creators across four interconnected portals.",
+    description: "See how EDEN monitors 350+ tech transfer offices, scores assets 0–100, and delivers structured intelligence to BD teams, researchers, and concept creators across four interconnected portals.",
   });
   const [, navigate] = useLocation();
-  const demoRef = useReveal();
+  const [activeScenario, setActiveScenario] = useState(0);
   const stepsRef = useReveal();
+  const demoRef = useReveal();
   const tiersRef = useReveal();
+
+  const scenario = DEMO_SCENARIOS[activeScenario];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -286,24 +354,20 @@ export default function HowItWorks() {
 
       <main className="relative z-10 flex-1">
 
-        {/* Hero */}
+        {/* Hero + Stats */}
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
-          <div
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border mb-8"
-            style={{ background: "hsl(var(--primary) / 0.08)", borderColor: "hsl(var(--primary) / 0.25)" }}
-          >
-            <Radar className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-              Platform Overview
-            </span>
-          </div>
-
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             The intelligence engine{" "}
-            <span className="gradient-text">behind EdenRadar.</span>
+            <span className="gradient-text">
+              for{" "}
+              <WordRotate
+                words={["BD teams.", "TTOs.", "researchers.", "deal flow."]}
+                className="inline-block"
+              />
+            </span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
-            EDEN monitors 300+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and surfaces the results to the teams that need them — in plain English.
+            EDEN monitors 350+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and delivers structured intelligence to the teams that need it, in plain English.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button size="lg" onClick={() => navigate("/login")} data-testid="howitworks-cta-hero" className="h-11 px-8 font-semibold text-base">
@@ -314,38 +378,17 @@ export default function HowItWorks() {
               See Pricing
             </Button>
           </div>
-        </section>
 
-        {/* EDEN Chat Demo */}
-        <section
-          ref={demoRef}
-          className="reveal-section chat-demo-wrapper max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
-        >
-          <div className="text-center mb-12">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Live Demo</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-              See EDEN in action
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              A real conversation with EDEN using the Johns Hopkins TTO as an example. The same query works across all 300+ indexed institutions.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
-            <div className="flex flex-col items-center justify-center order-2 lg:order-1">
-              <div className="w-full max-w-[380px] mx-auto">
-                <EdenOrb />
+          {/* Stats strip */}
+          <div className="mt-16 grid grid-cols-3 gap-6 sm:gap-10 max-w-lg mx-auto">
+            {STATS.map((s) => (
+              <div key={s.label} className="text-center">
+                <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
+                  <NumberTicker value={s.value} />
+                </div>
+                <div className="text-xs tracking-wide font-semibold text-foreground/70">{s.label}</div>
               </div>
-              <div className="text-center mt-6 max-w-xs mx-auto space-y-2">
-                <h3 className="font-bold text-foreground">EDEN Intelligence Engine</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">
-                  Processes, classifies, and reasons over every asset in the database — instant, accurate, cited answers in plain English.
-                </p>
-              </div>
-            </div>
-            <div className="order-1 lg:order-2">
-              <EdenChatDemo />
-            </div>
+            ))}
           </div>
         </section>
 
@@ -362,22 +405,60 @@ export default function HowItWorks() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {HOW_STEPS.map((step, i) => (
-              <div
-                key={i}
-                className="flex gap-5 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200"
-              >
-                <div
-                  className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
-                  style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
-                >
-                  {step.number}
+              <CardTilt key={i} className="rounded-xl">
+                <div className="flex gap-5 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
+                  <div
+                    className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
+                    style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
+                  >
+                    {step.number}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1.5">{step.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1.5">{step.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
-                </div>
-              </div>
+              </CardTilt>
             ))}
+          </div>
+        </section>
+
+        {/* EDEN Chat Demo */}
+        <section
+          ref={demoRef}
+          className="reveal-section chat-demo-wrapper max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
+        >
+          <div className="text-center mb-10">
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">See Step 2 in Action</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+              Three ways to search with EDEN
+            </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto mb-8">
+              Every query runs across all 350+ indexed institutions simultaneously. Select a scenario to watch EDEN respond in real time.
+            </p>
+
+            <AnimatedTabs
+              tabs={DEMO_SCENARIOS.map((s) => ({ id: s.id, label: s.label }))}
+              activeIndex={activeScenario}
+              onChange={setActiveScenario}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div className="flex flex-col items-center justify-center order-2 lg:order-1">
+              <div className="w-full max-w-[340px] mx-auto">
+                <EdenOrb />
+              </div>
+              <div className="text-center mt-6 max-w-xs mx-auto space-y-2">
+                <h3 className="font-bold text-foreground">EDEN Intelligence Engine</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Processes, classifies, and reasons over every asset in the database. Instant, accurate, cited answers in plain English.
+                </p>
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <EdenChatDemo key={scenario.id} messages={scenario.messages} />
+            </div>
           </div>
         </section>
 
@@ -406,7 +487,7 @@ export default function HowItWorks() {
                 <div className="px-5 py-4 bg-card border-b border-border">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
-                      <tier.icon className="w-4.5 h-4.5" style={{ color: tier.color }} />
+                      <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
                     </div>
                     <div className="min-w-0">
                       <h3 className="font-bold text-foreground text-sm leading-tight">{tier.name}</h3>
@@ -443,12 +524,13 @@ export default function HowItWorks() {
         {/* Final CTA */}
         <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div
-            className="rounded-2xl p-10 sm:p-14 text-center"
+            className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{
               background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
               border: "1px solid hsl(var(--primary) / 0.2)",
             }}
           >
+            <Spotlight className="-top-24 left-1/2 -translate-x-1/2" fill="hsl(142, 65%, 55%)" />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
               Ready to find your next licensing opportunity?
             </h2>

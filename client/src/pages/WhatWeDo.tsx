@@ -172,9 +172,9 @@ const PORTALS = [
       "NDA-gated deal rooms with encrypted messaging and audit trail",
       "Submit and track Expressions of Interest",
       "Document vault for secure asset exchange",
-      "Success-fee aligned — free to list, pay only when a deal closes",
+      "Success-fee aligned: free to list, pay only when a deal closes",
     ],
-    vision: "EdenMarket brings the discretion and structure that biotech deals require. Connect, negotiate, and close — inside a secure, identity-protected environment where both sides engage on equal footing.",
+    vision: "EdenMarket brings the discretion and structure that biotech deals require. Connect, negotiate, and close inside a secure, identity-protected environment where both sides engage on equal footing.",
   },
 ];
 

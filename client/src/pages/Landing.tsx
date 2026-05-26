@@ -5,6 +5,10 @@ import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { Spotlight } from "@/components/ui/spotlight";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { MovingBorder } from "@/components/ui/moving-border";
+import { BackgroundBeams } from "@/components/ui/background-beams";
 import {
   Building2,
   FlaskConical,
@@ -228,7 +232,7 @@ const DISCOVERY_TILES = [
 ];
 
 function PortalToggle({ onLogin }: { onLogin: () => void }) {
-  const [active, setActive] = useState<"discovery" | "research" | "industry">("discovery");
+  const [active, setActive] = useState<"discovery" | "research" | "industry">("industry");
   const ref = useReveal();
 
   const tiles = active === "discovery" ? DISCOVERY_TILES : active === "research" ? RESEARCH_TILES : INDUSTRY_TILES;
@@ -288,7 +292,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
                 className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
                 style={{ background: "hsl(var(--portal-scout) / 0.12)", color: "hsl(var(--portal-scout))", border: "1px solid hsl(var(--portal-scout) / 0.3)" }}
               >
-                EdenScout — Pipeline Intelligence
+                EdenScout: Pipeline Intelligence
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -318,7 +322,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
                 className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
                 style={{ background: "hsl(var(--portal-market) / 0.10)", color: "hsl(var(--portal-market))", border: "1px solid hsl(var(--portal-market) / 0.25)" }}
               >
-                EdenMarket — Blind Asset Marketplace
+                EdenMarket: Blind Asset Marketplace
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -428,33 +432,8 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
         background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 10%) 60%, hsl(155 40% 12%) 100%)",
       }}
     >
-      <div className="absolute inset-0 pointer-events-none" aria-hidden>
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "conic-gradient(from 200deg at 80% 50%, transparent 0deg, hsl(142 65% 48% / 0.06) 60deg, transparent 120deg)",
-          }}
-        />
-        <div className="absolute bottom-0 right-0 w-64 h-64 opacity-20" style={{ pointerEvents: "none" }}>
-          <svg viewBox="0 0 200 400" className="w-full h-full" aria-hidden>
-            <defs>
-              <linearGradient id="ctaVineGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-                <stop offset="0%" stopColor="hsl(142 65% 52%)" stopOpacity="0" />
-                <stop offset="100%" stopColor="hsl(142 65% 52%)" stopOpacity="0.8" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M 100 400 C 80 340, 120 280, 100 220 C 80 160, 120 100, 100 40"
-              fill="none" stroke="url(#ctaVineGrad)" strokeWidth="2"
-            />
-            {[380, 310, 240, 170, 100, 50].map((y, i) => (
-              <circle key={y} cx={100} cy={y} r={i % 2 === 0 ? 5 : 4}
-                fill="hsl(142 65% 55%)" fillOpacity={0.5 - i * 0.05} />
-            ))}
-          </svg>
-        </div>
-      </div>
+      <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="hsl(142, 65%, 55%)" />
+      <BackgroundBeams className="opacity-30" />
 
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
         <div
@@ -483,7 +462,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
           The platform where world-class university research meets the industry teams ready to build the next breakthrough therapy.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             size="lg"
             onClick={onLogin}
@@ -504,28 +483,99 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
               EdenMarket
             </Button>
           </Link>
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={onLogin}
-            data-testid="cta-bottom-research"
-            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <FlaskConical className="w-4 h-4" />
-            For Researchers
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={onLogin}
-            data-testid="cta-bottom-discovery"
-            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <Lightbulb className="w-4 h-4" />
-            For Discovery
-          </Button>
         </div>
 
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── InstitutionMarquee ──────────────── */
+
+const INSTITUTION_ROWS = [
+  [
+    "MIT", "Stanford", "Harvard", "Johns Hopkins", "UCSF", "UCLA", "Columbia", "Yale",
+    "Cornell", "Penn", "Duke", "Michigan", "Wisconsin-Madison", "UNC Chapel Hill",
+    "UC Berkeley", "Northwestern", "NYU", "Vanderbilt", "Emory", "Pittsburgh",
+  ],
+  [
+    "Ohio State", "Penn State", "Texas", "USC", "UCSD", "UC Davis", "Wash U St. Louis",
+    "Mayo Clinic", "Mass General Hospital", "Brigham and Women's", "Memorial Sloan Kettering",
+    "MD Anderson", "Cleveland Clinic", "Mount Sinai", "CHOP", "Boston Children's",
+    "Dartmouth", "Brown", "Tufts", "Georgetown",
+  ],
+  [
+    "Georgia Tech", "Purdue", "Illinois", "Minnesota", "Texas A&M", "Virginia", "Arizona State",
+    "Michigan State", "Colorado", "Oregon", "Washington", "Iowa", "Indiana", "Rutgers",
+    "Case Western", "BU", "Northeastern", "GWU", "Temple", "Drexel",
+  ],
+  [
+    "Wake Forest", "Miami", "Rochester", "Delaware", "Maryland", "Virginia Tech",
+    "Cincinnati", "Louisville", "Kentucky", "Caltech", "Rice", "Baylor",
+    "Lawrence Berkeley Lab", "Argonne National Lab", "NIH", "Nebraska", "Oklahoma",
+    "South Carolina", "Tennessee", "Alabama",
+  ],
+];
+
+function InstitutionMarquee() {
+  const speeds = [34, 42, 50, 38];
+  const directions = ["marquee-left", "marquee-right", "marquee-left", "marquee-right"] as const;
+
+  return (
+    <section className="py-12 overflow-hidden border-y border-border/40">
+      <div className="mb-7 text-center">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-primary">350+ Institutions Indexed</p>
+      </div>
+
+      {/* 3D perspective container */}
+      <div
+        style={{
+          perspective: "1200px",
+          perspectiveOrigin: "50% 0%",
+        }}
+      >
+        <div
+          className="space-y-2"
+          style={{
+            transform: "rotateX(18deg) rotateZ(-1deg)",
+            transformOrigin: "center top",
+          }}
+        >
+          {INSTITUTION_ROWS.map((row, ri) => {
+            const doubled = [...row, ...row];
+            return (
+              <div
+                key={ri}
+                className="relative overflow-hidden"
+                style={{
+                  maskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
+                }}
+              >
+                <div
+                  className="flex gap-2 w-max"
+                  style={{ animation: `${directions[ri]} ${speeds[ri]}s linear infinite` }}
+                >
+                  {doubled.map((name, i) => (
+                    <span
+                      key={i}
+                      className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap tracking-wide"
+                      style={{
+                        background: ri % 2 === 0
+                          ? "hsl(var(--portal-scout) / 0.08)"
+                          : "hsl(var(--card))",
+                        border: "1px solid hsl(var(--portal-scout) / 0.20)",
+                        color: "hsl(var(--foreground) / 0.70)",
+                      }}
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -534,17 +584,17 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 /* ─────────────────────────── Main Landing ────────────────────── */
 
 const STATS = [
-  { value: "300+",    label: "Tech Transfer Offices" },
-  { value: "10M+",    label: "Papers Indexed" },
-  { value: "0–100",   label: "EDEN Readiness Score" },
-  { value: "3-Sided", label: "Ecosystem" },
+  { value: "350+", label: "Tech Transfer Offices" },
+  { value: "33K+", label: "Scored Assets" },
+  { value: "40+",  label: "Live Data Sources" },
+  { value: "4",    label: "Integrated Portals" },
 ];
 
 export default function Landing() {
   useDocumentMeta({
     title: "EdenRadar — Where Biotech Research Meets Industry Intelligence",
     description:
-      "AI-powered biotech asset discovery across 300+ tech transfer offices and scientific literature. Connect industry BD teams with university researchers, surface licensable assets, and run a confidential deal marketplace — all in EdenRadar.",
+      "AI-powered biotech asset discovery across 350+ tech transfer offices. EDEN queries 40+ live data sources — patents, clinical trials, literature — to score and surface licensable assets for industry BD teams.",
   });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
@@ -581,44 +631,41 @@ export default function Landing() {
               </span>
             </h1>
 
-            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10 text-foreground/70 dark:text-white/72">
+            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10 text-foreground/70 dark:text-white/75">
               EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by EDEN, the intelligence engine that reads the science so you don't have to.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
-              <div className="glass-btn-wrap w-full sm:w-auto">
-                <button
-                  onClick={handleLogin}
-                  data-testid="button-cta-discovery"
-                  className="glass-btn-inner w-full sm:w-auto"
-                >
-                  <Lightbulb className="w-4 h-4" />
-                  For Discovery
-                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                </button>
-              </div>
-              <div className="glass-btn-wrap w-full sm:w-auto">
-                <button
-                  onClick={handleLogin}
-                  data-testid="button-cta-research"
-                  className="glass-btn-inner w-full sm:w-auto"
-                >
-                  <FlaskConical className="w-4 h-4" />
-                  For Researchers
-                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                </button>
-              </div>
-              <div className="glass-btn-wrap w-full sm:w-auto">
-                <button
-                  onClick={handleLogin}
-                  data-testid="button-cta-industry"
-                  className="glass-btn-inner w-full sm:w-auto"
-                >
-                  <Building2 className="w-4 h-4" />
-                  For Industry
-                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                </button>
-              </div>
+              <Button
+                size="lg"
+                onClick={handleLogin}
+                data-testid="button-cta-industry"
+                className="w-full sm:w-auto h-11 px-7 font-semibold gap-2"
+              >
+                <Building2 className="w-4 h-4" />
+                For Industry
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+              <MovingBorder
+                onClick={handleLogin}
+                data-testid="button-cta-research"
+                containerClassName="w-full sm:w-auto"
+                className="glass-btn-inner w-full sm:w-auto"
+              >
+                <FlaskConical className="w-4 h-4" />
+                For Researchers
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </MovingBorder>
+              <MovingBorder
+                onClick={handleLogin}
+                data-testid="button-cta-discovery"
+                containerClassName="w-full sm:w-auto"
+                className="glass-btn-inner w-full sm:w-auto"
+              >
+                <Lightbulb className="w-4 h-4" />
+                For Discovery
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </MovingBorder>
             </div>
 
             <Link href="/pricing">
@@ -637,7 +684,7 @@ export default function Landing() {
               {STATS.map((s) => (
                 <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
                   <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
-                    {s.value}
+                    <NumberTicker value={s.value} />
                   </div>
                   <div className="text-xs tracking-wide font-semibold text-foreground/70 dark:text-white/75">{s.label}</div>
                 </div>
@@ -651,9 +698,13 @@ export default function Landing() {
           />
         </section>
 
+        {/* ── Institution marquee ── */}
+        <InstitutionMarquee />
+
         {/* ── What we do strip ── */}
         <section className="border-y border-border bg-card/50">
           <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary text-center sm:text-left mb-6">How it works</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
               {[
                 {

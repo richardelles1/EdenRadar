@@ -40,7 +40,7 @@ function buildEmbedText(asset: AssetForEmbedding): string {
     asset.indication !== "unknown" ? `Indication: ${asset.indication}` : null,
     asset.developmentStage !== "unknown" ? `Stage: ${asset.developmentStage}` : null,
     `Institution: ${asset.institution}`,
-    asset.biology ? `Biology: ${asset.biology}` : null,
+    asset.biology && asset.biology !== "not applicable" ? `Biology: ${asset.biology}` : null,
     categoryText,
     asset.summary || null,
     asset.mechanismOfAction ? `Mechanism: ${asset.mechanismOfAction}` : null,

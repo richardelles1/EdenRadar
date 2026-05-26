@@ -426,13 +426,13 @@ function EdenMarketTier({ session }: { session: Session | null }) {
         <div className="p-6 md:col-span-2 space-y-4 bg-card/30">
           <div className="flex items-center gap-2">
             <Handshake className="w-4 h-4" style={{ color: INDIGO }} />
-            <p className="text-xs font-semibold uppercase tracking-widest text-foreground">Success fees — paid only when a deal closes</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-foreground">Success fees: paid only when a deal closes</p>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[
-              { label: "Pre-clinical", fee: "$10,000", desc: "On a closed pre-clinical license or option" },
-              { label: "Clinical", fee: "$30,000", desc: "On a closed Phase I–II asset transaction" },
-              { label: "Late-stage", fee: "$50,000", desc: "On a closed Phase III or commercial-stage deal" },
+              { label: "Pre-clinical", desc: "On a closed pre-clinical license or option" },
+              { label: "Clinical", desc: "On a closed Phase I–II asset transaction" },
+              { label: "Late-stage", desc: "On a closed Phase III or commercial-stage deal" },
             ].map((t) => (
               <div
                 key={t.label}
@@ -440,9 +440,8 @@ function EdenMarketTier({ session }: { session: Session | null }) {
                 style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--portal-market) / 0.15)" }}
                 data-testid={`edenmarket-fee-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: INDIGO }}>{t.label}</p>
-                <p className="text-xl font-black text-foreground tabular-nums">{t.fee}</p>
-                <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">{t.desc}</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: INDIGO }}>{t.label}</p>
+                <p className="text-[11px] text-muted-foreground leading-snug">{t.desc}</p>
               </div>
             ))}
           </div>

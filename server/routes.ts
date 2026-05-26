@@ -7590,7 +7590,7 @@ Do not respond with anything else.`;
 
   // ── EDEN chat routes ──────────────────────────────────────────────────────
 
-  app.post("/api/eden/chat", verifyAnyAuth, async (req, res) => {
+  app.post("/api/eden/chat", verifyAnyAuth, aiRateLimit, async (req, res) => {
 
     const { message, sessionId, userContext } = req.body ?? {};
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -7815,6 +7815,7 @@ Do not respond with anything else.`;
         const assetPayload = targeted.map((a) => ({
           id: a.id, assetName: a.assetName, institution: a.institution,
           indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
+          biology: a.biology ?? undefined,
           ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
@@ -8247,6 +8248,7 @@ Do not respond with anything else.`;
       const assetPayload = retrieved.map((a) => ({
         id: a.id, assetName: a.assetName, institution: a.institution,
         indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
+        biology: a.biology ?? undefined,
         ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
         similarity: Math.round(a.similarity * 100) / 100,
       }));
