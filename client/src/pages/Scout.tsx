@@ -21,7 +21,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles } from "lucide-react";
+import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles, Info } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -1099,15 +1099,24 @@ export default function Scout() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
-                    style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}
-                  >
-                    <span className="font-black tabular-nums text-foreground">
-                      {scoutStats ? scoutStats.relevantAssets.toLocaleString() : "33,000+"}
-                    </span>
-                    <span className="text-muted-foreground">TTO assets</span>
-                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-default"
+                          style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}
+                        >
+                          <span className="font-black tabular-nums text-foreground">
+                            {scoutStats ? scoutStats.relevantAssets.toLocaleString() : "33,000+"}
+                          </span>
+                          <span className="text-muted-foreground">TTO assets</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+                        Technology Transfer Office assets — academic and institutional IP available for licensing or partnership
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
 
                   <TooltipProvider>
                     <Tooltip>
@@ -1136,12 +1145,21 @@ export default function Scout() {
                     </Tooltip>
                   </TooltipProvider>
 
-                  <div
-                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
-                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
-                  >
-                    <span className="text-muted-foreground">Patents · Trials · 35+ sources</span>
-                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-default"
+                          style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
+                        >
+                          <span className="text-muted-foreground">Patents · Trials · 35+ sources</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                        Data compiled from TTO portals, patent databases, ClinicalTrials.gov, PubMed, bioRxiv, medRxiv, and more
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
 
                   <button
                     onClick={() => setLocation("/settings")}
@@ -1523,7 +1541,19 @@ export default function Scout() {
                     {/* Desktop full controls row */}
                     <div className="hidden md:flex items-end justify-start gap-4">
                       <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Score Filter</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 cursor-default w-fit">
+                                Score Filter
+                                <Info className="w-2.5 h-2.5 opacity-50" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[220px]">
+                              Fit score (0–100) based on how well each asset matches your search query and deal focus
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
                           {([0, 30, 50, 70] as const).map((threshold) => (
                             <button
@@ -2288,7 +2318,21 @@ export default function Scout() {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 cursor-default w-fit">
+                      Sort
+                      <Info className="w-2.5 h-2.5 opacity-50" />
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="text-xs max-w-[220px] space-y-1">
+                    <p><span className="font-semibold">Best Match</span> — ranked by fit score</p>
+                    <p><span className="font-semibold">Newest First</span> — most recently updated</p>
+                    <p><span className="font-semibold">Momentum</span> — stage advances, new filings, or rising activity</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency" | "momentum")} data-testid="select-sort">
                 <SelectTrigger className="h-8 text-xs w-full">
                   <SelectValue />
@@ -2370,7 +2414,19 @@ export default function Scout() {
 
             {availableBiologies.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Biology</p>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 cursor-default w-fit">
+                        Biology
+                        <Info className="w-2.5 h-2.5 opacity-50" />
+                      </p>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs max-w-[220px]">
+                      Mechanism-based categories — filters by underlying biological pathway or drug target class
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <div className="flex flex-wrap gap-1.5">
                   {availableBiologies.map((b) => {
                     const active = biologiesFilter.includes(b);

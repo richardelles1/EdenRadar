@@ -315,7 +315,7 @@ export default function DiscoveryFeed() {
           </div>
         ) : (
           <div className="space-y-6">
-            {featured.length > 0 && !filterArea && filterStage === "all" && !filterTag && (
+            {featured.length > 0 && filterArea === "All Areas" && filterStage === "all" && !filterTag && (
               <div>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-3 flex items-center gap-1.5">
                   <Sparkles className="w-3 h-3 text-amber-500" /> High credibility

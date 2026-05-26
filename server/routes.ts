@@ -11424,7 +11424,7 @@ If a field cannot be determined, use "N/A".`
         size: z.number().int().min(0).max(10 * 1024 * 1024),
       })).max(5).default([]);
       const attachedFiles = attachedFileSchema.parse(req.body.attachedFiles ?? []);
-      const contentHash = require("crypto")
+      const contentHash = crypto
         .createHash("sha256")
         .update(JSON.stringify({ ...parsed, ts: Date.now() }))
         .digest("hex")
@@ -11776,7 +11776,7 @@ If a field cannot be determined, use "N/A".`
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-      const userId = (req as any).conceptUserId as string;
+      const userId = req.headers["x-concept-user-id"] as string;
       const [existing] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
       if (!existing) return res.status(404).json({ error: "Not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Forbidden" });
@@ -11790,7 +11790,7 @@ If a field cannot be determined, use "N/A".`
       }
       if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields" });
 
-      const hash = require("crypto")
+      const hash = crypto
         .createHash("sha256")
         .update(JSON.stringify({ ...existing, ...updates }))
         .digest("hex")
@@ -11809,7 +11809,7 @@ If a field cannot be determined, use "N/A".`
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-      const userId = (req as any).conceptUserId as string;
+      const userId = req.headers["x-concept-user-id"] as string;
       const [existing] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
       if (!existing) return res.status(404).json({ error: "Not found" });
       if (existing.userId !== userId) return res.status(403).json({ error: "Forbidden" });
@@ -11909,7 +11909,8 @@ If a field cannot be determined, use "N/A".`
   // POST /api/discovery/research-needs — industry posts a research need (admin-mediated)
   app.post("/api/discovery/research-needs", verifyAnyAuth, async (req, res) => {
     try {
-      const userId = (req as any).userId as string;
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
       const { companyName, title, description, therapeuticArea, mechanismTags, stagePreference, whatTheyOffer } = req.body;
       if (!companyName || !title || !description) return res.status(400).json({ error: "companyName, title and description required" });
       const [need] = await db

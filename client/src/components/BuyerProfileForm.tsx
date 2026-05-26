@@ -195,9 +195,16 @@ export function BuyerProfileForm({ value, onChange, onClear }: BuyerProfileFormP
       >
         <div className="flex items-center gap-2">
           <Target className="w-3.5 h-3.5" />
-          <span className="font-medium">
-            {hasProfile ? "Deal Focus Active" : "Your Deal Focus"}
-          </span>
+          <div>
+            <span className="font-medium">
+              {hasProfile ? "Deal Focus Active" : "Your Deal Focus"}
+            </span>
+            {!hasProfile && (
+              <span className="block text-[10px] text-muted-foreground/70 font-normal leading-none mt-0.5">
+                Personalises fit scores for each search
+              </span>
+            )}
+          </div>
           {hasProfile && (
             <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-semibold">
               Active
