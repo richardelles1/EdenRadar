@@ -2718,7 +2718,7 @@ STRATEGIC ASSESSMENT
       `);
 
       return res.json({
-        designations: (rows as any[]).map((r) => ({
+        designations: rows.rows.map((r) => ({
           id: r.id,
           applicationNumber: r.application_number,
           sponsorName: r.sponsor_name,

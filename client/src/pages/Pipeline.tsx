@@ -1441,7 +1441,7 @@ export default function Pipeline() {
                 <Button
                   variant="outline" size="sm"
                   className="h-8 text-xs gap-1.5 border-border"
-                  onClick={handleBrief}
+                  onClick={() => handleBrief()}
                   disabled={typeof filterPipeline !== "number" || briefLoading !== null}
                   title={typeof filterPipeline !== "number" ? "Select a pipeline to generate a brief" : undefined}
                   data-testid="button-pipeline-brief"

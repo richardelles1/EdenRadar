@@ -1795,7 +1795,7 @@ async function migrateAssetStatusValues() {
 
   // ── API Keys tables ──────────────────────────────────────────────────────────
   try {
-    await mdb.execute(sql`
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS api_keys (
         id serial PRIMARY KEY,
         key_hash text NOT NULL UNIQUE,
@@ -1822,7 +1822,7 @@ async function migrateAssetStatusValues() {
         expires_at timestamptz
       )
     `);
-    await mdb.execute(sql`
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS api_usage_logs (
         id bigserial PRIMARY KEY,
         key_id integer,
@@ -1839,9 +1839,9 @@ async function migrateAssetStatusValues() {
         user_agent text
       )
     `);
-    await mdb.execute(sql`CREATE INDEX IF NOT EXISTS api_usage_logs_called_at_idx ON api_usage_logs(called_at)`);
-    await mdb.execute(sql`CREATE INDEX IF NOT EXISTS api_usage_logs_key_id_idx ON api_usage_logs(key_id)`);
-    await mdb.execute(sql`
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS api_usage_logs_called_at_idx ON api_usage_logs(called_at)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS api_usage_logs_key_id_idx ON api_usage_logs(key_id)`);
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS api_rate_limit_windows (
         key_id integer PRIMARY KEY,
         window_start timestamptz NOT NULL DEFAULT now(),
@@ -1849,7 +1849,7 @@ async function migrateAssetStatusValues() {
         updated_at timestamptz NOT NULL DEFAULT now()
       )
     `);
-    await mdb.execute(sql`
+    await db.execute(sql`
       CREATE TABLE IF NOT EXISTS api_key_audit_log (
         id serial PRIMARY KEY,
         action text NOT NULL,
@@ -1863,7 +1863,7 @@ async function migrateAssetStatusValues() {
         created_at timestamptz NOT NULL DEFAULT now()
       )
     `);
-    await mdb.execute(sql`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_type text NOT NULL DEFAULT 'personal'`);
+    await db.execute(sql`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS key_type text NOT NULL DEFAULT 'personal'`);
     log("[startup] api_keys tables ready", "startup");
   } catch (e) {
     log(`[startup] api_keys migration warning: ${e}`, "startup");

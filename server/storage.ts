@@ -3183,6 +3183,7 @@ export class DatabaseStorage implements IStorage {
     developmentStage: string; institution: string; summary: string;
     mechanismOfAction: string | null; innovationClaim: string | null;
     unmetNeed: string | null; comparableDrugs: string | null;
+    biology: string | null; categories: string | null;
   }>> {
     const result = await db.execute(sql`
       SELECT id, asset_name, target, modality, indication, development_stage, institution,
