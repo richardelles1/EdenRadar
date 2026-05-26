@@ -40,7 +40,10 @@ import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from ".
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, classifyIntent, type UserContext, type SessionFocusContext, type IntentClassification } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, summarizeSession, classifyIntent, type UserContext, type SessionFocusContext, type IntentClassification, type LiveSource } from "./lib/eden/rag";
+import { searchLens } from "./lib/sources/lens";
+import { searchHarvardDataverse } from "./lib/sources/harvard_dataverse";
+import { searchHarvardLibraryCloud } from "./lib/sources/harvard_librarycloud";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser, getAdminEmails } from "./lib/supabaseAuth";
 import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import {
@@ -7347,8 +7350,11 @@ Do not respond with anything else.`;
   app.post("/api/admin/eden/embed", async (req, res) => {
     if (embedRunning) return res.status(409).json({ error: "Embedding already running" });
     try {
-      const assets = await storage.getAssetsNeedingEmbedding();
-      if (assets.length === 0) return res.json({ message: "All relevant assets already embedded", total: 0 });
+      const mode = req.body?.mode === "biology" ? "biology" : "missing";
+      const assets = mode === "biology"
+        ? await storage.getAssetsNeedingBiologyReEmbed()
+        : await storage.getAssetsNeedingEmbedding();
+      if (assets.length === 0) return res.json({ message: mode === "biology" ? "No assets with biology/categories found to re-embed" : "All relevant assets already embedded", total: 0 });
 
       embedTotal = assets.length;
       embedProcessed = 0;
@@ -7485,6 +7491,9 @@ Do not respond with anything else.`;
       );
       const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 3);
 
+      // Derive engagement signals early so back-ref and definitional paths also benefit.
+      const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
+
       // ── LLM Intent Router + Embedding (parallel) ──────────────────────────
       // classifyIntent replaces the regex cascade. embedQuery runs speculatively
       // so it's ready when we reach the search path — cost is negligible if discarded.
@@ -7495,8 +7504,8 @@ Do not respond with anything else.`;
       const intentClass: IntentClassification = intentResult.status === "fulfilled"
         ? intentResult.value
         : isConversational(message.trim())
-          ? { intent: "conversational", filters: {}, backRefPosition: null }
-          : { intent: "search", filters: {}, backRefPosition: null };
+          ? { intent: "conversational", filters: {}, backRefPosition: null, liveSource: null }
+          : { intent: "search", filters: {}, backRefPosition: null, liveSource: null };
       const cachedEmbedding: number[] | null = precomputedEmbedding.status === "fulfilled"
         ? precomputedEmbedding.value
         : null;
@@ -7536,6 +7545,54 @@ Do not respond with anything else.`;
       const filtersActive = hasMeaningfulFilters(filters);
       const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
 
+      // ── Live external source fork ─────────────────────────────────────────
+      // Fires in parallel with TTO corpus search when classifyIntent returns a
+      // non-null liveSource. Results are sent as externalResults in the context
+      // SSE event — supplemental to, never replacing, TTO corpus results.
+      const liveSource: LiveSource | null = intentClass.liveSource;
+
+      const LIVE_SEARCH_TIMEOUT = 4000;
+      const liveResultsPromise: Promise<Array<{ id: string; title: string; url: string; source: LiveSource; status?: string; sponsor?: string; date?: string; metadata?: Record<string, unknown> }>> = liveSource
+        ? (async () => {
+            try {
+              const query = message.trim();
+              let signals;
+              if (liveSource === "clinicaltrials") {
+                signals = await Promise.race([
+                  searchClinicalTrials(query, 8),
+                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), LIVE_SEARCH_TIMEOUT)),
+                ]);
+              } else if (liveSource === "patents") {
+                signals = await Promise.race([
+                  searchLens(query, 8),
+                  new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), LIVE_SEARCH_TIMEOUT)),
+                ]);
+              } else {
+                const [dataverse, librarycloud] = await Promise.allSettled([
+                  Promise.race([searchHarvardDataverse(query, 5), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), LIVE_SEARCH_TIMEOUT))]),
+                  Promise.race([searchHarvardLibraryCloud(query, 5), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), LIVE_SEARCH_TIMEOUT))]),
+                ]);
+                signals = [
+                  ...(dataverse.status === "fulfilled" ? dataverse.value : []),
+                  ...(librarycloud.status === "fulfilled" ? librarycloud.value : []),
+                ].slice(0, 8);
+              }
+              return (signals ?? []).map((s) => ({
+                id: s.id,
+                title: s.title,
+                url: s.url,
+                source: liveSource,
+                status: (s.metadata as Record<string, unknown>)?.status as string | undefined,
+                sponsor: s.institution_or_sponsor || s.authors_or_owner || undefined,
+                date: s.date || undefined,
+                metadata: s.metadata as Record<string, unknown> | undefined,
+              }));
+            } catch {
+              return [];
+            }
+          })()
+        : Promise.resolve([]);
+
       // ── Routing decisions from LLM intent ────────────────────────────────
       const isBackRef = intentClass.intent === "back_ref" && priorIds.length > 0;
       const isComparative = intentClass.intent === "comparative";
@@ -7567,7 +7624,7 @@ Do not respond with anything else.`;
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext)) {
+        for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -7897,7 +7954,7 @@ Do not respond with anything else.`;
           fullResponse += bridgeIntro;
 
           const bridgePrompt = `You just explained a concept. Now briefly introduce these ${relatedAssets.length} portfolio asset${relatedAssets.length > 1 ? "s" : ""} that relate to it. Lead with "There ${relatedAssets.length === 1 ? "is" : "are"} ${relatedAssets.length} related asset${relatedAssets.length > 1 ? "s" : ""} in the portfolio:" then list each with one concise hook sentence (standard **Asset Name** (Institution) — hook format). Keep it under 80 words total.`;
-          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext)) {
+          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -7944,9 +8001,9 @@ Do not respond with anything else.`;
           : [];
         institutionAssets = instAssets;
         if (filtersActive) {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined);
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined, true);
         } else {
-          allSemantic = await storage.semanticSearch(queryEmbedding, 20);
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, undefined, undefined, undefined, undefined, undefined, 20, undefined, undefined, undefined, true);
         }
       } catch (embedErr) {
         console.warn("[eden/rag] embedding failed, falling back to keyword search:", (embedErr as Error)?.message ?? embedErr);
@@ -7989,8 +8046,7 @@ Do not respond with anything else.`;
         merged = kwFallback.map((a) => ({ ...a, similarity: 0.5 }));
       }
 
-      // Derive engagement signals and rerank with profile + adaptive + biology tiers.
-      const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
+      // Rerank with profile + adaptive + biology tiers using pre-derived engagement signals.
       const retrieved = rerankAssets(merged, resolvedCtx, engagementSignals, focusContext?.biology);
 
       const assetPayload = retrieved.map((a) => ({
@@ -8000,14 +8056,15 @@ Do not respond with anything else.`;
         similarity: Math.round(a.similarity * 100) / 100,
       }));
 
-      sendEvent("context", { sessionId: sid, assets: assetPayload });
+      const externalResults = await liveResultsPromise;
+      sendEvent("context", { sessionId: sid, assets: assetPayload, externalResults, activeSource: liveSource ?? "tto" });
       // For trending queries, append a note so EDEN frames results with market context.
       // We're transparent about the data source (recently indexed, high completeness) — not behavioral signals.
       const ragQuestion = filters.trending
         ? `${message.trim()}\n\n[CONTEXT FOR EDEN: These assets were indexed in the last 90 days and are well-documented. After presenting them, add 2–3 sentences of genuine market context from your industry intelligence — what deal dynamics, funding trends, or mechanism enthusiasm makes this area compelling right now. Do NOT fabricate market data; only reference what you know from your training.]`
         : message.trim();
       let fullResponse = "";
-      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext)) {
+      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
         fullResponse += token;
         sendEvent("token", { text: token });
       }
@@ -8061,6 +8118,27 @@ Do not respond with anything else.`;
     } catch (err) {
       console.error("[EDEN feedback]", err);
       return res.status(500).json({ error: "Failed to record feedback" });
+    }
+  });
+
+  app.post("/api/eden/bookmark", verifyAnyAuth, async (req, res) => {
+    const { source, externalId, title, url, snapshotJson } = req.body ?? {};
+    const validSources = ["clinicaltrials", "patents", "harvard"];
+    if (!source || !validSources.includes(source) || !externalId || !title || !url) {
+      return res.status(400).json({ error: "source, externalId, title, and url are required" });
+    }
+    try {
+      const userId = (req as any).userId ?? (req as any).user?.id ?? null;
+      if (!userId) return res.status(401).json({ error: "User ID required to bookmark" });
+      await db.execute(sql`
+        INSERT INTO user_bookmarks (user_id, source, external_id, title, url, snapshot_json)
+        VALUES (${userId}, ${source}, ${externalId}, ${title}, ${url}, ${snapshotJson ? JSON.stringify(snapshotJson) : null}::jsonb)
+        ON CONFLICT (user_id, source, external_id) DO NOTHING
+      `);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[EDEN bookmark]", err);
+      return res.status(500).json({ error: "Failed to save bookmark" });
     }
   });
 
@@ -8188,6 +8266,19 @@ Do not respond with anything else.`;
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(10);
       res.json({ institution, results: rows });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+    }
+  });
+
+  // Corpus size for the Eden welcome screen (non-admin users can't hit /api/admin/eden/stats)
+  app.get("/api/eden/corpus", verifyAnyAuth, async (_req, res) => {
+    try {
+      const rows = await db
+        .select({ total: sql<number>`count(*)::int` })
+        .from(ingestedAssets)
+        .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.embedding} IS NOT NULL`);
+      res.json({ total: rows[0]?.total ?? 0 });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
     }

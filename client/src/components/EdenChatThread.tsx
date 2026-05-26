@@ -1,7 +1,7 @@
-import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download } from "lucide-react";
+import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library } from "lucide-react";
 import { EdenAvatar, MarkdownContent, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
-import type { ChatAsset, ChatMessage } from "@/hooks/useEdenChat";
+import type { ChatAsset, ChatMessage, ExternalResult } from "@/hooks/useEdenChat";
 
 function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
   if (!assets.length || !content) return assets;
@@ -62,6 +62,128 @@ function exportCitationsAsCsv(assets: ChatAsset[]): void {
   anchor.download = "eden-assets.csv";
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+const SOURCE_META: Record<string, { label: string; Icon: React.ComponentType<{ className?: string }>; pill: string; border: string }> = {
+  clinicaltrials: { label: "ClinicalTrials.gov", Icon: FlaskConical, pill: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20", border: "border-l-blue-500/50" },
+  patents:        { label: "Lens.org Patents",   Icon: FileSearch,   pill: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20", border: "border-l-violet-500/50" },
+  harvard:        { label: "Harvard Library",    Icon: Library,      pill: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20", border: "border-l-amber-500/50" },
+};
+
+const STATUS_PILL: Record<string, string> = {
+  RECRUITING:             "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/25",
+  "NOT_YET_RECRUITING":   "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/25",
+  ACTIVE_NOT_RECRUITING:  "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/25",
+  COMPLETED:              "bg-muted text-muted-foreground border-border",
+  TERMINATED:             "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25",
+  WITHDRAWN:              "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25",
+};
+
+function ExternalResultCard({
+  result,
+  bookmarkedIds,
+  onBookmark,
+  compact = false,
+}: {
+  result: ExternalResult;
+  bookmarkedIds: Set<string>;
+  onBookmark: (r: ExternalResult) => void;
+  compact?: boolean;
+}) {
+  const meta = SOURCE_META[result.source] ?? SOURCE_META.clinicaltrials;
+  const { Icon } = meta;
+  const isBookmarked = bookmarkedIds.has(result.id);
+  const statusKey = (result.status ?? "").toUpperCase().replace(/\s+/g, "_");
+  const statusCls = STATUS_PILL[statusKey] ?? "bg-muted text-muted-foreground border-border";
+
+  return (
+    <div className={`rounded-xl border bg-card flex flex-col gap-1.5 hover:shadow-md transition-all border-l-[3px] ${meta.border} hover:border-current/30 ${compact ? "p-3" : "p-3.5"}`}>
+      {/* Source badge + title */}
+      <div className="flex items-start justify-between gap-2">
+        <p className={`font-bold text-foreground leading-snug line-clamp-2 flex-1 ${compact ? "text-[11px]" : "text-xs"}`}>{result.title}</p>
+        <span className={`font-medium border rounded px-1.5 py-0.5 shrink-0 flex items-center gap-1 ${meta.pill} ${compact ? "text-[9px]" : "text-[10px]"}`}>
+          <Icon className="h-2.5 w-2.5 shrink-0" />
+          {meta.label}
+        </span>
+      </div>
+
+      {/* Sponsor */}
+      {result.sponsor && (
+        <p className={`text-muted-foreground leading-none truncate ${compact ? "text-[10px]" : "text-[11px]"}`}>{result.sponsor}</p>
+      )}
+
+      {/* Status + date badges */}
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        {result.status && (
+          <span className={`font-medium border rounded px-1.5 py-0.5 ${statusCls} ${compact ? "text-[9px]" : "text-[10px]"}`}>
+            {result.status.replace(/_/g, " ").toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())}
+          </span>
+        )}
+        {result.date && (
+          <span className={`font-medium border rounded px-1.5 py-0.5 bg-muted text-muted-foreground border-border ${compact ? "text-[9px]" : "text-[10px]"}`}>
+            {result.date.slice(0, 7)}
+          </span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between mt-0.5 pt-1.5 border-t border-border/50">
+        <button
+          onClick={() => onBookmark(result)}
+          title={isBookmarked ? "Bookmarked" : "Bookmark this result"}
+          className={`flex items-center gap-1 transition-colors ${compact ? "text-[10px]" : "text-[11px]"} ${isBookmarked ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/60 hover:text-emerald-600 dark:hover:text-emerald-400"}`}
+        >
+          {isBookmarked
+            ? <BookmarkCheck className="h-3 w-3 shrink-0" />
+            : <Bookmark className="h-3 w-3 shrink-0" />}
+          {isBookmarked ? "Saved" : "Save"}
+        </button>
+        <a
+          href={result.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"}`}
+        >
+          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+          View source
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function ExternalResultsPanel({
+  results,
+  source,
+  bookmarkedIds,
+  onBookmark,
+  compact = false,
+}: {
+  results: ExternalResult[];
+  source: string;
+  bookmarkedIds: Set<string>;
+  onBookmark: (r: ExternalResult) => void;
+  compact?: boolean;
+}) {
+  if (!results.length) return null;
+  const meta = SOURCE_META[source] ?? SOURCE_META.clinicaltrials;
+  const { Icon } = meta;
+  return (
+    <div className="mt-3" data-testid="external-results-panel">
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Icon className="h-3 w-3 text-muted-foreground shrink-0" />
+        <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Live from {meta.label}</span>
+        <span className="text-[10px] text-muted-foreground/50">· {results.length} result{results.length !== 1 ? "s" : ""}</span>
+      </div>
+      <div className={compact ? "flex flex-col gap-1.5" : "grid grid-cols-1 sm:grid-cols-2 gap-2"}>
+        {results.map((r, i) => (
+          <div key={r.id} style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${i * 60}ms` }}>
+            <ExternalResultCard result={r} bookmarkedIds={bookmarkedIds} onBookmark={onBookmark} compact={compact} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
@@ -146,7 +268,9 @@ export type EdenChatThreadProps = {
   messageFeedback: Record<number, "up" | "down">;
   expandedCitations: Record<number, boolean>;
   savedIngestedIds: Set<number>;
+  bookmarkedIds: Set<string>;
   onFeedback: (i: number, sentiment: "up" | "down") => void;
+  onBookmark: (result: ExternalResult) => void;
   onSend: (q: string) => void;
   onToggleCitations: (i: number, open: boolean) => void;
   compact?: boolean;
@@ -159,7 +283,9 @@ export function EdenChatThread({
   messageFeedback,
   expandedCitations,
   savedIngestedIds,
+  bookmarkedIds,
   onFeedback,
+  onBookmark,
   onSend,
   onToggleCitations,
   compact = false,
@@ -172,7 +298,7 @@ export function EdenChatThread({
     <div className={compact ? "px-3 py-3 space-y-4" : "px-4 sm:px-6 py-5 space-y-5 max-w-3xl w-full mx-auto"}>
       {messages.map((msg, i) => {
         const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content
-          ? getFollowUpPills(msg.content, (msg.assets?.length ?? 0) > 0)
+          ? getFollowUpPills(msg.content, (msg.assets?.length ?? 0) > 0 || (msg.externalResults?.length ?? 0) > 0)
           : [];
 
         return (
@@ -256,7 +382,18 @@ export function EdenChatThread({
                 </div>
               )}
 
-              {/* Citations */}
+              {/* External live results — rendered before TTO citations when present */}
+              {msg.role === "assistant" && !msg.isStreaming && msg.externalResults && msg.externalResults.length > 0 && (
+                <ExternalResultsPanel
+                  results={msg.externalResults}
+                  source={msg.activeSource ?? "clinicaltrials"}
+                  bookmarkedIds={bookmarkedIds}
+                  onBookmark={onBookmark}
+                  compact={compact}
+                />
+              )}
+
+              {/* TTO corpus citations */}
               {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                 <div className="mt-2" data-testid={`chat-citations-${i}`}>
                   {!(expandedCitations[i] ?? msg.assets.length <= 3) ? (
@@ -266,7 +403,9 @@ export function EdenChatThread({
                       data-testid={`button-show-citations-${i}`}
                     >
                       <ChevronDown className="h-3 w-3 shrink-0" />
-                      {compact ? `${msg.assets.length} matched asset${msg.assets.length !== 1 ? "s" : ""}` : `Show ${msg.assets.length} matched asset${msg.assets.length !== 1 ? "s" : ""}`}
+                      {msg.externalResults?.length
+                        ? `Also in TTO corpus — ${msg.assets.length} asset${msg.assets.length !== 1 ? "s" : ""}`
+                        : compact ? `${msg.assets.length} matched asset${msg.assets.length !== 1 ? "s" : ""}` : `Show ${msg.assets.length} matched asset${msg.assets.length !== 1 ? "s" : ""}`}
                     </button>
                   ) : (
                     <>

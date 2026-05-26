@@ -20,9 +20,19 @@ export type AssetForEmbedding = {
   innovationClaim: string | null;
   unmetNeed: string | null;
   comparableDrugs: string | null;
+  biology?: string | null;
+  categories?: string | null;
 };
 
 function buildEmbedText(asset: AssetForEmbedding): string {
+  let categoryText: string | null = null;
+  if (asset.categories) {
+    try {
+      const parsed = JSON.parse(asset.categories);
+      categoryText = Array.isArray(parsed) && parsed.length ? `Categories: ${parsed.join(", ")}` : null;
+    } catch { categoryText = null; }
+  }
+
   return [
     asset.assetName,
     asset.target !== "unknown" ? `Target: ${asset.target}` : null,
@@ -30,6 +40,8 @@ function buildEmbedText(asset: AssetForEmbedding): string {
     asset.indication !== "unknown" ? `Indication: ${asset.indication}` : null,
     asset.developmentStage !== "unknown" ? `Stage: ${asset.developmentStage}` : null,
     `Institution: ${asset.institution}`,
+    asset.biology ? `Biology: ${asset.biology}` : null,
+    categoryText,
     asset.summary || null,
     asset.mechanismOfAction ? `Mechanism: ${asset.mechanismOfAction}` : null,
     asset.innovationClaim ? `Innovation claim: ${asset.innovationClaim}` : null,

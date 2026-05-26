@@ -392,10 +392,18 @@ export interface IStorage {
     developmentStage: string; institution: string; summary: string;
     mechanismOfAction: string | null; innovationClaim: string | null;
     unmetNeed: string | null; comparableDrugs: string | null;
+    biology: string | null; categories: string | null;
+  }>>;
+  getAssetsNeedingBiologyReEmbed(): Promise<Array<{
+    id: number; assetName: string; target: string; modality: string; indication: string;
+    developmentStage: string; institution: string; summary: string;
+    mechanismOfAction: string | null; innovationClaim: string | null;
+    unmetNeed: string | null; comparableDrugs: string | null;
+    biology: string | null; categories: string | null;
   }>>;
 
   semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
-  filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number, biology?: string, since?: Date, minCompleteness?: number): Promise<RetrievedAsset[]>;
+  filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number, biology?: string, since?: Date, minCompleteness?: number, ttoOnly?: boolean): Promise<RetrievedAsset[]>;
   scoutVectorSearch(queryEmbedding: number[], opts?: { modality?: string; stage?: string; indication?: string; institution?: string; biology?: string; biologies?: string[]; limit?: number; minSimilarity?: number; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
   keywordSearchIngestedAssets(query: string, limit?: number, opts?: { modality?: string; stage?: string; indication?: string; institution?: string; biology?: string; biologies?: string[]; since?: Date; before?: Date }): Promise<RetrievedAsset[]>;
   filteredCount(geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, biology?: string, since?: Date): Promise<number>;
@@ -3177,7 +3185,8 @@ export class DatabaseStorage implements IStorage {
   }>> {
     const result = await db.execute(sql`
       SELECT id, asset_name, target, modality, indication, development_stage, institution,
-             summary, mechanism_of_action, innovation_claim, unmet_need, comparable_drugs
+             summary, mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+             biology, categories
       FROM ingested_assets
       WHERE relevant = true AND embedding IS NULL
       ORDER BY completeness_score DESC NULLS LAST
@@ -3195,6 +3204,43 @@ export class DatabaseStorage implements IStorage {
       innovationClaim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
       unmetNeed: typeof r.unmet_need === "string" ? r.unmet_need : null,
       comparableDrugs: typeof r.comparable_drugs === "string" ? r.comparable_drugs : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
+      categories: typeof r.categories === "string" && r.categories ? r.categories : null,
+    }));
+  }
+
+  async getAssetsNeedingBiologyReEmbed(): Promise<Array<{
+    id: number; assetName: string; target: string; modality: string; indication: string;
+    developmentStage: string; institution: string; summary: string;
+    mechanismOfAction: string | null; innovationClaim: string | null;
+    unmetNeed: string | null; comparableDrugs: string | null;
+    biology: string | null; categories: string | null;
+  }>> {
+    const result = await db.execute(sql`
+      SELECT id, asset_name, target, modality, indication, development_stage, institution,
+             summary, mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+             biology, categories
+      FROM ingested_assets
+      WHERE relevant = true
+        AND embedding IS NOT NULL
+        AND (biology IS NOT NULL OR (categories IS NOT NULL AND categories != 'null'::jsonb))
+      ORDER BY completeness_score DESC NULLS LAST
+    `);
+    return (result.rows as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id),
+      assetName: String(r.asset_name ?? ""),
+      target: String(r.target ?? ""),
+      modality: String(r.modality ?? ""),
+      indication: String(r.indication ?? ""),
+      developmentStage: String(r.development_stage ?? ""),
+      institution: String(r.institution ?? ""),
+      summary: String(r.summary ?? ""),
+      mechanismOfAction: typeof r.mechanism_of_action === "string" ? r.mechanism_of_action : null,
+      innovationClaim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
+      unmetNeed: typeof r.unmet_need === "string" ? r.unmet_need : null,
+      comparableDrugs: typeof r.comparable_drugs === "string" ? r.comparable_drugs : null,
+      biology: typeof r.biology === "string" && r.biology ? r.biology : null,
+      categories: typeof r.categories === "string" && r.categories ? r.categories : null,
     }));
   }
 
@@ -3272,12 +3318,14 @@ export class DatabaseStorage implements IStorage {
     limit = 15,
     biology?: string,
     since?: Date,
-    minCompleteness?: number
+    minCompleteness?: number,
+    ttoOnly = true
   ): Promise<RetrievedAsset[]> {
     const vectorStr = `[${queryEmbedding.join(",")}]`;
     const filterConditions: ReturnType<typeof sql>[] = [
       sql`embedding IS NOT NULL AND relevant = true AND canonical_asset_id IS NULL`,
     ];
+    if (ttoOnly) filterConditions.push(sql`source_type = 'tech_transfer'`);
     if (geoRegex) filterConditions.push(sql`institution ~* ${geoRegex}`);
     if (modality) filterConditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
