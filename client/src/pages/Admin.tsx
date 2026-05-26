@@ -14204,7 +14204,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Graduation Queue</h2>
-                <p className="text-sm text-muted-foreground mt-1">Concepts requesting graduation from The Commons to an EdenLab research project. Approving creates a new research project. All inter-portal escalations are controlled here.</p>
+                <p className="text-sm text-muted-foreground mt-1">Concepts requesting graduation from EdenDiscovery to an EdenLab research project. Approving creates a new research project. All inter-portal escalations are controlled here.</p>
               </div>
               <ConceptEscalationQueue pw={pw} />
             </>

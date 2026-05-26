@@ -61,7 +61,7 @@ function DiscoveryNav() {
               <Lightbulb className="w-4 h-4 text-white" />
             </div>
             <span className="font-bold text-foreground text-base tracking-tight">
-              The <span className="text-amber-500">Commons</span>
+              Eden<span className="text-amber-500">Discovery</span>
             </span>
           </div>
         </Link>
@@ -84,7 +84,7 @@ function DiscoveryNav() {
           ) : (
             <Link href="/discovery/join">
               <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5" data-testid="link-join-discovery">
-                Join The Commons
+                Join EdenDiscovery
                 <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </Link>
@@ -228,7 +228,7 @@ export default function DiscoveryFeed() {
               <FlaskConical className="w-5 h-5 text-amber-500" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-foreground" data-testid="text-discovery-title">The Commons</h1>
+              <h1 className="text-2xl font-bold text-foreground" data-testid="text-discovery-title">EdenDiscovery</h1>
               <p className="text-sm text-muted-foreground">Pre-research ideas posted before the work is done — to attract collaborators, funding, and movement.</p>
             </div>
           </div>

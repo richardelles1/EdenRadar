@@ -154,7 +154,7 @@ export default function SubmitConcept() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/my-concepts"] });
-      toast({ title: "Concept posted!", description: "AI credibility scoring complete. Your idea is now live on The Commons." });
+      toast({ title: "Concept posted!", description: "AI credibility scoring complete. Your idea is now live on EdenDiscovery." });
       navigate(`/discovery/concept/${data.concept.id}`);
     },
     onError: (err: Error) => {
@@ -316,7 +316,7 @@ export default function SubmitConcept() {
 
           <div className="space-y-2">
             <Label>Mechanism / Biology Tags</Label>
-            <p className="text-xs text-muted-foreground">Tag the biological mechanisms at play. These power filtering on The Commons.</p>
+            <p className="text-xs text-muted-foreground">Tag the biological mechanisms at play. These power filtering on EdenDiscovery.</p>
             <div className="flex flex-wrap gap-1.5 mb-2">
               {mechanismTags.map((tag) => (
                 <span key={tag} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400">
@@ -442,7 +442,7 @@ export default function SubmitConcept() {
               {mutation.isPending || uploading ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{uploading ? "Uploading..." : "AI scoring..."}</>
               ) : (
-                <><Send className="w-4 h-4 mr-2" />Post to The Commons</>
+                <><Send className="w-4 h-4 mr-2" />Post to EdenDiscovery</>
               )}
             </Button>
           </div>
