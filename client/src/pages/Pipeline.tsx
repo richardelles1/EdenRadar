@@ -22,6 +22,7 @@ import {
   type DragEndEvent, type DragStartEvent,
 } from "@dnd-kit/core";
 import { SCOUT_CARD_TINTS, type ScoutCardCategory } from "@/lib/scoutCardTints";
+import { PipelineBriefDialog, type BriefData } from "@/components/PipelineBriefDialog";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1055,12 +1056,32 @@ export default function Pipeline() {
   const [newPipelineName, setNewPipelineName] = useState("");
   const [renamingPipelineId, setRenamingPipelineId] = useState<number | null>(null);
   const [renamePipelineName, setRenamePipelineName] = useState("");
+  const [briefModal, setBriefModal] = useState<BriefData | null>(null);
+  const [briefLoading, setBriefLoading] = useState<number | null>(null);
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
 
   // Viewers get a near-infinite drag distance so DnD is effectively disabled
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: isViewer ? 999999 : 8 } }));
+
+  const briefMutation = useMutation({
+    mutationFn: async (listId: number) => {
+      const res = await apiRequest("POST", `/api/pipeline-lists/${listId}/brief`, {});
+      return res.json() as Promise<BriefData>;
+    },
+    onSuccess: (result) => { setBriefModal(result); setBriefLoading(null); },
+    onError: (err: any) => {
+      toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
+      setBriefLoading(null);
+    },
+  });
+
+  const handleBrief = () => {
+    if (typeof filterPipeline !== "number") return;
+    setBriefLoading(filterPipeline);
+    briefMutation.mutate(filterPipeline);
+  };
 
   const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
@@ -1378,11 +1399,16 @@ export default function Pipeline() {
                 <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" onClick={handleExportJson} data-testid="button-pipeline-export-json">
                   <Download className="w-3 h-3" />JSON
                 </Button>
-                <Link href="/pipeline/brief/print">
-                  <Button variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-border" data-testid="button-pipeline-brief">
-                    <FileText className="w-3 h-3" />Brief
-                  </Button>
-                </Link>
+                <Button
+                  variant="outline" size="sm"
+                  className="h-8 text-xs gap-1.5 border-border"
+                  onClick={handleBrief}
+                  disabled={typeof filterPipeline !== "number" || briefLoading !== null}
+                  data-testid="button-pipeline-brief"
+                >
+                  {briefLoading !== null ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+                  Brief
+                </Button>
               </div>
             )}
           </div>
@@ -1722,6 +1748,12 @@ export default function Pipeline() {
         onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
         pipelines={pipelines}
         isViewer={isViewer}
+      />
+
+      <PipelineBriefDialog
+        data={briefModal}
+        open={!!briefModal}
+        onClose={() => setBriefModal(null)}
       />
     </div>
   );

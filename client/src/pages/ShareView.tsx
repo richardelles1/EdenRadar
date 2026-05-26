@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Lock, Clock, ExternalLink, AlertTriangle, FlaskConical, FileText } from "lucide-react";
@@ -33,10 +33,22 @@ type DossierPayload = {
   generated_at: string;
 };
 
+type BriefSignal = { type: string; title: string; year: string };
+type BriefAsset = {
+  id: number; name: string; target: string; modality: string; stage: string;
+  indication: string; status: string | null; institution: string;
+  insight: string | null; signals: BriefSignal[];
+};
 type BriefPayload = {
   brief: string;
   pipelineName: string;
   assetCount: number;
+  generatedAt?: string;
+  strategicThesis?: string;
+  bdStatusOverview?: string;
+  strategicAssessment?: string;
+  assets?: BriefAsset[];
+  standaloneSignals?: BriefSignal[];
 };
 
 type Section = { heading: string | null; lines: string[] };
@@ -194,14 +206,42 @@ function DossierView({ payload, expiresAt, createdAt }: { payload: DossierPayloa
   );
 }
 
+const SIGNAL_COLORS: Record<string, { bg: string; border: string; color: string }> = {
+  Patent: { bg: "rgba(217,119,6,0.1)", border: "rgba(217,119,6,0.3)", color: "#92400e" },
+  "Clinical Trial": { bg: "rgba(20,184,166,0.1)", border: "rgba(20,184,166,0.3)", color: "#0f766e" },
+  Paper: { bg: "rgba(124,58,237,0.1)", border: "rgba(124,58,237,0.3)", color: "#6d28d9" },
+  Preprint: { bg: "rgba(124,58,237,0.1)", border: "rgba(124,58,237,0.3)", color: "#6d28d9" },
+};
+
+function ShareSignalRow({ signal, mutedColor, cardBorder }: { signal: BriefSignal; mutedColor: string; cardBorder: string }) {
+  const c = SIGNAL_COLORS[signal.type];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem" }}>
+      <span style={{ padding: "0.1rem 0.4rem", borderRadius: "4px", background: c?.bg ?? "#f1f5f9", border: `1px solid ${c?.border ?? cardBorder}`, color: c?.color ?? mutedColor, fontSize: "0.65rem", fontWeight: 700, whiteSpace: "nowrap", flexShrink: 0 }}>
+        {signal.type}
+      </span>
+      <span style={{ color: mutedColor, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{signal.title}</span>
+      <span style={{ color: mutedColor, opacity: 0.6, flexShrink: 0 }}>{signal.year}</span>
+    </div>
+  );
+}
+
 function BriefView({ payload, expiresAt }: { payload: BriefPayload; expiresAt: string }) {
-  const sections = parseSections(payload.brief ?? "");
+  const isStructured = !!(payload.strategicThesis || payload.assets?.length);
+  const sections = isStructured ? [] : parseSections(payload.brief ?? "");
+
   const headingColor = "#1a6b44";
   const mutedColor = "#5a8a72";
   const cardBorder = "#d1e8db";
   const fg = "#1a2b24";
   const cardBg = "#ffffff";
   const bg = "#f8f9fa";
+
+  const sectionLabel: React.CSSProperties = {
+    fontSize: "0.65rem", textTransform: "uppercase",
+    letterSpacing: "0.1em", color: headingColor,
+    fontWeight: 700, marginBottom: "0.5rem",
+  };
 
   return (
     <div style={{ fontFamily: "'Open Sans', system-ui, sans-serif", background: bg, minHeight: "100vh", color: fg }}>
@@ -231,20 +271,96 @@ function BriefView({ payload, expiresAt }: { payload: BriefPayload; expiresAt: s
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
-          {sections.map((sec, i) => (
-            <div key={i} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1.1rem 1.4rem" }}>
-              {sec.heading && (
-                <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.1em", color: headingColor, fontWeight: 700, marginBottom: "0.5rem" }}>
-                  {sec.heading}
+          {isStructured ? (
+            <>
+              {payload.strategicThesis && (
+                <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1.1rem 1.4rem" }}>
+                  <div style={sectionLabel}>Strategic Thesis</div>
+                  <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.75, color: fg }}>{payload.strategicThesis}</p>
                 </div>
               )}
-              {sec.lines.map((line, j) => (
-                <p key={j} style={{ margin: 0, marginTop: j > 0 ? "0.5rem" : 0, fontSize: "0.875rem", lineHeight: 1.75, color: fg }}>
-                  {line}
-                </p>
-              ))}
-            </div>
-          ))}
+              {payload.bdStatusOverview && (
+                <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1.1rem 1.4rem" }}>
+                  <div style={sectionLabel}>BD Status</div>
+                  <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.75, color: fg }}>{payload.bdStatusOverview}</p>
+                </div>
+              )}
+              {payload.assets && payload.assets.length > 0 && (
+                <div>
+                  <div style={{ ...sectionLabel, marginBottom: "0.625rem" }}>Asset Roster</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+                    {payload.assets.map((asset, i) => {
+                      const meta = [
+                        asset.target !== "—" && `Target: ${asset.target}`,
+                        asset.modality !== "—" && asset.modality,
+                        asset.indication !== "—" && asset.indication,
+                        asset.institution !== "—" && asset.institution,
+                      ].filter(Boolean).join(" · ");
+                      return (
+                        <div key={asset.id} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1rem 1.25rem" }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                            <span style={{ fontSize: "0.7rem", fontWeight: 700, color: mutedColor, minWidth: "1.25rem", textAlign: "right", marginTop: "0.15rem", flexShrink: 0 }}>{i + 1}.</span>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.4rem", marginBottom: "0.3rem" }}>
+                                <span style={{ fontWeight: 700, fontSize: "0.9rem", color: fg }}>{asset.name}</span>
+                                {asset.stage && asset.stage !== "—" && (
+                                  <span style={{ fontSize: "0.65rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: `${headingColor}18`, border: `1px solid ${headingColor}30`, color: headingColor, fontWeight: 600 }}>{asset.stage}</span>
+                                )}
+                                {asset.status && (
+                                  <span style={{ fontSize: "0.65rem", padding: "0.15rem 0.5rem", borderRadius: "999px", background: "#f1f5f9", border: `1px solid ${cardBorder}`, color: mutedColor, fontWeight: 600 }}>{asset.status.replace(/_/g, " ")}</span>
+                                )}
+                              </div>
+                              {meta && <p style={{ fontSize: "0.78rem", color: mutedColor, margin: "0 0 0.5rem" }}>{meta}</p>}
+                              {asset.insight && (
+                                <p style={{ fontSize: "0.8rem", color: fg, lineHeight: 1.65, margin: "0 0 0.5rem", paddingLeft: "0.65rem", borderLeft: `2px solid ${headingColor}50`, fontStyle: "italic" }}>{asset.insight}</p>
+                              )}
+                              {asset.signals.length > 0 && (
+                                <div style={{ borderTop: `1px solid ${cardBorder}60`, paddingTop: "0.5rem", marginTop: "0.25rem" }}>
+                                  <p style={{ fontSize: "0.65rem", fontWeight: 600, color: mutedColor, margin: "0 0 0.35rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>Supporting Evidence</p>
+                                  <div style={{ display: "flex", flexDirection: "column", gap: "0.3rem" }}>
+                                    {asset.signals.map((s, j) => <ShareSignalRow key={j} signal={s} mutedColor={mutedColor} cardBorder={cardBorder} />)}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {payload.standaloneSignals && payload.standaloneSignals.length > 0 && (
+                <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1.1rem 1.4rem" }}>
+                  <div style={sectionLabel}>Unlinked Signals</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", marginTop: "0.25rem" }}>
+                    {payload.standaloneSignals.map((s, i) => <ShareSignalRow key={i} signal={s} mutedColor={mutedColor} cardBorder={cardBorder} />)}
+                  </div>
+                </div>
+              )}
+              {payload.strategicAssessment && (
+                <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1.1rem 1.4rem" }}>
+                  <div style={sectionLabel}>Strategic Assessment</div>
+                  <p style={{ margin: 0, fontSize: "0.875rem", lineHeight: 1.75, color: fg }}>{payload.strategicAssessment}</p>
+                </div>
+              )}
+            </>
+          ) : (
+            sections.map((sec, i) => (
+              <div key={i} style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "8px", padding: "1.1rem 1.4rem" }}>
+                {sec.heading && (
+                  <div style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.1em", color: headingColor, fontWeight: 700, marginBottom: "0.5rem" }}>
+                    {sec.heading}
+                  </div>
+                )}
+                {sec.lines.map((line, j) => (
+                  <p key={j} style={{ margin: 0, marginTop: j > 0 ? "0.5rem" : 0, fontSize: "0.875rem", lineHeight: 1.75, color: fg }}>
+                    {line}
+                  </p>
+                ))}
+              </div>
+            ))
+          )}
         </div>
 
         <SignUpCta />
