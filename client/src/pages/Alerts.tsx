@@ -45,7 +45,10 @@ import {
   ToggleLeft,
   ToggleRight,
   Zap,
+  Bookmark,
+  Search,
 } from "lucide-react";
+import type { ScoutSavedSearch } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import type { UserAlert } from "@shared/schema";
@@ -1175,6 +1178,106 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
   );
 }
 
+function SavedSearchesSection() {
+  const { toast } = useToast();
+
+  const { data: savedSearches = [], isLoading } = useQuery<ScoutSavedSearch[]>({
+    queryKey: ["/api/scout/saved-searches"],
+    staleTime: 60 * 1000,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => apiRequest("DELETE", `/api/scout/saved-searches/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/scout/saved-searches"] });
+      toast({ title: "Saved search removed" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const toggleEmailMutation = useMutation({
+    mutationFn: ({ id, notifyByEmail }: { id: number; notifyByEmail: boolean }) =>
+      apiRequest("PATCH", `/api/scout/saved-searches/${id}`, { notifyByEmail }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/scout/saved-searches"] }),
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading) return null;
+  if (savedSearches.length === 0) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <Bookmark className="w-3.5 h-3.5 text-muted-foreground" />
+        <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Saved Searches</h2>
+      </div>
+      <div className="space-y-2">
+        {savedSearches.map((s) => {
+          const filters = (s.filters ?? {}) as Record<string, unknown>;
+          const chips: string[] = [];
+          if (s.query) chips.push(`"${s.query}"`);
+          for (const m of ((filters.modalities ?? []) as string[])) chips.push(m);
+          for (const st of ((filters.stages ?? []) as string[])) chips.push(st);
+
+          const params = new URLSearchParams();
+          if (s.query) params.set("q", s.query);
+          if (((filters.modalities ?? []) as string[]).length > 0)
+            params.set("modalities", ((filters.modalities ?? []) as string[]).join(","));
+          if (((filters.stages ?? []) as string[]).length > 0)
+            params.set("stages", ((filters.stages ?? []) as string[]).join(","));
+
+          return (
+            <div
+              key={s.id}
+              className="flex items-start gap-3 rounded-md border border-border bg-card px-3 py-2.5 group hover:border-primary/30 transition-colors"
+              data-testid={`saved-search-${s.id}`}
+            >
+              <Search className="w-3.5 h-3.5 shrink-0 mt-0.5 text-muted-foreground" />
+              <div className="flex-1 min-w-0 space-y-1.5">
+                <p className="text-xs font-semibold text-foreground truncate">{s.name}</p>
+                {chips.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {chips.slice(0, 4).map((c) => (
+                      <span key={c} className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground border border-border">{c}</span>
+                    ))}
+                    {chips.length > 4 && (
+                      <span className="text-[10px] text-muted-foreground">+{chips.length - 4} more</span>
+                    )}
+                  </div>
+                )}
+                <div className="flex items-center gap-3 pt-0.5">
+                  <a
+                    href={`/scout?${params.toString()}`}
+                    className="text-[11px] text-primary hover:underline flex items-center gap-1"
+                  >
+                    <ArrowRight className="w-3 h-3" />
+                    Run search
+                  </a>
+                  <button
+                    onClick={() => toggleEmailMutation.mutate({ id: s.id, notifyByEmail: !s.notifyByEmail })}
+                    className={`text-[11px] flex items-center gap-1 transition-colors ${s.notifyByEmail ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground hover:text-foreground"}`}
+                    title={s.notifyByEmail ? "Email alerts on" : "Email alerts off"}
+                  >
+                    <Bell className="w-3 h-3" />
+                    {s.notifyByEmail ? "Alerting" : "Alert me"}
+                  </button>
+                </div>
+              </div>
+              <button
+                onClick={() => deleteMutation.mutate(s.id)}
+                className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"
+                data-testid={`delete-saved-search-${s.id}`}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function Alerts() {
   const [sheetOpen, setSheetOpen] = useState(false);
   // sinceParam: initialised from DB lastViewedAlertsAt so badge and page counts agree.
@@ -1337,6 +1440,8 @@ export default function Alerts() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
+              <SavedSearchesSection />
+
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} matchCounts={alertMatchCounts} profile={profile} />
 
               <div className="border-t border-border/40" />

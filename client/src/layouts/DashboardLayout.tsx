@@ -225,6 +225,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         onClose={() => setOnboardingOpen(false)}
         initialCompanyName={org?.name}
         onSave={handleOnboardingSave}
+        navigate={navigate}
       />
     </div>
   );

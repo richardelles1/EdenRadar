@@ -10,7 +10,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter, type RetrievedAsset, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, scoutSavedSearches, insertScoutSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -1435,6 +1435,73 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[scout/recently-added] Error:", err);
       return res.status(500).json({ assets: [], error: err.message });
+    }
+  });
+
+  // ── Scout Saved Searches ────────────────────────────────────────────────────
+
+  app.get("/api/scout/saved-searches", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const rows = await db.select().from(scoutSavedSearches)
+        .where(eq(scoutSavedSearches.userId, userId))
+        .orderBy(desc(scoutSavedSearches.createdAt));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/scout/saved-searches", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const data = insertScoutSavedSearchSchema.parse({ ...req.body, userId });
+      // Enforce per-user cap of 50.
+      const [{ cnt }] = await db.select({ cnt: drizzleCount() }).from(scoutSavedSearches)
+        .where(eq(scoutSavedSearches.userId, userId));
+      if (Number(cnt) >= 50) {
+        return res.status(400).json({ error: "Saved search limit reached (50). Delete some before adding more." });
+      }
+      try {
+        const [row] = await db.insert(scoutSavedSearches).values(data).returning();
+        res.status(201).json(row);
+      } catch (dbErr: any) {
+        if (dbErr.code === "23505") {
+          return res.status(409).json({ error: "A saved search with that name already exists." });
+        }
+        throw dbErr;
+      }
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/scout/saved-searches/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = Number(req.params.id);
+      const { notifyByEmail } = z.object({ notifyByEmail: z.boolean() }).parse(req.body);
+      const [row] = await db.update(scoutSavedSearches)
+        .set({ notifyByEmail })
+        .where(and(eq(scoutSavedSearches.id, id), eq(scoutSavedSearches.userId, userId)))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/scout/saved-searches/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = Number(req.params.id);
+      await db.delete(scoutSavedSearches)
+        .where(and(eq(scoutSavedSearches.id, id), eq(scoutSavedSearches.userId, userId)));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -3252,41 +3319,8 @@ STRATEGIC ASSESSMENT
     }
   });
 
-  app.post("/api/pipeline/brief", async (req, res) => {
-    try {
-      const { stage } = z.object({ stage: z.string().min(1) }).parse(req.body);
-      const result = await db.execute(sql`
-        SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage, sa.source_name, sa.source_journal
-        FROM saved_assets sa
-        WHERE LOWER(TRIM(COALESCE(sa.development_stage, 'unknown'))) = ${stage.toLowerCase().trim()}
-        ORDER BY sa.id DESC
-        LIMIT 50
-      `);
-      const assets = result.rows as Record<string, unknown>[];
-      if (assets.length === 0) {
-        return res.json({ brief: "No assets in this pipeline stage.", assetCount: 0 });
-      }
-      const assetList = assets.map((a, i) =>
-        `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Disease: ${String(a.disease_indication ?? "—")} | Source: ${String(a.source_name || a.source_journal || "—")}`
-      ).join("\n");
-      const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
-      const prompt = `You are a biotech intelligence analyst. Below is a list of drug development assets at the ${stageLabel} stage from a curated pipeline tracker.\n\nGenerate a concise pipeline brief with the following sections:\nAsset Overview: Count and general description\nTherapeutic Targets & Mechanisms: Common targets and mechanisms of action\nModality Mix: Types of modalities represented (small molecules, biologics, etc.)\nDisease Focus: Key indications and disease areas\nStrategic Summary: 2-3 sentences on the strategic significance of this pipeline stage\n\nAssets:\n${assetList}\n\nRespond with well-formatted plain text. Do not use markdown symbols or headers with #. Use clear labeled sections separated by blank lines.`;
-      const { default: OpenAI } = await import("openai");
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 700,
-        temperature: 0.4,
-      });
-      const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
-      logAppEvent("pipeline_brief_generated", { stage, assetCount: assets.length });
-      return res.json({ brief, assetCount: assets.length });
-    } catch (err: any) {
-      console.error("[pipeline/brief] Error:", err);
-      return res.status(500).json({ error: friendlyOpenAIError(err) });
-    }
-  });
+  // /api/pipeline/brief removed — endpoint had no auth and no user_id filter,
+  // exposing all users' saved assets to any unauthenticated caller.
 
   app.get("/api/pipelines", async (req, res) => {
     try {
@@ -9299,8 +9333,27 @@ Do not respond with anything else.`;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    // Allowlist prevents mass-assignment of server-controlled fields
+    // (adminStatus, researcherId, published, archived, adminNote).
+    const discoveryPatchSchema = z.object({
+      title: z.string().min(1).max(200).optional(),
+      summary: z.string().optional(),
+      researchArea: z.string().optional(),
+      technologyType: z.string().optional(),
+      institution: z.string().optional(),
+      lab: z.string().optional().nullable(),
+      developmentStage: z.string().optional(),
+      ipStatus: z.string().optional(),
+      seeking: z.string().optional(),
+      contactEmail: z.string().email().optional(),
+      publicationLink: z.string().optional().nullable(),
+      patentLink: z.string().optional().nullable(),
+      attachmentUrls: z.array(z.string()).optional(),
+    });
+    const parsed = discoveryPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const card = await storage.updateDiscoveryCard(id, researcherId, req.body);
+      const card = await storage.updateDiscoveryCard(id, researcherId, parsed.data);
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
     } catch (err: any) {
@@ -9769,8 +9822,21 @@ If a field cannot be determined, use "N/A".`
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    // Allowlist prevents mass-assignment of userId or other server-controlled fields.
+    const grantPatchSchema = z.object({
+      title: z.string().min(1).optional(),
+      url: z.string().optional().nullable(),
+      agencyName: z.string().optional(),
+      deadline: z.string().optional().nullable(),
+      amount: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+      status: z.string().optional(),
+      projectId: z.number().optional().nullable(),
+    });
+    const parsed = grantPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const grant = await storage.updateSavedGrant(id, researcherId, req.body);
+      const grant = await storage.updateSavedGrant(id, researcherId, parsed.data);
       res.json({ grant });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10257,7 +10323,13 @@ If a field cannot be determined, use "N/A".`
       return res.status(400).json({ error: "query is required" });
     }
     const trimmed = query.trim().replace(/;+$/, "");
-    if (!/^SELECT\b/i.test(trimmed)) {
+    // Strip comments before checking — prevents `/**/SELECT` bypass.
+    const stripped = trimmed.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ").trim();
+    if (!/^SELECT\b/i.test(stripped)) {
+      return res.status(400).json({ error: "Only SELECT statements are allowed" });
+    }
+    // Block DML inside CTEs (e.g. WITH x AS (DELETE ...) SELECT 1).
+    if (/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE)\b/i.test(stripped)) {
       return res.status(400).json({ error: "Only SELECT statements are allowed" });
     }
     try {
@@ -11419,6 +11491,11 @@ If a field cannot be determined, use "N/A".`
         size: z.number().int().min(0).max(10 * 1024 * 1024),
       })).max(5).default([]);
       const attachedFiles = attachedFileSchema.parse(req.body.attachedFiles ?? []);
+      const contentHash = crypto
+        .createHash("sha256")
+        .update(JSON.stringify({ ...parsed, ts: Date.now() }))
+        .digest("hex")
+        .substring(0, 16);
       const [concept] = await db
         .insert(conceptCards)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11428,6 +11505,8 @@ If a field cannot be determined, use "N/A".`
           credibilityScore: aiScore,
           credibilityRationale: aiRationale,
           attachedFiles,
+          contentHash,
+          publishedAt: new Date(),
         })
         .returning();
 
@@ -11754,6 +11833,158 @@ If a field cannot be determined, use "N/A".`
       const landscapeResp = { assets, literature };
       cacheSet(landscapeCacheKey, landscapeResp, 2 * 60 * 60 * 1000);
       res.json(landscapeResp);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/discovery/concepts/:id — edit own concept
+  app.patch("/api/discovery/concepts/:id", verifyConceptAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = req.headers["x-concept-user-id"] as string;
+      const [existing] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Forbidden" });
+
+      const allowed = ["title", "oneLiner", "hypothesis", "problem", "proposedApproach",
+        "requiredExpertise", "seeking", "therapeuticArea", "modality", "stage",
+        "openQuestions", "mechanismTags"] as const;
+      const updates: Record<string, any> = {};
+      for (const key of allowed) {
+        if (key in req.body) updates[key] = req.body[key];
+      }
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields" });
+
+      const hash = crypto
+        .createHash("sha256")
+        .update(JSON.stringify({ ...existing, ...updates }))
+        .digest("hex")
+        .substring(0, 16);
+      updates.contentHash = hash;
+
+      const [updated] = await db.update(conceptCards).set(updates).where(eq(conceptCards.id, id)).returning();
+      res.json({ concept: stripPrivateFields(updated) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/discovery/concepts/:id/escalate — request graduation to research project
+  app.post("/api/discovery/concepts/:id/escalate", verifyConceptAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = req.headers["x-concept-user-id"] as string;
+      const [existing] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Forbidden" });
+      if (existing.escalationStatus === "pending") return res.status(409).json({ error: "Escalation already pending" });
+      if (existing.escalationStatus === "approved") return res.status(409).json({ error: "Already graduated to research project" });
+
+      const [updated] = await db
+        .update(conceptCards)
+        .set({ escalationStatus: "pending", escalationRequestedAt: new Date() })
+        .where(eq(conceptCards.id, id))
+        .returning();
+      res.json({ concept: stripPrivateFields(updated) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/concept-escalations — admin escalation queue
+  app.get("/api/admin/concept-escalations", requireAdmin, async (req, res) => {
+    try {
+      const concepts = await db
+        .select()
+        .from(conceptCards)
+        .where(eq(conceptCards.escalationStatus, "pending"))
+        .orderBy(conceptCards.escalationRequestedAt);
+      res.json({ concepts });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/concept-escalations/:id/approve — approve and create research project
+  app.post("/api/admin/concept-escalations/:id/approve", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Not found" });
+      if (concept.escalationStatus !== "pending") return res.status(409).json({ error: "Not pending" });
+
+      const [project] = await db
+        .insert(researchProjects)
+        .values({
+          title: concept.title,
+          researchDomain: concept.therapeuticArea,
+          description: `${concept.oneLiner}\n\n${concept.problem}`,
+          status: "planning",
+        })
+        .returning();
+
+      await db
+        .update(conceptCards)
+        .set({ escalationStatus: "approved", escalationReviewedAt: new Date(), projectId: project.id })
+        .where(eq(conceptCards.id, id));
+
+      res.json({ projectId: project.id });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/concept-escalations/:id/reject — reject with optional note
+  app.post("/api/admin/concept-escalations/:id/reject", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const { note } = req.body;
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Not found" });
+
+      await db
+        .update(conceptCards)
+        .set({ escalationStatus: "rejected", escalationReviewedAt: new Date(), escalationNote: note ?? null })
+        .where(eq(conceptCards.id, id));
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/discovery/research-needs — public list of research needs posted by industry
+  app.get("/api/discovery/research-needs", async (_req, res) => {
+    try {
+      const needs = await db
+        .select()
+        .from(researchNeeds)
+        .where(eq(researchNeeds.status, "active"))
+        .orderBy(desc(researchNeeds.createdAt))
+        .limit(50);
+      res.json({ needs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/discovery/research-needs — industry posts a research need (admin-mediated)
+  app.post("/api/discovery/research-needs", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      const { companyName, title, description, therapeuticArea, mechanismTags, stagePreference, whatTheyOffer } = req.body;
+      if (!companyName || !title || !description) return res.status(400).json({ error: "companyName, title and description required" });
+      const [need] = await db
+        .insert(researchNeeds)
+        .values({ industryUserId: userId, companyName, title, description, therapeuticArea, mechanismTags, stagePreference, whatTheyOffer, status: "active" })
+        .returning();
+      res.json({ need });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search, TrendingUp, Building2, FlaskConical, Clock, ArrowRight, Flame, Bell } from "lucide-react";
+import { Search, TrendingUp, Building2, FlaskConical, Clock, ArrowRight, Flame, Bell, Layers, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getIndustryProfile } from "@/hooks/use-industry";
@@ -46,6 +46,102 @@ interface AlertDeltaResponse {
   };
   windowHours: number;
   since?: string;
+}
+
+function GettingStarted({ navigate, firstArea }: { navigate: (path: string) => void; firstArea?: string }) {
+  const searchExample = firstArea ? `"${firstArea.toLowerCase()}"` : '"KRAS inhibitor"';
+  const STEPS = [
+    {
+      icon: Search,
+      color: "emerald",
+      title: "Run your first search",
+      desc: `Try ${searchExample} or "GLP-1 obesity". Results are scored 1–10 for your deal thesis.`,
+      cta: "Open Scout",
+      href: "/scout",
+    },
+    {
+      icon: Layers,
+      color: "blue",
+      title: "Create a pipeline",
+      desc: "Save assets you want to track and organise them into stages for your BD workflow.",
+      cta: "Go to Pipeline",
+      href: "/pipeline",
+    },
+    {
+      icon: Bell,
+      color: "violet",
+      title: "Set your first alert",
+      desc: "Get notified when new assets matching your therapeutic focus are indexed.",
+      cta: "Set an alert",
+      href: "/alerts",
+    },
+  ] as const;
+
+  const colorMap = {
+    emerald: {
+      bg: "bg-emerald-500/10 dark:bg-emerald-500/15",
+      icon: "text-emerald-600 dark:text-emerald-400",
+      cta: "bg-emerald-600 hover:bg-emerald-700 text-white",
+      ring: "ring-emerald-500/20",
+      border: "border-emerald-200 dark:border-emerald-800/40",
+    },
+    blue: {
+      bg: "bg-blue-500/10 dark:bg-blue-500/15",
+      icon: "text-blue-600 dark:text-blue-400",
+      cta: "bg-blue-600 hover:bg-blue-700 text-white",
+      ring: "ring-blue-500/20",
+      border: "border-blue-200 dark:border-blue-800/40",
+    },
+    violet: {
+      bg: "bg-violet-500/10 dark:bg-violet-500/15",
+      icon: "text-violet-600 dark:text-violet-400",
+      cta: "bg-violet-600 hover:bg-violet-700 text-white",
+      ring: "ring-violet-500/20",
+      border: "border-violet-200 dark:border-violet-800/40",
+    },
+  };
+
+  return (
+    <div className="space-y-3" data-testid="getting-started">
+      <div className="flex items-center gap-2">
+        <Rocket className="w-4 h-4 text-primary" />
+        <h2 className="text-sm font-semibold text-foreground">Get started</h2>
+        <span className="text-[10px] text-muted-foreground">— three steps to your first deal signal</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {STEPS.map(({ icon: Icon, color, title, desc, cta, href }, i) => {
+          const c = colorMap[color];
+          return (
+            <div
+              key={href}
+              className={`relative rounded-xl border ${c.border} bg-card p-5 flex flex-col gap-4 overflow-hidden`}
+            >
+              {/* Step number watermark */}
+              <span
+                className="absolute top-3 right-4 text-5xl font-black tabular-nums leading-none select-none"
+                style={{ color: "hsl(var(--muted-foreground) / 0.07)" }}
+              >
+                {i + 1}
+              </span>
+              <div className={`w-10 h-10 rounded-xl ${c.bg} flex items-center justify-center`}>
+                <Icon className={`w-5 h-5 ${c.icon}`} />
+              </div>
+              <div className="space-y-1 flex-1">
+                <p className="text-sm font-semibold text-foreground">{title}</p>
+                <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+              </div>
+              <button
+                onClick={() => navigate(href)}
+                className={`self-start inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors ${c.cta}`}
+              >
+                {cta} <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -285,7 +381,7 @@ export default function Dashboard() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search TTO assets across 138+ institutions..."
+            placeholder="Search TTO assets across 350+ institutions..."
             className="w-full h-11 pl-10 pr-24 rounded-xl border border-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/60 transition-all"
             data-testid="dashboard-search-input"
           />
@@ -313,6 +409,10 @@ export default function Dashboard() {
             <StatCard label="Top Modality" value={topModality?.modality ?? "—"} sub={topModality ? `${topModality.count.toLocaleString()} assets` : ""} />
           </div>
         ) : null}
+
+        {recentSearches.length === 0 && !isLoading && (
+          <GettingStarted navigate={navigate} firstArea={profile.therapeuticAreas?.[0]} />
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {stats && stats.byModality.length > 0 && (

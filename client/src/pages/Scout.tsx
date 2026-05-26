@@ -21,7 +21,10 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles } from "lucide-react";
+import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles, Info, Bookmark, BookmarkCheck } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -30,6 +33,8 @@ import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
 import { PatentCard } from "@/components/PatentCard";
 import { ClinicalTrialCard } from "@/components/ClinicalTrialCard";
+import { ScoutTour, useScoutTour } from "@/components/ScoutTour";
+import { getIndustryProfile } from "@/hooks/use-industry";
 
 type SearchResponse = {
   assets: ScoredAsset[];
@@ -194,9 +199,32 @@ const BUYER_PROFILE_KEY = "edenradar:buyer-profile";
 function loadBuyerProfile(): BuyerProfile {
   try {
     const stored = localStorage.getItem(BUYER_PROFILE_KEY);
-    if (stored) return { ...DEFAULT_BUYER_PROFILE, ...JSON.parse(stored) };
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<BuyerProfile>;
+      // Seed from onboarding profile if buyer profile fields were never set.
+      if (!parsed.therapeutic_areas?.length || !parsed.modalities?.length) {
+        const industry = getIndustryProfile();
+        if (!parsed.therapeutic_areas?.length && industry.therapeuticAreas.length > 0) {
+          parsed.therapeutic_areas = industry.therapeuticAreas;
+        }
+        if (!parsed.modalities?.length && industry.modalities.length > 0) {
+          parsed.modalities = industry.modalities;
+        }
+        if (!parsed.preferred_stages?.length && industry.dealStages.length > 0) {
+          parsed.preferred_stages = industry.dealStages;
+        }
+      }
+      return { ...DEFAULT_BUYER_PROFILE, ...parsed };
+    }
   } catch {}
-  return DEFAULT_BUYER_PROFILE;
+  // No stored buyer profile — bootstrap entirely from onboarding data.
+  const industry = getIndustryProfile();
+  return {
+    ...DEFAULT_BUYER_PROFILE,
+    therapeutic_areas: industry.therapeuticAreas,
+    modalities: industry.modalities,
+    preferred_stages: industry.dealStages,
+  };
 }
 
 function SourcesDropdown({
@@ -339,6 +367,7 @@ export default function Scout() {
   const patentAbortRef = useRef<AbortController | null>(null);
   const trialAbortRef = useRef<AbortController | null>(null);
   const researchAbortRef = useRef<AbortController | null>(null);
+  const { show: showTour, close: closeTour, retrigger: retriggerTour } = useScoutTour();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [patentFiltersOpen, setPatentFiltersOpen] = useState(false);
   const [trialFiltersOpen, setTrialFiltersOpen] = useState(false);
@@ -839,6 +868,35 @@ export default function Scout() {
   const handleCancelTrials = () => { trialAbortRef.current?.abort(); };
   const handleCancelResearch = () => { researchAbortRef.current?.abort(); };
 
+  // ── Save Search ────────────────────────────────────────────────────────────
+  const [saveSearchOpen, setSaveSearchOpen] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState("");
+  const [saveSearchSaved, setSaveSearchSaved] = useState(false);
+
+  const saveSearchMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/scout/saved-searches", {
+        name: saveSearchName.trim(),
+        query: currentQuery || null,
+        filters: {
+          modalities: modalityFilters.length > 0 ? modalityFilters : undefined,
+          stages: stageFilters.length > 0 ? stageFilters : undefined,
+          biologies: biologiesFilter.length > 0 ? biologiesFilter : undefined,
+          institutions: institutionFilter !== "all" ? [institutionFilter] : undefined,
+          sinceFilter: sinceFilter !== "any" ? sinceFilter : undefined,
+        },
+      }),
+    onSuccess: () => {
+      setSaveSearchOpen(false);
+      setSaveSearchName("");
+      setSaveSearchSaved(true);
+      toast({ title: "Search saved", description: "Find it in Alerts → Saved Searches." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not save", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleGenerateReport = () => {
     const query = currentQuery || inputQuery;
     if (!query.trim()) {
@@ -1065,6 +1123,7 @@ export default function Scout() {
   ].filter(Boolean).length;
 
   return (
+    <>
     <div className="min-h-full flex flex-col bg-gradient-to-b from-background via-background to-muted/20">
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
@@ -1099,15 +1158,24 @@ export default function Scout() {
                 </div>
 
                 <div className="flex items-center gap-2 flex-wrap">
-                  <div
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
-                    style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}
-                  >
-                    <span className="font-black tabular-nums text-foreground">
-                      {scoutStats ? scoutStats.relevantAssets.toLocaleString() : "33,000+"}
-                    </span>
-                    <span className="text-muted-foreground">TTO assets</span>
-                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-default"
+                          style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}
+                        >
+                          <span className="font-black tabular-nums text-foreground">
+                            {scoutStats ? scoutStats.relevantAssets.toLocaleString() : "33,000+"}
+                          </span>
+                          <span className="text-muted-foreground">TTO assets</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[240px] text-xs">
+                        Technology Transfer Office assets — academic and institutional IP available for licensing or partnership
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
 
                   <TooltipProvider>
                     <Tooltip>
@@ -1136,21 +1204,46 @@ export default function Scout() {
                     </Tooltip>
                   </TooltipProvider>
 
-                  <div
-                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
-                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
-                  >
-                    <span className="text-muted-foreground">Patents · Trials · 35+ sources</span>
-                  </div>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-default"
+                          style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
+                        >
+                          <span className="text-muted-foreground">Patents · Trials · 35+ sources</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[260px] text-xs">
+                        Data compiled from TTO portals, patent databases, ClinicalTrials.gov, PubMed, bioRxiv, medRxiv, and more
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
 
-                  <button
-                    onClick={() => setLocation("/settings")}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-                    data-testid="button-scout-settings"
-                    title="Settings"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => setLocation("/settings")}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                          data-testid="button-scout-settings"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">
+                        <div className="space-y-1.5">
+                          <p>Settings</p>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); retriggerTour(); }}
+                            className="text-primary hover:text-primary/80 underline underline-offset-2 block transition-colors"
+                          >
+                            Retake tour
+                          </button>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
             </div>
@@ -1172,24 +1265,48 @@ export default function Scout() {
 
             {/* Sources dropdown + pre-search suggestion chips */}
             <div className="max-w-3xl mx-auto space-y-3">
-              <SourcesDropdown
-                researchSources={researchSources}
-                onSourcesChange={setResearchSources}
-                open={sourcesDropdownOpen}
-                onOpenChange={setSourcesDropdownOpen}
-              />
+              {hasSearched && (
+                <SourcesDropdown
+                  researchSources={researchSources}
+                  onSourcesChange={setResearchSources}
+                  open={sourcesDropdownOpen}
+                  onOpenChange={setSourcesDropdownOpen}
+                />
+              )}
               {!hasSearched && (
-                <div className="flex flex-wrap gap-2 animate-in fade-in duration-500">
-                  {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
-                    <HoverBorderGradient
-                      key={chip}
-                      onClick={() => handleChipClick(chip)}
-                      className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
-                      data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      {chip}
-                    </HoverBorderGradient>
-                  ))}
+                <div className="space-y-4 animate-in fade-in duration-500">
+                  {/* Value proposition */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      Search using plain language — indication, target, modality, or mechanism
+                    </span>
+                    <span className="hidden sm:flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      Every result scored 1–10 for fit to your deal thesis
+                    </span>
+                    <span className="hidden sm:flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                      Patents, trials, and research included automatically
+                    </span>
+                  </div>
+
+                  {/* Suggestion chips */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Try a search</p>
+                    <div className="flex flex-wrap gap-2">
+                      {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
+                        <HoverBorderGradient
+                          key={chip}
+                          onClick={() => handleChipClick(chip)}
+                          className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
+                          data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          {chip}
+                        </HoverBorderGradient>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -1523,7 +1640,19 @@ export default function Scout() {
                     {/* Desktop full controls row */}
                     <div className="hidden md:flex items-end justify-start gap-4">
                       <div className="flex flex-col gap-1">
-                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Score Filter</span>
+                        <TooltipProvider>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 cursor-default w-fit">
+                                Score Filter
+                                <Info className="w-2.5 h-2.5 opacity-50" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs max-w-[220px]">
+                              Fit score (0–100) based on how well each asset matches your search query and deal focus
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                         <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
                           {([0, 30, 50, 70] as const).map((threshold) => (
                             <button
@@ -1576,9 +1705,49 @@ export default function Scout() {
                         )}
                         {reportMutation.isPending ? "Generating..." : "Match Report"}
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-[11px] h-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => { setSaveSearchName(currentQuery || ""); setSaveSearchOpen(true); }}
+                        data-testid="button-save-search"
+                      >
+                        {saveSearchSaved ? <BookmarkCheck className="w-3 h-3 text-emerald-500" /> : <Bookmark className="w-3 h-3" />}
+                        {saveSearchSaved ? "Saved" : "Save Search"}
+                      </Button>
                     </div>
                   </>
                 )}
+
+                {/* Save Search dialog */}
+                <Dialog open={saveSearchOpen} onOpenChange={setSaveSearchOpen}>
+                  <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle className="text-base">Save this search</DialogTitle>
+                      <DialogDescription className="text-sm">
+                        Give it a name. Find it later in Alerts → Saved Searches.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <Input
+                      placeholder="e.g. KRAS oncology preclinical"
+                      value={saveSearchName}
+                      onChange={(e) => setSaveSearchName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && saveSearchName.trim()) saveSearchMutation.mutate(); }}
+                      autoFocus
+                      data-testid="input-save-search-name"
+                    />
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={() => setSaveSearchOpen(false)}>Cancel</Button>
+                      <Button
+                        onClick={() => saveSearchMutation.mutate()}
+                        disabled={!saveSearchName.trim() || saveSearchMutation.isPending}
+                        data-testid="button-save-search-confirm"
+                      >
+                        {saveSearchMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 {profileBannerQuery && hasSearched && (
                   <div className="flex items-center gap-3 px-4 py-2.5 mb-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm">
@@ -2288,7 +2457,21 @@ export default function Scout() {
             </div>
 
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 cursor-default w-fit">
+                      Sort
+                      <Info className="w-2.5 h-2.5 opacity-50" />
+                    </p>
+                  </TooltipTrigger>
+                  <TooltipContent side="left" className="text-xs max-w-[220px] space-y-1">
+                    <p><span className="font-semibold">Best Match</span> — ranked by fit score</p>
+                    <p><span className="font-semibold">Newest First</span> — most recently updated</p>
+                    <p><span className="font-semibold">Momentum</span> — stage advances, new filings, or rising activity</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency" | "momentum")} data-testid="select-sort">
                 <SelectTrigger className="h-8 text-xs w-full">
                   <SelectValue />
@@ -2370,7 +2553,19 @@ export default function Scout() {
 
             {availableBiologies.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Biology</p>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide flex items-center gap-1 cursor-default w-fit">
+                        Biology
+                        <Info className="w-2.5 h-2.5 opacity-50" />
+                      </p>
+                    </TooltipTrigger>
+                    <TooltipContent side="left" className="text-xs max-w-[220px]">
+                      Mechanism-based categories — filters by underlying biological pathway or drug target class
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <div className="flex flex-wrap gap-1.5">
                   {availableBiologies.map((b) => {
                     const active = biologiesFilter.includes(b);
@@ -2630,5 +2825,9 @@ export default function Scout() {
         </SheetContent>
       </Sheet>
     </div>
+
+    {/* First-time user tour */}
+    {showTour && <ScoutTour onClose={closeTour} />}
+    </>
   );
 }

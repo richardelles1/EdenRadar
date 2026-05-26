@@ -397,20 +397,27 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                       )}
                     </span>
                   </TooltipTrigger>
-                  {asset.stage_changed_at && asset.previous_stage && (
-                    <TooltipContent side="bottom" className="text-xs">
-                      Advanced from <span className="font-medium">{asset.previous_stage}</span>
-                    </TooltipContent>
-                  )}
+                  <TooltipContent side="bottom" className="text-xs">
+                    {asset.stage_changed_at && asset.previous_stage
+                      ? <>Advanced from <span className="font-medium">{asset.previous_stage}</span></>
+                      : "Development stage — from early discovery through clinical trials"}
+                  </TooltipContent>
                 </Tooltip>
               )}
               {modalityLabel && (
-                <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-sm select-none ${MODALITY_PILL_CLASS}`}
-                  data-testid={`pill-modality-${asset.id}`}
-                >
-                  {modalityLabel}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={`text-[10px] font-medium px-2 py-0.5 rounded-sm select-none ${MODALITY_PILL_CLASS}`}
+                      data-testid={`pill-modality-${asset.id}`}
+                    >
+                      {modalityLabel}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="text-xs">
+                    Drug delivery format — how the therapeutic is administered or engineered
+                  </TooltipContent>
+                </Tooltip>
               )}
               {classUnknown && (
                 <span

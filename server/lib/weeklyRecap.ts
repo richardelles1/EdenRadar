@@ -17,10 +17,12 @@ import {
   orgMembers,
   organizations,
   weeklyRecaps,
+  emailUnsubscribes,
   type WeeklyRecap,
 } from "@shared/schema";
 import { db } from "../db";
 import { storage } from "../storage";
+import { sendWeeklyRecapEmail, unsubscribeUrlFor } from "../email";
 
 // ── Week boundary helpers (UTC, Monday 00:00) ──────────────────────────────
 
@@ -468,6 +470,10 @@ export async function runWeeklyRecapJob(opts: { force?: boolean } = {}): Promise
   const thisWeek = startOfWeek(new Date());
   const targetWeek = previousWeekStart(thisWeek);
 
+  // Pre-load unsubscribed addresses so we skip them without a per-org query.
+  const unsubRows = await db.select({ email: emailUnsubscribes.email }).from(emailUnsubscribes);
+  const unsubSet = new Set(unsubRows.map((r) => r.email.toLowerCase()));
+
   const orgs = await db.select({ id: organizations.id }).from(organizations);
   let created = 0;
   for (const org of orgs) {
@@ -477,6 +483,35 @@ export async function runWeeklyRecapJob(opts: { force?: boolean } = {}): Promise
       const payload = await assembleRecap(org.id, targetWeek);
       await upsertRecap(org.id, targetWeek, payload, true);
       created++;
+
+      // Send recap email to each org member who hasn't unsubscribed.
+      const members = await storage.getOrgMembers(org.id);
+      const highlights = (payload.worthALook ?? payload.newAssets?.top ?? []).slice(0, 5);
+      const emailData = {
+        weekLabel: payload.weekLabel,
+        summary: payload.summary ?? "",
+        counts: {
+          newAssets: payload.counts.newAssets,
+          saves: payload.counts.saves,
+          marketListings: payload.counts.marketListings,
+        },
+        highlights,
+      };
+      for (const member of members) {
+        if (!member.email) continue;
+        if (unsubSet.has(member.email.toLowerCase())) continue;
+        try {
+          const unsub = member.userId ? unsubscribeUrlFor(member.userId) : undefined;
+          await sendWeeklyRecapEmail(
+            member.email,
+            member.memberName ?? null,
+            emailData,
+            unsub ?? `${process.env.APP_URL ?? "https://edenradar.com"}/unsubscribe`,
+          );
+        } catch (emailErr: any) {
+          console.warn(`[weekly-recap] Email failed for ${member.email}: ${emailErr?.message}`);
+        }
+      }
     } catch (err: any) {
       console.warn(`[weekly-recap] Org #${org.id} assembly failed: ${err?.message}`);
     }

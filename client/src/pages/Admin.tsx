@@ -7174,6 +7174,117 @@ function ConceptQueue({ pw }: { pw: string }) {
   );
 }
 
+function ConceptEscalationQueue({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+
+  const { data, isLoading, refetch } = useQuery<{ concepts: any[] }>({
+    queryKey: ["/api/admin/concept-escalations"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/concept-escalations", {
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const pending = data?.concepts ?? [];
+
+  async function approve(id: number) {
+    try {
+      const res = await fetch(`/api/admin/concept-escalations/${id}/approve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { projectId } = await res.json();
+      toast({ title: "Approved", description: `Research project #${projectId} created in EdenLab.` });
+      refetch();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  async function reject(id: number) {
+    try {
+      const res = await fetch(`/api/admin/concept-escalations/${id}/reject`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ note: rejectNote }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast({ title: "Rejected" });
+      setRejectingId(null);
+      setRejectNote("");
+      refetch();
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  }
+
+  if (isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading...</div>;
+  if (pending.length === 0) return <p className="text-sm text-muted-foreground">No pending graduation requests.</p>;
+
+  return (
+    <div className="space-y-3">
+      {pending.map((c) => (
+        <div key={c.id} className="border border-violet-500/20 rounded-lg p-4 bg-violet-500/5" data-testid={`admin-escalation-${c.id}`}>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] text-violet-600 dark:text-violet-400 font-semibold uppercase tracking-wide mb-0.5">Graduation Request</p>
+              <h3 className="font-semibold text-foreground text-sm">{c.title}</h3>
+              <p className="text-xs text-muted-foreground">{c.oneLiner}</p>
+            </div>
+            <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+              (c.credibilityScore ?? 0) >= 70
+                ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                : (c.credibilityScore ?? 0) >= 40
+                  ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                  : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+            }`}>
+              <Sparkles className="w-3 h-3" />{c.credibilityScore ?? "—"}/100
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground mb-3">
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">{c.therapeuticArea}</span>
+            <span>by {c.submitterName}</span>
+            {c.escalationRequestedAt && (
+              <span>Requested {new Date(c.escalationRequestedAt).toLocaleDateString()}</span>
+            )}
+          </div>
+          {rejectingId === c.id ? (
+            <div className="space-y-2">
+              <input
+                className="w-full text-sm border border-border rounded-md px-3 py-1.5 bg-background"
+                placeholder="Rejection note (optional)"
+                value={rejectNote}
+                onChange={(e) => setRejectNote(e.target.value)}
+                data-testid={`input-reject-note-${c.id}`}
+              />
+              <div className="flex gap-2">
+                <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => { setRejectingId(null); setRejectNote(""); }}>Cancel</Button>
+                <Button size="sm" className="bg-red-600 hover:bg-red-700 text-white text-xs h-7" onClick={() => reject(c.id)} data-testid={`button-confirm-reject-${c.id}`}>Confirm Reject</Button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white text-xs h-7 gap-1" onClick={() => approve(c.id)} data-testid={`button-approve-escalation-${c.id}`}>
+                <CheckCircle2 className="w-3 h-3" /> Approve → Create Project
+              </Button>
+              <Button size="sm" variant="outline" className="text-xs h-7 text-red-600 border-red-500/30 hover:bg-red-500/10" onClick={() => setRejectingId(c.id)} data-testid={`button-reject-escalation-${c.id}`}>
+                Reject
+              </Button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ResearchQueue({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [rejectingId, setRejectingId] = useState<number | null>(null);
@@ -13807,6 +13918,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
                   Concept Review
                 </button>
                 <button
+                  onClick={() => setActiveTab("concept-escalations")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "concept-escalations" ? "bg-violet-500/10 text-violet-600 dark:text-violet-400" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-concept-escalations"
+                >
+                  <ArrowUpCircle className="h-4 w-4" />
+                  Graduation Queue
+                </button>
+                <button
                   onClick={() => setActiveTab("edenlab-review")}
                   className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                     activeTab === "edenlab-review" ? "bg-violet-500/10 text-violet-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -14076,6 +14197,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
                 <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the EdenDiscovery portal with AI credibility scores.</p>
               </div>
               <ConceptQueue pw={pw} />
+            </>
+          )}
+
+          {activeTab === "concept-escalations" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Graduation Queue</h2>
+                <p className="text-sm text-muted-foreground mt-1">Concepts requesting graduation from EdenDiscovery to an EdenLab research project. Approving creates a new research project. All inter-portal escalations are controlled here.</p>
+              </div>
+              <ConceptEscalationQueue pw={pw} />
             </>
           )}
 

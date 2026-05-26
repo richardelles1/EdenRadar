@@ -34,6 +34,12 @@ import {
   Paperclip,
   FileText,
   Download,
+  Tag,
+  HelpCircle,
+  Rocket,
+  Clock3,
+  CheckCircle2,
+  XCircle,
 } from "lucide-react";
 
 function ScoreRing({ score }: { score: number }) {
@@ -176,6 +182,7 @@ export default function ConceptDetail() {
   const fromIndustry = new URLSearchParams(searchStr).get("from") === "industry";
   const { toast } = useToast();
   const [showContact, setShowContact] = useState(false);
+  const [escalating, setEscalating] = useState(false);
 
   const { data, isLoading } = useQuery<{ concept: ConceptCard }>({
     queryKey: ["/api/discovery/concepts", id],
@@ -261,6 +268,28 @@ export default function ConceptDetail() {
     },
   });
 
+  const escalateMutation = useMutation({
+    mutationFn: async () => {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch(`/api/discovery/concepts/${id}/escalate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!res.ok) { const body = await res.text(); throw new Error(body || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discovery/my-concepts"] });
+      toast({ title: "Graduation request submitted", description: "An admin will review your request to move this concept to an EdenLab research project." });
+      setEscalating(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed", description: err.message, variant: "destructive" });
+      setEscalating(false);
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
@@ -290,6 +319,9 @@ export default function ConceptDetail() {
   const isOwner = user?.id === c.userId;
   type AttachedFile = { name: string; url: string; size: number };
   const attachments: AttachedFile[] = Array.isArray(c.attachedFiles) ? c.attachedFiles : [];
+  const mechanismTags = ((c as any).mechanismTags as string[] | null) ?? [];
+  const openQuestions = ((c as any).openQuestions as string[] | null) ?? [];
+  const escalationStatus = (c as any).escalationStatus as string ?? "none";
 
   return (
     <div className="min-h-screen bg-background">
@@ -388,6 +420,40 @@ export default function ConceptDetail() {
             </div>
           </div>
         </div>
+
+        {mechanismTags.length > 0 && (
+          <div className="border border-border rounded-xl bg-card p-5 mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Tag className="w-4 h-4 text-violet-500" />
+              <h3 className="font-semibold text-sm text-foreground">Biology / Mechanism</h3>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {mechanismTags.map((tag) => (
+                <span key={tag} className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-violet-500/25 text-violet-600 dark:text-violet-400 bg-violet-500/5" data-testid={`mechanism-tag-${tag}`}>
+                  <Tag className="w-2.5 h-2.5" />
+                  {tag}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {openQuestions.length > 0 && (
+          <div className="border border-border rounded-xl bg-card p-5 mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <HelpCircle className="w-4 h-4 text-amber-500" />
+              <h3 className="font-semibold text-sm text-foreground">Open Questions</h3>
+            </div>
+            <ul className="space-y-2">
+              {openQuestions.map((q, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                  <span className="text-amber-500 mt-0.5 shrink-0">?</span>
+                  {q}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {(c.seeking?.length || c.requiredExpertise) && (
           <div className="border border-border rounded-xl bg-card p-5 mb-5">
@@ -495,9 +561,67 @@ export default function ConceptDetail() {
           </div>
 
           {isOwner && (
-            <p className="text-xs text-muted-foreground text-center pt-2 border-t border-border italic">
-              This is your concept. You can view interested parties from My Concepts.
-            </p>
+            <div className="pt-2 border-t border-border space-y-3">
+              <p className="text-xs text-muted-foreground text-center italic">
+                This is your concept. You can view interested parties from My Concepts.
+              </p>
+
+              {escalationStatus === "none" && (
+                <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3">
+                  <div className="flex items-start gap-3">
+                    <Rocket className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-xs font-semibold text-foreground">Ready to take this further?</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">Request graduation to an EdenLab research project. An admin will review and set it up for you.</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    {escalating ? (
+                      <div className="space-y-2 w-full">
+                        <p className="text-xs text-muted-foreground">Confirm escalation request?</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" className="text-xs h-7" onClick={() => setEscalating(false)} data-testid="button-cancel-escalate">Cancel</Button>
+                          <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white text-xs h-7 gap-1" onClick={() => escalateMutation.mutate()} disabled={escalateMutation.isPending} data-testid="button-confirm-escalate">
+                            {escalateMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Rocket className="w-3 h-3" />}
+                            Graduate to Research Project
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <Button size="sm" className="bg-violet-600 hover:bg-violet-700 text-white text-xs h-7 gap-1.5" onClick={() => setEscalating(true)} data-testid="button-escalate-concept">
+                        <Rocket className="w-3 h-3" /> Request graduation
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {escalationStatus === "pending" && (
+                <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 flex items-center gap-2">
+                  <Clock3 className="w-4 h-4 text-amber-500 shrink-0" />
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Graduation request is pending admin review.</p>
+                </div>
+              )}
+
+              {escalationStatus === "approved" && (
+                <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                  <p className="text-xs text-green-700 dark:text-green-400">Graduated to a research project in EdenLab.</p>
+                </div>
+              )}
+
+              {escalationStatus === "rejected" && (
+                <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <XCircle className="w-4 h-4 text-red-500 shrink-0" />
+                    <p className="text-xs text-red-700 dark:text-red-400 font-medium">Graduation request rejected</p>
+                  </div>
+                  {(c as any).escalationNote && (
+                    <p className="text-xs text-muted-foreground ml-6">{(c as any).escalationNote}</p>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
           {!session && (
