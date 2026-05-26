@@ -2526,7 +2526,7 @@ interface EnrichmentStats {
 }
 
 interface EnrichmentStatus {
-  status: "idle" | "running" | "done" | "error";
+  status: "idle" | "running" | "done" | "error" | "interrupted";
   processed: number;
   total: number;
   improved: number;
@@ -13539,7 +13539,7 @@ function JarvisTab({ pw }: { pw: string }) {
   const tier = (n?: number) => (n ?? 0).toLocaleString();
   const pct = (s?: string) => s ? `${s}%` : "—";
 
-  const shortcuts: { label: string; desc: string; mut: ReturnType<typeof useMutation>; color: string }[] = [
+  const shortcuts: { label: string; desc: string; mut: { mutate: () => void; isPending: boolean }; color: string }[] = [
     { label: "Daily Sweep",    desc: "Full staleness-ordered institution sweep",  mut: sweepMut,     color: "border-emerald-700 hover:bg-emerald-950 text-emerald-400" },
     { label: "Staleness Scan", desc: "Oldest-synced institutions first",           mut: stalenessMut, color: "border-sky-700 hover:bg-sky-950 text-sky-400" },
     { label: "Rule Fill",      desc: "Regex rules for MoA, target, indication — free",  mut: ruleFillMut,  color: "border-teal-700 hover:bg-teal-950 text-teal-400" },
