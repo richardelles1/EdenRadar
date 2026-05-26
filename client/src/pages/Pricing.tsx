@@ -92,9 +92,9 @@ const FREE_TIERS = [
     id: "discovery",
     name: "EdenDiscovery",
     icon: Lightbulb,
-    color: "hsl(38 92% 50%)",
-    colorDim: "hsl(38 92% 50% / 0.08)",
-    borderColor: "hsl(38 92% 50% / 0.3)",
+    color: "hsl(var(--portal-discovery))",
+    colorDim: "hsl(var(--portal-discovery) / 0.08)",
+    borderColor: "hsl(var(--portal-discovery) / 0.3)",
     tagline: "For concept creators and early-stage innovators.",
     features: [
       "Submit early-stage hypotheses before research begins",
@@ -107,9 +107,9 @@ const FREE_TIERS = [
     id: "lab",
     name: "EdenLab",
     icon: FlaskConical,
-    color: "hsl(265 60% 60%)",
-    colorDim: "hsl(265 60% 60% / 0.08)",
-    borderColor: "hsl(265 60% 60% / 0.3)",
+    color: "hsl(var(--portal-lab))",
+    colorDim: "hsl(var(--portal-lab) / 0.08)",
+    borderColor: "hsl(var(--portal-lab) / 0.3)",
     tagline: "For academic researchers, lab leaders, and PhD teams.",
     features: [
       "11-section structured research project workspace",
@@ -174,7 +174,7 @@ function PlanCTA({
         <div className="space-y-1.5">
           <div
             className="w-full h-9 rounded-md flex items-center justify-center gap-1.5 text-sm font-semibold"
-            style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
+            style={{ background: "hsl(var(--portal-scout) / 0.10)", color: "hsl(var(--portal-scout))" }}
             data-testid={`status-current-plan-${plan.id}`}
           >
             <Check className="w-3.5 h-3.5" />
@@ -202,7 +202,7 @@ function PlanCTA({
           <Button
             className="w-full font-semibold h-9 text-sm"
             variant={plan.highlighted ? "default" : "outline"}
-            style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
+            style={plan.highlighted ? { background: "hsl(var(--portal-scout))", color: "white", border: "none" } : undefined}
             onClick={handleOpenPortal}
             disabled={portalLoading}
             data-testid={`button-pricing-upgrade-${plan.id}`}
@@ -240,7 +240,7 @@ function PlanCTA({
         <Button
           className="w-full font-semibold h-9 text-sm"
           variant="outline"
-          style={{ borderColor: "hsl(38 92% 50% / 0.5)", color: "hsl(38 92% 50%)" }}
+          style={{ borderColor: "hsl(var(--portal-discovery) / 0.5)", color: "hsl(var(--portal-discovery))" }}
           onClick={handleOpenPortal}
           disabled={portalLoading}
           data-testid={`button-pricing-pastdue-${plan.id}`}
@@ -306,7 +306,7 @@ function PlanCTA({
       <Button
         className="w-full font-semibold h-9 text-sm"
         variant={plan.highlighted ? "default" : "outline"}
-        style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
+        style={plan.highlighted ? { background: "hsl(var(--portal-scout))", color: "white", border: "none" } : undefined}
         onClick={handleSubscribe}
         disabled={loading}
         data-testid={`button-pricing-${plan.id}`}
@@ -326,7 +326,7 @@ function PlanCTA({
 function EdenMarketTier({ session }: { session: Session | null }) {
   const [, navigate] = useLocation();
   const { subscribe, isLoading } = useMarketSubscribe();
-  const INDIGO = "hsl(234 80% 58%)";
+  const INDIGO = "hsl(var(--portal-market))";
 
   const { data: access } = useQuery<{ access: boolean; orgId: number | null }>({
     queryKey: ["/api/market/access"],
@@ -349,7 +349,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
         <h2 className="text-lg font-semibold text-foreground">EdenMarket</h2>
         <span
           className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
-          style={{ background: "hsl(234 80% 58% / 0.12)", color: INDIGO }}
+          style={{ background: "hsl(var(--portal-market) / 0.12)", color: INDIGO }}
         >
           Marketplace
         </span>
@@ -360,12 +360,12 @@ function EdenMarketTier({ session }: { session: Session | null }) {
 
       <div
         className="rounded-xl overflow-hidden grid grid-cols-1 md:grid-cols-3"
-        style={{ border: "1px solid hsl(234 80% 58% / 0.25)", background: "linear-gradient(135deg, hsl(234 80% 58% / 0.05), hsl(234 80% 58% / 0.01))" }}
+        style={{ border: "1px solid hsl(var(--portal-market) / 0.25)", background: "linear-gradient(135deg, hsl(var(--portal-market) / 0.05), hsl(var(--portal-market) / 0.01))" }}
       >
         {/* Left: subscription */}
-        <div className="p-6 md:col-span-1 flex flex-col gap-4 md:border-r" style={{ borderColor: "hsl(234 80% 58% / 0.18)" }}>
+        <div className="p-6 md:col-span-1 flex flex-col gap-4 md:border-r" style={{ borderColor: "hsl(var(--portal-market) / 0.18)" }}>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(234 80% 58% / 0.15)" }}>
+            <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(var(--portal-market) / 0.15)" }}>
               <ShoppingBag className="w-4 h-4" style={{ color: INDIGO }} />
             </div>
             <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: INDIGO }}>Access</span>
@@ -437,7 +437,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
               <div
                 key={t.label}
                 className="rounded-lg p-4"
-                style={{ background: "hsl(var(--background))", border: "1px solid hsl(234 80% 58% / 0.15)" }}
+                style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--portal-market) / 0.15)" }}
                 data-testid={`edenmarket-fee-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
                 <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: INDIGO }}>{t.label}</p>
@@ -446,7 +446,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
               </div>
             ))}
           </div>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-3 border-t" style={{ borderColor: "hsl(234 80% 58% / 0.15)" }}>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-3 border-t" style={{ borderColor: "hsl(var(--portal-market) / 0.15)" }}>
             <p className="text-xs text-muted-foreground flex-1">
               Listing assets is free for sellers. EdenMarket only earns when you close — incentives stay aligned with you.
             </p>
@@ -455,7 +455,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
                 variant="outline"
                 size="sm"
                 className="h-8 px-3 text-xs gap-1.5 whitespace-nowrap"
-                style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: INDIGO }}
+                style={{ borderColor: "hsl(var(--portal-market) / 0.4)", color: INDIGO }}
                 data-testid="button-pricing-edenmarket-list"
               >
                 List your assets
@@ -500,17 +500,17 @@ function SubscriptionBanner({ isPastDue, session }: { isPastDue: boolean; sessio
       style={
         isPastDue
           ? { background: "hsl(38 92% 50% / 0.06)", border: "1px solid hsl(38 92% 50% / 0.2)" }
-          : { background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }
+          : { background: "hsl(var(--portal-scout) / 0.06)", border: "1px solid hsl(var(--portal-scout) / 0.2)" }
       }
       data-testid="banner-subscription-status"
     >
       <div
         className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
-        style={isPastDue ? { background: "hsl(38 92% 50% / 0.15)" } : { background: "hsl(142 52% 36% / 0.15)" }}
+        style={isPastDue ? { background: "hsl(38 92% 50% / 0.15)" } : { background: "hsl(var(--portal-scout) / 0.15)" }}
       >
         {isPastDue
           ? <Settings className="w-3 h-3" style={{ color: "hsl(38 92% 50%)" }} />
-          : <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+          : <Check className="w-3 h-3" style={{ color: "hsl(var(--portal-scout))" }} />
         }
       </div>
       <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
@@ -531,7 +531,7 @@ function SubscriptionBanner({ isPastDue, session }: { isPastDue: boolean; sessio
           onClick={handleOpenPortal}
           disabled={portalLoading}
           className="text-xs font-semibold flex items-center gap-1 shrink-0 underline-offset-2 hover:underline transition-colors"
-          style={{ color: isPastDue ? "hsl(38 92% 50%)" : "hsl(142 52% 36%)" }}
+          style={{ color: isPastDue ? "hsl(38 92% 50%)" : "hsl(var(--portal-scout))" }}
           data-testid="button-banner-open-portal"
         >
           {portalLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <ExternalLink className="w-3 h-3" />}
@@ -580,8 +580,8 @@ export default function Pricing() {
     }
   }
 
-  const SCOUT_INDIGO = "hsl(142 52% 36%)";
-  const MARKET_INDIGO = "hsl(234 80% 58%)";
+  const SCOUT_INDIGO = "hsl(var(--portal-scout))";
+  const MARKET_INDIGO = "hsl(var(--portal-market))";
 
   const scoutGrid = (
     <div className="space-y-4" data-testid="pricing-section-scout">
@@ -595,25 +595,25 @@ export default function Pricing() {
               className="relative flex flex-col rounded-xl overflow-hidden"
               style={{
                 border: isCurrentPlan
-                  ? "2px solid hsl(142 52% 36%)"
+                  ? "2px solid hsl(var(--portal-scout))"
                   : plan.highlighted
-                    ? "2px solid hsl(142 52% 36%)"
+                    ? "2px solid hsl(var(--portal-scout))"
                     : "1px solid hsl(var(--border))",
-                boxShadow: isCurrentPlan || plan.highlighted ? "0 0 0 4px hsl(142 52% 36% / 0.08)" : undefined,
+                boxShadow: isCurrentPlan || plan.highlighted ? "0 0 0 4px hsl(var(--portal-scout) / 0.08)" : undefined,
               }}
               data-testid={`pricing-card-${plan.id}`}
             >
               {(isCurrentPlan || plan.highlighted) && (
                 <div
                   className="absolute top-0 left-0 right-0 h-0.5"
-                  style={{ background: "hsl(142 52% 36%)" }}
+                  style={{ background: "hsl(var(--portal-scout))" }}
                 />
               )}
               <div
                 className="px-5 py-5"
                 style={{
                   background: isCurrentPlan || plan.highlighted
-                    ? "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))"
+                    ? "linear-gradient(135deg, hsl(var(--portal-scout) / 0.08), hsl(var(--portal-scout) / 0.03))"
                     : "hsl(var(--card))",
                   borderBottom: "1px solid hsl(var(--border))",
                 }}
@@ -624,7 +624,7 @@ export default function Pricing() {
                   {isCurrentPlan ? (
                     <span
                       className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                      style={{ background: "hsl(142 52% 36% / 0.15)", color: "hsl(142 52% 36%)" }}
+                      style={{ background: "hsl(var(--portal-scout) / 0.15)", color: "hsl(var(--portal-scout))" }}
                       data-testid={`badge-current-plan-${plan.id}`}
                     >
                       Your plan
@@ -632,7 +632,7 @@ export default function Pricing() {
                   ) : plan.highlighted ? (
                     <span
                       className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                      style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
+                      style={{ background: "hsl(var(--portal-scout) / 0.12)", color: "hsl(var(--portal-scout))" }}
                     >
                       Most popular
                     </span>
@@ -641,7 +641,7 @@ export default function Pricing() {
                 <div className="flex items-center gap-2 mb-3">
                   <span
                     className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
-                    style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
+                    style={{ background: "hsl(var(--portal-scout) / 0.10)", color: "hsl(var(--portal-scout))" }}
                   >
                     {plan.isTeam && <Users className="w-3 h-3" />}
                     {plan.seats}
@@ -652,7 +652,7 @@ export default function Pricing() {
                 {plan.teamCallout && (
                   <p
                     className="text-[10px] leading-relaxed mt-2 pt-2 border-t"
-                    style={{ borderColor: "hsl(142 52% 36% / 0.2)", color: "hsl(142 52% 36%)" }}
+                    style={{ borderColor: "hsl(var(--portal-scout) / 0.2)", color: "hsl(var(--portal-scout))" }}
                   >
                     {plan.teamCallout}
                   </p>
@@ -668,12 +668,12 @@ export default function Pricing() {
                         style={{
                           background: isEscalator
                             ? "hsl(var(--muted))"
-                            : "hsl(142 52% 36% / 0.12)",
+                            : "hsl(var(--portal-scout) / 0.12)",
                         }}
                       >
                         {isEscalator
                           ? <ArrowRight className="w-2 h-2 text-muted-foreground" />
-                          : <Check className="w-2.5 h-2.5" style={{ color: "hsl(142 52% 36%)" }} />}
+                          : <Check className="w-2.5 h-2.5" style={{ color: "hsl(var(--portal-scout))" }} />}
                       </div>
                       <span className={`text-xs leading-relaxed ${isEscalator ? "text-muted-foreground italic font-medium" : "text-foreground"}`}>
                         {f}
@@ -702,7 +702,7 @@ export default function Pricing() {
         {/* Header */}
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "hsl(142 52% 36%)" }}>
+            <p className="text-xs font-semibold uppercase tracking-widest text-primary">
               EdenScout + EdenMarket
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground" data-testid="text-pricing-title">
@@ -760,13 +760,13 @@ export default function Pricing() {
         {!isSubscribed && !isPastDue && (
           <div
             className="rounded-lg px-4 py-3 flex items-start gap-3"
-            style={{ background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }}
+            style={{ background: "hsl(var(--portal-scout) / 0.06)", border: "1px solid hsl(var(--portal-scout) / 0.2)" }}
           >
             <div
               className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
-              style={{ background: "hsl(142 52% 36% / 0.15)" }}
+              style={{ background: "hsl(var(--portal-scout) / 0.15)" }}
             >
-              <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+              <Check className="w-3 h-3" style={{ color: "hsl(var(--portal-scout))" }} />
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               <span className="font-semibold text-foreground">ACH bank transfer accepted.</span>{" "}
@@ -805,14 +805,14 @@ export default function Pricing() {
           className="rounded-xl p-7 sm:p-9"
           style={{
             background: "linear-gradient(135deg, hsl(155 25% 6%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
-            border: "1px solid hsl(142 52% 36% / 0.25)",
+            border: "1px solid hsl(var(--portal-scout) / 0.25)",
           }}
           data-testid="pricing-card-enterprise"
         >
           <div className="flex flex-col sm:flex-row sm:items-start gap-6">
             <div className="flex-1 space-y-3">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "hsl(142 52% 36% / 0.2)" }}>
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "hsl(var(--portal-scout) / 0.2)" }}>
                   <Building2 className="w-4.5 h-4.5" style={{ color: "hsl(142 65% 60%)" }} />
                 </div>
                 <div>
@@ -836,7 +836,7 @@ export default function Pricing() {
               <a href={`mailto:${CONTACT_SALES}`} data-testid="button-pricing-enterprise">
                 <Button
                   className="h-10 px-6 font-semibold text-sm gap-2 whitespace-nowrap"
-                  style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
+                  style={{ background: "hsl(var(--portal-scout))", color: "white", border: "none" }}
                 >
                   <Mail className="w-3.5 h-3.5" />
                   Contact sales
@@ -918,7 +918,7 @@ export default function Pricing() {
           <p>All plans are billed monthly. Annual contracts available for Team and Enterprise plans with volume discounts. Prices are in USD.</p>
           <p>
             Questions?{" "}
-            <a href={`mailto:${CONTACT_SALES}`} className="text-emerald-600 hover:text-emerald-500 underline">
+            <a href={`mailto:${CONTACT_SALES}`} className="text-primary hover:text-primary/80 underline">
               {CONTACT_SALES}
             </a>
           </p>

@@ -74,7 +74,6 @@ import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
-import { SiteGate } from "@/components/SiteGate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { ScoutGate } from "@/components/ScoutGate";
 import Login from "@/pages/Login";
@@ -480,12 +479,10 @@ function App() {
         <AuthProvider>
           <ThemeInit />
           <Toaster />
-          <SiteGate>
-            <ImpersonationBanner />
-            <SessionExpiredGuard />
-            <Router />
-            <EdenWidget />
-          </SiteGate>
+          <ImpersonationBanner />
+          <SessionExpiredGuard />
+          <Router />
+          <EdenWidget />
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

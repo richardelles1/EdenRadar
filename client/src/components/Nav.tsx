@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
-  Bookmark, Moon, Sun, Sprout, Radar, Menu, X, ChevronDown,
+  Bookmark, Moon, Sun, Radar, Menu, X, ChevronDown,
   FlaskConical, Lightbulb, ShoppingBag,
   Layers, BookOpen, Award, Sparkles, Target, Rocket,
   TrendingUp, FileBarChart2, Bell, Briefcase,
@@ -219,7 +219,7 @@ export function Nav({ onOpenSaved }: NavProps) {
           <Link href="/">
             <div className="flex items-center gap-2.5 cursor-pointer select-none" data-testid="link-home-logo">
               <div className="relative w-7 h-7 rounded-md bg-primary flex items-center justify-center overflow-hidden">
-                <Sprout className="w-4 h-4 text-primary-foreground" />
+                <Radar className="w-4 h-4 text-primary-foreground" />
               </div>
               <span className="font-bold text-foreground text-base tracking-tight">
                 Eden<span className="text-primary">Radar</span>
@@ -303,9 +303,9 @@ export function Nav({ onOpenSaved }: NavProps) {
         {/* Right side */}
         <div className="flex items-center gap-2">
           {!isPublic && portal === "scout" && (
-            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20">
-              <Radar className="w-3 h-3 text-primary" />
-              <span className="text-xs font-medium text-primary">AI Discovery Engine</span>
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/8 border border-primary/15">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+              <span className="text-[11px] font-semibold tracking-wide text-primary/80 uppercase">Live</span>
             </div>
           )}
 
@@ -326,7 +326,6 @@ export function Nav({ onOpenSaved }: NavProps) {
                 size="sm"
                 className="h-8 px-4 font-semibold text-xs hidden sm:flex"
                 data-testid="button-nav-signin"
-                style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
               >
                 Sign In
               </Button>
@@ -450,7 +449,6 @@ export function Nav({ onOpenSaved }: NavProps) {
               size="sm"
               className="w-full mt-2 font-semibold text-xs"
               data-testid="button-nav-mobile-signin"
-              style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
               onClick={() => setMobileOpen(false)}
             >
               Sign In

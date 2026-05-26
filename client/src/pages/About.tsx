@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Award, Sprout, Globe, Users } from "lucide-react";
+import { ArrowRight, Award, Radar, Sprout, Globe, Users } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
@@ -39,7 +39,7 @@ function PageBackground() {
           animation: "radar-bg-slow 28s linear infinite",
           transformOrigin: "center center",
           background:
-            "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.03) 310deg, hsl(142 65% 48% / 0.10) 360deg)",
+            "conic-gradient(from 0deg, transparent 260deg, hsl(var(--portal-scout) / 0.03) 310deg, hsl(var(--portal-scout) / 0.10) 360deg)",
           borderRadius: "50%",
         }}
       />
@@ -128,9 +128,9 @@ export default function About() {
         <section className="relative overflow-hidden pt-24 pb-20 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <div
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border mb-8"
-            style={{ background: "hsl(142 52% 36% / 0.08)", borderColor: "hsl(142 52% 36% / 0.25)" }}
+            style={{ background: "hsl(var(--portal-scout) / 0.08)", borderColor: "hsl(var(--portal-scout) / 0.25)" }}
           >
-            <Sprout className="w-3.5 h-3.5 text-primary" />
+            <Radar className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-semibold text-primary tracking-widest uppercase">
               Founded Early 2026
             </span>
@@ -147,8 +147,7 @@ export default function About() {
             size="lg"
             onClick={() => navigate("/login")}
             data-testid="about-cta-main"
-            className="h-12 px-8 font-semibold text-base"
-            style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
+            className="h-11 px-8 font-semibold text-base"
           >
             Get Started
             <ArrowRight className="w-4 h-4 ml-2" />
@@ -164,7 +163,7 @@ export default function About() {
             className="rounded-2xl p-8 sm:p-12 text-center"
             style={{
               background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
-              border: "1px solid hsl(142 52% 36% / 0.2)",
+              border: "1px solid hsl(var(--portal-scout) / 0.2)",
             }}
           >
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">Our Mission</p>
@@ -208,8 +207,8 @@ export default function About() {
                         width: 128,
                         height: 128,
                         borderRadius: "50%",
-                        border: "3px solid hsl(142 52% 36% / 0.5)",
-                        boxShadow: "0 0 0 4px hsl(142 52% 36% / 0.1)",
+                        border: "3px solid hsl(var(--portal-scout) / 0.5)",
+                        boxShadow: "0 0 0 4px hsl(var(--portal-scout) / 0.1)",
                       }}
                     >
                       <img
@@ -244,9 +243,9 @@ export default function About() {
                 <div
                   className="rounded-xl px-7 py-5"
                   style={{
-                    background: "hsl(142 52% 36% / 0.06)",
-                    border: "1px solid hsl(142 52% 36% / 0.18)",
-                    borderLeft: "3px solid hsl(142 52% 36%)",
+                    background: "hsl(var(--portal-scout) / 0.06)",
+                    border: "1px solid hsl(var(--portal-scout) / 0.18)",
+                    borderLeft: "3px solid hsl(var(--portal-scout))",
                   }}
                 >
                   <p className="text-sm italic text-foreground leading-relaxed">
@@ -302,7 +301,6 @@ export default function About() {
               onClick={() => navigate("/login")}
               data-testid="about-cta-bottom"
               className="h-11 px-7 font-semibold"
-              style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
             >
               Get Started
               <ArrowRight className="w-4 h-4 ml-2" />
