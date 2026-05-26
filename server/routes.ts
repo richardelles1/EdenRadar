@@ -10,7 +10,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -7606,7 +7606,16 @@ Do not respond with anything else.`;
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
+    // Analytics tracking — populated as the request progresses, flushed in finally.
+    const _qStart = Date.now();
+    let _qIntent = "search";
+    let _qFilters: Record<string, unknown> = {};
+    let _qAssetCount = 0;
+
     const sendEvent = (event: string, data: unknown) => {
+      if (event === "context" && data !== null && typeof data === "object" && "assets" in data) {
+        _qAssetCount = ((data as { assets?: unknown[] }).assets ?? []).length;
+      }
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
@@ -7705,6 +7714,8 @@ Do not respond with anything else.`;
         ? precomputedEmbedding.value
         : null;
 
+      _qIntent = intentClass.intent ?? "search";
+
       // ── Merge LLM filters with accumulated session focus ──────────────────
       // LLM extracts what's in the current message; focusContext fills gaps with
       // prior accumulated context (e.g. a stage set two turns ago stays active).
@@ -7719,6 +7730,8 @@ Do not respond with anything else.`;
         recency: intentClass.filters.recency,
         trending: intentClass.filters.trending,
       };
+
+      _qFilters = filters as Record<string, unknown>;
 
       // Map recency window to a concrete Date for storage-layer filtering.
       const RECENCY_MS: Record<string, number> = {
@@ -8277,6 +8290,16 @@ Do not respond with anything else.`;
       sendEvent("error", { message: errMsg });
     } finally {
       res.end();
+      db.insert(edenQueries).values({
+        sessionId: sid,
+        userId: requestUserId ?? null,
+        queryText: message.trim().slice(0, 500),
+        intent: _qIntent,
+        filters: Object.keys(_qFilters).length ? _qFilters : null,
+        assetCount: _qAssetCount,
+        emptyResult: _qIntent === "search" && _qAssetCount === 0,
+        latencyMs: Date.now() - _qStart,
+      }).catch(() => { /* non-fatal */ });
     }
   });
 
