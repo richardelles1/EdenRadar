@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import {
   ArrowRight,
-  Radar,
   Lightbulb,
   FlaskConical,
   TrendingUp,
@@ -238,7 +237,7 @@ const TIER_OVERVIEW = [
     color: "hsl(var(--portal-market))",
     colorDim: "hsl(var(--portal-market) / 0.08)",
     borderColor: "hsl(var(--portal-market) / 0.3)",
-    features: ["Anonymous listings — identity NDA-gated", "Secure deal rooms with audit trail", "Success-fee aligned — free to list"],
+    features: ["Anonymous listings (identity NDA-gated)", "Secure deal rooms with audit trail", "Success-fee aligned: free to list"],
   },
 ];
 
@@ -248,7 +247,7 @@ const HOW_STEPS = [
   {
     number: "01",
     title: "Sign up and choose your tier",
-    desc: "Create your account in under two minutes. Select the tier that fits your workflow — free for researchers, paid for industry intelligence.",
+    desc: "Create your account in under two minutes. Select the tier that fits your workflow: free for researchers, paid for industry intelligence.",
   },
   {
     number: "02",
@@ -288,22 +287,12 @@ export default function HowItWorks() {
 
         {/* Hero */}
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
-          <div
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border mb-8"
-            style={{ background: "hsl(var(--primary) / 0.08)", borderColor: "hsl(var(--primary) / 0.25)" }}
-          >
-            <Radar className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-              Platform Overview
-            </span>
-          </div>
-
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             The intelligence engine{" "}
             <span className="gradient-text">behind EdenRadar.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
-            EDEN monitors 300+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and surfaces the results to the teams that need them — in plain English.
+            EDEN monitors 300+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and surfaces the results to the teams that need them, in plain English.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Button size="lg" onClick={() => navigate("/login")} data-testid="howitworks-cta-hero" className="h-11 px-8 font-semibold text-base">
@@ -339,7 +328,7 @@ export default function HowItWorks() {
               <div className="text-center mt-6 max-w-xs mx-auto space-y-2">
                 <h3 className="font-bold text-foreground">EDEN Intelligence Engine</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  Processes, classifies, and reasons over every asset in the database — instant, accurate, cited answers in plain English.
+                  Processes, classifies, and reasons over every asset in the database. Instant, accurate, cited answers in plain English.
                 </p>
               </div>
             </div>
