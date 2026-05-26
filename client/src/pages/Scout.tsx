@@ -31,6 +31,7 @@ import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
 import { PatentCard } from "@/components/PatentCard";
 import { ClinicalTrialCard } from "@/components/ClinicalTrialCard";
 import { ScoutTour, useScoutTour } from "@/components/ScoutTour";
+import { getIndustryProfile } from "@/hooks/use-industry";
 
 type SearchResponse = {
   assets: ScoredAsset[];
@@ -195,9 +196,32 @@ const BUYER_PROFILE_KEY = "edenradar:buyer-profile";
 function loadBuyerProfile(): BuyerProfile {
   try {
     const stored = localStorage.getItem(BUYER_PROFILE_KEY);
-    if (stored) return { ...DEFAULT_BUYER_PROFILE, ...JSON.parse(stored) };
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<BuyerProfile>;
+      // Seed from onboarding profile if buyer profile fields were never set.
+      if (!parsed.therapeutic_areas?.length || !parsed.modalities?.length) {
+        const industry = getIndustryProfile();
+        if (!parsed.therapeutic_areas?.length && industry.therapeuticAreas.length > 0) {
+          parsed.therapeutic_areas = industry.therapeuticAreas;
+        }
+        if (!parsed.modalities?.length && industry.modalities.length > 0) {
+          parsed.modalities = industry.modalities;
+        }
+        if (!parsed.preferred_stages?.length && industry.dealStages.length > 0) {
+          parsed.preferred_stages = industry.dealStages;
+        }
+      }
+      return { ...DEFAULT_BUYER_PROFILE, ...parsed };
+    }
   } catch {}
-  return DEFAULT_BUYER_PROFILE;
+  // No stored buyer profile — bootstrap entirely from onboarding data.
+  const industry = getIndustryProfile();
+  return {
+    ...DEFAULT_BUYER_PROFILE,
+    therapeutic_areas: industry.therapeuticAreas,
+    modalities: industry.modalities,
+    preferred_stages: industry.dealStages,
+  };
 }
 
 function SourcesDropdown({
@@ -1216,17 +1240,39 @@ export default function Scout() {
                 onOpenChange={setSourcesDropdownOpen}
               />
               {!hasSearched && (
-                <div className="flex flex-wrap gap-2 animate-in fade-in duration-500">
-                  {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
-                    <HoverBorderGradient
-                      key={chip}
-                      onClick={() => handleChipClick(chip)}
-                      className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
-                      data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      {chip}
-                    </HoverBorderGradient>
-                  ))}
+                <div className="space-y-4 animate-in fade-in duration-500">
+                  {/* Value proposition */}
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                      Search using plain language — indication, target, modality, or mechanism
+                    </span>
+                    <span className="hidden sm:flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />
+                      Every result scored 1–10 for fit to your deal thesis
+                    </span>
+                    <span className="hidden sm:flex items-center gap-1.5">
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-500 shrink-0" />
+                      Patents, trials, and research included automatically
+                    </span>
+                  </div>
+
+                  {/* Suggestion chips */}
+                  <div>
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Try a search</p>
+                    <div className="flex flex-wrap gap-2">
+                      {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
+                        <HoverBorderGradient
+                          key={chip}
+                          onClick={() => handleChipClick(chip)}
+                          className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
+                          data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          {chip}
+                        </HoverBorderGradient>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
