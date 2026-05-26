@@ -697,6 +697,15 @@ export const conceptCards = pgTable("concept_cards", {
   interestAdvising: integer("interest_advising").notNull().default(0),
   attachedFiles: jsonb("attached_files").$type<{ name: string; url: string; size: number }[]>().default([]),
   status: text("status").notNull().default("active"),
+  openQuestions: jsonb("open_questions").$type<string[]>(),
+  mechanismTags: jsonb("mechanism_tags").$type<string[]>(),
+  escalationStatus: text("escalation_status").notNull().default("none"),
+  escalationRequestedAt: timestamp("escalation_requested_at"),
+  escalationReviewedAt: timestamp("escalation_reviewed_at"),
+  escalationNote: text("escalation_note"),
+  projectId: integer("project_id"),
+  publishedAt: timestamp("published_at"),
+  contentHash: text("content_hash"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
@@ -709,8 +718,17 @@ export const insertConceptCardSchema = createInsertSchema(conceptCards).omit({
   interestAdvising: true,
   createdAt: true,
   attachedFiles: true,
+  escalationStatus: true,
+  escalationRequestedAt: true,
+  escalationReviewedAt: true,
+  escalationNote: true,
+  projectId: true,
+  publishedAt: true,
+  contentHash: true,
 }).extend({
   stage: z.number().int().min(1).max(4),
+  openQuestions: z.array(z.string()).nullable().optional(),
+  mechanismTags: z.array(z.string()).nullable().optional(),
 });
 export type InsertConceptCard = z.infer<typeof insertConceptCardSchema>;
 export type ConceptCard = typeof conceptCards.$inferSelect;
@@ -725,6 +743,21 @@ export const conceptInterests = pgTable("concept_interests", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type ConceptInterest = typeof conceptInterests.$inferSelect;
+
+export const researchNeeds = pgTable("research_needs", {
+  id: serial("id").primaryKey(),
+  industryUserId: text("industry_user_id").notNull(),
+  companyName: text("company_name").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  therapeuticArea: text("therapeutic_area"),
+  mechanismTags: jsonb("mechanism_tags").$type<string[]>(),
+  stagePreference: text("stage_preference"),
+  whatTheyOffer: text("what_they_offer"),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type ResearchNeed = typeof researchNeeds.$inferSelect;
 
 export const edenMessageFeedback = pgTable("eden_message_feedback", {
   id: serial("id").primaryKey(),

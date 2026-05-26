@@ -10,7 +10,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter, type RetrievedAsset, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -11424,6 +11424,11 @@ If a field cannot be determined, use "N/A".`
         size: z.number().int().min(0).max(10 * 1024 * 1024),
       })).max(5).default([]);
       const attachedFiles = attachedFileSchema.parse(req.body.attachedFiles ?? []);
+      const contentHash = require("crypto")
+        .createHash("sha256")
+        .update(JSON.stringify({ ...parsed, ts: Date.now() }))
+        .digest("hex")
+        .substring(0, 16);
       const [concept] = await db
         .insert(conceptCards)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -11433,6 +11438,8 @@ If a field cannot be determined, use "N/A".`
           credibilityScore: aiScore,
           credibilityRationale: aiRationale,
           attachedFiles,
+          contentHash,
+          publishedAt: new Date(),
         })
         .returning();
 
@@ -11759,6 +11766,157 @@ If a field cannot be determined, use "N/A".`
       const landscapeResp = { assets, literature };
       cacheSet(landscapeCacheKey, landscapeResp, 2 * 60 * 60 * 1000);
       res.json(landscapeResp);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/discovery/concepts/:id — edit own concept
+  app.patch("/api/discovery/concepts/:id", verifyConceptAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = (req as any).conceptUserId as string;
+      const [existing] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Forbidden" });
+
+      const allowed = ["title", "oneLiner", "hypothesis", "problem", "proposedApproach",
+        "requiredExpertise", "seeking", "therapeuticArea", "modality", "stage",
+        "openQuestions", "mechanismTags"] as const;
+      const updates: Record<string, any> = {};
+      for (const key of allowed) {
+        if (key in req.body) updates[key] = req.body[key];
+      }
+      if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields" });
+
+      const hash = require("crypto")
+        .createHash("sha256")
+        .update(JSON.stringify({ ...existing, ...updates }))
+        .digest("hex")
+        .substring(0, 16);
+      updates.contentHash = hash;
+
+      const [updated] = await db.update(conceptCards).set(updates).where(eq(conceptCards.id, id)).returning();
+      res.json({ concept: stripPrivateFields(updated) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/discovery/concepts/:id/escalate — request graduation to research project
+  app.post("/api/discovery/concepts/:id/escalate", verifyConceptAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = (req as any).conceptUserId as string;
+      const [existing] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!existing) return res.status(404).json({ error: "Not found" });
+      if (existing.userId !== userId) return res.status(403).json({ error: "Forbidden" });
+      if (existing.escalationStatus === "pending") return res.status(409).json({ error: "Escalation already pending" });
+      if (existing.escalationStatus === "approved") return res.status(409).json({ error: "Already graduated to research project" });
+
+      const [updated] = await db
+        .update(conceptCards)
+        .set({ escalationStatus: "pending", escalationRequestedAt: new Date() })
+        .where(eq(conceptCards.id, id))
+        .returning();
+      res.json({ concept: stripPrivateFields(updated) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/concept-escalations — admin escalation queue
+  app.get("/api/admin/concept-escalations", requireAdmin, async (req, res) => {
+    try {
+      const concepts = await db
+        .select()
+        .from(conceptCards)
+        .where(eq(conceptCards.escalationStatus, "pending"))
+        .orderBy(conceptCards.escalationRequestedAt);
+      res.json({ concepts });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/concept-escalations/:id/approve — approve and create research project
+  app.post("/api/admin/concept-escalations/:id/approve", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Not found" });
+      if (concept.escalationStatus !== "pending") return res.status(409).json({ error: "Not pending" });
+
+      const [project] = await db
+        .insert(researchProjects)
+        .values({
+          title: concept.title,
+          researchDomain: concept.therapeuticArea,
+          description: `${concept.oneLiner}\n\n${concept.problem}`,
+          status: "planning",
+        })
+        .returning();
+
+      await db
+        .update(conceptCards)
+        .set({ escalationStatus: "approved", escalationReviewedAt: new Date(), projectId: project.id })
+        .where(eq(conceptCards.id, id));
+
+      res.json({ projectId: project.id });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/concept-escalations/:id/reject — reject with optional note
+  app.post("/api/admin/concept-escalations/:id/reject", requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const { note } = req.body;
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Not found" });
+
+      await db
+        .update(conceptCards)
+        .set({ escalationStatus: "rejected", escalationReviewedAt: new Date(), escalationNote: note ?? null })
+        .where(eq(conceptCards.id, id));
+
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/discovery/research-needs — public list of research needs posted by industry
+  app.get("/api/discovery/research-needs", async (_req, res) => {
+    try {
+      const needs = await db
+        .select()
+        .from(researchNeeds)
+        .where(eq(researchNeeds.status, "active"))
+        .orderBy(desc(researchNeeds.createdAt))
+        .limit(50);
+      res.json({ needs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/discovery/research-needs — industry posts a research need (admin-mediated)
+  app.post("/api/discovery/research-needs", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = (req as any).userId as string;
+      const { companyName, title, description, therapeuticArea, mechanismTags, stagePreference, whatTheyOffer } = req.body;
+      if (!companyName || !title || !description) return res.status(400).json({ error: "companyName, title and description required" });
+      const [need] = await db
+        .insert(researchNeeds)
+        .values({ industryUserId: userId, companyName, title, description, therapeuticArea, mechanismTags, stagePreference, whatTheyOffer, status: "active" })
+        .returning();
+      res.json({ need });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

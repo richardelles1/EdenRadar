@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Lightbulb, TrendingUp, Clock, Sparkles, PlusCircle, Loader2,
   Users, DollarSign, GraduationCap, ChevronDown, ChevronUp, Mail, Trash2, AlertTriangle, ExternalLink,
+  Rocket, Clock3, CheckCircle2, XCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -191,6 +192,7 @@ export default function MyConcepts() {
         <div className="space-y-4">
           {myConcepts.map((c) => {
             const totalInterest = (c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0);
+            const escalationStatus = (c as any).escalationStatus as string ?? "none";
             return (
               <div key={c.id} data-testid={`card-my-concept-${c.id}`}>
                 <div className="group p-5 rounded-xl border border-border bg-card hover:border-amber-500/40 hover:shadow-md transition-all duration-200">
@@ -201,6 +203,28 @@ export default function MyConcepts() {
                       </h3>
                     </button>
                     <div className="flex items-center gap-2 shrink-0">
+                      {escalationStatus === "pending" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400" data-testid={`badge-escalation-${c.id}`}>
+                          <Clock3 className="w-2.5 h-2.5" /> Pending review
+                        </span>
+                      )}
+                      {escalationStatus === "approved" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border border-green-500/30 bg-green-500/10 text-green-600 dark:text-green-400" data-testid={`badge-escalation-${c.id}`}>
+                          <CheckCircle2 className="w-2.5 h-2.5" /> Graduated
+                        </span>
+                      )}
+                      {escalationStatus === "rejected" && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400" data-testid={`badge-escalation-${c.id}`}>
+                          <XCircle className="w-2.5 h-2.5" /> Not accepted
+                        </span>
+                      )}
+                      {escalationStatus === "none" && (
+                        <Link href={`/discovery/concept/${c.id}`}>
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded border border-violet-500/20 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:border-violet-500/40 cursor-pointer" data-testid={`badge-graduate-${c.id}`}>
+                            <Rocket className="w-2.5 h-2.5" /> Graduate?
+                          </span>
+                        </Link>
+                      )}
                       {c.credibilityScore !== null && (
                         <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
                           c.credibilityScore >= 70
