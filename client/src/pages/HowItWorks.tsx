@@ -357,13 +357,9 @@ export default function HowItWorks() {
         {/* Hero + Stats */}
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-            The intelligence engine{" "}
-            <span className="gradient-text">
-              for{" "}
-              <WordRotate
-                words={["BD teams.", "TTOs.", "researchers.", "deal flow."]}
-                className="inline-block"
-              />
+            <span className="block">The intelligence engine</span>
+            <span className="gradient-text block">
+              for <WordRotate words={["BD teams.", "TTOs.", "researchers.", "deal flow."]} />
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
