@@ -234,9 +234,9 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
   const tiles = active === "discovery" ? DISCOVERY_TILES : active === "research" ? RESEARCH_TILES : INDUSTRY_TILES;
 
   const TAB_STYLE: Record<string, { bg: string; shadow: string }> = {
-    discovery: { bg: "hsl(38 92% 50%)", shadow: "0 2px 12px hsl(38 92% 50% / 0.35)" },
-    research: { bg: "hsl(265 60% 55%)", shadow: "0 2px 12px hsl(265 60% 55% / 0.35)" },
-    industry: { bg: "hsl(142 52% 36%)", shadow: "0 2px 12px hsl(142 52% 36% / 0.35)" },
+    discovery: { bg: "hsl(var(--portal-discovery))", shadow: "0 2px 12px hsl(var(--portal-discovery) / 0.35)" },
+    research: { bg: "hsl(var(--portal-lab))", shadow: "0 2px 12px hsl(var(--portal-lab) / 0.35)" },
+    industry: { bg: "hsl(var(--portal-scout))", shadow: "0 2px 12px hsl(var(--portal-scout) / 0.35)" },
   };
 
   const TILE_ACCENT: Record<string, { hover: string; iconBg: string; iconBgHover: string; iconColor: string }> = {
@@ -286,7 +286,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
             <div className="flex items-center gap-2">
               <span
                 className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
-                style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)", border: "1px solid hsl(142 52% 36% / 0.3)" }}
+                style={{ background: "hsl(var(--portal-scout) / 0.12)", color: "hsl(var(--portal-scout))", border: "1px solid hsl(var(--portal-scout) / 0.3)" }}
               >
                 EdenScout — Pipeline Intelligence
               </span>
@@ -316,7 +316,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
             <div className="flex items-center gap-2">
               <span
                 className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
-                style={{ background: "hsl(234 80% 58% / 0.10)", color: "hsl(234 80% 58%)", border: "1px solid hsl(234 80% 58% / 0.25)" }}
+                style={{ background: "hsl(var(--portal-market) / 0.10)", color: "hsl(var(--portal-market))", border: "1px solid hsl(var(--portal-market) / 0.25)" }}
               >
                 EdenMarket — Blind Asset Marketplace
               </span>
@@ -326,14 +326,14 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
                 <div
                   key={tile.title}
                   className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md"
-                  style={{ borderColor: "hsl(234 80% 58% / 0.15)", animationDelay: `${(i + 4) * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                  style={{ borderColor: "hsl(var(--portal-market) / 0.15)", animationDelay: `${(i + 4) * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
                   data-testid={`tile-industry-market-${i}`}
                 >
                   <div
                     className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200"
-                    style={{ background: "hsl(234 80% 58% / 0.10)" }}
+                    style={{ background: "hsl(var(--portal-market) / 0.10)" }}
                   >
-                    <tile.icon className="w-5 h-5" style={{ color: "hsl(234 80% 58%)" }} />
+                    <tile.icon className="w-5 h-5" style={{ color: "hsl(var(--portal-market))" }} />
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
@@ -358,7 +358,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
             <Link href="/market">
               <span
                 className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 cursor-pointer"
-                style={{ color: "hsl(234 80% 58%)" }}
+                style={{ color: "hsl(var(--portal-market))" }}
                 data-testid="button-toggle-market-cta"
               >
                 Browse EdenMarket
@@ -393,7 +393,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
               <a
                 href="/discovery"
                 className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 mx-auto w-fit"
-                style={{ color: "hsl(38 92% 50%)" }}
+                style={{ color: "hsl(var(--portal-discovery))" }}
                 data-testid="button-discovery-cta"
               >
                 Browse EdenDiscovery
@@ -459,7 +459,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
         <div
           className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6"
-          style={{ background: "hsl(142 52% 36% / 0.2)", border: "1px solid hsl(142 52% 36% / 0.35)" }}
+          style={{ background: "hsl(var(--portal-scout) / 0.2)", border: "1px solid hsl(var(--portal-scout) / 0.35)" }}
         >
           <Zap className="w-3.5 h-3.5" style={{ color: "hsl(142 65% 60%)" }} />
           <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "hsl(142 65% 60%)" }}>
@@ -488,12 +488,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             size="lg"
             onClick={onLogin}
             data-testid="cta-bottom-industry"
-            className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
-            style={{
-              background: "hsl(142 52% 36%)",
-              color: "white",
-              border: "none",
-            }}
+            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
           >
             <Building2 className="w-4 h-4" />
             EdenScout
@@ -502,12 +497,8 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             <Button
               size="lg"
               data-testid="cta-bottom-edenmarket"
-              className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
-              style={{
-                background: "hsl(234 80% 58%)",
-                color: "white",
-                border: "none",
-              }}
+              className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
+              style={{ background: "hsl(var(--portal-market))", color: "white", border: "none" }}
             >
               <ShoppingBag className="w-4 h-4" />
               EdenMarket
@@ -518,12 +509,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             variant="outline"
             onClick={onLogin}
             data-testid="cta-bottom-research"
-            className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
-            style={{
-              borderColor: "hsl(142 52% 36% / 0.5)",
-              color: "hsl(142 65% 62%)",
-              background: "transparent",
-            }}
+            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
           >
             <FlaskConical className="w-4 h-4" />
             For Researchers
@@ -533,12 +519,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             variant="outline"
             onClick={onLogin}
             data-testid="cta-bottom-discovery"
-            className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
-            style={{
-              borderColor: "hsl(38 92% 50% / 0.5)",
-              color: "hsl(38 92% 60%)",
-              background: "transparent",
-            }}
+            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
           >
             <Lightbulb className="w-4 h-4" />
             For Discovery
@@ -555,7 +536,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 const STATS = [
   { value: "300+",    label: "Tech Transfer Offices" },
   { value: "10M+",    label: "Papers Indexed" },
-  { value: "EDEN",    label: "Enriched Signals" },
+  { value: "0–100",   label: "EDEN Readiness Score" },
   { value: "3-Sided", label: "Ecosystem" },
 ];
 
@@ -717,34 +698,34 @@ export default function Landing() {
           <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
               <div className="space-y-5">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "hsl(234 80% 58% / 0.10)", border: "1px solid hsl(234 80% 58% / 0.25)" }}>
-                  <ShoppingBag className="w-3.5 h-3.5" style={{ color: "hsl(234 80% 58%)" }} />
-                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "hsl(234 80% 58%)" }}>EdenMarket</span>
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "hsl(var(--portal-market) / 0.10)", border: "1px solid hsl(var(--portal-market) / 0.25)" }}>
+                  <ShoppingBag className="w-3.5 h-3.5" style={{ color: "hsl(var(--portal-market))" }} />
+                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "hsl(var(--portal-market))" }}>EdenMarket</span>
                 </div>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
                   The blind marketplace for{" "}
-                  <span style={{ color: "hsl(234 80% 58%)" }}>licensable biotech assets</span>
+                  <span style={{ color: "hsl(var(--portal-market))" }}>licensable biotech assets</span>
                 </h2>
                 <p className="text-base text-muted-foreground leading-relaxed">
                   Buyers see structured listings — therapeutic area, modality, stage, IP profile — without seller identities. Engage anonymously, sign an NDA inside the deal room, and unlock the full asset only when both sides agree.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
                   <div className="flex items-start gap-2.5">
-                    <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(234 80% 58%)" }} />
+                    <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
                     <div>
                       <p className="text-xs font-semibold text-foreground">Blind by default</p>
                       <p className="text-[11px] text-muted-foreground leading-snug">Identity hidden until NDA signed.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(234 80% 58%)" }} />
+                    <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
                     <div>
                       <p className="text-xs font-semibold text-foreground">NDA-gated deal room</p>
                       <p className="text-[11px] text-muted-foreground leading-snug">Documents, messages, audit trail.</p>
                     </div>
                   </div>
                   <div className="flex items-start gap-2.5">
-                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(234 80% 58%)" }} />
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
                     <div>
                       <p className="text-xs font-semibold text-foreground">Success-fee aligned</p>
                       <p className="text-[11px] text-muted-foreground leading-snug">Pay only when a deal closes — see pricing.</p>
@@ -755,7 +736,7 @@ export default function Landing() {
                   <Link href="/market">
                     <Button
                       className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                      style={{ background: "hsl(234 80% 58%)", color: "white", border: "none" }}
+                      style={{ background: "hsl(var(--portal-market))", color: "white", border: "none" }}
                       data-testid="button-landing-edenmarket-buyer"
                     >
                       <ShoppingBag className="w-4 h-4" />
@@ -767,7 +748,7 @@ export default function Landing() {
                     <Button
                       variant="outline"
                       className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                      style={{ borderColor: "hsl(234 80% 58% / 0.4)", color: "hsl(234 80% 58%)" }}
+                      style={{ borderColor: "hsl(var(--portal-market) / 0.4)", color: "hsl(var(--portal-market))" }}
                       data-testid="button-landing-edenmarket-seller"
                     >
                       List your assets
@@ -777,16 +758,16 @@ export default function Landing() {
                 </div>
                 <p className="text-[11px] text-muted-foreground pt-1">
                   Already a buyer?{" "}
-                  <Link href="/market/login" className="font-medium hover:underline" style={{ color: "hsl(234 80% 58%)" }} data-testid="link-landing-market-signin">
+                  <Link href="/market/login" className="font-medium hover:underline" style={{ color: "hsl(var(--portal-market))" }} data-testid="link-landing-market-signin">
                     Sign in to EdenMarket
                   </Link>
                 </p>
               </div>
 
-              <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(234 80% 58% / 0.08), hsl(234 80% 58% / 0.02))", border: "1px solid hsl(234 80% 58% / 0.20)" }}>
+              <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(var(--portal-market) / 0.08), hsl(var(--portal-market) / 0.02))", border: "1px solid hsl(var(--portal-market) / 0.20)" }}>
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sample listing</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "hsl(234 80% 58% / 0.15)", color: "hsl(234 80% 58%)" }}>BLIND</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "hsl(var(--portal-market) / 0.15)", color: "hsl(var(--portal-market))" }}>BLIND</span>
                 </div>
                 <div className="space-y-3">
                   <div>
@@ -809,7 +790,7 @@ export default function Landing() {
                   </div>
                   <div className="pt-3 border-t border-border/50 flex items-center justify-between">
                     <span className="text-[11px] text-muted-foreground">Seller identity revealed after NDA</span>
-                    <Lock className="w-3.5 h-3.5" style={{ color: "hsl(234 80% 58%)" }} />
+                    <Lock className="w-3.5 h-3.5" style={{ color: "hsl(var(--portal-market))" }} />
                   </div>
                 </div>
               </div>

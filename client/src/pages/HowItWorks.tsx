@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { PLAN_PRICES, formatPrice } from "@/lib/pricing";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
@@ -8,18 +7,14 @@ import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import {
   ArrowRight,
-  Sprout,
-  Check,
+  Radar,
   Lightbulb,
   FlaskConical,
   TrendingUp,
-  ChevronRight,
+  ShoppingBag,
   Dna,
   Shield,
-  Globe,
-  Bell,
-  FileText,
-  GitMerge,
+  Check,
 } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
@@ -28,12 +23,7 @@ function useReveal(threshold = 0.15) {
     const el = ref.current;
     if (!el) return;
     const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          el.classList.add("is-visible");
-          obs.disconnect();
-        }
-      },
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("is-visible"); obs.disconnect(); } },
       { threshold }
     );
     obs.observe(el);
@@ -52,349 +42,22 @@ function PageBackground() {
           height: "min(80vw, 800px)",
           animation: "radar-bg-slow 28s linear infinite",
           transformOrigin: "center center",
-          background:
-            "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.03) 310deg, hsl(142 65% 48% / 0.08) 360deg)",
+          background: "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.03) 310deg, hsl(142 65% 48% / 0.08) 360deg)",
           borderRadius: "50%",
         }}
       />
+      {[300, 450, 600].map((r, i) => (
+        <div
+          key={r}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
+          style={{ width: r, height: r, borderColor: `hsl(142 55% 45% / ${0.04 - i * 0.006})` }}
+        />
+      ))}
     </div>
   );
 }
 
-const YEARLY_DISCOUNT = 0.95;
-
-function derivedYearly(monthlyUsd: number): { yearlyPrice: string; yearlySavings: string } {
-  const discounted = Math.floor(monthlyUsd * YEARLY_DISCOUNT);
-  const savedPerYear = Math.round(monthlyUsd * 12 * (1 - YEARLY_DISCOUNT));
-  return {
-    yearlyPrice: `$${discounted}`,
-    yearlySavings: `$${savedPerYear}`,
-  };
-}
-
-const TIERS = [
-  {
-    name: "EdenDiscovery",
-    tier: "Tier 1",
-    icon: Lightbulb,
-    color: "hsl(38 92% 50%)",
-    colorDim: "hsl(38 92% 50% / 0.08)",
-    borderColor: "hsl(38 92% 50% / 0.3)",
-    headerBg: "hsl(38 92% 50%)",
-    price: "Free",
-    yearlyPrice: "",
-    yearlySavings: "",
-    period: "",
-    tagline: "Explore concepts. Validate ideas. Start free.",
-    popular: false,
-    features: [
-      "Submit early-stage concepts before research begins",
-      "EDEN credibility scoring for concepts",
-      "Browse the public concept community feed",
-      "Save concepts to a personal watchlist",
-      "Surface your concepts to industry collaborators",
-    ],
-  },
-  {
-    name: "EdenLab",
-    tier: "Tier 2",
-    icon: FlaskConical,
-    color: "hsl(265 60% 60%)",
-    colorDim: "hsl(265 60% 60% / 0.08)",
-    borderColor: "hsl(265 60% 60% / 0.3)",
-    headerBg: "hsl(265 60% 60%)",
-    price: "Free",
-    yearlyPrice: "",
-    yearlySavings: "",
-    period: "",
-    tagline: "Structure your research from concept to publication.",
-    popular: false,
-    features: [
-      "Everything in EdenDiscovery",
-      "11-section structured research project canvas",
-      "Literature synthesis across 40+ academic sources",
-      "Evidence extraction and citation management",
-      "Grants discovery matched to your research profile",
-      "Industry visibility for your published research",
-    ],
-  },
-  {
-    name: "EdenScout",
-    tier: "Tier 3",
-    icon: TrendingUp,
-    color: "hsl(142 65% 48%)",
-    colorDim: "hsl(142 65% 48% / 0.08)",
-    borderColor: "hsl(142 65% 48% / 0.3)",
-    headerBg: "hsl(142 52% 36%)",
-    price: formatPrice(PLAN_PRICES.individual),
-    ...derivedYearly(PLAN_PRICES.individual),
-    period: "/mo",
-    tagline: "For BD teams and licensing executives.",
-    popular: true,
-    features: [],
-  },
-];
-
-function FreeTierCard({ tier }: { tier: typeof TIERS[0] }) {
-  const [, navigate] = useLocation();
-  return (
-    <div
-      className="rounded-2xl flex flex-col overflow-hidden"
-      style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
-    >
-      <div className="px-5 py-4" style={{ background: tier.headerBg }}>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2.5">
-            <div
-              className="w-8 h-8 rounded-lg flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.2)" }}
-            >
-              <tier.icon className="w-3.5 h-3.5 text-white" />
-            </div>
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{tier.tier}</p>
-              <h3 className="text-sm font-bold text-white leading-tight">{tier.name}</h3>
-            </div>
-          </div>
-          <span className="text-xl font-black text-white">Free</span>
-        </div>
-        <p className="text-[11px] text-white/70 leading-snug">{tier.tagline}</p>
-      </div>
-
-      <div className="flex-1 px-5 py-3 bg-card">
-        <ul className="space-y-2">
-          {tier.features.slice(0, 4).map((feature, fi) => {
-            const isEscalator = feature.startsWith("Everything in");
-            return (
-              <li key={fi} className="flex items-start gap-2 text-xs">
-                <span
-                  className="flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center mt-0.5"
-                  style={{ background: isEscalator ? "hsl(var(--muted))" : tier.color.replace(")", " / 0.15)") }}
-                >
-                  {isEscalator
-                    ? <ChevronRight className="w-2 h-2 text-muted-foreground" />
-                    : <Check className="w-2 h-2" style={{ color: tier.color }} />}
-                </span>
-                <span className={isEscalator ? "text-muted-foreground font-medium italic" : "text-foreground"}>
-                  {feature}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </div>
-
-      <div className="px-5 py-4 bg-card border-t border-border">
-        <Button
-          className="w-full font-semibold h-9 text-sm"
-          onClick={() => navigate("/login")}
-          data-testid={`pricing-cta-${tier.tier.toLowerCase().replace(" ", "")}`}
-          style={{ background: tier.color, color: "white", border: "none" }}
-          variant="default"
-        >
-          Start Free
-          <ChevronRight className="w-3.5 h-3.5 ml-1" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-const SCOUT = TIERS[2];
-
-const SCOUT_CATEGORIES = [
-  { icon: Globe,    label: "TTO Intelligence" },
-  { icon: Bell,     label: "Smart Alerts"      },
-  { icon: FileText, label: "Asset Dossiers"    },
-  { icon: GitMerge, label: "Deal Pipeline"     },
-];
-
-const SCOUT_BULLETS = [
-  "EDEN queries across 300+ TTOs",
-  "Custom push alerts via email",
-  "Institution intelligence and TTO profiles",
-  "Enriched dossiers with competitive cross-reference",
-  "Therapy area, stage, and modality filters",
-  "EDEN readiness scoring per asset",
-  "Researcher contact information",
-  "Saved asset lists and pipeline tracking",
-  "PDF and CSV pipeline export",
-];
-
-function ScoutCard({ isYearly }: { isYearly: boolean }) {
-  const [, navigate] = useLocation();
-
-  return (
-    <div
-      className="rounded-2xl flex flex-col overflow-hidden relative h-full"
-      style={{
-        border: `1px solid ${SCOUT.borderColor}`,
-        borderTop: `3px solid ${SCOUT.headerBg}`,
-      }}
-    >
-      <div className="px-7 py-6" style={{ background: SCOUT.headerBg }}>
-        <div className="flex items-start justify-between gap-6">
-          <div className="flex items-center gap-3">
-            <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-              style={{ background: "rgba(255,255,255,0.2)" }}
-            >
-              <SCOUT.icon className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{SCOUT.tier}</p>
-                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/20 text-white">
-                  Most Popular
-                </span>
-              </div>
-              <h3 className="text-lg font-bold text-white leading-tight">{SCOUT.name}</h3>
-              <p className="text-xs text-white/70 mt-0.5">{SCOUT.tagline}</p>
-            </div>
-          </div>
-
-          <div className="text-right flex-shrink-0">
-            {isYearly ? (
-              <>
-                <div className="flex items-baseline gap-1.5 justify-end">
-                  <span className="text-4xl font-black text-white">{SCOUT.yearlyPrice}</span>
-                  <span className="text-sm text-white/70">/mo</span>
-                  <span className="text-sm text-white/50 line-through">{SCOUT.price}</span>
-                </div>
-                <div className="mt-1 flex items-center gap-1.5 justify-end">
-                  <span
-                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                    style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
-                  >
-                    Save {SCOUT.yearlySavings}/yr
-                  </span>
-                  <span className="text-[10px] text-white/60">billed annually</span>
-                </div>
-              </>
-            ) : (
-              <div className="flex items-baseline gap-1 justify-end">
-                <span className="text-4xl font-black text-white">{SCOUT.price}</span>
-                <span className="text-sm text-white/70">{SCOUT.period}</span>
-              </div>
-            )}
-          </div>
-        </div>
-        <p className="mt-3 text-[11px] text-white/50 text-right">
-          Individual, Team &amp; Enterprise plans &mdash;{" "}
-          <Link to="/pricing" className="text-white/70 underline underline-offset-2 hover:text-white transition-colors">
-            see all plans &rarr;
-          </Link>
-        </p>
-      </div>
-
-      {/* Top half — 2x2 icon + label tiles */}
-      <div className="px-7 pt-5 pb-4 bg-card grid grid-cols-2 gap-3">
-        {SCOUT_CATEGORIES.map((cat) => (
-          <div
-            key={cat.label}
-            className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
-            style={{ background: SCOUT.colorDim }}
-          >
-            <cat.icon className="w-7 h-7 flex-shrink-0" style={{ color: SCOUT.headerBg }} />
-            <span className="text-sm font-bold text-foreground leading-tight">{cat.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Divider */}
-      <div className="mx-7 h-px bg-border" />
-
-      {/* Bottom half — 2-column bullet list */}
-      <div className="px-7 py-4 bg-card grid grid-cols-2 gap-x-6 gap-y-1.5">
-        {SCOUT_BULLETS.map((item, i) => (
-          <div key={i} className="flex items-start gap-2">
-            <Check className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: SCOUT.headerBg }} />
-            <span className="text-xs text-muted-foreground">{item}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="px-7 py-5 bg-card border-t border-border">
-        <Button
-          className="w-full font-semibold h-11 text-base"
-          onClick={() => navigate("/login")}
-          data-testid="pricing-cta-tier3"
-          style={{ background: SCOUT.headerBg, color: "white", border: "none" }}
-          variant="default"
-        >
-          Get Started with EdenScout
-          <ChevronRight className="w-4 h-4 ml-1.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function PricingCards() {
-  const [isYearly, setIsYearly] = useState(false);
-  const freeTiers = TIERS.slice(0, 2);
-
-  return (
-    <div className="mt-12">
-      {/* Billing toggle */}
-      <div className="flex items-center justify-center gap-3 mb-8">
-        <span
-          className="text-sm font-medium"
-          style={{ color: isYearly ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))" }}
-        >
-          Monthly
-        </span>
-        <button
-          type="button"
-          role="switch"
-          aria-checked={isYearly}
-          data-testid="pricing-billing-toggle"
-          onClick={() => setIsYearly((v) => !v)}
-          className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none"
-          style={{ background: isYearly ? "hsl(142 65% 48%)" : "hsl(var(--muted))" }}
-        >
-          <span
-            className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-            style={{ transform: isYearly ? "translateX(20px)" : "translateX(0px)" }}
-          />
-        </button>
-        <span
-          className="text-sm font-medium flex items-center gap-1.5"
-          style={{ color: isYearly ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))" }}
-        >
-          Yearly
-          <span
-            className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-            style={{ background: "hsl(142 65% 48% / 0.12)", color: "hsl(142 52% 36%)" }}
-          >
-            Save 5% on EdenScout
-          </span>
-        </span>
-      </div>
-
-      {/* Bento grid: free tiers stacked on left, Scout full-height on right */}
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-5">
-        {/* Left column: Discovery + Lab stacked */}
-        <div className="flex flex-col gap-5">
-          {freeTiers.map((tier) => (
-            <FreeTierCard key={tier.name} tier={tier} />
-          ))}
-        </div>
-        {/* Right column: Scout spans full height */}
-        <ScoutCard isYearly={isYearly} />
-      </div>
-    </div>
-  );
-}
-
-/* ─── Eden Chat Demo ─────────────────────────────────────── */
-
-interface ChatMessage {
-  role: "user" | "eden";
-  text: string;
-  assetCards?: AssetCardData[];
-  delay: number;
-}
+/* ─── EDEN Chat Demo ─────────────────────────────────────────── */
 
 interface AssetCardData {
   id: number;
@@ -409,78 +72,19 @@ interface AssetCardData {
 }
 
 const DEMO_ASSETS: AssetCardData[] = [
-  {
-    id: 1,
-    title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen",
-    institution: "Johns Hopkins University",
-    area: "Oncology",
-    stage: "Preclinical",
-    score: 91,
-    modality: "Cell Therapy",
-    color: "hsl(142 65% 48%)",
-    icon: Dna,
-  },
-  {
-    id: 2,
-    title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment",
-    institution: "Johns Hopkins University",
-    area: "Oncology",
-    stage: "Discovery",
-    score: 85,
-    modality: "Small Molecule",
-    color: "hsl(265 60% 60%)",
-    icon: Shield,
-  },
-  {
-    id: 3,
-    title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma",
-    institution: "Johns Hopkins University",
-    area: "Oncology",
-    stage: "IND-Enabling",
-    score: 88,
-    modality: "Antibody",
-    color: "hsl(38 92% 50%)",
-    icon: TrendingUp,
-  },
+  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins University", area: "Oncology", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: "hsl(142 65% 48%)", icon: Dna },
+  { id: 2, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins University", area: "Oncology", stage: "Discovery", score: 85, modality: "Small Molecule", color: "hsl(265 60% 60%)", icon: Shield },
+  { id: 3, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins University", area: "Oncology", stage: "IND-Enabling", score: 88, modality: "Antibody", color: "hsl(38 92% 50%)", icon: TrendingUp },
 ];
 
-const CHAT_MESSAGES: ChatMessage[] = [
-  {
-    role: "eden",
-    text: "I'm EDEN, EdenRadar's research intelligence engine. I monitor and enrich biotech assets across 300+ tech transfer offices in real time. How can I help your team today?",
-    delay: 400,
-  },
-  {
-    role: "user",
-    text: "How many total assets do you have indexed right now?",
-    delay: 1800,
-  },
-  {
-    role: "eden",
-    text: "EdenRadar continuously monitors 300+ research institutions globally. All assets are EDEN-enriched and scored for licensing readiness. What would you like to explore?",
-    delay: 3200,
-  },
-  {
-    role: "user",
-    text: "Interesting. How many of those are in oncology from Johns Hopkins specifically?",
-    delay: 5000,
-  },
-  {
-    role: "eden",
-    text: "Johns Hopkins Technology Ventures has a significant oncology portfolio in the index, spanning cell therapy, small molecule, antibody, and gene therapy modalities. Would you like me to surface the top-ranked assets by EDEN readiness score?",
-    delay: 6600,
-  },
-  {
-    role: "user",
-    text: "Yes, show me the top 3.",
-    delay: 8400,
-  },
-  {
-    role: "eden",
-    text: "Here are the top 3 Johns Hopkins oncology assets ranked by EDEN readiness score:",
-    assetCards: DEMO_ASSETS,
-    delay: 9800,
-  },
+const CHAT_MESSAGES = [
+  { role: "eden" as const, text: "I'm EDEN, EdenRadar's research intelligence engine. I monitor and enrich biotech assets across 300+ tech transfer offices in real time. How can I help your team today?", delay: 400 },
+  { role: "user" as const, text: "How many total assets do you have indexed right now?", delay: 1800 },
+  { role: "eden" as const, text: "EdenRadar continuously monitors 300+ research institutions globally. All assets are EDEN-enriched and scored for licensing readiness. What would you like to explore?", delay: 3200 },
+  { role: "user" as const, text: "Interesting. How many of those are in oncology from Johns Hopkins specifically?", delay: 5000 },
+  { role: "eden" as const, text: "Johns Hopkins Technology Ventures has a significant oncology portfolio in the index, spanning cell therapy, small molecule, antibody, and gene therapy modalities. Would you like me to surface the top-ranked assets by EDEN readiness score?", delay: 6600 },
+  { role: "user" as const, text: "Yes, show me the top 3.", delay: 8400 },
+  { role: "eden" as const, text: "Here are the top 3 Johns Hopkins oncology assets ranked by EDEN readiness score:", assetCards: DEMO_ASSETS, delay: 9800 },
 ];
 
 function DemoAssetCard({ asset }: { asset: AssetCardData }) {
@@ -495,21 +99,13 @@ function DemoAssetCard({ asset }: { asset: AssetCardData }) {
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold text-foreground leading-snug flex-1">{asset.title}</p>
-        <span
-          className="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full"
-          style={{ background: asset.color.replace(")", " / 0.15)"), color: asset.color }}
-        >
+        <span className="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: asset.color.replace(")", " / 0.15)"), color: asset.color }}>
           {asset.score}
         </span>
       </div>
       <div className="flex flex-wrap gap-1.5 text-[10px]">
         <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{asset.institution}</span>
-        <span
-          className="px-2 py-0.5 rounded-full font-medium"
-          style={{ background: asset.color.replace(")", " / 0.12)"), color: asset.color }}
-        >
-          {asset.area}
-        </span>
+        <span className="px-2 py-0.5 rounded-full font-medium" style={{ background: asset.color.replace(")", " / 0.12)"), color: asset.color }}>{asset.area}</span>
         <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{asset.stage}</span>
         <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{asset.modality}</span>
       </div>
@@ -524,59 +120,28 @@ function EdenChatDemo() {
 
   useEffect(() => {
     if (hasStarted.current) return;
-
     const startChat = () => {
       hasStarted.current = true;
       CHAT_MESSAGES.forEach((msg, i) => {
         setTimeout(() => {
           setVisibleCount(i + 1);
-          requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-              requestAnimationFrame(() => {
-                if (chatRef.current) {
-                  chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
-                }
-              });
-            });
-          });
+          requestAnimationFrame(() => requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (chatRef.current) chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
+          })));
         }, msg.delay);
       });
     };
-
     const el = chatRef.current?.closest(".chat-demo-wrapper") as HTMLElement | null;
-    if (!el) {
-      startChat();
-      return;
-    }
-
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          startChat();
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.3 }
-    );
+    if (!el) { startChat(); return; }
+    const obs = new IntersectionObserver(([entry]) => { if (entry.isIntersecting) { startChat(); obs.disconnect(); } }, { threshold: 0.3 });
     obs.observe(el);
     return () => obs.disconnect();
   }, []);
 
   const visibleMessages = CHAT_MESSAGES.slice(0, visibleCount);
-
   return (
-    <div
-      className="flex flex-col rounded-2xl overflow-hidden"
-      style={{
-        background: "hsl(var(--card))",
-        height: 480,
-      }}
-    >
-      {/* Header */}
-      <div
-        className="flex items-center gap-3 px-5 py-3.5 border-b border-border"
-        style={{ background: "hsl(142 52% 36% / 0.06)" }}
-      >
+    <div className="flex flex-col rounded-2xl overflow-hidden border border-border" style={{ background: "hsl(var(--card))", height: 480 }}>
+      <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-primary/[0.06]">
         <EdenAvatar size={28} />
         <div>
           <p className="text-sm font-semibold text-foreground leading-tight">EDEN</p>
@@ -588,44 +153,22 @@ function EdenChatDemo() {
           ))}
         </div>
       </div>
-
-      {/* Messages */}
-      <div
-        ref={chatRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-4"
-        style={{ scrollBehavior: "smooth" }}
-      >
+      <div ref={chatRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ scrollBehavior: "smooth" }}>
         {visibleMessages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-            style={{ animation: "fade-up 0.35s ease-out forwards" }}
-          >
+          <div key={i} className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`} style={{ animation: "fade-up 0.35s ease-out forwards" }}>
             {msg.role === "eden" && <EdenAvatar size={26} isThinking={false} />}
             <div className="flex flex-col gap-2 max-w-[80%]">
               <div
                 className="px-3.5 py-2.5 rounded-xl text-xs leading-relaxed"
-                style={
-                  msg.role === "user"
-                    ? {
-                        background: "hsl(142 52% 36%)",
-                        color: "white",
-                        borderRadius: "14px 14px 4px 14px",
-                      }
-                    : {
-                        background: "hsl(var(--muted))",
-                        color: "hsl(var(--foreground))",
-                        borderRadius: "14px 14px 14px 4px",
-                      }
-                }
+                style={msg.role === "user"
+                  ? { background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", borderRadius: "14px 14px 4px 14px" }
+                  : { background: "hsl(var(--muted))", color: "hsl(var(--foreground))", borderRadius: "14px 14px 14px 4px" }}
               >
                 {msg.text}
               </div>
-              {msg.assetCards && (
+              {"assetCards" in msg && msg.assetCards && (
                 <div className="space-y-2">
-                  {msg.assetCards.map((asset) => (
-                    <DemoAssetCard key={asset.id} asset={asset} />
-                  ))}
+                  {msg.assetCards.map((asset) => <DemoAssetCard key={asset.id} asset={asset} />)}
                 </div>
               )}
             </div>
@@ -634,39 +177,18 @@ function EdenChatDemo() {
         {visibleCount < CHAT_MESSAGES.length && (
           <div className="flex gap-2.5">
             <EdenAvatar size={26} isThinking />
-            <div
-              className="px-3.5 py-2.5 rounded-xl text-xs"
-              style={{
-                background: "hsl(var(--muted))",
-                color: "hsl(var(--muted-foreground))",
-                borderRadius: "14px 14px 14px 4px",
-              }}
-            >
+            <div className="px-3.5 py-2.5 rounded-xl text-xs" style={{ background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))", borderRadius: "14px 14px 14px 4px" }}>
               <span className="flex gap-1 items-center">
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-primary"
-                  style={{ animation: "eden-pulse 1.2s ease-in-out infinite" }}
-                />
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-primary"
-                  style={{ animation: "eden-pulse 1.2s ease-in-out 0.25s infinite" }}
-                />
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-primary"
-                  style={{ animation: "eden-pulse 1.2s ease-in-out 0.5s infinite" }}
-                />
+                {[0, 0.25, 0.5].map((delay, i) => (
+                  <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: `eden-pulse 1.2s ease-in-out ${delay}s infinite` }} />
+                ))}
               </span>
             </div>
           </div>
         )}
       </div>
-
-      {/* Input stub */}
       <div className="px-4 py-3 border-t border-border">
-        <div
-          className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl"
-          style={{ background: "hsl(var(--muted))", opacity: 0.5 }}
-        >
+        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-muted opacity-50">
           <span className="text-xs text-muted-foreground flex-1">Ask EDEN anything about biotech assets...</span>
           <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
         </div>
@@ -675,39 +197,87 @@ function EdenChatDemo() {
   );
 }
 
+/* ─── Portal Tier Overview ───────────────────────────────────── */
+
+const TIER_OVERVIEW = [
+  {
+    icon: Lightbulb,
+    name: "EdenDiscovery",
+    tagline: "Concept registry for early-stage innovators",
+    price: "Free",
+    color: "hsl(var(--portal-discovery))",
+    colorDim: "hsl(var(--portal-discovery) / 0.08)",
+    borderColor: "hsl(var(--portal-discovery) / 0.3)",
+    features: ["Submit and timestamp early-stage concepts", "EDEN credibility scoring (0–100)", "Surface to industry scouts"],
+  },
+  {
+    icon: FlaskConical,
+    name: "EdenLab",
+    tagline: "Project workspace for academic researchers",
+    price: "Free",
+    color: "hsl(var(--portal-lab))",
+    colorDim: "hsl(var(--portal-lab) / 0.08)",
+    borderColor: "hsl(var(--portal-lab) / 0.3)",
+    features: ["11-section structured research canvas", "Literature synthesis across 40+ sources", "Grants discovery matched to your profile"],
+  },
+  {
+    icon: TrendingUp,
+    name: "EdenScout",
+    tagline: "Intelligence platform for BD teams",
+    price: "Paid",
+    color: "hsl(var(--portal-scout))",
+    colorDim: "hsl(var(--portal-scout) / 0.08)",
+    borderColor: "hsl(var(--portal-scout) / 0.3)",
+    features: ["EDEN queries across 300+ TTOs", "EDEN-scored dossiers + competitive cross-reference", "Alerts, CSV export, pipeline tracking"],
+  },
+  {
+    icon: ShoppingBag,
+    name: "EdenMarket",
+    tagline: "Blind marketplace for licensable assets",
+    price: "Paid",
+    color: "hsl(var(--portal-market))",
+    colorDim: "hsl(var(--portal-market) / 0.08)",
+    borderColor: "hsl(var(--portal-market) / 0.3)",
+    features: ["Anonymous listings — identity NDA-gated", "Secure deal rooms with audit trail", "Success-fee aligned — free to list"],
+  },
+];
+
+/* ─── How-to Steps ───────────────────────────────────────────── */
+
 const HOW_STEPS = [
   {
     number: "01",
     title: "Sign up and choose your tier",
-    desc: "Create your account in under two minutes. Select the tier that fits your team, starting from EdenDiscovery for early exploration all the way to the full EdenScout intelligence suite.",
+    desc: "Create your account in under two minutes. Select the tier that fits your workflow — free for researchers, paid for industry intelligence.",
   },
   {
     number: "02",
     title: "Tell EDEN what you're looking for",
-    desc: "Ask EDEN a plain English question. 'Show me CNS assets from MIT in preclinical stage.' EDEN searches across thousands of EDEN-enriched records instantly and presents ranked results.",
+    desc: "Ask in plain English. \"Show me CNS assets from MIT in preclinical stage.\" EDEN searches thousands of enriched records instantly and returns ranked results.",
   },
   {
     number: "03",
     title: "Explore enriched dossiers",
-    desc: "Drill into any asset to see the full EDEN-compiled dossier: scientific summary, competitive landscape, inventor details, patent coverage, and deal readiness score.",
+    desc: "Drill into any asset for the full EDEN-compiled dossier: scientific summary, competitive landscape, inventor details, patent coverage, and deal readiness score.",
   },
   {
     number: "04",
     title: "Save, export, and act",
-    desc: "Save assets to watchlists, export pipeline reports to CSV or PDF, and set alerts for new matching assets. Your BD team is now running on intelligence, not guesswork.",
+    desc: "Save to watchlists, export pipeline reports to CSV or PDF, and set push alerts for new matching assets. Your BD team is now running on intelligence, not guesswork.",
   },
 ];
+
+/* ─── Main Page ──────────────────────────────────────────────── */
 
 export default function HowItWorks() {
   useDocumentMeta({
     title: "How It Works — EdenRadar Platform Walkthrough",
-    description:
-      "See how EdenRadar collects biotech assets, runs EDEN scoring, surfaces alerts, and drives confidential industry-research deals — step by step across the three portals.",
+    description: "See how EDEN monitors 300+ tech transfer offices, scores assets 0–100, and delivers structured intelligence to BD teams, researchers, and concept creators across four interconnected portals.",
   });
   const [, navigate] = useLocation();
-  const pricingRef = useReveal();
   const demoRef = useReveal();
   const stepsRef = useReveal();
+  const tiersRef = useReveal();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -720,45 +290,36 @@ export default function HowItWorks() {
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <div
             className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border mb-8"
-            style={{ background: "hsl(142 52% 36% / 0.08)", borderColor: "hsl(142 52% 36% / 0.25)" }}
+            style={{ background: "hsl(var(--primary) / 0.08)", borderColor: "hsl(var(--primary) / 0.25)" }}
           >
-            <Sprout className="w-3.5 h-3.5 text-primary" />
+            <Radar className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-              Pricing and How It Works
+              Platform Overview
             </span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-            Simple pricing.{" "}
-            <span className="gradient-text">Powerful intelligence.</span>
+            The intelligence engine{" "}
+            <span className="gradient-text">behind EdenRadar.</span>
           </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Three tiers built for every stage of biotech discovery. Start exploring free-range assets today, or go all-in with the full EdenScout suite.
+          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
+            EDEN monitors 300+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and surfaces the results to the teams that need them — in plain English.
           </p>
-        </section>
-
-        {/* Pricing */}
-        <section
-          ref={pricingRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-10"
-        >
-          <div className="text-center mb-4">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-2">Choose Your Tier</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
-              Three portals. One ecosystem.
-            </h2>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <Button size="lg" onClick={() => navigate("/login")} data-testid="howitworks-cta-hero" className="h-11 px-8 font-semibold text-base">
+              Get Started
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/pricing")} data-testid="howitworks-cta-pricing" className="h-11 px-8 font-semibold text-base">
+              See Pricing
+            </Button>
           </div>
-          <PricingCards />
-
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            All plans include a 3-day free trial.
-          </p>
         </section>
 
-        {/* EDEN Chat Demo + Orb */}
+        {/* EDEN Chat Demo */}
         <section
           ref={demoRef}
-          className="reveal-section chat-demo-wrapper max-w-screen-xl mx-auto px-4 sm:px-6 py-16"
+          className="reveal-section chat-demo-wrapper max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
         >
           <div className="text-center mb-12">
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Live Demo</p>
@@ -766,26 +327,23 @@ export default function HowItWorks() {
               See EDEN in action
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              A real conversation with EDEN, EdenRadar's intelligence layer, using the Johns Hopkins TTO as an example.
+              A real conversation with EDEN using the Johns Hopkins TTO as an example. The same query works across all 300+ indexed institutions.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-            {/* Orb */}
-            <div className="flex flex-col items-center justify-center">
-              <div className="w-full max-w-[420px] mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
+            <div className="flex flex-col items-center justify-center order-2 lg:order-1">
+              <div className="w-full max-w-[380px] mx-auto">
                 <EdenOrb />
               </div>
-              <div className="text-center mt-6 max-w-xs mx-auto">
-                <h3 className="font-bold text-foreground mb-2">EDEN Intelligence Engine</h3>
+              <div className="text-center mt-6 max-w-xs mx-auto space-y-2">
+                <h3 className="font-bold text-foreground">EDEN Intelligence Engine</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  The intelligence core of EdenRadar. EDEN processes, classifies, and reasons over every asset in the database, giving you instant, accurate, cited answers in plain English.
+                  Processes, classifies, and reasons over every asset in the database — instant, accurate, cited answers in plain English.
                 </p>
               </div>
             </div>
-
-            {/* Chat window */}
-            <div>
+            <div className="order-1 lg:order-2">
               <EdenChatDemo />
             </div>
           </div>
@@ -794,7 +352,7 @@ export default function HowItWorks() {
         {/* How it works steps */}
         <section
           ref={stepsRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16"
+          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
         >
           <div className="text-center mb-12">
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Getting Started</p>
@@ -802,7 +360,7 @@ export default function HowItWorks() {
               Up and running in four steps
             </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {HOW_STEPS.map((step, i) => (
               <div
                 key={i}
@@ -810,7 +368,7 @@ export default function HowItWorks() {
               >
                 <div
                   className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
-                  style={{ background: "hsl(142 52% 36% / 0.1)", color: "hsl(142 65% 55%)" }}
+                  style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
                 >
                   {step.number}
                 </div>
@@ -823,13 +381,72 @@ export default function HowItWorks() {
           </div>
         </section>
 
+        {/* Portal tier overview */}
+        <section
+          ref={tiersRef}
+          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
+        >
+          <div className="text-center mb-12">
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Choose Your Entry Point</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
+              Four portals. One ecosystem.
+            </h2>
+            <p className="text-muted-foreground max-w-lg mx-auto">
+              Every tier is purpose-built for a different side of the biotech deal. Start free, upgrade when your workflow demands it.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+            {TIER_OVERVIEW.map((tier) => (
+              <div
+                key={tier.name}
+                className="flex flex-col rounded-xl overflow-hidden"
+                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+              >
+                <div className="px-5 py-4 bg-card border-b border-border">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
+                      <tier.icon className="w-4.5 h-4.5" style={{ color: tier.color }} />
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-bold text-foreground text-sm leading-tight">{tier.name}</h3>
+                      <span className="text-sm font-bold" style={{ color: tier.color }}>{tier.price}</span>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-snug">{tier.tagline}</p>
+                </div>
+                <div className="flex-1 px-5 py-4 bg-card space-y-2">
+                  {tier.features.map((f) => (
+                    <div key={f} className="flex items-start gap-2">
+                      <Check className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: tier.color }} />
+                      <span className="text-[11px] text-foreground leading-snug">{f}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="text-center">
+            <Link href="/pricing">
+              <button
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
+                data-testid="howitworks-link-full-pricing"
+              >
+                See full pricing and plan details
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </Link>
+          </div>
+        </section>
+
         {/* Final CTA */}
-        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16">
+        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div
-            className="rounded-2xl p-10 text-center"
+            className="rounded-2xl p-10 sm:p-14 text-center"
             style={{
               background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
-              border: "1px solid hsl(142 52% 36% / 0.2)",
+              border: "1px solid hsl(var(--primary) / 0.2)",
             }}
           >
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
@@ -844,7 +461,6 @@ export default function HowItWorks() {
                 onClick={() => navigate("/login")}
                 data-testid="howitworks-cta-main"
                 className="h-11 px-7 font-semibold"
-                style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
               >
                 Start Free Trial
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -854,11 +470,14 @@ export default function HowItWorks() {
                 variant="outline"
                 onClick={() => navigate("/what-we-do")}
                 data-testid="howitworks-cta-learn"
-                className="h-11 px-7 font-semibold"
+                className="h-11 px-7 font-semibold border-white/20 text-white/80 hover:text-white hover:bg-white/10"
               >
-                Learn More
+                Explore the Platform
               </Button>
             </div>
+            <p className="text-xs text-muted-foreground/60 mt-6">
+              3-day free trial on EdenScout · No card required for researcher tiers
+            </p>
           </div>
         </section>
 

@@ -376,6 +376,35 @@ export async function registerRoutes(
   // ── Eden MCP Server ───────────────────────────────────────────────────────
   app.use("/mcp", mcpRouter);
 
+  // ── Waitlist ──────────────────────────────────────────────────────────────
+  app.post("/api/waitlist", async (req, res) => {
+    const { email, name, role } = req.body as { email?: string; name?: string; role?: string };
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: "Valid email required" });
+    }
+    const VALID_ROLES = ["industry", "researcher", "concept"];
+    const safeRole = VALID_ROLES.includes(role ?? "") ? role : null;
+    const sbUrl = process.env.VITE_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!sbUrl || !serviceKey) return res.status(500).json({ error: "Server misconfigured" });
+    const { createClient } = await import("@supabase/supabase-js");
+    const admin = createClient(sbUrl, serviceKey);
+    const { error } = await admin.from("waitlist").insert({
+      email: email.toLowerCase().trim(),
+      name: name?.trim() || null,
+      role: safeRole,
+    });
+    if (error && error.code === "23505") {
+      // duplicate email — treat as success so we don't leak existence
+      return res.json({ ok: true });
+    }
+    if (error) {
+      console.error("[waitlist] insert error:", error.message);
+      return res.status(500).json({ error: "Could not save. Please try again." });
+    }
+    return res.json({ ok: true });
+  });
+
   app.get("/api/sources", (_req, res) => {
     const sources = Object.values(dataSources).map((s) => ({
       id: s.id,

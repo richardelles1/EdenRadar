@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/lib/supabase";
-import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2, Mail, X } from "lucide-react";
+import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2, Mail, X, Lock } from "lucide-react";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 
 function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string } {
@@ -97,6 +97,18 @@ export default function Login() {
 
   const [pickRoleLoading, setPickRoleLoading] = useState(false);
   const [pickRoleError, setPickRoleError] = useState<string | null>(null);
+
+  // Beta gate — shown before signup form
+  const [betaUnlocked, setBetaUnlocked] = useState(() => localStorage.getItem("eden-access") === "true");
+  const [betaTab, setBetaTab] = useState<"waitlist" | "code">("waitlist");
+  const [wlEmail, setWlEmail] = useState("");
+  const [wlName, setWlName] = useState("");
+  const [wlRole, setWlRole] = useState<"industry" | "researcher" | "concept">("industry");
+  const [wlLoading, setWlLoading] = useState(false);
+  const [wlSuccess, setWlSuccess] = useState(false);
+  const [wlError, setWlError] = useState<string | null>(null);
+  const [betaCode, setBetaCode] = useState("");
+  const [betaCodeError, setBetaCodeError] = useState(false);
 
   useEffect(() => {
     if (!authLoading && session && !role && !isPasswordRecovery && view === "auth") {
@@ -274,6 +286,40 @@ export default function Login() {
       } else {
         setView("auth");
       }
+    }
+  }
+
+  async function handleWaitlistSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setWlLoading(true);
+    setWlError(null);
+    try {
+      const res = await fetch("/api/waitlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: wlEmail, name: wlName, role: wlRole }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        setWlError(data.error ?? "Something went wrong. Please try again.");
+      } else {
+        setWlSuccess(true);
+      }
+    } catch {
+      setWlError("Network error. Please try again.");
+    } finally {
+      setWlLoading(false);
+    }
+  }
+
+  function handleBetaCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (betaCode.trim().toLowerCase() === "quality") {
+      localStorage.setItem("eden-access", "true");
+      setBetaUnlocked(true);
+      setBetaCodeError(false);
+    } else {
+      setBetaCodeError(true);
     }
   }
 
@@ -593,7 +639,14 @@ export default function Login() {
                     key={m}
                     type="button"
                     className={`flex-1 py-2 text-sm font-medium transition-colors ${mode === m ? "bg-emerald-600 text-white" : `bg-transparent ${tabOff}`}`}
-                    onClick={() => { setMode(m); setError(null); setTosAccepted(false); }}
+                    onClick={() => {
+                      setMode(m);
+                      setError(null);
+                      setTosAccepted(false);
+                      setWlSuccess(false);
+                      setWlError(null);
+                      setBetaCodeError(false);
+                    }}
                     data-testid={`tab-${m}`}
                   >
                     {m === "signin" ? "Sign In" : "Sign Up"}
@@ -601,8 +654,154 @@ export default function Login() {
                 ))}
               </div>
 
-              {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              {/* ── Beta gate (signup only, not yet unlocked) ── */}
+              {mode === "signup" && !betaUnlocked && (
+                <div className="space-y-5">
+                  <div className="flex flex-col items-center gap-2 text-center">
+                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${isDark ? "bg-white/8" : "bg-gray-100"}`}>
+                      <Lock className={`w-4 h-4 ${isDark ? "text-white/50" : "text-gray-500"}`} />
+                    </div>
+                    <div className="space-y-0.5">
+                      <p className={`text-sm font-semibold ${heading}`}>EdenRadar Early Access</p>
+                      <p className={`text-xs ${sub}`}>We're in private beta. Join the waitlist or enter your access code.</p>
+                    </div>
+                  </div>
+
+                  {/* Tab switcher */}
+                  <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: tabBorder }}>
+                    {(["waitlist", "code"] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className={`flex-1 py-2 text-xs font-medium transition-colors ${betaTab === t ? (isDark ? "bg-white/10 text-white" : "bg-gray-100 text-gray-800") : `bg-transparent ${tabOff}`}`}
+                        onClick={() => { setBetaTab(t); setWlError(null); setBetaCodeError(false); }}
+                        data-testid={`beta-tab-${t}`}
+                      >
+                        {t === "waitlist" ? "Join Waitlist" : "I Have a Code"}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Waitlist form */}
+                  {betaTab === "waitlist" && !wlSuccess && (
+                    <form onSubmit={handleWaitlistSubmit} className="space-y-3">
+                      <div className={`${inputBase} ${inputBorder}`}>
+                        <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                          <path fillRule="evenodd" clipRule="evenodd" d="M0 .55.571 0H15.43l.57.55v9.9l-.571.55H.57L0 10.45zm1.143 1.138V9.9h13.714V1.69l-6.503 4.8h-.697zM13.749 1.1H2.25L8 5.356z" fill={inputIconColor}/>
+                        </svg>
+                        <input
+                          type="email"
+                          placeholder="Email address"
+                          value={wlEmail}
+                          onChange={(e) => setWlEmail(e.target.value)}
+                          required
+                          autoFocus
+                          data-testid="input-wl-email"
+                          className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                        />
+                      </div>
+                      <div className={`${inputBase} ${inputBorder}`}>
+                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                          <circle cx="7" cy="4.5" r="3.5" stroke={inputIconColor} strokeWidth="1.2"/>
+                          <path d="M1 13c0-3.314 2.686-5 6-5s6 1.686 6 5" stroke={inputIconColor} strokeWidth="1.2" strokeLinecap="round"/>
+                        </svg>
+                        <input
+                          type="text"
+                          placeholder="Your name (optional)"
+                          value={wlName}
+                          onChange={(e) => setWlName(e.target.value)}
+                          data-testid="input-wl-name"
+                          className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className={`text-xs font-medium ${isDark ? "text-white/50" : "text-gray-500"}`}>I am</p>
+                        <div className="grid grid-cols-3 gap-2">
+                          {([
+                            { value: "industry"   as const, label: "Industry",   active: "border-emerald-500/55 bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" },
+                            { value: "researcher" as const, label: "Researcher", active: "border-violet-500/55 bg-violet-500/12 text-violet-600 dark:text-violet-400"   },
+                            { value: "concept"    as const, label: "Concept",    active: "border-amber-500/55 bg-amber-500/12 text-amber-600 dark:text-amber-400"        },
+                          ]).map(({ value, label, active }) => (
+                            <button
+                              key={value}
+                              type="button"
+                              className={`p-2.5 rounded-lg border text-xs font-medium transition-all ${wlRole === value ? active : roleOff}`}
+                              onClick={() => setWlRole(value)}
+                              data-testid={`wl-role-${value}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      {wlError && <p className="text-sm text-red-500 dark:text-red-400">{wlError}</p>}
+                      <button
+                        type="submit"
+                        disabled={wlLoading}
+                        data-testid="button-wl-submit"
+                        className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                      >
+                        {wlLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Request Early Access
+                      </button>
+                    </form>
+                  )}
+
+                  {/* Waitlist success */}
+                  {betaTab === "waitlist" && wlSuccess && (
+                    <div className="text-center space-y-3 py-2">
+                      <CheckCircle2 className="w-9 h-9 text-emerald-500 mx-auto" />
+                      <div className="space-y-1">
+                        <p className={`text-sm font-semibold ${heading}`}>You're on the list.</p>
+                        <p className={`text-xs ${sub}`}>We'll reach out to {wlEmail} when your access is ready.</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Back to home link (always visible in gate) */}
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      className={`text-xs transition-colors ${backLink}`}
+                      onClick={() => navigate("/")}
+                      data-testid="link-gate-back-home"
+                    >
+                      ← Back to home
+                    </button>
+                  </div>
+
+                  {/* Code form */}
+                  {betaTab === "code" && (
+                    <form onSubmit={handleBetaCode} className="space-y-3">
+                      <div className={`${inputBase} ${inputBorder} ${betaCodeError ? "border-red-500" : ""}`}>
+                        <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                          <path d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z" fill={inputIconColor}/>
+                        </svg>
+                        <input
+                          type="password"
+                          placeholder="Access code"
+                          value={betaCode}
+                          onChange={(e) => { setBetaCode(e.target.value); setBetaCodeError(false); }}
+                          autoFocus
+                          data-testid="input-beta-code"
+                          className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                        />
+                      </div>
+                      {betaCodeError && <p className="text-sm text-red-500 dark:text-red-400">Incorrect access code</p>}
+                      <button
+                        type="submit"
+                        data-testid="button-beta-code-submit"
+                        className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors flex items-center justify-center"
+                      >
+                        Unlock Sign Up
+                      </button>
+                    </form>
+                  )}
+                </div>
+              )}
+
+              {/* Form — only when signed-in mode OR beta unlocked */}
+              {(mode === "signin" || betaUnlocked) && <form onSubmit={handleSubmit} className="space-y-4">
 
                 {/* Email */}
                 <div className={`${inputBase} ${inputBorder}`}>
@@ -783,38 +982,36 @@ export default function Login() {
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   {mode === "signin" ? "Sign In" : "Create Account"}
                 </button>
-              </form>
+              </form>}
 
-              {/* Divider */}
-              <div className="flex items-center gap-3">
-                <div className={`flex-1 h-px ${dividerLine}`} />
-                <span className={`text-xs text-nowrap ${dividerText}`}>or continue with</span>
-                <div className={`flex-1 h-px ${dividerLine}`} />
-              </div>
-
-              {/* Google button */}
-              <button
-                type="button"
-                onClick={handleGoogle}
-                disabled={googleLoading}
-                data-testid="button-google-signin"
-                className={`w-full h-12 rounded-full flex items-center justify-center gap-3 text-sm font-medium transition-colors disabled:opacity-60 ${googleBtn}`}
-              >
-                {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
-                Continue with Google
-              </button>
-
-              {/* Back to home */}
-              <div className="text-center pt-1">
+              {/* Divider + Google + back — only when signed-in mode OR beta unlocked */}
+              {(mode === "signin" || betaUnlocked) && <>
+                <div className="flex items-center gap-3">
+                  <div className={`flex-1 h-px ${dividerLine}`} />
+                  <span className={`text-xs text-nowrap ${dividerText}`}>or continue with</span>
+                  <div className={`flex-1 h-px ${dividerLine}`} />
+                </div>
                 <button
                   type="button"
-                  className={`text-xs transition-colors ${backLink}`}
-                  onClick={() => navigate("/")}
-                  data-testid="link-back-home"
+                  onClick={handleGoogle}
+                  disabled={googleLoading}
+                  data-testid="button-google-signin"
+                  className={`w-full h-12 rounded-full flex items-center justify-center gap-3 text-sm font-medium transition-colors disabled:opacity-60 ${googleBtn}`}
                 >
-                  Back to home
+                  {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
+                  Continue with Google
                 </button>
-              </div>
+                <div className="text-center pt-1">
+                  <button
+                    type="button"
+                    className={`text-xs transition-colors ${backLink}`}
+                    onClick={() => navigate("/")}
+                    data-testid="link-back-home"
+                  >
+                    Back to home
+                  </button>
+                </div>
+              </>}
             </>
           )}
 
