@@ -228,7 +228,7 @@ const DISCOVERY_TILES = [
 ];
 
 function PortalToggle({ onLogin }: { onLogin: () => void }) {
-  const [active, setActive] = useState<"discovery" | "research" | "industry">("discovery");
+  const [active, setActive] = useState<"discovery" | "research" | "industry">("industry");
   const ref = useReveal();
 
   const tiles = active === "discovery" ? DISCOVERY_TILES : active === "research" ? RESEARCH_TILES : INDUSTRY_TILES;
@@ -288,7 +288,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
                 className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
                 style={{ background: "hsl(var(--portal-scout) / 0.12)", color: "hsl(var(--portal-scout))", border: "1px solid hsl(var(--portal-scout) / 0.3)" }}
               >
-                EdenScout — Pipeline Intelligence
+                EdenScout: Pipeline Intelligence
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -318,7 +318,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
                 className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
                 style={{ background: "hsl(var(--portal-market) / 0.10)", color: "hsl(var(--portal-market))", border: "1px solid hsl(var(--portal-market) / 0.25)" }}
               >
-                EdenMarket — Blind Asset Marketplace
+                EdenMarket: Blind Asset Marketplace
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -436,24 +436,6 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
               "conic-gradient(from 200deg at 80% 50%, transparent 0deg, hsl(142 65% 48% / 0.06) 60deg, transparent 120deg)",
           }}
         />
-        <div className="absolute bottom-0 right-0 w-64 h-64 opacity-20" style={{ pointerEvents: "none" }}>
-          <svg viewBox="0 0 200 400" className="w-full h-full" aria-hidden>
-            <defs>
-              <linearGradient id="ctaVineGrad" x1="0%" y1="100%" x2="0%" y2="0%">
-                <stop offset="0%" stopColor="hsl(142 65% 52%)" stopOpacity="0" />
-                <stop offset="100%" stopColor="hsl(142 65% 52%)" stopOpacity="0.8" />
-              </linearGradient>
-            </defs>
-            <path
-              d="M 100 400 C 80 340, 120 280, 100 220 C 80 160, 120 100, 100 40"
-              fill="none" stroke="url(#ctaVineGrad)" strokeWidth="2"
-            />
-            {[380, 310, 240, 170, 100, 50].map((y, i) => (
-              <circle key={y} cx={100} cy={y} r={i % 2 === 0 ? 5 : 4}
-                fill="hsl(142 65% 55%)" fillOpacity={0.5 - i * 0.05} />
-            ))}
-          </svg>
-        </div>
       </div>
 
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
@@ -483,7 +465,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
           The platform where world-class university research meets the industry teams ready to build the next breakthrough therapy.
         </p>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4 flex-wrap">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             size="lg"
             onClick={onLogin}
@@ -504,26 +486,6 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
               EdenMarket
             </Button>
           </Link>
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={onLogin}
-            data-testid="cta-bottom-research"
-            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <FlaskConical className="w-4 h-4" />
-            For Researchers
-          </Button>
-          <Button
-            size="lg"
-            variant="outline"
-            onClick={onLogin}
-            data-testid="cta-bottom-discovery"
-            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2 border-white/20 text-white/80 hover:text-white hover:bg-white/10"
-          >
-            <Lightbulb className="w-4 h-4" />
-            For Discovery
-          </Button>
         </div>
 
       </div>
@@ -534,10 +496,10 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 /* ─────────────────────────── Main Landing ────────────────────── */
 
 const STATS = [
-  { value: "300+",    label: "Tech Transfer Offices" },
-  { value: "10M+",    label: "Papers Indexed" },
-  { value: "0–100",   label: "EDEN Readiness Score" },
-  { value: "3-Sided", label: "Ecosystem" },
+  { value: "300+", label: "Tech Transfer Offices" },
+  { value: "10M+", label: "Papers Indexed" },
+  { value: "EDEN", label: "AI Intelligence Engine" },
+  { value: "4",    label: "Integrated Portals" },
 ];
 
 export default function Landing() {
@@ -581,22 +543,21 @@ export default function Landing() {
               </span>
             </h1>
 
-            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10 text-foreground/70 dark:text-white/72">
+            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10 text-foreground/70 dark:text-white/75">
               EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by EDEN, the intelligence engine that reads the science so you don't have to.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
-              <div className="glass-btn-wrap w-full sm:w-auto">
-                <button
-                  onClick={handleLogin}
-                  data-testid="button-cta-discovery"
-                  className="glass-btn-inner w-full sm:w-auto"
-                >
-                  <Lightbulb className="w-4 h-4" />
-                  For Discovery
-                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                </button>
-              </div>
+              <Button
+                size="lg"
+                onClick={handleLogin}
+                data-testid="button-cta-industry"
+                className="w-full sm:w-auto h-11 px-7 font-semibold gap-2"
+              >
+                <Building2 className="w-4 h-4" />
+                For Industry
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
               <div className="glass-btn-wrap w-full sm:w-auto">
                 <button
                   onClick={handleLogin}
@@ -611,11 +572,11 @@ export default function Landing() {
               <div className="glass-btn-wrap w-full sm:w-auto">
                 <button
                   onClick={handleLogin}
-                  data-testid="button-cta-industry"
+                  data-testid="button-cta-discovery"
                   className="glass-btn-inner w-full sm:w-auto"
                 >
-                  <Building2 className="w-4 h-4" />
-                  For Industry
+                  <Lightbulb className="w-4 h-4" />
+                  For Discovery
                   <ArrowRight className="w-3.5 h-3.5 opacity-70" />
                 </button>
               </div>
@@ -654,6 +615,7 @@ export default function Landing() {
         {/* ── What we do strip ── */}
         <section className="border-y border-border bg-card/50">
           <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-10">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-primary text-center sm:text-left mb-6">How it works</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
               {[
                 {

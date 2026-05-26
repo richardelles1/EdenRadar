@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Award, Radar, Sprout, Globe, Users } from "lucide-react";
+import { ArrowRight, Award, Sprout, Globe, Users } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
@@ -126,16 +126,6 @@ export default function About() {
 
         {/* Hero */}
         <section className="relative overflow-hidden pt-24 pb-20 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
-          <div
-            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border mb-8"
-            style={{ background: "hsl(var(--portal-scout) / 0.08)", borderColor: "hsl(var(--portal-scout) / 0.25)" }}
-          >
-            <Radar className="w-3.5 h-3.5 text-primary" />
-            <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-              Founded Early 2026
-            </span>
-          </div>
-
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             Built by industry insiders,{" "}
             <span className="gradient-text">for the industry.</span>
