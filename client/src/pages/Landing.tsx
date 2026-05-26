@@ -493,6 +493,82 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+/* ─────────────────────────── InstitutionMarquee ──────────────── */
+
+const INSTITUTION_ROWS = [
+  [
+    "MIT", "Stanford", "Harvard", "Johns Hopkins", "UCSF", "UCLA", "Columbia", "Yale",
+    "Cornell", "Penn", "Duke", "Michigan", "Wisconsin-Madison", "UNC Chapel Hill",
+    "UC Berkeley", "Northwestern", "NYU", "Vanderbilt", "Emory", "Pittsburgh",
+  ],
+  [
+    "Ohio State", "Penn State", "Texas", "USC", "UCSD", "UC Davis", "Wash U St. Louis",
+    "Mayo Clinic", "Mass General Hospital", "Brigham and Women's", "Memorial Sloan Kettering",
+    "MD Anderson", "Cleveland Clinic", "Mount Sinai", "CHOP", "Boston Children's",
+    "Dartmouth", "Brown", "Tufts", "Georgetown",
+  ],
+  [
+    "Georgia Tech", "Purdue", "Illinois", "Minnesota", "Texas A&M", "Virginia", "Arizona State",
+    "Michigan State", "Colorado", "Oregon", "Washington", "Iowa", "Indiana", "Rutgers",
+    "Case Western", "BU", "Northeastern", "GWU", "Temple", "Drexel",
+  ],
+  [
+    "Wake Forest", "Miami", "Rochester", "Delaware", "Maryland", "Virginia Tech",
+    "Cincinnati", "Louisville", "Kentucky", "Caltech", "Rice", "Baylor",
+    "Lawrence Berkeley Lab", "Argonne National Lab", "NIH", "Nebraska", "Oklahoma",
+    "South Carolina", "Tennessee", "Alabama",
+  ],
+];
+
+function InstitutionMarquee() {
+  const speeds = [38, 45, 52, 42];
+  const directions = ["marquee-left", "marquee-right", "marquee-left", "marquee-right"] as const;
+
+  return (
+    <section className="py-10 overflow-hidden border-y border-border/40">
+      <div className="mb-6 text-center">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-primary">350+ Institutions Indexed</p>
+      </div>
+      <div
+        className="space-y-2.5"
+        style={{
+          perspective: "800px",
+          transform: "rotateX(6deg)",
+          transformOrigin: "center top",
+        }}
+      >
+        {INSTITUTION_ROWS.map((row, ri) => {
+          const doubled = [...row, ...row];
+          return (
+            <div key={ri} className="relative overflow-hidden" style={{ maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)" }}>
+              <div
+                className="flex gap-2.5 w-max"
+                style={{
+                  animation: `${directions[ri]} ${speeds[ri]}s linear infinite`,
+                }}
+              >
+                {doubled.map((name, i) => (
+                  <span
+                    key={i}
+                    className="flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
+                    style={{
+                      background: "hsl(var(--portal-scout) / 0.07)",
+                      border: "1px solid hsl(var(--portal-scout) / 0.18)",
+                      color: "hsl(var(--foreground) / 0.75)",
+                    }}
+                  >
+                    {name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
 /* ─────────────────────────── Main Landing ────────────────────── */
 
 const STATS = [
@@ -611,6 +687,9 @@ export default function Landing() {
             style={{ background: "linear-gradient(to bottom, transparent, hsl(var(--background)))" }}
           />
         </section>
+
+        {/* ── Institution marquee ── */}
+        <InstitutionMarquee />
 
         {/* ── What we do strip ── */}
         <section className="border-y border-border bg-card/50">

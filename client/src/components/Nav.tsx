@@ -140,50 +140,59 @@ const PORTAL_NAV: Record<NonNullable<PortalContext>, { label: string; href: stri
   ],
 };
 
-function PortalDropdown({
-  label,
-  entries,
-  testId,
-}: { label: string; entries: PortalEntry[]; testId: string }) {
+function PortalItem({ entry }: { entry: PortalEntry }) {
+  return (
+    <Link href={entry.href}>
+      <a
+        className="group block px-2 py-2 rounded-md hover:bg-accent/60 transition-colors"
+        data-testid={`link-portal-${entry.name.toLowerCase()}`}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
+            style={{ background: `hsl(${entry.accent} / 0.12)`, color: `hsl(${entry.accent})` }}
+          >
+            <entry.Icon className="w-4 h-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-semibold leading-tight" style={{ color: `hsl(${entry.accent})` }}>
+              {entry.name}
+            </div>
+            <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">{entry.blurb}</div>
+          </div>
+        </div>
+      </a>
+    </Link>
+  );
+}
+
+function PlatformDropdown() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           className="px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-150 inline-flex items-center gap-1"
-          data-testid={testId}
+          data-testid="link-nav-platform"
         >
-          {label}
+          Platform
           <ChevronDown className="w-3.5 h-3.5 opacity-70" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[320px] p-1.5">
-        {entries.map((e) => (
-          <Link key={e.href} href={e.href}>
-            <a
-              className="group block px-2 py-2 rounded-md hover:bg-accent/60 transition-colors"
-              data-testid={`link-portal-${e.name.toLowerCase()}`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-                  style={{ background: `hsl(${e.accent} / 0.12)`, color: `hsl(${e.accent})` }}
-                >
-                  <e.Icon className="w-4 h-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold leading-tight" style={{ color: `hsl(${e.accent})` }}>
-                    {e.name}
-                  </div>
-                  <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">{e.blurb}</div>
-                </div>
-              </div>
-            </a>
-          </Link>
-        ))}
+      <DropdownMenuContent align="start" className="w-[300px] p-1.5">
+        <p className="px-2 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Free
+        </p>
+        {RESEARCHER_PORTALS.map((e) => <PortalItem key={e.href} entry={e} />)}
+        <div className="my-1.5 border-t border-border" />
+        <p className="px-2 pt-0.5 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+          Paid
+        </p>
+        {INDUSTRY_PORTALS.map((e) => <PortalItem key={e.href} entry={e} />)}
+        <div className="my-1.5 border-t border-border" />
         <Link href="/pricing">
           <a
-            className="block mt-1 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-            data-testid={`link-portal-pricing-${testId}`}
+            className="block px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="link-portal-pricing-platform"
           >
             See pricing →
           </a>
@@ -243,16 +252,7 @@ export function Nav({ onOpenSaved }: NavProps) {
                     About
                   </button>
                 </Link>
-                <PortalDropdown
-                  label="For Researchers"
-                  entries={RESEARCHER_PORTALS}
-                  testId="link-nav-for-researchers"
-                />
-                <PortalDropdown
-                  label="For Industry"
-                  entries={INDUSTRY_PORTALS}
-                  testId="link-nav-for-industry"
-                />
+                <PlatformDropdown />
                 <Link href="/how-it-works">
                   <button
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
@@ -397,7 +397,7 @@ export function Nav({ onOpenSaved }: NavProps) {
             </button>
           </Link>
           <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            For Researchers
+            Free
           </div>
           {RESEARCHER_PORTALS.map((e) => (
             <Link key={e.href} href={e.href}>
@@ -411,8 +411,8 @@ export function Nav({ onOpenSaved }: NavProps) {
               </button>
             </Link>
           ))}
-          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            For Industry
+          <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+            Paid
           </div>
           {INDUSTRY_PORTALS.map((e) => (
             <Link key={e.href} href={e.href}>
