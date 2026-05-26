@@ -527,55 +527,41 @@ function InstitutionMarquee() {
         <p className="text-[10px] font-bold uppercase tracking-widest text-primary">350+ Institutions Indexed</p>
       </div>
 
-      {/* 3D perspective container */}
-      <div
-        style={{
-          perspective: "1200px",
-          perspectiveOrigin: "50% 0%",
-        }}
-      >
-        <div
-          className="space-y-2"
-          style={{
-            transform: "rotateX(18deg) rotateZ(-1deg)",
-            transformOrigin: "center top",
-          }}
-        >
-          {INSTITUTION_ROWS.map((row, ri) => {
-            const doubled = [...row, ...row];
-            return (
+      <div className="space-y-2.5">
+        {INSTITUTION_ROWS.map((row, ri) => {
+          const doubled = [...row, ...row];
+          return (
+            <div
+              key={ri}
+              className="relative overflow-hidden"
+              style={{
+                maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+              }}
+            >
               <div
-                key={ri}
-                className="relative overflow-hidden"
-                style={{
-                  maskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
-                }}
+                className="flex w-max"
+                style={{ animation: `${directions[ri]} ${speeds[ri]}s linear infinite` }}
               >
-                <div
-                  className="flex gap-2 w-max"
-                  style={{ animation: `${directions[ri]} ${speeds[ri]}s linear infinite` }}
-                >
-                  {doubled.map((name, i) => (
+                {doubled.map((name, i) => (
+                  <span
+                    key={i}
+                    className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold tracking-wider"
+                    style={{ color: "hsl(var(--foreground) / 0.50)" }}
+                  >
+                    {name}
                     <span
-                      key={i}
-                      className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap tracking-wide"
-                      style={{
-                        background: ri % 2 === 0
-                          ? "hsl(var(--portal-scout) / 0.08)"
-                          : "hsl(var(--card))",
-                        border: "1px solid hsl(var(--portal-scout) / 0.20)",
-                        color: "hsl(var(--foreground) / 0.70)",
-                      }}
+                      className="mx-4"
+                      style={{ color: "hsl(var(--foreground) / 0.18)" }}
                     >
-                      {name}
+                      ·
                     </span>
-                  ))}
-                </div>
+                  </span>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -668,14 +654,6 @@ export default function Landing() {
               </MovingBorder>
             </div>
 
-            <Link href="/pricing">
-              <span
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer underline underline-offset-2"
-                data-testid="link-see-pricing"
-              >
-                See pricing
-              </span>
-            </Link>
 
             <div
               ref={statsRef}
