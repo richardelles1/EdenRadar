@@ -5,6 +5,10 @@ import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { Spotlight } from "@/components/ui/spotlight";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { MovingBorder } from "@/components/ui/moving-border";
+import { BackgroundBeams } from "@/components/ui/background-beams";
 import {
   Building2,
   FlaskConical,
@@ -428,15 +432,8 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
         background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 10%) 60%, hsl(155 40% 12%) 100%)",
       }}
     >
-      <div className="absolute inset-0 pointer-events-none" aria-hidden>
-        <div
-          className="absolute inset-0"
-          style={{
-            background:
-              "conic-gradient(from 200deg at 80% 50%, transparent 0deg, hsl(142 65% 48% / 0.06) 60deg, transparent 120deg)",
-          }}
-        />
-      </div>
+      <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="hsl(142, 65%, 55%)" />
+      <BackgroundBeams className="opacity-30" />
 
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
         <div
@@ -521,49 +518,64 @@ const INSTITUTION_ROWS = [
 ];
 
 function InstitutionMarquee() {
-  const speeds = [38, 45, 52, 42];
+  const speeds = [34, 42, 50, 38];
   const directions = ["marquee-left", "marquee-right", "marquee-left", "marquee-right"] as const;
 
   return (
-    <section className="py-10 overflow-hidden border-y border-border/40">
-      <div className="mb-6 text-center">
+    <section className="py-12 overflow-hidden border-y border-border/40">
+      <div className="mb-7 text-center">
         <p className="text-[10px] font-bold uppercase tracking-widest text-primary">350+ Institutions Indexed</p>
       </div>
+
+      {/* 3D perspective container */}
       <div
-        className="space-y-2.5"
         style={{
-          perspective: "800px",
-          transform: "rotateX(6deg)",
-          transformOrigin: "center top",
+          perspective: "1200px",
+          perspectiveOrigin: "50% 0%",
         }}
       >
-        {INSTITUTION_ROWS.map((row, ri) => {
-          const doubled = [...row, ...row];
-          return (
-            <div key={ri} className="relative overflow-hidden" style={{ maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)" }}>
+        <div
+          className="space-y-2"
+          style={{
+            transform: "rotateX(18deg) rotateZ(-1deg)",
+            transformOrigin: "center top",
+          }}
+        >
+          {INSTITUTION_ROWS.map((row, ri) => {
+            const doubled = [...row, ...row];
+            return (
               <div
-                className="flex gap-2.5 w-max"
+                key={ri}
+                className="relative overflow-hidden"
                 style={{
-                  animation: `${directions[ri]} ${speeds[ri]}s linear infinite`,
+                  maskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
+                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
                 }}
               >
-                {doubled.map((name, i) => (
-                  <span
-                    key={i}
-                    className="flex-shrink-0 px-3 py-1 rounded-full text-[11px] font-semibold whitespace-nowrap"
-                    style={{
-                      background: "hsl(var(--portal-scout) / 0.07)",
-                      border: "1px solid hsl(var(--portal-scout) / 0.18)",
-                      color: "hsl(var(--foreground) / 0.75)",
-                    }}
-                  >
-                    {name}
-                  </span>
-                ))}
+                <div
+                  className="flex gap-2 w-max"
+                  style={{ animation: `${directions[ri]} ${speeds[ri]}s linear infinite` }}
+                >
+                  {doubled.map((name, i) => (
+                    <span
+                      key={i}
+                      className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap tracking-wide"
+                      style={{
+                        background: ri % 2 === 0
+                          ? "hsl(var(--portal-scout) / 0.08)"
+                          : "hsl(var(--card))",
+                        border: "1px solid hsl(var(--portal-scout) / 0.20)",
+                        color: "hsl(var(--foreground) / 0.70)",
+                      }}
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
     </section>
   );
@@ -572,9 +584,9 @@ function InstitutionMarquee() {
 /* ─────────────────────────── Main Landing ────────────────────── */
 
 const STATS = [
-  { value: "300+", label: "Tech Transfer Offices" },
-  { value: "10M+", label: "Papers Indexed" },
-  { value: "EDEN", label: "AI Intelligence Engine" },
+  { value: "350+", label: "Tech Transfer Offices" },
+  { value: "33K+", label: "Scored Assets" },
+  { value: "40+",  label: "Live Data Sources" },
   { value: "4",    label: "Integrated Portals" },
 ];
 
@@ -582,7 +594,7 @@ export default function Landing() {
   useDocumentMeta({
     title: "EdenRadar — Where Biotech Research Meets Industry Intelligence",
     description:
-      "AI-powered biotech asset discovery across 300+ tech transfer offices and scientific literature. Connect industry BD teams with university researchers, surface licensable assets, and run a confidential deal marketplace — all in EdenRadar.",
+      "AI-powered biotech asset discovery across 350+ tech transfer offices. EDEN queries 40+ live data sources — patents, clinical trials, literature — to score and surface licensable assets for industry BD teams.",
   });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
@@ -634,28 +646,26 @@ export default function Landing() {
                 For Industry
                 <ArrowRight className="w-3.5 h-3.5" />
               </Button>
-              <div className="glass-btn-wrap w-full sm:w-auto">
-                <button
-                  onClick={handleLogin}
-                  data-testid="button-cta-research"
-                  className="glass-btn-inner w-full sm:w-auto"
-                >
-                  <FlaskConical className="w-4 h-4" />
-                  For Researchers
-                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                </button>
-              </div>
-              <div className="glass-btn-wrap w-full sm:w-auto">
-                <button
-                  onClick={handleLogin}
-                  data-testid="button-cta-discovery"
-                  className="glass-btn-inner w-full sm:w-auto"
-                >
-                  <Lightbulb className="w-4 h-4" />
-                  For Discovery
-                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-                </button>
-              </div>
+              <MovingBorder
+                onClick={handleLogin}
+                data-testid="button-cta-research"
+                containerClassName="w-full sm:w-auto"
+                className="glass-btn-inner w-full sm:w-auto"
+              >
+                <FlaskConical className="w-4 h-4" />
+                For Researchers
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </MovingBorder>
+              <MovingBorder
+                onClick={handleLogin}
+                data-testid="button-cta-discovery"
+                containerClassName="w-full sm:w-auto"
+                className="glass-btn-inner w-full sm:w-auto"
+              >
+                <Lightbulb className="w-4 h-4" />
+                For Discovery
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </MovingBorder>
             </div>
 
             <Link href="/pricing">
@@ -674,7 +684,7 @@ export default function Landing() {
               {STATS.map((s) => (
                 <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
                   <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
-                    {s.value}
+                    <NumberTicker value={s.value} />
                   </div>
                   <div className="text-xs tracking-wide font-semibold text-foreground/70 dark:text-white/75">{s.label}</div>
                 </div>

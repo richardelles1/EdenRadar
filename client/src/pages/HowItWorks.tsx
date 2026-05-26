@@ -5,6 +5,11 @@ import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { Spotlight } from "@/components/ui/spotlight";
+import { NumberTicker } from "@/components/ui/number-ticker";
+import { WordRotate } from "@/components/ui/word-rotate";
+import { AnimatedTabs } from "@/components/ui/animated-tabs";
+import { CardTilt } from "@/components/ui/card-tilt";
 import {
   ArrowRight,
   Lightbulb,
@@ -323,8 +328,8 @@ const HOW_STEPS = [
 
 const STATS = [
   { value: "350+", label: "Tech Transfer Offices" },
-  { value: "10M+", label: "Papers Indexed" },
-  { value: "0–100", label: "EDEN Readiness Score" },
+  { value: "33K+", label: "Scored Assets" },
+  { value: "40+",  label: "Live Data Sources" },
 ];
 
 /* ─── Main Page ──────────────────────────────────────────────── */
@@ -353,7 +358,13 @@ export default function HowItWorks() {
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             The intelligence engine{" "}
-            <span className="gradient-text">behind EdenRadar.</span>
+            <span className="gradient-text">
+              for{" "}
+              <WordRotate
+                words={["BD teams.", "TTOs.", "researchers.", "deal flow."]}
+                className="inline-block"
+              />
+            </span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
             EDEN monitors 350+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and delivers structured intelligence to the teams that need it, in plain English.
@@ -372,7 +383,9 @@ export default function HowItWorks() {
           <div className="mt-16 grid grid-cols-3 gap-6 sm:gap-10 max-w-lg mx-auto">
             {STATS.map((s) => (
               <div key={s.label} className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">{s.value}</div>
+                <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
+                  <NumberTicker value={s.value} />
+                </div>
                 <div className="text-xs tracking-wide font-semibold text-foreground/70">{s.label}</div>
               </div>
             ))}
@@ -392,21 +405,20 @@ export default function HowItWorks() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {HOW_STEPS.map((step, i) => (
-              <div
-                key={i}
-                className="flex gap-5 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200"
-              >
-                <div
-                  className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
-                  style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
-                >
-                  {step.number}
+              <CardTilt key={i} className="rounded-xl">
+                <div className="flex gap-5 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
+                  <div
+                    className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
+                    style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
+                  >
+                    {step.number}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1.5">{step.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1.5">{step.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
-                </div>
-              </div>
+              </CardTilt>
             ))}
           </div>
         </section>
@@ -425,22 +437,11 @@ export default function HowItWorks() {
               Every query runs across all 350+ indexed institutions simultaneously. Select a scenario to watch EDEN respond in real time.
             </p>
 
-            {/* Scenario tabs */}
-            <div className="inline-flex items-center p-1 rounded-full border border-border bg-card shadow-sm">
-              {DEMO_SCENARIOS.map((s, i) => (
-                <button
-                  key={s.id}
-                  onClick={() => setActiveScenario(i)}
-                  className="px-4 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-semibold transition-all duration-200 min-h-[36px]"
-                  style={activeScenario === i
-                    ? { background: "hsl(var(--portal-scout))", color: "white", boxShadow: "0 2px 8px hsl(var(--portal-scout) / 0.35)" }
-                    : { color: "hsl(var(--muted-foreground))" }}
-                  data-testid={`button-demo-scenario-${s.id}`}
-                >
-                  {s.label}
-                </button>
-              ))}
-            </div>
+            <AnimatedTabs
+              tabs={DEMO_SCENARIOS.map((s) => ({ id: s.id, label: s.label }))}
+              activeIndex={activeScenario}
+              onChange={setActiveScenario}
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-14 items-center">
@@ -523,12 +524,13 @@ export default function HowItWorks() {
         {/* Final CTA */}
         <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div
-            className="rounded-2xl p-10 sm:p-14 text-center"
+            className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{
               background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
               border: "1px solid hsl(var(--primary) / 0.2)",
             }}
           >
+            <Spotlight className="-top-24 left-1/2 -translate-x-1/2" fill="hsl(142, 65%, 55%)" />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
               Ready to find your next licensing opportunity?
             </h2>
