@@ -9,7 +9,7 @@ import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
+import { storage, type EnrichFilter, type RetrievedAsset, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
@@ -342,6 +342,72 @@ function saveRefetchState(key: string, value: unknown): void {
     fs.mkdirSync(path.dirname(REFETCH_STATE_FILE), { recursive: true });
     fs.writeFileSync(REFETCH_STATE_FILE, JSON.stringify(_refetchState, null, 2));
   } catch {}
+}
+
+// ─── Scout search: field-level query match scoring ────────────────────────────
+// Hoisted to module scope — not re-instantiated on every request.
+
+export type FieldMatchResult = { score: number; basis: string };
+
+/** Unwrap a raw DB field to a plain comparable string.
+ *  Handles JSONB-serialised arrays (categories: '["gene_therapy","oncology"]')
+ *  and underscore-joined values so substring matching works correctly. */
+function toText(raw: string | null | undefined): string {
+  if (!raw) return "";
+  if (raw.trimStart().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return (parsed as string[]).join(" ").replace(/_/g, " ");
+    } catch {}
+  }
+  return raw.replace(/_/g, " ");
+}
+
+/** Absolute field-level query-match score for a single TTO asset.
+ *  Score reflects WHERE each term appears, not the asset's rank among other results —
+ *  every asset with the term in its name scores 95 regardless of result-set size.
+ *
+ *  Returns null when every query token is < 3 characters (e.g. "IL", "NK AR").
+ *  The caller must leave normalizedRrfById unpopulated in that case so
+ *  scoreSearchRelevance receives undefined → hasData:false, which causes
+ *  computeTotal to redistribute the 80% search_relevance weight to
+ *  record_quality and availability rather than pinning every asset at 50. */
+export function computeFieldMatch(q: string, r: RetrievedAsset): FieldMatchResult | null {
+  const terms = q.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+  if (terms.length === 0) return null;
+
+  const tiers: { text: string; score: number; label: string }[] = [
+    { text: toText(r.assetName).toLowerCase(),                                    score: 95, label: "asset name" },
+    { text: `${toText(r.indication)} ${toText(r.target)}`.toLowerCase(),          score: 85, label: "indication or target" },
+    { text: `${toText(r.modality)} ${toText(r.mechanismOfAction)}`.toLowerCase(), score: 75, label: "mechanism or modality" },
+    { text: `${toText(r.innovationClaim)} ${toText(r.summary)}`.toLowerCase(),    score: 65, label: "description" },
+    { text: `${toText(r.biology)} ${toText(r.categories)}`.toLowerCase(),         score: 55, label: "secondary fields" },
+  ];
+
+  type TermResult = { score: number; label: string | null };
+  const termResults: TermResult[] = terms.map((term) => {
+    for (const tier of tiers) {
+      if (tier.text.includes(term)) return { score: tier.score, label: tier.label };
+    }
+    return { score: 40, label: null }; // FTS/vector match on indexed content not in structured fields
+  });
+
+  const avg = termResults.reduce((sum, t) => sum + t.score, 0) / termResults.length;
+  const score = Math.min(100, Math.round(avg));
+
+  const structuredHits = termResults.filter((t) => t.label !== null);
+  const hasUnstructured = termResults.some((t) => t.label === null);
+  let basis: string;
+  if (structuredHits.length === 0) {
+    basis = `Semantic or full-text match (score: ${score}/100)`;
+  } else {
+    const bestLabel = structuredHits.reduce((best, t) => t.score > best.score ? t : best).label!;
+    basis = hasUnstructured
+      ? `Query terms found in ${bestLabel} (partial structured match)`
+      : `Query terms found in ${bestLabel}`;
+  }
+
+  return { score, basis };
 }
 
 export async function registerRoutes(
@@ -878,79 +944,15 @@ export async function registerRoutes(
         }
       }
 
-      // Compute an absolute query-match score per asset based on which structured
-      // field contains each query term. Score reflects WHERE the match occurs, not
-      // where the asset ranks relative to others — every asset whose title contains
-      // "COVID" scores ~95 regardless of how many other title matches exist.
-      // RRF rank still drives sort order; this score drives the grade shown to the user.
-      // Returns null when no evaluable terms exist (all < 3 chars, e.g. "IL", "NK")
-      // so the caller can leave the map empty and trigger hasData:false weight
-      // redistribution rather than assigning a misleading score of 50.
-      type FieldMatchResult = { score: number; basis: string };
-      const fieldMatchScore = (q: string, r: RetrievedAssetT): FieldMatchResult | null => {
-        const terms = q.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
-        if (terms.length === 0) return null;
-
-        // Normalize underscores to spaces and unwrap JSON-array strings.
-        // r.categories is a JSONB column serialised as text: '["gene_therapy","oncology"]'.
-        // Without this, "gene therapy" splits into "gene" (matches gene_therapy) and
-        // "therapy" (does not — underscore breaks the substring), scoring incorrectly.
-        const toText = (raw: string | null): string => {
-          if (!raw) return "";
-          if (raw.trimStart().startsWith("[")) {
-            try {
-              const parsed = JSON.parse(raw);
-              if (Array.isArray(parsed)) return (parsed as string[]).join(" ").replace(/_/g, " ");
-            } catch {}
-          }
-          return raw.replace(/_/g, " ");
-        };
-
-        const tiers: { text: string; score: number; label: string }[] = [
-          { text: toText(r.assetName).toLowerCase(),                                                      score: 95, label: "asset name" },
-          { text: `${toText(r.indication)} ${toText(r.target)}`.toLowerCase(),                            score: 85, label: "indication or target" },
-          { text: `${toText(r.modality)} ${toText(r.mechanismOfAction)}`.toLowerCase(),                   score: 75, label: "mechanism or modality" },
-          { text: `${toText(r.innovationClaim)} ${toText(r.summary)}`.toLowerCase(),                      score: 65, label: "description" },
-          { text: `${toText(r.biology)} ${toText(r.categories)}`.toLowerCase(),                           score: 55, label: "secondary fields" },
-        ];
-
-        type TermResult = { score: number; label: string | null };
-        const termResults: TermResult[] = terms.map((term) => {
-          for (const tier of tiers) {
-            if (tier.text.includes(term)) return { score: tier.score, label: tier.label };
-          }
-          // Term not in any structured field — asset was retrieved by FTS or vector
-          // on indexed content (full abstract, portal description) we don't store.
-          return { score: 40, label: null };
-        });
-
-        const avg = termResults.reduce((sum, t) => sum + t.score, 0) / termResults.length;
-        const score = Math.min(100, Math.round(avg));
-
-        // Build an accurate basis from actual per-term match locations.
-        const structuredHits = termResults.filter((t) => t.label !== null);
-        const hasUnstructured = termResults.some((t) => t.label === null);
-        let basis: string;
-        if (structuredHits.length === 0) {
-          basis = `Semantic or full-text match (score: ${score}/100)`;
-        } else {
-          const bestLabel = structuredHits.reduce((best, t) => t.score > best.score ? t : best).label!;
-          basis = hasUnstructured
-            ? `Query terms found in ${bestLabel} (partial structured match)`
-            : `Query terms found in ${bestLabel}`;
-        }
-
-        return { score, basis };
-      };
-
-      // Only insert into the map when fieldMatchScore returns a result — a null
-      // return (all terms < 3 chars) leaves the map empty so scoreSearchRelevance
-      // receives undefined and returns hasData:false, correctly redistributing the
-      // 80% weight to record_quality and availability instead of assigning a flat 50.
+      // Score each retrieved asset against the query using computeFieldMatch (module
+      // scope). A null return means every query token was < 3 chars (abbreviation
+      // search); those assets are omitted from the map so scoreSearchRelevance
+      // receives undefined → hasData:false → weight auto-redistributes to
+      // record_quality + availability rather than assigning a flat, meaningless 50.
       const normalizedRrfById = new Map<number, FieldMatchResult>();
       if (trimmedQuery) {
         for (const r of results) {
-          const fm = fieldMatchScore(trimmedQuery, r);
+          const fm = computeFieldMatch(trimmedQuery, r);
           if (fm !== null) normalizedRrfById.set(r.id, fm);
         }
       }
