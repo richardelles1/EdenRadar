@@ -19,6 +19,10 @@ import {
   Dna,
   Shield,
   Check,
+  Search,
+  Sparkles,
+  Bell,
+  BarChart3,
 } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
@@ -299,28 +303,44 @@ const TIER_OVERVIEW = [
   },
 ];
 
-/* ─── How-to Steps ───────────────────────────────────────────── */
+/* ─── Intelligence Channels ──────────────────────────────────── */
 
-const HOW_STEPS = [
+const INTEL_CHANNELS = [
   {
-    number: "01",
-    title: "Sign up and choose your tier",
-    desc: "Create your account in under two minutes. Select the tier that fits your workflow: free for researchers, paid for industry intelligence.",
+    icon: Search,
+    tag: "Active",
+    title: "Natural language search",
+    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds. No database query language required.",
+    color: "hsl(var(--portal-scout))",
+    colorDim: "hsl(var(--portal-scout) / 0.08)",
+    borderColor: "hsl(var(--portal-scout) / 0.5)",
   },
   {
-    number: "02",
-    title: "Query across the full index",
-    desc: "Ask in plain English across all 350+ indexed institutions at once. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
+    icon: Sparkles,
+    tag: "Conversational",
+    title: "EDEN intelligence engine",
+    desc: "Go deeper with EDEN. Ask follow-up questions, request a full patent landscape, compare competing programs, or synthesize literature across 40+ live sources — all cited, all in plain English.",
+    color: "hsl(var(--portal-lab))",
+    colorDim: "hsl(var(--portal-lab) / 0.08)",
+    borderColor: "hsl(var(--portal-lab) / 0.5)",
   },
   {
-    number: "03",
-    title: "Explore enriched dossiers",
-    desc: "Drill into any asset for the full EDEN-compiled dossier: scientific summary, competitive landscape, inventor details, patent coverage, and deal readiness score.",
+    icon: Bell,
+    tag: "Automated",
+    title: "Standing alerts",
+    desc: "Set your criteria once. The moment a new matching asset appears from any of the 350+ monitored institutions, your team is notified — before it surfaces publicly. No manual scanning, no missed deals.",
+    color: "hsl(var(--portal-discovery))",
+    colorDim: "hsl(var(--portal-discovery) / 0.08)",
+    borderColor: "hsl(var(--portal-discovery) / 0.5)",
   },
   {
-    number: "04",
-    title: "Save, export, and stay ahead",
-    desc: "Set standing alerts — the moment a new matching asset appears from any monitored institution, your team is notified before it hits the market. Export pipeline reports to CSV or PDF, or share dossier links directly with colleagues.",
+    icon: BarChart3,
+    tag: "Structured",
+    title: "Landscape intelligence",
+    desc: "Every asset arrives with an EDEN-compiled context layer: patent coverage, clinical trial cross-reference, competitive program mapping, inventor history, and a deal readiness score 0–100.",
+    color: "hsl(var(--portal-market))",
+    colorDim: "hsl(var(--portal-market) / 0.08)",
+    borderColor: "hsl(var(--portal-market) / 0.5)",
   },
 ];
 
@@ -388,30 +408,50 @@ export default function HowItWorks() {
           </div>
         </section>
 
-        {/* How it works steps */}
+        {/* Intelligence delivery channels */}
         <section
           ref={stepsRef}
           className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
         >
           <div className="text-center mb-12">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Getting Started</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
-              Up and running in four steps
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Intelligence Delivery</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">
+              How intelligence reaches your team
             </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              Four distinct channels — each designed so the right asset finds you, whether you're actively searching or not.
+            </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {HOW_STEPS.map((step, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {INTEL_CHANNELS.map((ch, i) => (
               <CardTilt key={i} className="rounded-xl">
-                <div className="flex gap-5 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
-                  <div
-                    className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
-                    style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
-                  >
-                    {step.number}
+                <div
+                  className="flex flex-col gap-4 p-6 rounded-xl bg-card h-full transition-colors duration-200"
+                  style={{
+                    borderWidth: "1px",
+                    borderStyle: "solid",
+                    borderColor: "hsl(var(--border))",
+                    borderLeftWidth: "3px",
+                    borderLeftColor: ch.color,
+                  }}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div
+                      className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
+                      style={{ background: ch.colorDim }}
+                    >
+                      <ch.icon className="w-5 h-5" style={{ color: ch.color }} />
+                    </div>
+                    <span
+                      className="text-[10px] font-bold uppercase tracking-widest mt-1 flex-shrink-0"
+                      style={{ color: ch.color }}
+                    >
+                      {ch.tag}
+                    </span>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground mb-1.5">{step.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                    <h3 className="font-semibold text-foreground mb-2">{ch.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
                   </div>
                 </div>
               </CardTilt>
