@@ -477,8 +477,8 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         {renderTrigger(() => setDialogOpen(true))}
 
         <Dialog open={dialogOpen} onOpenChange={(o) => { setDialogOpen(o); }}>
-          <DialogContent className="max-w-lg w-full" data-testid="dialog-non-tto-save">
-            <DialogHeader>
+          <DialogContent className="max-w-lg flex flex-col max-h-[90vh]" data-testid="dialog-non-tto-save">
+            <DialogHeader className="shrink-0">
               <DialogTitle className="flex items-center gap-2 text-base">
                 <Bookmark className="w-4 h-4 text-primary shrink-0" />
                 Save Signal
@@ -491,7 +491,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
               </div>
             </DialogHeader>
 
-            <div className="flex flex-col gap-4 py-1 max-h-[60vh] overflow-y-auto overflow-x-hidden pr-1">
+            <div className="flex flex-col gap-4 py-1 flex-1 min-h-0 overflow-y-auto overflow-x-hidden pr-1">
               {/* ── Link to TTO Asset ─────────────────────────────────────── */}
               <div>
                 <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -536,7 +536,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
                             >
                               <FlaskConical className="w-3 h-3 text-emerald-500 shrink-0" />
                               <span className="flex-1 truncate">{a.assetName}</span>
-                              {pl && <span className="text-[9px] text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded">{pl.name}</span>}
+                              {pl && <span className="text-[9px] text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded max-w-[6rem] truncate">{pl.name}</span>}
                             </button>
                           );
                         })}
@@ -610,7 +610,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
               </div>
             </div>
 
-            <DialogFooter className="flex items-center justify-between gap-2 sm:justify-between">
+            <DialogFooter className="flex shrink-0 items-center justify-between gap-2 sm:justify-between">
               <div>
                 {isSaved && savedAsset?.id && (
                   <button
@@ -653,14 +653,14 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
       {renderTrigger(() => setOpen(true))}
 
       <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setSelectedParentId(null); setParentSearch(""); setCreating(false); setNewName(""); setCreateShared(false); } }}>
-        <DialogContent className="max-w-sm w-full" data-testid="pipeline-picker-popover">
-          <DialogHeader>
+        <DialogContent className="max-w-sm flex flex-col max-h-[90vh]" data-testid="pipeline-picker-popover">
+          <DialogHeader className="shrink-0">
             <DialogTitle>
               {isSaved ? "Move to pipeline" : "Save to pipeline"}
             </DialogTitle>
           </DialogHeader>
 
-          <div className="flex flex-col gap-0.5">
+          <div className="flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto">
             {(() => {
               const isCurrentUncat = isSaved && currentPipelineListId === null;
               return (
