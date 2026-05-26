@@ -439,9 +439,9 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: 
               </button>
               <span className="px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-sm text-[9px] text-white tabular-nums shadow-sm">{faceIdx + 1}/{faces.length}</span>
               <button
-                onClick={(e) => { e.stopPropagation(); setFaceIdx((i) => Math.min(faces.length - 1, i + 1)); }}
+                onClick={(e) => { e.stopPropagation(); setFaceIdx((i) => (i + 1) % faces.length); }}
                 onPointerDown={(e) => e.stopPropagation()}
-                disabled={faceIdx === faces.length - 1}
+                disabled={false}
                 className="w-6 h-6 rounded-full bg-black/55 backdrop-blur-sm flex items-center justify-center text-white hover:bg-black/75 disabled:opacity-25 transition-all shrink-0 shadow-sm"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
