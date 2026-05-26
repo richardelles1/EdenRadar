@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { OrientationHint } from "@/components/OrientationHint";
 import { useLocation } from "wouter";
 import {
   Bell,
@@ -10,13 +9,25 @@ import {
   ArrowRight,
   Calendar,
   Building2,
+  Search,
+  BookOpen,
+  Send,
+  ChevronRight,
+  Microscope,
+  Sparkles,
+  TrendingUp,
+  Target,
+  Rocket,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useResearcherId, useResearcherHeaders, getResearcherProfile } from "@/hooks/use-researcher";
-import type { ResearchProject } from "@shared/schema";
+import { PORTAL_ACCENT, accentMix } from "@/components/sidebar-primitives";
+import type { ResearchProject, SavedReference } from "@shared/schema";
 import { ProjectCard } from "@/pages/ResearchProjects";
+
+const ACCENT = PORTAL_ACCENT.lab;
 
 type ProjectsResponse = { projects: ResearchProject[] };
 type SearchResult = {
@@ -26,10 +37,131 @@ type SearchResult = {
   url: string;
   date: string;
   institution_or_sponsor: string;
-  metadata?: { opp_status?: string; opp_num?: string; [key: string]: unknown };
+  metadata?: { opp_status?: string; opp_num?: string; source_label?: string; [key: string]: unknown };
 };
 type SearchResponse = { assets: { signals: SearchResult[] }[] };
-type DiscoveryCard = { id: number; title: string; summary: string; published: boolean; adminStatus: string; researchArea: string; createdAt: string };
+type DiscoveryCard = {
+  id: number;
+  title: string;
+  summary: string;
+  published: boolean;
+  adminStatus: string;
+  researchArea: string;
+  createdAt: string;
+};
+
+function SectionLabel({
+  icon: Icon,
+  label,
+  accent,
+  action,
+  onAction,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  accent: string;
+  action?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center gap-2.5 pl-3 border-l-2" style={{ borderColor: accent }}>
+        <Icon className="w-3.5 h-3.5" style={{ color: accent }} />
+        <span className="text-sm font-semibold text-foreground">{label}</span>
+      </div>
+      {action && onAction && (
+        <button
+          onClick={onAction}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {action}
+          <ArrowRight className="w-3 h-3" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+type PipelineStage = {
+  key: string;
+  label: string;
+  sublabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  accentColor: string;
+  value: string | number;
+  href: string;
+};
+
+function PipelineStageCard({
+  stage,
+  isLast,
+  navigate,
+}: {
+  stage: PipelineStage;
+  isLast: boolean;
+  navigate: (href: string) => void;
+}) {
+  return (
+    <div className="flex items-center flex-1 min-w-0">
+      <button
+        onClick={() => navigate(stage.href)}
+        className="flex-1 min-w-0 rounded-lg border border-border bg-card p-3.5 flex flex-col gap-1.5 hover:border-opacity-60 transition-all group relative overflow-hidden text-left cursor-pointer"
+        style={{ ["--hover-border" as string]: stage.accentColor }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.borderColor = `${stage.accentColor}50`;
+          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 4px 16px ${stage.accentColor}18`;
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLButtonElement).style.borderColor = "";
+          (e.currentTarget as HTMLButtonElement).style.transform = "";
+          (e.currentTarget as HTMLButtonElement).style.boxShadow = "";
+        }}
+      >
+        {/* Left accent strip */}
+        <div
+          className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg"
+          style={{ backgroundColor: stage.accentColor }}
+        />
+        <div className="flex items-center justify-between">
+          <stage.icon className="w-3.5 h-3.5" style={{ color: stage.accentColor }} />
+          <span className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {stage.label}
+          </span>
+        </div>
+        <div className="text-2xl font-bold tabular-nums" style={{ color: stage.accentColor }}>
+          {stage.value}
+        </div>
+        <div className="text-[10px] text-muted-foreground truncate">{stage.sublabel}</div>
+      </button>
+      {!isLast && (
+        <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0 mx-1.5" />
+      )}
+    </div>
+  );
+}
+
+function DiscoveryStatusBadge({ card }: { card: DiscoveryCard }) {
+  if (card.adminStatus === "approved") {
+    return (
+      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+        Live
+      </span>
+    );
+  }
+  if (card.published) {
+    return (
+      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+        Submitted
+      </span>
+    );
+  }
+  return (
+    <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-500/10 text-gray-500 dark:text-gray-400 border border-gray-500/20">
+      Draft
+    </span>
+  );
+}
 
 export default function ResearchDashboard() {
   const researcherId = useResearcherId();
@@ -39,6 +171,7 @@ export default function ResearchDashboard() {
 
   const allAreas = profile.researchAreas.length > 0 ? profile.researchAreas : ["CRISPR gene editing"];
   const spotlightQuery = allAreas.join(" OR ");
+  const primaryArea = allAreas[0];
 
   const { data: projectsData, isLoading: projectsLoading } = useQuery<ProjectsResponse>({
     queryKey: ["/api/research/projects", researcherId],
@@ -60,6 +193,16 @@ export default function ResearchDashboard() {
     enabled: !!researcherId,
   });
 
+  const { data: refsData } = useQuery<{ references: SavedReference[] }>({
+    queryKey: ["/api/research/references", researcherId],
+    queryFn: async () => {
+      const r = await fetch("/api/research/references", { headers: researcherHeaders });
+      if (!r.ok) throw new Error("Failed to fetch references");
+      return r.json();
+    },
+    enabled: !!researcherId,
+  });
+
   const { data: grantData, isLoading: grantLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", spotlightQuery, "grants_spotlight"],
     queryFn: async () => {
@@ -75,8 +218,6 @@ export default function ResearchDashboard() {
     staleTime: 30 * 60 * 1000,
     gcTime: 60 * 60 * 1000,
   });
-
-  const primaryArea = allAreas[0];
 
   const { data: alertData, isLoading: alertLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", primaryArea, "pubmed"],
@@ -98,80 +239,194 @@ export default function ResearchDashboard() {
   const recentProjects = projects.slice(0, 3);
   const discoveries = discoveryData?.cards ?? [];
   const recentDiscoveries = discoveries.slice(0, 3);
-  const totalDiscoveries = discoveries.length;
-  const publishedCount = discoveries.filter((c) => c.published).length;
+  const publishedCount = discoveries.filter((c) => c.published || c.adminStatus === "approved").length;
+  const activeProjects = projects.filter((p) => p.status === "active").length;
+  const refCount = refsData?.references?.length ?? 0;
   const latestSignal = alertData?.assets?.[0]?.signals?.[0];
   const grantSignals = grantData?.assets?.flatMap((a) => a.signals ?? []) ?? [];
-  const grantsPending = grantLoading;
-  const alertsPending = alertLoading;
+
+  // Phase-level counts derived from projects
+  const totalScreened = projects.reduce((sum, p) => sum + ((p as any).screeningPapers?.length ?? 0), 0);
+  const totalIncluded = projects.reduce((sum, p) =>
+    sum + ((p as any).screeningPapers as any[] ?? []).filter((sp: any) => sp.fullTextDecision === "include").length, 0
+  );
+
+  const pipelineStages: PipelineStage[] = [
+    {
+      key: "define",
+      label: "Define",
+      sublabel: projects.length === 1 ? "project defined" : "projects defined",
+      icon: Target,
+      accentColor: "hsl(262 80% 60%)",
+      value: projects.length,
+      href: "/research/projects",
+    },
+    {
+      key: "search",
+      label: "Search",
+      sublabel: refCount === 1 ? "reference saved" : "references saved",
+      icon: Search,
+      accentColor: "hsl(217 91% 60%)",
+      value: refCount,
+      href: "/research/data-sources",
+    },
+    {
+      key: "evidence",
+      label: "Evidence",
+      sublabel: totalScreened === 1 ? "paper imported" : "papers imported",
+      icon: BookOpen,
+      accentColor: "hsl(188 85% 35%)",
+      value: totalScreened,
+      href: "/research/projects",
+    },
+    {
+      key: "analyze",
+      label: "Analyze",
+      sublabel: totalIncluded === 1 ? "paper included" : "papers included",
+      icon: FlaskConical,
+      accentColor: "hsl(142 52% 36%)",
+      value: totalIncluded,
+      href: "/research/projects",
+    },
+    {
+      key: "translate",
+      label: "Translate",
+      sublabel: discoveries.length === 1 ? "discovery drafted" : "discoveries drafted",
+      icon: Rocket,
+      accentColor: "hsl(38 92% 50%)",
+      value: discoveries.length,
+      href: "/research/my-discoveries",
+    },
+    {
+      key: "publish",
+      label: "Publish",
+      sublabel: publishedCount === 1 ? "discovery live" : "discoveries live",
+      icon: Send,
+      accentColor: "hsl(142 52% 36%)",
+      value: publishedCount,
+      href: "/research/my-discoveries",
+    },
+  ];
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-8">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground" data-testid="text-welcome">
-            {profile.name ? `Welcome back, ${profile.name.split(" ")[0]}!` : "Research Dashboard"}
-          </h1>
-          {(profile.institution || profile.careerStage) && (
-            <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-profile-subtitle">
-              {profile.careerStage ? `${profile.careerStage} · ` : ""}{profile.institution}{profile.lab ? ` · ${profile.lab}` : ""}{profile.researchAreas?.length > 0 ? ` · ${profile.researchAreas.slice(0, 2).join(", ")}` : ""}
+    <div className="p-6 max-w-5xl mx-auto space-y-7">
+
+      {/* Command header */}
+      <div
+        className="rounded-xl border border-border p-4 flex items-center justify-between gap-4"
+        style={{ background: accentMix(ACCENT, 4) }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: ACCENT }}
+          >
+            <Microscope className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-foreground" data-testid="text-welcome">
+                {profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : "EdenLab"}
+              </h1>
+              <span
+                className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border"
+                style={{
+                  background: accentMix("hsl(142 52% 36%)", 12),
+                  color: "hsl(142 52% 36%)",
+                  borderColor: accentMix("hsl(142 52% 36%)", 30),
+                }}
+              >
+                Live
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-profile-subtitle">
+              {[profile.careerStage, profile.institution, profile.lab].filter(Boolean).join(" · ") || "Complete your profile to personalise EdenLab"}
             </p>
-          )}
+          </div>
+        </div>
+        <div className="hidden sm:flex items-center gap-3 text-[11px] text-muted-foreground tabular-nums shrink-0">
+          <span>
+            <span className="text-foreground font-semibold">{projects.length}</span> projects
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            <span className="text-foreground font-semibold">{refCount}</span> refs
+          </span>
+          <span className="text-border">·</span>
+          <span>
+            <span className="text-foreground font-semibold">{discoveries.length}</span> discoveries
+          </span>
+        </div>
+        {allAreas.length > 0 && (
+          <div className="hidden md:flex items-center gap-1.5 shrink-0">
+            {allAreas.slice(0, 2).map((area) => (
+              <span
+                key={area}
+                className="text-[10px] font-medium px-2 py-0.5 rounded-full border truncate max-w-[120px]"
+                style={{
+                  background: accentMix(ACCENT, 8),
+                  color: ACCENT,
+                  borderColor: accentMix(ACCENT, 25),
+                }}
+              >
+                {area}
+              </span>
+            ))}
+            {allAreas.length > 2 && (
+              <span className="text-[10px] text-muted-foreground">+{allAreas.length - 2}</span>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Workflow pipeline */}
+      <div>
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2.5">
+          Research Workflow
+        </p>
+        <div className="flex items-center gap-0">
+          {pipelineStages.map((stage, i) => (
+            <PipelineStageCard
+              key={stage.key}
+              stage={stage}
+              isLast={i === pipelineStages.length - 1}
+              navigate={navigate}
+            />
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: "Projects", value: projects.length, icon: FolderOpen, color: "text-violet-500", href: "/research/projects" },
-          { label: "Discoveries", value: totalDiscoveries, icon: FlaskConical, color: "text-amber-500", href: "/research/my-discoveries" },
-          { label: "Open Grants", value: grantSignals.length > 0 ? `${grantSignals.length}+` : "—", icon: BadgeDollarSign, color: "text-emerald-500", href: "/research/grants" },
-          { label: "Alerts", value: latestSignal ? "New" : "—", icon: Bell, color: "text-blue-500", href: "/research/alerts" },
-        ].map((kpi) => (
-          <button
-            key={kpi.label}
-            onClick={() => navigate(kpi.href)}
-            className="border border-border rounded-lg p-4 bg-card flex flex-col gap-2 text-left hover:border-violet-500/30 transition-colors cursor-pointer"
-            data-testid={`kpi-${kpi.label.toLowerCase().replace(/\s+/g, "-")}`}
-          >
-            <kpi.icon className={`w-4 h-4 ${kpi.color}`} />
-            <div className="text-2xl font-bold text-foreground">{kpi.value}</div>
-            <div className="text-xs text-muted-foreground">{kpi.label}</div>
-          </button>
-        ))}
-      </div>
-
+      {/* Recent Projects */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => navigate("/research/projects")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <FolderOpen className="w-4 h-4 text-violet-500" />
-            <h2 className="text-base font-semibold text-foreground">Recent Projects</h2>
-          </button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => navigate("/research/projects")}
-            data-testid="button-view-all-projects"
-          >
-            View all
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
+        <SectionLabel
+          icon={FolderOpen}
+          label="Active Projects"
+          accent={ACCENT}
+          action="View all"
+          onAction={() => navigate("/research/projects")}
+        />
         {projectsLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-28 rounded-lg" />)}
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-lg" />)}
           </div>
         ) : recentProjects.length === 0 ? (
-          <div className="border border-dashed border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-            No projects yet.{" "}
+          <div
+            className="rounded-lg border border-dashed border-border p-8 text-center"
+            style={{ background: accentMix(ACCENT, 3) }}
+          >
+            <FolderOpen className="w-8 h-8 mx-auto mb-2.5" style={{ color: accentMix(ACCENT, 80) }} />
+            <p className="text-sm text-muted-foreground mb-3">No projects yet.</p>
             <button
-              className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
+              className="text-xs font-medium px-3 py-1.5 rounded-md border transition-colors"
+              style={{
+                color: ACCENT,
+                borderColor: accentMix(ACCENT, 40),
+                background: accentMix(ACCENT, 8),
+              }}
               onClick={() => navigate("/research/projects")}
             >
-              Create one
-            </button>{" "}
-            to start organizing your research.
+              Create your first project
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -189,65 +444,60 @@ export default function ResearchDashboard() {
         )}
       </section>
 
+      {/* Recent Discoveries */}
       <section>
-        <div className="flex items-center justify-between mb-3">
-          <button onClick={() => navigate("/research/my-discoveries")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <FlaskConical className="w-4 h-4 text-amber-500" />
-            <h2 className="text-base font-semibold text-foreground">Recent Discoveries</h2>
-          </button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => navigate("/research/my-discoveries")}
-            data-testid="button-view-all-discoveries"
-          >
-            View all
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Button>
-        </div>
-
+        <SectionLabel
+          icon={FlaskConical}
+          label="Discoveries"
+          accent="hsl(38 92% 50%)"
+          action="View all"
+          onAction={() => navigate("/research/my-discoveries")}
+        />
         {discoveriesLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {[1, 2, 3].map((i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
           </div>
         ) : recentDiscoveries.length === 0 ? (
-          <div className="border border-dashed border-border rounded-lg p-6 text-center text-sm text-muted-foreground">
-            No discoveries yet.{" "}
+          <div className="rounded-lg border border-dashed border-border p-8 text-center" style={{ background: "color-mix(in srgb, hsl(38 92% 50%) 4%, transparent)" }}>
+            <Sparkles className="w-8 h-8 mx-auto mb-2.5 text-amber-400/60" />
+            <p className="text-sm text-muted-foreground mb-3">No discoveries yet.</p>
             <button
-              className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
-              onClick={() => navigate("/research/create-discovery")}
+              className="text-xs font-medium px-3 py-1.5 rounded-md border border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/8 transition-colors hover:bg-amber-500/15"
+              onClick={() => navigate("/research/my-discoveries")}
             >
-              Create one
-            </button>{" "}
-            to share your research with industry.
+              Package your first discovery
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {recentDiscoveries.map((d) => (
               <div
                 key={d.id}
-                className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors cursor-pointer flex flex-col gap-2"
+                className="relative rounded-lg border border-border bg-card p-4 flex flex-col gap-2 cursor-pointer overflow-hidden transition-all"
+                style={{ background: "color-mix(in srgb, hsl(38 92% 50%) 4%, var(--card))" }}
                 onClick={() => navigate("/research/my-discoveries")}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "hsl(38 92% 50% / 0.4)";
+                  (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "";
+                  (e.currentTarget as HTMLDivElement).style.transform = "";
+                }}
                 data-testid={`discovery-card-${d.id}`}
               >
+                <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg bg-amber-500" />
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground line-clamp-2 leading-snug flex-1">{d.title}</p>
-                  <Badge
-                    variant="secondary"
-                    className={`text-[10px] shrink-0 ${
-                      d.adminStatus === "approved"
-                        ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                        : d.published
-                          ? "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
-                          : "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30"
-                    }`}
-                  >
-                    {d.adminStatus === "approved" ? "Approved" : d.published ? "Submitted" : "Draft"}
-                  </Badge>
+                  <p className="text-sm font-semibold text-foreground line-clamp-2 leading-snug flex-1">
+                    {d.title}
+                  </p>
+                  <DiscoveryStatusBadge card={d} />
                 </div>
                 {d.researchArea && (
-                  <span className="text-[11px] text-muted-foreground">{d.researchArea}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wide">{d.researchArea}</span>
+                )}
+                {d.summary && (
+                  <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">{d.summary}</p>
                 )}
               </div>
             ))}
@@ -255,61 +505,74 @@ export default function ResearchDashboard() {
         )}
       </section>
 
+      {/* Grants Spotlight */}
       <section>
-        <OrientationHint
-          hintId="research-grants-spotlight"
-          title="Profile-driven spotlight."
-          body="These grants are matched to the Research Areas in your profile. Add more areas to widen coverage, or update them in your profile settings."
-          accent="violet"
-        />
-        <div className="flex items-center justify-between mb-3 mt-3">
-          <button onClick={() => navigate("/research/grants")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <BadgeDollarSign className="w-4 h-4 text-emerald-500" />
-            <h2 className="text-base font-semibold text-foreground">Grants Spotlight</h2>
-          </button>
-          <div className="flex items-center gap-1 flex-wrap">
-            {allAreas.slice(0, 3).map((area) => (
-              <Badge key={area} variant="secondary" className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
-                {area}
-              </Badge>
-            ))}
-            {allAreas.length > 3 && (
-              <span className="text-[11px] text-muted-foreground">+{allAreas.length - 3}</span>
-            )}
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2.5 pl-3 border-l-2 border-emerald-500">
+            <BadgeDollarSign className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+            <span className="text-sm font-semibold text-foreground">Grants Spotlight</span>
+            <div className="flex items-center gap-1">
+              {allAreas.slice(0, 2).map((area) => (
+                <span
+                  key={area}
+                  className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 truncate max-w-[100px]"
+                >
+                  {area}
+                </span>
+              ))}
+              {allAreas.length > 2 && (
+                <span className="text-[10px] text-muted-foreground">+{allAreas.length - 2}</span>
+              )}
+            </div>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          <button
             onClick={() => navigate("/research/grants")}
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             data-testid="button-find-more-grants"
           >
             Find more
-            <ArrowRight className="w-3.5 h-3.5" />
-          </Button>
+            <ArrowRight className="w-3 h-3" />
+          </button>
         </div>
 
-        {grantsPending ? (
-          <Skeleton className="h-24 w-full rounded-lg" />
+        {grantLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-lg" />)}
+          </div>
         ) : grantSignals.length > 0 ? (
           <div className="space-y-2">
             {grantSignals.slice(0, 3).map((g, i) => (
               <div
                 key={g.id ?? i}
-                className="border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-4 flex flex-col gap-2 cursor-pointer hover:border-emerald-500/50 transition-colors"
+                className="relative rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-col gap-1.5 cursor-pointer transition-all overflow-hidden"
                 onClick={() => navigate("/research/grants")}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "hsl(142 52% 36% / 0.4)";
+                  (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)";
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLDivElement).style.borderColor = "";
+                  (e.currentTarget as HTMLDivElement).style.transform = "";
+                }}
                 data-testid={`grants-spotlight-${i}`}
               >
+                <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg bg-emerald-500" />
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{g.title}</h3>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {!!g.metadata?.source_label && (
-                      <Badge variant="secondary" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                    {g.metadata?.source_label && (
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 uppercase tracking-wide">
                         {g.metadata.source_label as string}
-                      </Badge>
+                      </span>
                     )}
                     {g.url && (
-                      <a href={g.url} target="_blank" rel="noopener noreferrer" className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                      <a
+                        href={g.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      >
                         <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                       </a>
                     )}
@@ -318,7 +581,7 @@ export default function ResearchDashboard() {
                 {g.text && g.text !== g.title && (
                   <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{g.text}</p>
                 )}
-                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
                   {g.institution_or_sponsor && (
                     <span className="flex items-center gap-1">
                       <Building2 className="w-3 h-3" />
@@ -336,36 +599,49 @@ export default function ResearchDashboard() {
             ))}
           </div>
         ) : (
-          <div className="border border-border rounded-lg p-4 text-sm text-muted-foreground text-center">
-            No open funding found for your research areas. Try{" "}
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground text-center">
+            No open funding found for your research areas.{" "}
             <button
-              className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
+              className="text-emerald-600 dark:text-emerald-400 underline underline-offset-2"
               onClick={() => navigate("/research/grants")}
             >
-              searching directly
-            </button>.
+              Search directly
+            </button>
           </div>
         )}
       </section>
 
+      {/* Breaking Alert */}
       <section>
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={() => navigate("/research/alerts")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <Bell className="w-4 h-4 text-amber-500" />
-            <h2 className="text-base font-semibold text-foreground">Breaking Research Alert</h2>
-          </button>
+        <div className="flex items-center gap-2.5 pl-3 border-l-2 border-amber-500 mb-3">
+          <Bell className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          <span className="text-sm font-semibold text-foreground">Breaking Alert</span>
           {primaryArea && (
-            <Badge variant="secondary" className="text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
               {primaryArea}
-            </Badge>
+            </span>
           )}
+          <button
+            onClick={() => navigate("/research/alerts")}
+            className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            All alerts
+            <ArrowRight className="w-3 h-3" />
+          </button>
         </div>
-        {alertsPending ? (
+
+        {alertLoading ? (
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : latestSignal ? (
-          <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 flex flex-col gap-2" data-testid="breaking-alert">
+          <div
+            className="relative rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col gap-1.5 overflow-hidden"
+            data-testid="breaking-alert"
+          >
+            <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg bg-amber-500" />
             <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{latestSignal.title}</h3>
+              <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                {latestSignal.title}
+              </h3>
               {latestSignal.url && (
                 <a href={latestSignal.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
                   <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
@@ -373,7 +649,7 @@ export default function ResearchDashboard() {
               )}
             </div>
             <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{latestSignal.text}</p>
-            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
               {latestSignal.date && <span>{latestSignal.date}</span>}
               {latestSignal.institution_or_sponsor && (
                 <>
@@ -384,15 +660,15 @@ export default function ResearchDashboard() {
             </div>
           </div>
         ) : (
-          <div className="border border-border rounded-lg p-4 text-sm text-muted-foreground text-center">
-            No alert yet. Set a research area in your{" "}
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground text-center">
+            No alert yet.{" "}
             <button
-              className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
+              className="text-amber-600 dark:text-amber-400 underline underline-offset-2"
               onClick={() => navigate("/research/profile")}
             >
-              profile
+              Set a research area
             </button>{" "}
-            to activate.
+            in your profile to activate.
           </div>
         )}
       </section>

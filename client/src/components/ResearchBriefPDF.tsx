@@ -106,6 +106,19 @@ function SectionHeader({ num, title }: { num: number; title: string }) {
   );
 }
 
+const AMBER = "#d97706";
+const EMERALD = "#16a34a";
+const RED = "#dc2626";
+const AMBER_BG = "#fef9c3";
+const EMERALD_BG = "#dcfce7";
+const RED_BG = "#fee2e2";
+
+const ROB_COLORS: Record<string, { bg: string; fg: string }> = {
+  low:          { bg: EMERALD_BG, fg: EMERALD },
+  some_concerns: { bg: AMBER_BG,   fg: AMBER },
+  high:          { bg: RED_BG,     fg: RED },
+};
+
 export function ResearchBriefPDF({ project: p }: { project: ResearchProject }) {
   const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const hasPapers = (p.keyPapers ?? []).length > 0;
@@ -113,6 +126,18 @@ export function ResearchBriefPDF({ project: p }: { project: ResearchProject }) {
   const hasContributors = (p.projectContributors ?? []).length > 0;
   const hasLinks = (p.supportingEvidenceLinks ?? []).length > 0;
   const hasExperiments = (p.nextExperiments ?? []).length > 0;
+
+  // Compute PRISMA counts from screeningPapers
+  const screeningPapers = (p.screeningPapers as any[] | null) ?? [];
+  const prismaIdentified = screeningPapers.length;
+  const prismaScreened = screeningPapers.filter((sp: any) => sp.abstractDecision != null).length;
+  const prismaFullText = screeningPapers.filter((sp: any) => sp.fullTextDecision != null).length;
+  const prismaIncluded = screeningPapers.filter((sp: any) => sp.fullTextDecision === "include").length;
+
+  const robEntries = (p.riskOfBias as any[] | null) ?? [];
+  const synthesis = (p.evidenceSynthesisText as any | null);
+  const results = (p.researchResults as any | null);
+  const dissemination = (p.disseminationPlan as any | null);
 
   return (
     <Document title={`Research Brief — ${p.title}`} author="EdenRadar">
@@ -343,10 +368,155 @@ export function ResearchBriefPDF({ project: p }: { project: ResearchProject }) {
           </View>
         )}
 
-        {/* §11 Discovery Card */}
+        {/* PRISMA Flow (shown when any screening data exists) */}
+        {prismaIdentified > 0 && (
+          <View style={s.section}>
+            <SectionHeader num={11} title="PRISMA Flow Summary" />
+            <View style={s.sectionBody}>
+              <View style={[s.table, { marginBottom: 0 }]}>
+                <View style={s.tableHeader}>
+                  {["Stage", "Count", "Notes"].map((h) => (
+                    <Text key={h} style={s.tableHeaderCell}>{h}</Text>
+                  ))}
+                </View>
+                {[
+                  { stage: "Identified (imported)", count: prismaIdentified, note: "Total records retrieved from all sources" },
+                  { stage: "Screened (abstract)", count: prismaScreened, note: `${prismaIdentified - prismaScreened} pending abstract review` },
+                  { stage: "Full-text assessed", count: prismaFullText, note: `${prismaScreened - prismaFullText} excluded at abstract stage` },
+                  { stage: "Included in synthesis", count: prismaIncluded, note: `${prismaFullText - prismaIncluded} excluded at full-text stage` },
+                ].map((row, i) => (
+                  <View key={i} style={[s.tableRow, i % 2 === 1 ? s.tableRowAlt : {}]}>
+                    <Text style={s.tableCell}>{row.stage}</Text>
+                    <Text style={[s.tableCell, { flex: 0.4, fontFamily: "Helvetica-Bold", color: VIOLET }]}>{row.count}</Text>
+                    <Text style={[s.tableCell, { color: GRAY, fontSize: 7.5 }]}>{row.note}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Risk of Bias */}
+        {robEntries.length > 0 && (
+          <View style={s.section}>
+            <SectionHeader num={12} title="Risk of Bias Assessment" />
+            <View style={s.sectionBody}>
+              {(p as any).robTool && (
+                <Field label="Assessment Tool" value={(p as any).robTool as string} />
+              )}
+              <View style={s.table}>
+                <View style={s.tableHeader}>
+                  {["Study", "Domain", "Rating"].map((h) => (
+                    <Text key={h} style={s.tableHeaderCell}>{h}</Text>
+                  ))}
+                </View>
+                {robEntries.flatMap((entry: any, ei: number) =>
+                  (entry.domains ?? []).map((d: any, di: number) => {
+                    const colors = ROB_COLORS[d.rating] ?? { bg: "#f3f4f6", fg: GRAY };
+                    return (
+                      <View key={`${ei}-${di}`} style={[s.tableRow, (ei + di) % 2 === 1 ? s.tableRowAlt : {}]}>
+                        <Text style={s.tableCell}>{di === 0 ? (entry.title || `Study ${ei + 1}`) : ""}</Text>
+                        <Text style={s.tableCell}>{d.name}</Text>
+                        <View style={{ flex: 1, justifyContent: "center" }}>
+                          <View style={{ backgroundColor: colors.bg, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 8, alignSelf: "flex-start" }}>
+                            <Text style={{ fontSize: 7.5, color: colors.fg, fontFamily: "Helvetica-Bold" }}>
+                              {d.rating === "some_concerns" ? "Some Concerns" : d.rating ? d.rating.charAt(0).toUpperCase() + d.rating.slice(1) : "—"}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Evidence Synthesis */}
+        {(synthesis?.narrative || synthesis?.certaintyGrade) && (
+          <View style={s.section}>
+            <SectionHeader num={13} title="Evidence Synthesis" />
+            <View style={s.sectionBody}>
+              {synthesis.narrative && (
+                <View style={s.highlight}>
+                  <Text style={s.fieldLabel}>Narrative Synthesis</Text>
+                  <Text style={s.highlightText}>{synthesis.narrative}</Text>
+                </View>
+              )}
+              <View style={s.fieldRow}>
+                {synthesis.certaintyGrade && (
+                  <View style={s.fieldHalf}>
+                    <Text style={s.fieldLabel}>GRADE Certainty</Text>
+                    <View style={{ flexDirection: "row", marginBottom: 8 }}>
+                      <View style={{
+                        paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+                        backgroundColor: synthesis.certaintyGrade === "high" ? EMERALD_BG : synthesis.certaintyGrade === "moderate" ? "#e0f2fe" : synthesis.certaintyGrade === "low" ? AMBER_BG : RED_BG,
+                      }}>
+                        <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: synthesis.certaintyGrade === "high" ? EMERALD : synthesis.certaintyGrade === "moderate" ? "#0369a1" : synthesis.certaintyGrade === "low" ? AMBER : RED }}>
+                          {synthesis.certaintyGrade.replace("_", " ").toUpperCase()}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                )}
+                {synthesis.strengthOfEvidence && (
+                  <View style={s.fieldHalf}>
+                    <Text style={s.fieldLabel}>Strength of Evidence</Text>
+                    <Text style={s.fieldValue}>{synthesis.strengthOfEvidence}</Text>
+                  </View>
+                )}
+              </View>
+              {synthesis.heterogeneity && (
+                <Field label="Heterogeneity" value={synthesis.heterogeneity} />
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* Results & Conclusions */}
+        {(results?.mainFindings || results?.conclusions) && (
+          <View style={s.section}>
+            <SectionHeader num={14} title="Results & Conclusions" />
+            <View style={s.sectionBody}>
+              {results.mainFindings && (
+                <View style={s.highlight}>
+                  <Text style={s.fieldLabel}>Main Findings</Text>
+                  <Text style={s.highlightText}>{results.mainFindings}</Text>
+                </View>
+              )}
+              <Field label="Conclusions" value={results.conclusions} />
+              <Field label="Limitations" value={results.limitations} />
+              <Field label="Implications" value={results.implications} />
+            </View>
+          </View>
+        )}
+
+        {/* Dissemination Plan */}
+        {(dissemination?.targetJournals?.length > 0 || dissemination?.timelineToSubmit) && (
+          <View style={s.section}>
+            <SectionHeader num={15} title="Dissemination Plan" />
+            <View style={s.sectionBody}>
+              {(dissemination.targetJournals ?? []).length > 0 && (
+                <Pills label="Target Journals" items={dissemination.targetJournals} />
+              )}
+              {(dissemination.conferenceTargets ?? []).length > 0 && (
+                <Pills label="Conference Targets" items={dissemination.conferenceTargets} />
+              )}
+              <FieldPair
+                left={["Timeline to Submit", dissemination.timelineToSubmit]}
+                right={["Open Access Plan", dissemination.openAccessPlan]}
+              />
+              <Field label="Preprint Strategy" value={dissemination.preprintStrategy} />
+              <Field label="Data Sharing Plan" value={dissemination.dataSharePlan} />
+            </View>
+          </View>
+        )}
+
+        {/* §16 Discovery Card */}
         {(p.discoveryTitle || p.discoverySummary || p.technologyType || p.developmentStage) && (
           <View style={s.section}>
-            <SectionHeader num={11} title="Discovery Card Preparation" />
+            <SectionHeader num={16} title="Discovery Card Preparation" />
             <View style={s.sectionBody}>
               <Field label="Discovery Title" value={p.discoveryTitle} />
               {p.discoverySummary && (

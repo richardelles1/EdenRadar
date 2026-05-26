@@ -4,7 +4,6 @@ import {
   BookOpen, Trash2, ExternalLink, FolderOpen, Table2, Loader2,
   Download, Save, CheckSquare, Square, X, ChevronDown,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,7 +11,10 @@ import {
 } from "@/components/ui/select";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
+import { PORTAL_ACCENT, accentMix } from "@/components/sidebar-primitives";
 import type { SavedReference, ResearchProject } from "@shared/schema";
+
+const ACCENT = PORTAL_ACCENT.lab;
 
 const SOURCE_TYPE_LABELS: Record<string, string> = {
   paper: "Paper",
@@ -24,6 +26,19 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   dataset: "Dataset",
   researcher: "Researcher",
 };
+
+const SOURCE_TINT: Record<string, { bg: string; strip: string; badge: string; badgeTxt: string }> = {
+  paper:          { bg: "bg-violet-500/5 dark:bg-violet-950/20 border-violet-500/15", strip: "bg-violet-500", badge: "bg-violet-500/10 border-violet-500/20", badgeTxt: "text-violet-600 dark:text-violet-400" },
+  preprint:       { bg: "bg-amber-500/5 dark:bg-amber-950/20 border-amber-500/15",   strip: "bg-amber-500",   badge: "bg-amber-500/10 border-amber-500/20",   badgeTxt: "text-amber-600 dark:text-amber-400" },
+  clinical_trial: { bg: "bg-teal-500/5 dark:bg-teal-950/20 border-teal-500/15",     strip: "bg-teal-500",    badge: "bg-teal-500/10 border-teal-500/20",     badgeTxt: "text-teal-600 dark:text-teal-400" },
+  patent:         { bg: "bg-amber-500/5 dark:bg-amber-950/20 border-amber-500/15",   strip: "bg-amber-500",   badge: "bg-amber-500/10 border-amber-500/20",   badgeTxt: "text-amber-600 dark:text-amber-400" },
+  grant:          { bg: "bg-emerald-500/5 dark:bg-emerald-950/20 border-emerald-500/15", strip: "bg-emerald-500", badge: "bg-emerald-500/10 border-emerald-500/20", badgeTxt: "text-emerald-600 dark:text-emerald-400" },
+  tech_transfer:  { bg: "bg-emerald-500/5 dark:bg-emerald-950/20 border-emerald-500/15", strip: "bg-emerald-500", badge: "bg-emerald-500/10 border-emerald-500/20", badgeTxt: "text-emerald-600 dark:text-emerald-400" },
+  dataset:        { bg: "bg-sky-500/5 dark:bg-sky-950/20 border-sky-500/15",         strip: "bg-sky-500",     badge: "bg-sky-500/10 border-sky-500/20",       badgeTxt: "text-sky-600 dark:text-sky-400" },
+  researcher:     { bg: "bg-sky-500/5 dark:bg-sky-950/20 border-sky-500/15",         strip: "bg-sky-500",     badge: "bg-sky-500/10 border-sky-500/20",       badgeTxt: "text-sky-600 dark:text-sky-400" },
+};
+
+const DEFAULT_TINT = { bg: "bg-card border-border", strip: "bg-gray-400", badge: "bg-gray-500/10 border-gray-500/20", badgeTxt: "text-gray-600 dark:text-gray-400" };
 
 const STRENGTH_COLORS: Record<string, string> = {
   High: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
@@ -57,27 +72,22 @@ export default function ResearchLibrary() {
 
   const { data: refsData, isLoading: refsLoading } = useQuery<{ references: SavedReference[] }>({
     queryKey: ["/api/research/references", researcherId],
-    queryFn: () =>
-      fetch("/api/research/references", { headers: researcherHeaders }).then((r) => r.json()),
+    queryFn: () => fetch("/api/research/references", { headers: researcherHeaders }).then((r) => r.json()),
     enabled: !!researcherId,
   });
 
   const { data: projectsData } = useQuery<{ projects: ResearchProject[] }>({
     queryKey: ["/api/research/projects", researcherId],
-    queryFn: () =>
-      fetch("/api/research/projects", { headers: researcherHeaders }).then((r) => {
-        if (!r.ok) throw new Error("Failed to load projects");
-        return r.json();
-      }),
+    queryFn: () => fetch("/api/research/projects", { headers: researcherHeaders }).then((r) => {
+      if (!r.ok) throw new Error("Failed to load projects");
+      return r.json();
+    }),
     enabled: !!researcherId,
   });
 
   const deleteRef = useMutation({
     mutationFn: (id: number) =>
-      fetch(`/api/research/references/${id}`, {
-        method: "DELETE",
-        headers: researcherHeaders,
-      }).then((r) => {
+      fetch(`/api/research/references/${id}`, { method: "DELETE", headers: researcherHeaders }).then((r) => {
         if (!r.ok) throw new Error("Failed to delete");
         return r.json();
       }),
@@ -85,9 +95,7 @@ export default function ResearchLibrary() {
       qc.invalidateQueries({ queryKey: ["/api/research/references", researcherId] });
       toast({ title: "Reference removed" });
     },
-    onError: () => {
-      toast({ title: "Failed to remove reference", variant: "destructive" });
-    },
+    onError: () => toast({ title: "Failed to remove reference", variant: "destructive" }),
   });
 
   const extractEvidence = useMutation({
@@ -95,25 +103,18 @@ export default function ResearchLibrary() {
       setPendingIds(new Set(ids));
       setEvidenceRows([]);
       setShowTable(true);
-
       const r = await fetch("/api/research/library/extract-evidence", {
         method: "POST",
         headers: { ...researcherHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ referenceIds: ids }),
       });
-      if (!r.ok) {
-        const err = await r.json();
-        throw new Error(err.error ?? "Extraction failed");
-      }
+      if (!r.ok) { const err = await r.json(); throw new Error(err.error ?? "Extraction failed"); }
       const data = await r.json() as { rows: EvidenceRow[] };
-
       setEvidenceRows(data.rows);
       setPendingIds(new Set());
       return data;
     },
-    onSuccess: (data) => {
-      toast({ title: `Evidence extracted from ${data.rows.length} references` });
-    },
+    onSuccess: (data) => toast({ title: `Evidence extracted from ${data.rows.length} references` }),
     onError: (err: any) => {
       setPendingIds(new Set());
       toast({ title: "Evidence extraction failed", description: err.message, variant: "destructive" });
@@ -127,10 +128,7 @@ export default function ResearchLibrary() {
         headers: { ...researcherHeaders, "Content-Type": "application/json" },
         body: JSON.stringify({ rows }),
       });
-      if (!r.ok) {
-        const err = await r.json();
-        throw new Error(err.error ?? "Save failed");
-      }
+      if (!r.ok) { const err = await r.json(); throw new Error(err.error ?? "Save failed"); }
       return r.json();
     },
     onSuccess: () => {
@@ -138,9 +136,7 @@ export default function ResearchLibrary() {
       toast({ title: "Evidence table saved to project" });
       setSaveProjectId("");
     },
-    onError: (err: any) => {
-      toast({ title: "Failed to save", description: err.message, variant: "destructive" });
-    },
+    onError: (err: any) => toast({ title: "Failed to save", description: err.message, variant: "destructive" }),
   });
 
   const projectMap = useMemo(() => {
@@ -178,11 +174,7 @@ export default function ResearchLibrary() {
   }, []);
 
   const selectAll = useCallback(() => {
-    if (selectedIds.size === totalRefs) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(allRefs.map((r) => r.id)));
-    }
+    setSelectedIds(selectedIds.size === totalRefs ? new Set() : new Set(allRefs.map((r) => r.id)));
   }, [allRefs, selectedIds.size, totalRefs]);
 
   const exportCsv = useCallback(() => {
@@ -209,12 +201,21 @@ export default function ResearchLibrary() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Saved Literature</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Your saved references and bookmarks
-          </p>
+      {/* Header */}
+      <div
+        className="rounded-xl border border-border p-4 flex items-center justify-between gap-4"
+        style={{ background: accentMix(ACCENT, 4) }}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: ACCENT }}>
+            <BookOpen className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-foreground">Saved Literature</h1>
+            <p className="text-xs text-muted-foreground">
+              {totalRefs > 0 ? `${totalRefs} reference${totalRefs !== 1 ? "s" : ""} · ${groupKeys.filter((k) => k !== "unsorted").length} project${groupKeys.filter((k) => k !== "unsorted").length !== 1 ? "s" : ""}` : "Build your research library from Database Search"}
+            </p>
+          </div>
         </div>
         {totalRefs >= 2 && (
           <div className="flex items-center gap-2">
@@ -225,64 +226,66 @@ export default function ResearchLibrary() {
               className="gap-1.5 text-xs"
               data-testid="button-select-all"
             >
-              {selectedIds.size === totalRefs ? (
-                <CheckSquare className="w-3.5 h-3.5" />
-              ) : (
-                <Square className="w-3.5 h-3.5" />
-              )}
+              {selectedIds.size === totalRefs ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5" />}
               {selectedIds.size === totalRefs ? "Deselect All" : "Select All"}
             </Button>
             {selectedIds.size >= 2 && (
               <Button
                 size="sm"
-                className="gap-1.5 text-xs"
+                className="gap-1.5 text-xs text-white"
+                style={{ background: ACCENT }}
                 disabled={extractEvidence.isPending}
                 onClick={() => extractEvidence.mutate(Array.from(selectedIds))}
                 data-testid="button-build-evidence-table"
               >
-                {extractEvidence.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Table2 className="w-3.5 h-3.5" />
-                )}
-                {extractEvidence.isPending
-                  ? `Extracting (${selectedIds.size})...`
-                  : `Build Evidence Table (${selectedIds.size})`}
+                {extractEvidence.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Table2 className="w-3.5 h-3.5" />}
+                {extractEvidence.isPending ? `Extracting (${selectedIds.size})…` : `Build Evidence Table (${selectedIds.size})`}
               </Button>
             )}
           </div>
         )}
       </div>
 
+      {/* Evidence table panel */}
       {showTable && evidenceRows && (
-        <div className="rounded-xl border border-primary/20 bg-card p-5 space-y-4" data-testid="evidence-table-panel">
+        <div
+          className="rounded-xl border p-5 space-y-4"
+          style={{ background: accentMix(ACCENT, 3), borderColor: accentMix(ACCENT, 25) }}
+          data-testid="evidence-table-panel"
+        >
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Table2 className="w-4 h-4 text-primary" />
+              <Table2 className="w-4 h-4" style={{ color: ACCENT }} />
               <h2 className="text-sm font-semibold text-foreground">Evidence Comparison Table</h2>
               {pendingIds.size > 0 ? (
-                <Badge variant="secondary" className="text-[10px] gap-1">
+                <span
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
+                  style={{ background: accentMix(ACCENT, 10), color: ACCENT }}
+                >
                   <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                  Analyzing {pendingIds.size} papers...
-                </Badge>
+                  Analyzing {pendingIds.size}…
+                </span>
               ) : (
-                <Badge variant="secondary" className="text-[10px]">{evidenceRows.length} papers</Badge>
+                <span
+                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                  style={{ background: accentMix(ACCENT, 10), color: ACCENT }}
+                >
+                  {evidenceRows.length} papers
+                </span>
               )}
             </div>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={exportCsv} data-testid="button-export-csv">
+              <Button variant="outline" size="sm" className="gap-1.5 text-xs h-8" onClick={exportCsv} data-testid="button-export-csv">
                 <Download className="w-3 h-3" /> CSV
               </Button>
               {projects.length > 0 && (
                 <div className="flex items-center gap-1.5">
                   <Select value={saveProjectId} onValueChange={setSaveProjectId}>
                     <SelectTrigger className="h-8 text-xs w-[160px]" data-testid="select-save-project">
-                      <SelectValue placeholder="Save to project..." />
+                      <SelectValue placeholder="Save to project…" />
                     </SelectTrigger>
                     <SelectContent>
-                      {projects.map((p) => (
-                        <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
-                      ))}
+                      {projects.map((p) => <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   {saveProjectId && (
@@ -295,7 +298,7 @@ export default function ResearchLibrary() {
                       data-testid="button-save-to-project"
                     >
                       <Save className="w-3 h-3" />
-                      {saveToProject.isPending ? "Saving..." : "Save"}
+                      {saveToProject.isPending ? "Saving…" : "Save"}
                     </Button>
                   )}
                 </div>
@@ -310,22 +313,17 @@ export default function ResearchLibrary() {
             <table className="w-full text-xs border-collapse" data-testid="evidence-table">
               <thead>
                 <tr className="border-b border-border">
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Title</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Study Type</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Sample Size</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Population</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Intervention/Target</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Outcome</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap min-w-[200px]">Key Findings</th>
-                  <th className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap">Strength</th>
+                  {["Title", "Study Type", "Sample Size", "Population", "Intervention/Target", "Outcome", "Key Findings", "Strength"].map((h) => (
+                    <th key={h} className="text-left p-2 font-semibold text-muted-foreground whitespace-nowrap text-[10px] uppercase tracking-wide">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {evidenceRows.map((row) => (
-                  <tr key={row.referenceId} className="border-b border-border/50 hover:bg-muted/30" data-testid={`evidence-row-${row.referenceId}`}>
+                  <tr key={row.referenceId} className="border-b border-border/50 hover:bg-muted/20" data-testid={`evidence-row-${row.referenceId}`}>
                     <td className="p-2 max-w-[180px] truncate font-medium text-foreground">{row.title}</td>
                     <td className="p-2 text-muted-foreground whitespace-nowrap">{row.studyType}</td>
-                    <td className="p-2 text-muted-foreground whitespace-nowrap">{row.sampleSize}</td>
+                    <td className="p-2 text-muted-foreground whitespace-nowrap tabular-nums">{row.sampleSize}</td>
                     <td className="p-2 text-muted-foreground max-w-[120px] truncate">{row.population}</td>
                     <td className="p-2 text-muted-foreground max-w-[120px] truncate">{row.interventionTarget}</td>
                     <td className="p-2 text-muted-foreground max-w-[120px] truncate">{row.outcome}</td>
@@ -345,17 +343,13 @@ export default function ResearchLibrary() {
                       <tr key={`pending-${id}`} className="border-b border-border/50" data-testid={`evidence-row-pending-${id}`}>
                         <td className="p-2 max-w-[180px] truncate font-medium text-foreground/60">
                           <div className="flex items-center gap-1.5">
-                            <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
+                            <Loader2 className="w-3 h-3 animate-spin shrink-0" style={{ color: ACCENT }} />
                             <span className="truncate">{ref?.title ?? `Reference #${id}`}</span>
                           </div>
                         </td>
-                        <td className="p-2"><Skeleton className="h-3 w-14" /></td>
-                        <td className="p-2"><Skeleton className="h-3 w-10" /></td>
-                        <td className="p-2"><Skeleton className="h-3 w-16" /></td>
-                        <td className="p-2"><Skeleton className="h-3 w-16" /></td>
-                        <td className="p-2"><Skeleton className="h-3 w-14" /></td>
-                        <td className="p-2"><Skeleton className="h-3 w-32" /></td>
-                        <td className="p-2"><Skeleton className="h-3 w-14 rounded-full" /></td>
+                        {Array(7).fill(null).map((_, i) => (
+                          <td key={i} className="p-2"><Skeleton className="h-3 w-14" /></td>
+                        ))}
                       </tr>
                     );
                   })}
@@ -365,86 +359,110 @@ export default function ResearchLibrary() {
         </div>
       )}
 
+      {/* Reference groups */}
       {refsLoading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 rounded-lg" />)}
         </div>
       ) : totalRefs === 0 ? (
-        <div className="border border-dashed border-border rounded-lg p-12 text-center space-y-3" data-testid="library-empty-state">
-          <BookOpen className="w-8 h-8 text-muted-foreground mx-auto" />
+        <div
+          className="rounded-lg border border-dashed border-border p-12 text-center"
+          style={{ background: accentMix(ACCENT, 3) }}
+          data-testid="library-empty-state"
+        >
+          <BookOpen className="w-10 h-10 mx-auto mb-3 opacity-20" />
           <p className="text-sm text-muted-foreground">
-            No saved references yet. Bookmark results from the Data Sources page to build your library.
+            No saved references yet. Bookmark results from the Database Search to build your library.
           </p>
         </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-8">
           {groupKeys.map((key) => {
             const refs = grouped[key];
             const isUnsorted = key === "unsorted";
-            const groupTitle = isUnsorted ? "Unsaved bookmarks" : projectMap[Number(key)] ?? `Project #${key}`;
+            const groupTitle = isUnsorted ? "Unsorted" : projectMap[Number(key)] ?? `Project #${key}`;
 
             return (
               <section key={key} data-testid={`library-group-${key}`}>
-                <div className="flex items-center gap-2 mb-3">
-                  <FolderOpen className="w-4 h-4 text-violet-500" />
+                {/* Group header with left-border label style */}
+                <div className="flex items-center gap-2.5 pl-3 border-l-2 mb-3" style={{ borderColor: ACCENT }}>
+                  <FolderOpen className="w-3.5 h-3.5" style={{ color: ACCENT }} />
                   <h2 className="text-sm font-semibold text-foreground">{groupTitle}</h2>
-                  <Badge variant="secondary" className="text-[10px]">{refs.length}</Badge>
+                  <span
+                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full tabular-nums"
+                    style={{ background: accentMix(ACCENT, 10), color: ACCENT }}
+                  >
+                    {refs.length}
+                  </span>
                 </div>
+
                 <div className="space-y-2">
                   {refs.map((ref) => {
                     const isSelected = selectedIds.has(ref.id);
+                    const tint = SOURCE_TINT[ref.sourceType] ?? DEFAULT_TINT;
+
                     return (
                       <div
                         key={ref.id}
-                        className={`group/item border rounded-lg p-3 bg-card transition-colors flex items-start gap-3 cursor-pointer ${
-                          isSelected
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-border hover:border-violet-500/20"
+                        className={`group/item relative rounded-lg border flex items-start gap-3 cursor-pointer overflow-hidden transition-all ${
+                          isSelected ? "border-opacity-60 ring-1 ring-inset" : tint.bg
                         }`}
+                        style={
+                          isSelected
+                            ? { borderColor: ACCENT, ["--tw-ring-color" as string]: accentMix(ACCENT, 30), background: accentMix(ACCENT, 6) }
+                            : {}
+                        }
                         onClick={() => toggleSelect(ref.id)}
+                        onMouseEnter={(e) => { if (!isSelected) (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.transform = ""; }}
                         data-testid={`library-item-${ref.id}`}
                       >
-                        <div className={`shrink-0 mt-0.5 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover/item:opacity-100"}`}>
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-primary" />
-                          ) : (
-                            <Square className="w-4 h-4 text-muted-foreground/40" />
-                          )}
+                        {/* Left accent strip */}
+                        {!isSelected && (
+                          <div className={`absolute left-0 inset-y-0 w-[3px] rounded-l-lg ${tint.strip}`} />
+                        )}
+                        {isSelected && (
+                          <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg" style={{ backgroundColor: ACCENT }} />
+                        )}
+
+                        {/* Checkbox */}
+                        <div className={`shrink-0 mt-3 ml-4 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover/item:opacity-100"}`}>
+                          {isSelected
+                            ? <CheckSquare className="w-4 h-4" style={{ color: ACCENT }} />
+                            : <Square className="w-4 h-4 text-muted-foreground/40" />}
                         </div>
-                        <div className="flex-1 min-w-0 space-y-1">
+
+                        {/* Content */}
+                        <div className="flex-1 min-w-0 py-3 space-y-1.5">
                           <a
                             href={ref.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-sm font-medium text-foreground hover:text-violet-500 transition-colors line-clamp-1 flex items-center gap-1.5"
+                            className="text-sm font-medium text-foreground hover:underline line-clamp-1 flex items-center gap-1.5"
                             onClick={(e) => e.stopPropagation()}
                             data-testid={`link-library-item-${ref.id}`}
                           >
                             {ref.title}
                             <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground" />
                           </a>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                            <Badge variant="secondary" className="text-[10px] py-0">
+                          <div className="flex items-center gap-2 text-[10px] flex-wrap">
+                            <span className={`px-1.5 py-0.5 rounded border font-semibold uppercase tracking-wide ${tint.badge} ${tint.badgeTxt}`}>
                               {SOURCE_TYPE_LABELS[ref.sourceType] ?? ref.sourceType}
-                            </Badge>
-                            {ref.date && <span>{ref.date}</span>}
+                            </span>
+                            {ref.date && <span className="text-muted-foreground">{ref.date}</span>}
                             {ref.institution && (
-                              <>
-                                <span>·</span>
-                                <span className="truncate max-w-[200px]">{ref.institution}</span>
-                              </>
+                              <span className="text-muted-foreground truncate max-w-[200px]">{ref.institution}</span>
                             )}
                           </div>
                           {ref.notes && (
-                            <p className="text-xs text-muted-foreground italic line-clamp-2">"{ref.notes}"</p>
+                            <p className="text-[11px] text-muted-foreground italic line-clamp-1">"{ref.notes}"</p>
                           )}
                         </div>
+
+                        {/* Delete */}
                         <button
-                          className="text-muted-foreground hover:text-red-500 transition-colors shrink-0 p-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteRef.mutate(ref.id);
-                          }}
+                          className="text-muted-foreground/30 hover:text-red-500 transition-colors shrink-0 p-3 mt-0.5"
+                          onClick={(e) => { e.stopPropagation(); deleteRef.mutate(ref.id); }}
                           data-testid={`button-delete-ref-${ref.id}`}
                         >
                           <Trash2 className="w-3.5 h-3.5" />

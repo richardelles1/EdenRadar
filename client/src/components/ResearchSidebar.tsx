@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -21,7 +22,7 @@ import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
-import { getResearcherProfile } from "@/hooks/use-researcher";
+import { getResearcherProfile, useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import {
   AceternitySidebar,
   AceternitySidebarBody,
@@ -128,6 +129,39 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
+  const researcherId = useResearcherId();
+  const headers = useResearcherHeaders();
+
+  const { data: projectsData } = useQuery<{ projects: { id: number }[] }>({
+    queryKey: ["/api/research/projects", researcherId],
+    queryFn: () => fetch("/api/research/projects", { headers }).then((r) => r.json()),
+    enabled: !!researcherId,
+    staleTime: 60_000,
+  });
+
+  const { data: discoveriesData } = useQuery<{ discoveries: { id: number }[] }>({
+    queryKey: ["/api/research/discoveries", researcherId],
+    queryFn: () => fetch("/api/research/discoveries", { headers }).then((r) => r.json()),
+    enabled: !!researcherId,
+    staleTime: 60_000,
+  });
+
+  const { data: alertsData } = useQuery<{ topics: { id: number; unreadCount?: number }[] }>({
+    queryKey: ["/api/research/alerts/topics", researcherId],
+    queryFn: () => fetch("/api/research/alerts/topics", { headers }).then((r) => r.json()),
+    enabled: !!researcherId,
+    staleTime: 30_000,
+  });
+
+  const projectCount = projectsData?.projects?.length ?? 0;
+  const discoveryCount = discoveriesData?.discoveries?.length ?? 0;
+  const alertTopicCount = alertsData?.topics?.length ?? 0;
+
+  const badgeCounts: Record<string, number> = {
+    "/research/projects": projectCount,
+    "/research/my-discoveries": discoveryCount,
+    "/research/alerts": alertTopicCount,
+  };
 
   function navigate(href: string) {
     setLocation(href);
@@ -172,17 +206,22 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           <div key={groupLabel}>
             <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>
             <div className="space-y-0.5">
-              {items.map((item) => (
-                <SidebarNavButton
-                  key={item.href}
-                  label={item.label}
-                  icon={item.icon}
-                  isActive={isItemActive(location, item)}
-                  onClick={() => navigate(item.href)}
-                  accent={ACCENT}
-                  testId={`research-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                />
-              ))}
+              {items.map((item) => {
+                const isMarket = item.href.startsWith("/market");
+                return (
+                  <SidebarNavButton
+                    key={item.href}
+                    label={item.label}
+                    icon={item.icon}
+                    isActive={isItemActive(location, item)}
+                    onClick={() => navigate(item.href)}
+                    accent={isMarket ? PORTAL_ACCENT.market : ACCENT}
+                    tintInactive={isMarket}
+                    badgeCount={badgeCounts[item.href]}
+                    testId={`research-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                  />
+                );
+              })}
             </div>
           </div>
         ))}
