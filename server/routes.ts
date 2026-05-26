@@ -1386,6 +1386,26 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/scout/stats", async (_req, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          COUNT(*)::int AS relevant_assets,
+          COUNT(DISTINCT institution)::int AS institutions
+        FROM ingested_assets
+        WHERE relevant = true
+      `);
+      const row = result.rows[0] as Record<string, unknown>;
+      return res.json({
+        relevantAssets: Number(row?.relevant_assets ?? 0),
+        institutions: Number(row?.institutions ?? 0),
+      });
+    } catch (err: any) {
+      console.error("[scout/stats] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load stats" });
+    }
+  });
+
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const dashUserId = await tryGetUserId(req);
@@ -1894,13 +1914,14 @@ export async function registerRoutes(
       const [listResult, assetsResult] = await Promise.all([
         db.execute(sql`SELECT name FROM pipeline_lists WHERE id = ${listId} LIMIT 1`),
         db.execute(sql`
-          SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage,
-                 sa.source_name, sa.source_journal,
+          SELECT sa.id, sa.asset_name, sa.target, sa.modality, sa.development_stage,
+                 sa.disease_indication, sa.summary, sa.source_name, sa.source_title,
+                 sa.source_journal, sa.publication_year, sa.status, sa.parent_saved_asset_id,
                  COALESCE(ia.institution, '') AS institution
           FROM saved_assets sa
           LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
           WHERE sa.pipeline_list_id = ${listId}
-          ORDER BY sa.id DESC
+          ORDER BY sa.parent_saved_asset_id NULLS FIRST, sa.id ASC
         `),
       ]);
 
@@ -1908,29 +1929,174 @@ export async function registerRoutes(
       if (!listRow) return res.status(404).json({ error: "Pipeline list not found" });
       const pipelineName = String(listRow.name ?? "Pipeline");
 
-      const assets = assetsResult.rows as Record<string, unknown>[];
-      if (assets.length === 0) {
-        return res.json({ brief: `No assets in the "${pipelineName}" pipeline yet.`, assetCount: 0, pipelineName });
+      const allRows = assetsResult.rows as Record<string, unknown>[];
+      if (allRows.length === 0) {
+        return res.json({
+          pipelineName, assetCount: 0, generatedAt: new Date().toISOString(),
+          assets: [], standaloneSignals: [],
+          strategicThesis: `No assets in the "${pipelineName}" pipeline yet.`,
+          bdStatusOverview: "", strategicAssessment: "",
+          brief: `No assets in the "${pipelineName}" pipeline yet.`,
+        });
       }
 
-      const assetList = assets.map((a, i) => {
-        const institution = String(a.institution ?? "").trim() || String(a.source_name || a.source_journal || "—");
-        return `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Institution: ${institution} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Stage: ${String(a.development_stage ?? "—")} | Disease: ${String(a.disease_indication ?? "—")}`;
-      }).join("\n");
+      const NON_TTO = ["patent", "clinical_trial", "pubmed", "biorxiv", "medrxiv", "literature", "arxiv", "preprint", "paper"];
+      const isNonTto = (src: string) => NON_TTO.some(n => src.toLowerCase().includes(n));
+      const srcLabel = (src: string): string => {
+        const s = src.toLowerCase();
+        if (s.includes("patent")) return "Patent";
+        if (s.includes("clinical_trial")) return "Clinical Trial";
+        if (s.includes("pubmed") || s.includes("paper") || s.includes("literature")) return "Paper";
+        if (s.includes("biorxiv") || s.includes("medrxiv") || s.includes("preprint") || s.includes("arxiv")) return "Preprint";
+        return "Signal";
+      };
+      const STATUS_LABELS: Record<string, string> = {
+        watching: "Watching", evaluating: "Evaluating",
+        in_discussion: "In Discussion", on_hold: "On Hold", passed: "Passed",
+      };
 
-      const prompt = `You are a biotech intelligence analyst. Below is a list of drug development assets from a curated pipeline named "${pipelineName}".\n\nGenerate a concise pipeline dossier with the following sections:\nAsset Overview: Count and general description of the portfolio\nTherapeutic Targets & Mechanisms: Common targets and mechanisms of action\nModality Mix: Types of modalities represented (small molecules, biologics, etc.)\nDevelopment Stage Spread: Breakdown of where assets sit in development\nDisease Focus: Key indications and disease areas\nStrategic Summary: 2-3 sentences on the strategic significance and positioning of this pipeline\n\nAssets:\n${assetList}\n\nRespond with well-formatted plain text. Do not use markdown symbols or headers with #. Use clear labeled sections separated by blank lines.`;
+      const ttoRows = allRows.filter(r => !isNonTto(String(r.source_name ?? "")));
+      const signalRows = allRows.filter(r => isNonTto(String(r.source_name ?? "")));
+
+      const signalsByParent: Record<number, typeof signalRows> = {};
+      const standaloneSignalRows: typeof signalRows = [];
+      for (const s of signalRows) {
+        const pid = s.parent_saved_asset_id as number | null;
+        if (pid) { (signalsByParent[pid] ??= []).push(s); } else { standaloneSignalRows.push(s); }
+      }
+
+      const structuredAssets = ttoRows.map(r => ({
+        id: Number(r.id),
+        name: String(r.asset_name ?? "Unknown"),
+        target: String(r.target ?? "—"),
+        modality: String(r.modality ?? "—"),
+        stage: String(r.development_stage ?? "—"),
+        indication: String(r.disease_indication ?? "—"),
+        status: r.status ? (STATUS_LABELS[String(r.status)] ?? String(r.status)) : null,
+        institution: (String(r.institution ?? "").trim() || String(r.source_journal ?? "")).trim() || "—",
+        summary: String(r.summary ?? "").trim(),
+        insight: null as string | null,
+        signals: (signalsByParent[Number(r.id)] ?? []).map(s => ({
+          type: srcLabel(String(s.source_name ?? "")),
+          title: String(s.source_title ?? s.asset_name ?? "—").trim(),
+          year: String(s.publication_year ?? "—"),
+          summary: String(s.summary ?? "").slice(0, 200).trim(),
+        })),
+      }));
+
+      const standaloneSignals = standaloneSignalRows.map(s => ({
+        type: srcLabel(String(s.source_name ?? "")),
+        title: String(s.source_title ?? s.asset_name ?? "—").trim(),
+        year: String(s.publication_year ?? "—"),
+      }));
+
+      const assetContext = structuredAssets.map((a, i) => {
+        const sigText = a.signals.length > 0
+          ? `Supporting evidence (${a.signals.length}):\n` + a.signals.map(s => `    [${s.type}] "${s.title}" (${s.year})${s.summary ? " — " + s.summary : ""}`).join("\n")
+          : "No supporting signals linked.";
+        return [
+          `Asset ${i + 1}: ${a.name}`,
+          `  Target: ${a.target} | Modality: ${a.modality} | Stage: ${a.stage}`,
+          `  Disease: ${a.indication} | Institution: ${a.institution}`,
+          `  BD Status: ${a.status ?? "not set"}`,
+          a.summary ? `  Context: ${a.summary.slice(0, 300)}` : "",
+          `  ${sigText}`,
+        ].filter(Boolean).join("\n");
+      }).join("\n\n");
+
+      const standaloneCtx = standaloneSignals.length > 0
+        ? `\nUNLINKED SIGNALS (${standaloneSignals.length}):\n` + standaloneSignals.map(s => `- [${s.type}] "${s.title}" (${s.year})`).join("\n")
+        : "";
+
+      const prompt = `You are a biotech intelligence analyst writing a pipeline brief for a BD/licensing team.
+Pipeline: "${pipelineName}"
+
+PIPELINE ASSETS:
+${assetContext}${standaloneCtx}
+
+Write a brief with EXACTLY these four sections. Plain text only — no markdown, no bullet symbols. Separate sections with a blank line. Use the exact section labels.
+
+STRATEGIC THESIS
+2-3 sentences identifying the core therapeutic focus, target classes, and scientific positioning of this pipeline.
+
+BD STATUS OVERVIEW
+1-2 sentences summarising where assets stand operationally. Name specific assets by status where set. If no statuses are set, note that.
+
+ASSET INSIGHTS
+One analytical sentence per asset. Format each line as:
+[Asset Name] — [one sentence drawing on target, modality, stage, and evidence]
+
+STRATEGIC ASSESSMENT
+2-3 sentences on pipeline strengths, evidence gaps, and where the BD team should focus next.`;
 
       const { default: OpenAI } = await import("openai");
       const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [{ role: "user", content: prompt }],
-        max_tokens: 800,
-        temperature: 0.4,
+        max_tokens: 1200,
+        temperature: 0.3,
       });
-      const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
-      logAppEvent("pipeline_brief_generated", { listId, assetCount: assets.length });
-      return res.json({ brief, assetCount: assets.length, pipelineName });
+      const llmText = completion.choices[0]?.message?.content ?? "";
+
+      function extractSection(text: string, label: string): string {
+        const re = new RegExp(`${label}\\s*\\n([\\s\\S]*?)(?=\\n[A-Z][A-Z &]+\\n|$)`, "i");
+        const m = text.match(re);
+        return m ? m[1].trim() : "";
+      }
+
+      const strategicThesis = extractSection(llmText, "STRATEGIC THESIS");
+      const bdStatusOverview = extractSection(llmText, "BD STATUS OVERVIEW");
+      const assetInsightsRaw = extractSection(llmText, "ASSET INSIGHTS");
+      const strategicAssessment = extractSection(llmText, "STRATEGIC ASSESSMENT");
+
+      const insightMap: Record<string, string> = {};
+      for (const line of assetInsightsRaw.split("\n")) {
+        const m = line.match(/^(.+?)\s*[—–-]{1,2}\s*(.+)$/);
+        if (m) insightMap[m[1].trim()] = m[2].trim();
+      }
+      const assetsWithInsights = structuredAssets.map(a => ({ ...a, insight: insightMap[a.name] ?? null }));
+
+      const brief = [
+        `${pipelineName.toUpperCase()} — PIPELINE BRIEF`,
+        "",
+        "STRATEGIC THESIS",
+        strategicThesis,
+        "",
+        "BD STATUS OVERVIEW",
+        bdStatusOverview,
+        "",
+        "ASSET ROSTER",
+        ...assetsWithInsights.map((a, i) => [
+          `${i + 1}. ${a.name}`,
+          `   ${a.stage} · ${a.modality}${a.status ? " · " + a.status : ""}`,
+          `   Target: ${a.target} | ${a.indication} | ${a.institution}`,
+          a.insight ? `   ${a.insight}` : "",
+          a.signals.length > 0
+            ? "   Supporting Evidence:\n" + a.signals.map(s => `   [${s.type}] "${s.title}" (${s.year})`).join("\n")
+            : "   No supporting signals.",
+          "",
+        ].filter((l): l is string => l !== "").join("\n")),
+        standaloneSignals.length > 0
+          ? "UNLINKED SIGNALS\n" + standaloneSignals.map(s => `[${s.type}] "${s.title}" (${s.year})`).join("\n")
+          : "",
+        "",
+        "STRATEGIC ASSESSMENT",
+        strategicAssessment,
+      ].filter(s => s !== "").join("\n");
+
+      logAppEvent("pipeline_brief_generated", { listId, assetCount: ttoRows.length });
+      return res.json({
+        pipelineName,
+        assetCount: ttoRows.length,
+        generatedAt: new Date().toISOString(),
+        assets: assetsWithInsights,
+        standaloneSignals,
+        strategicThesis,
+        bdStatusOverview,
+        strategicAssessment,
+        brief,
+      });
     } catch (err: any) {
       console.error("[pipeline-lists/brief] Error:", err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });

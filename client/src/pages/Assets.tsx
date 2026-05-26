@@ -3,8 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { PipelineBriefDialog, type BriefData } from "@/components/PipelineBriefDialog";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
@@ -29,9 +28,7 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
-  Copy,
   Loader2,
-  Printer,
   Users,
   MessageSquare,
   Send,
@@ -910,7 +907,7 @@ function PipelineSidebar({
   );
 }
 
-type BriefModal = { pipelineName: string; brief: string; assetCount: number };
+type BriefModal = BriefData;
 
 export default function Assets() {
   const { toast } = useToast();
@@ -919,7 +916,6 @@ export default function Assets() {
   const [sourceTypeFilter, setSourceTypeFilter] = useState<"all" | SourceTypeKey>("all");
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
   const [briefLoading, setBriefLoading] = useState<number | null>(null);
-  const [copied, setCopied] = useState(false);
   const [teamScope, setTeamScope] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -1051,10 +1047,10 @@ export default function Assets() {
   const briefMutation = useMutation({
     mutationFn: async (listId: number) => {
       const res = await apiRequest("POST", `/api/pipeline-lists/${listId}/brief`, {});
-      return res.json() as Promise<{ brief: string; assetCount: number; pipelineName: string }>;
+      return res.json() as Promise<BriefData>;
     },
     onSuccess: (result) => {
-      setBriefModal({ pipelineName: result.pipelineName, brief: result.brief, assetCount: result.assetCount });
+      setBriefModal(result);
       setBriefLoading(null);
     },
     onError: (err: any) => {
@@ -1068,24 +1064,6 @@ export default function Assets() {
     if (!id) return;
     setBriefLoading(id);
     briefMutation.mutate(id);
-  };
-
-  const handleCopy = () => {
-    if (!briefModal) return;
-    navigator.clipboard.writeText(briefModal.brief).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  const handlePrint = () => {
-    if (!briefModal) return;
-    sessionStorage.setItem("pipeline-brief-print", JSON.stringify({
-      brief: briefModal.brief,
-      pipelineName: briefModal.pipelineName,
-      assetCount: briefModal.assetCount,
-    }));
-    window.open("/pipeline/brief/print", "_blank");
   };
 
   const pipelines = pipelinesData?.pipelines ?? [];
@@ -1466,48 +1444,11 @@ export default function Assets() {
         </div>
       )}
 
-      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); } }}>
-        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col overflow-hidden" data-testid="dialog-pipeline-brief">
-          <DialogHeader>
-            <div className="flex items-center justify-between gap-3">
-              <DialogTitle className="flex items-center gap-2 text-base">
-                <FileText className="w-4 h-4 text-primary" />
-                {briefModal?.pipelineName}: Pipeline Brief
-              </DialogTitle>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-muted-foreground">
-                  {briefModal?.assetCount} asset{briefModal?.assetCount !== 1 ? "s" : ""}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopy}
-                  className="h-7 text-xs gap-1.5 border-card-border"
-                  data-testid="button-brief-copy"
-                >
-                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
-                  {copied ? "Copied!" : "Copy"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handlePrint}
-                  className="h-7 text-xs gap-1.5 border-card-border"
-                  data-testid="button-brief-print"
-                >
-                  <Printer className="w-3 h-3" />
-                  Print
-                </Button>
-              </div>
-            </div>
-          </DialogHeader>
-          <ScrollArea className="flex-1 min-h-0 mt-2">
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed px-1 pb-4" data-testid="text-brief-content">
-              {briefModal?.brief}
-            </pre>
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
+      <PipelineBriefDialog
+        data={briefModal}
+        open={!!briefModal}
+        onClose={() => setBriefModal(null)}
+      />
     </div>
   );
 }
