@@ -30,6 +30,7 @@ import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
 import { PatentCard } from "@/components/PatentCard";
 import { ClinicalTrialCard } from "@/components/ClinicalTrialCard";
+import { ScoutTour, useScoutTour } from "@/components/ScoutTour";
 
 type SearchResponse = {
   assets: ScoredAsset[];
@@ -339,6 +340,7 @@ export default function Scout() {
   const patentAbortRef = useRef<AbortController | null>(null);
   const trialAbortRef = useRef<AbortController | null>(null);
   const researchAbortRef = useRef<AbortController | null>(null);
+  const { show: showTour, close: closeTour, retrigger: retriggerTour } = useScoutTour();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [patentFiltersOpen, setPatentFiltersOpen] = useState(false);
   const [trialFiltersOpen, setTrialFiltersOpen] = useState(false);
@@ -1065,6 +1067,7 @@ export default function Scout() {
   ].filter(Boolean).length;
 
   return (
+    <>
     <div className="min-h-full flex flex-col bg-gradient-to-b from-background via-background to-muted/20">
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
@@ -1161,14 +1164,30 @@ export default function Scout() {
                     </Tooltip>
                   </TooltipProvider>
 
-                  <button
-                    onClick={() => setLocation("/settings")}
-                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-                    data-testid="button-scout-settings"
-                    title="Settings"
-                  >
-                    <Settings className="w-4 h-4" />
-                  </button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => setLocation("/settings")}
+                          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                          data-testid="button-scout-settings"
+                        >
+                          <Settings className="w-4 h-4" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs">
+                        <div className="space-y-1.5">
+                          <p>Settings</p>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); retriggerTour(); }}
+                            className="text-primary hover:text-primary/80 underline underline-offset-2 block transition-colors"
+                          >
+                            Retake tour
+                          </button>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
             </div>
@@ -2686,5 +2705,9 @@ export default function Scout() {
         </SheetContent>
       </Sheet>
     </div>
+
+    {/* First-time user tour */}
+    {showTour && <ScoutTour onClose={closeTour} />}
+    </>
   );
 }
