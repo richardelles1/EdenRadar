@@ -712,6 +712,20 @@ export const edenSessions = pgTable("eden_sessions", {
 });
 export type EdenSession = typeof edenSessions.$inferSelect;
 
+export const edenQueries = pgTable("eden_queries", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  userId: text("user_id"),
+  queryText: text("query_text").notNull(),
+  intent: text("intent").notNull().default("search"),
+  filters: jsonb("filters").$type<Record<string, unknown>>(),
+  assetCount: integer("asset_count").notNull().default(0),
+  emptyResult: boolean("empty_result").notNull().default(false),
+  latencyMs: integer("latency_ms"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type EdenQuery = typeof edenQueries.$inferSelect;
+
 // ── Organizations & Org Members ───────────────────────────────────────────────
 
 export const organizations = pgTable("organizations", {

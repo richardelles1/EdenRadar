@@ -19,6 +19,10 @@ import {
   Dna,
   Shield,
   Check,
+  Search,
+  Sparkles,
+  Bell,
+  BarChart3,
 } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
@@ -299,28 +303,32 @@ const TIER_OVERVIEW = [
   },
 ];
 
-/* ─── How-to Steps ───────────────────────────────────────────── */
+/* ─── Intelligence Channels ──────────────────────────────────── */
 
-const HOW_STEPS = [
+const INTEL_CHANNELS = [
   {
-    number: "01",
-    title: "Sign up and choose your tier",
-    desc: "Create your account in under two minutes. Select the tier that fits your workflow: free for researchers, paid for industry intelligence.",
+    icon: Search,
+    tag: "Active",
+    title: "Natural language search",
+    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
   },
   {
-    number: "02",
-    title: "Query across the full index",
-    desc: "Ask in plain English across all 350+ indexed institutions at once. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
+    icon: Sparkles,
+    tag: "Conversational",
+    title: "EDEN intelligence engine",
+    desc: "Go deeper with EDEN. Ask follow-up questions, request a full patent landscape, compare competing programs, or synthesize literature across 40+ live sources — all cited, all in plain English.",
   },
   {
-    number: "03",
-    title: "Explore enriched dossiers",
-    desc: "Drill into any asset for the full EDEN-compiled dossier: scientific summary, competitive landscape, inventor details, patent coverage, and deal readiness score.",
+    icon: Bell,
+    tag: "Automated",
+    title: "Standing alerts",
+    desc: "Set your criteria once. The moment a new matching asset appears from any of the 350+ monitored institutions, your team is notified before it surfaces publicly. No manual scanning, no missed deals.",
   },
   {
-    number: "04",
-    title: "Save, export, and stay ahead",
-    desc: "Set standing alerts — the moment a new matching asset appears from any monitored institution, your team is notified before it hits the market. Export pipeline reports to CSV or PDF, or share dossier links directly with colleagues.",
+    icon: BarChart3,
+    tag: "Structured",
+    title: "Landscape intelligence",
+    desc: "Every asset arrives with an EDEN-compiled context layer: patent coverage, clinical trial cross-reference, competitive program mapping, inventor history, and a deal readiness score 0–100.",
   },
 ];
 
@@ -357,13 +365,9 @@ export default function HowItWorks() {
         {/* Hero + Stats */}
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-            The intelligence engine{" "}
-            <span className="gradient-text">
-              for{" "}
-              <WordRotate
-                words={["BD teams.", "TTOs.", "researchers.", "deal flow."]}
-                className="inline-block"
-              />
+            <span className="block">The intelligence engine</span>
+            <span className="gradient-text block">
+              for <WordRotate words={["BD teams.", "TTOs.", "researchers.", "deal flow."]} />
             </span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
@@ -392,30 +396,45 @@ export default function HowItWorks() {
           </div>
         </section>
 
-        {/* How it works steps */}
+        {/* Intelligence delivery channels */}
         <section
           ref={stepsRef}
           className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
         >
           <div className="text-center mb-12">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Getting Started</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
-              Up and running in four steps
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Intelligence Delivery</p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">
+              How intelligence reaches your team
             </h2>
+            <p className="text-muted-foreground max-w-xl mx-auto">
+              Four distinct channels — each designed so the right asset finds you, whether you're actively searching or not.
+            </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {HOW_STEPS.map((step, i) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {INTEL_CHANNELS.map((ch, i) => (
               <CardTilt key={i} className="rounded-xl">
-                <div className="flex gap-5 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
-                  <div
-                    className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center font-black text-lg"
-                    style={{ background: "hsl(var(--primary) / 0.08)", color: "hsl(var(--primary))" }}
-                  >
-                    {step.number}
+                <div
+                  className="flex flex-col gap-5 p-7 rounded-xl h-full"
+                  style={{
+                    background: "linear-gradient(150deg, hsl(var(--card)) 0%, hsl(var(--primary) / 0.04) 100%)",
+                    border: "1px solid hsl(var(--border))",
+                    borderTop: "2px solid hsl(var(--primary) / 0.40)",
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div
+                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: "hsl(var(--primary) / 0.10)" }}
+                    >
+                      <ch.icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary/50">
+                      {ch.tag}
+                    </span>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground mb-1.5">{step.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                    <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
                   </div>
                 </div>
               </CardTilt>

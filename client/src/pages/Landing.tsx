@@ -287,14 +287,9 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
         <div className="space-y-6" key="industry">
           {/* EdenScout sub-section */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span
-                className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
-                style={{ background: "hsl(var(--portal-scout) / 0.12)", color: "hsl(var(--portal-scout))", border: "1px solid hsl(var(--portal-scout) / 0.3)" }}
-              >
-                EdenScout: Pipeline Intelligence
-              </span>
-            </div>
+            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-primary/60 pl-3 border-l-2 border-l-primary/40">
+              EdenScout: Pipeline Intelligence
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {INDUSTRY_TILES.map((tile, i) => (
                 <div
@@ -317,14 +312,11 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
 
           {/* EdenMarket sub-section */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span
-                className="text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full"
-                style={{ background: "hsl(var(--portal-market) / 0.10)", color: "hsl(var(--portal-market))", border: "1px solid hsl(var(--portal-market) / 0.25)" }}
-              >
-                EdenMarket: Blind Asset Marketplace
-              </span>
-            </div>
+            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] pl-3 border-l-2"
+              style={{ color: "hsl(var(--portal-market) / 0.7)", borderLeftColor: "hsl(var(--portal-market) / 0.4)" }}
+            >
+              EdenMarket: Blind Asset Marketplace
+            </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {EDENMARKET_TILES.map((tile, i) => (
                 <div
@@ -436,15 +428,9 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
       <BackgroundBeams className="opacity-30" />
 
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
-        <div
-          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6"
-          style={{ background: "hsl(var(--portal-scout) / 0.2)", border: "1px solid hsl(var(--portal-scout) / 0.35)" }}
-        >
-          <Zap className="w-3.5 h-3.5" style={{ color: "hsl(142 65% 60%)" }} />
-          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "hsl(142 65% 60%)" }}>
-            Join EdenRadar Today
-          </span>
-        </div>
+        <p className="text-xs font-mono font-semibold uppercase tracking-[0.15em] mb-6" style={{ color: "hsl(142 65% 55%)" }}>
+          Join EdenRadar Today
+        </p>
 
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-5 leading-tight text-white">
           Get started with{" "}
@@ -527,55 +513,41 @@ function InstitutionMarquee() {
         <p className="text-[10px] font-bold uppercase tracking-widest text-primary">350+ Institutions Indexed</p>
       </div>
 
-      {/* 3D perspective container */}
-      <div
-        style={{
-          perspective: "1200px",
-          perspectiveOrigin: "50% 0%",
-        }}
-      >
-        <div
-          className="space-y-2"
-          style={{
-            transform: "rotateX(18deg) rotateZ(-1deg)",
-            transformOrigin: "center top",
-          }}
-        >
-          {INSTITUTION_ROWS.map((row, ri) => {
-            const doubled = [...row, ...row];
-            return (
+      <div className="space-y-2.5">
+        {INSTITUTION_ROWS.map((row, ri) => {
+          const doubled = [...row, ...row];
+          return (
+            <div
+              key={ri}
+              className="relative overflow-hidden"
+              style={{
+                maskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 8%, black 92%, transparent 100%)",
+              }}
+            >
               <div
-                key={ri}
-                className="relative overflow-hidden"
-                style={{
-                  maskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
-                  WebkitMaskImage: "linear-gradient(to right, transparent 0%, black 10%, black 90%, transparent 100%)",
-                }}
+                className="flex w-max"
+                style={{ animation: `${directions[ri]} ${speeds[ri]}s linear infinite` }}
               >
-                <div
-                  className="flex gap-2 w-max"
-                  style={{ animation: `${directions[ri]} ${speeds[ri]}s linear infinite` }}
-                >
-                  {doubled.map((name, i) => (
+                {doubled.map((name, i) => (
+                  <span
+                    key={i}
+                    className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold tracking-wider"
+                    style={{ color: "hsl(var(--foreground) / 0.50)" }}
+                  >
+                    {name}
                     <span
-                      key={i}
-                      className="flex-shrink-0 px-3.5 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap tracking-wide"
-                      style={{
-                        background: ri % 2 === 0
-                          ? "hsl(var(--portal-scout) / 0.08)"
-                          : "hsl(var(--card))",
-                        border: "1px solid hsl(var(--portal-scout) / 0.20)",
-                        color: "hsl(var(--foreground) / 0.70)",
-                      }}
+                      className="mx-4"
+                      style={{ color: "hsl(var(--foreground) / 0.18)" }}
                     >
-                      {name}
+                      ·
                     </span>
-                  ))}
-                </div>
+                  </span>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            </div>
+          );
+        })}
       </div>
     </section>
   );
@@ -668,14 +640,6 @@ export default function Landing() {
               </MovingBorder>
             </div>
 
-            <Link href="/pricing">
-              <span
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer underline underline-offset-2"
-                data-testid="link-see-pricing"
-              >
-                See pricing
-              </span>
-            </Link>
 
             <div
               ref={statsRef}
@@ -749,10 +713,11 @@ export default function Landing() {
           <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
               <div className="space-y-5">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "hsl(var(--portal-market) / 0.10)", border: "1px solid hsl(var(--portal-market) / 0.25)" }}>
-                  <ShoppingBag className="w-3.5 h-3.5" style={{ color: "hsl(var(--portal-market))" }} />
-                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "hsl(var(--portal-market))" }}>EdenMarket</span>
-                </div>
+                <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] pl-3 border-l-2"
+                  style={{ color: "hsl(var(--portal-market) / 0.7)", borderLeftColor: "hsl(var(--portal-market) / 0.4)" }}
+                >
+                  EdenMarket
+                </p>
                 <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
                   The blind marketplace for{" "}
                   <span style={{ color: "hsl(var(--portal-market))" }}>licensable biotech assets</span>

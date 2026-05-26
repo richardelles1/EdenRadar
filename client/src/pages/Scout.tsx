@@ -10,7 +10,7 @@ import { BuyerProfileForm } from "@/components/BuyerProfileForm";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
+import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -1199,14 +1199,14 @@ export default function Scout() {
               {!hasSearched && (
                 <div className="flex flex-wrap gap-2 animate-in fade-in duration-500">
                   {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
-                    <button
+                    <HoverBorderGradient
                       key={chip}
                       onClick={() => handleChipClick(chip)}
-                      className="px-3.5 py-1.5 rounded-full border border-border/70 bg-background/60 hover:border-primary/50 hover:bg-primary/5 hover:text-primary text-xs text-muted-foreground transition-all duration-150"
+                      className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
                       data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
                     >
                       {chip}
-                    </button>
+                    </HoverBorderGradient>
                   ))}
                 </div>
               )}
@@ -1417,47 +1417,48 @@ export default function Scout() {
             <div className="px-4 sm:px-6 pb-3">
               <div className="flex flex-wrap items-center gap-2">
                 {stageFilters.map((s) => (
-                  <Badge key={`sf-${s}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setStageFilters((prev) => prev.filter((v) => v !== s))} data-testid={`active-filter-stage-${s}`}>
+                  <button key={`sf-${s}`} onClick={() => setStageFilters((prev) => prev.filter((v) => v !== s))} data-testid={`active-filter-stage-${s}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all capitalize cursor-pointer">
                     Stage: {s} ×
-                  </Badge>
+                  </button>
                 ))}
                 {modalityFilters.map((m) => (
-                  <Badge key={`mf-${m}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setModalityFilters((prev) => prev.filter((v) => v !== m))} data-testid={`active-filter-modality-${m}`}>
+                  <button key={`mf-${m}`} onClick={() => setModalityFilters((prev) => prev.filter((v) => v !== m))} data-testid={`active-filter-modality-${m}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all capitalize cursor-pointer">
                     {m} ×
-                  </Badge>
+                  </button>
                 ))}
                 {institutionFilter !== "all" && (
-                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution">
+                  <button onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer">
                     {institutionFilter} ×
-                  </Badge>
+                  </button>
                 )}
                 {biologiesFilter.map((b) => (
-                  <Badge key={`bio-chip-${b}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/20" onClick={() => setBiologiesFilter((prev) => prev.filter((v) => v !== b))} data-testid={`active-filter-biology-${b}`}>
+                  <button key={`bio-chip-${b}`} onClick={() => setBiologiesFilter((prev) => prev.filter((v) => v !== b))} data-testid={`active-filter-biology-${b}`}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-teal-500/60 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 transition-all capitalize cursor-pointer">
                     {b} ×
-                  </Badge>
+                  </button>
                 ))}
                 {(stagesMulti.length > 0 || modalitiesMulti.length > 0 || institutionsMulti.length > 0) && (
                   <>
                     {stagesMulti.map((s) => (
-                      <Badge key={`smul-${s}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20"
-                        onClick={() => setStagesMulti((prev) => prev.filter((v) => v !== s))}
-                        data-testid={`active-filter-stage-multi-${s}`}>
+                      <button key={`smul-${s}`} onClick={() => setStagesMulti((prev) => prev.filter((v) => v !== s))} data-testid={`active-filter-stage-multi-${s}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 transition-all capitalize cursor-pointer">
                         Stage: {s} ×
-                      </Badge>
+                      </button>
                     ))}
                     {modalitiesMulti.map((m) => (
-                      <Badge key={`mmul-${m}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize bg-primary/10 text-primary border border-primary/20"
-                        onClick={() => setModalitiesMulti((prev) => prev.filter((v) => v !== m))}
-                        data-testid={`active-filter-modality-multi-${m}`}>
+                      <button key={`mmul-${m}`} onClick={() => setModalitiesMulti((prev) => prev.filter((v) => v !== m))} data-testid={`active-filter-modality-multi-${m}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/60 bg-primary/5 text-primary hover:bg-primary/10 transition-all capitalize cursor-pointer">
                         {m} ×
-                      </Badge>
+                      </button>
                     ))}
                     {institutionsMulti.map((i) => (
-                      <Badge key={`imul-${i}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
-                        onClick={() => setInstitutionsMulti((prev) => prev.filter((v) => v !== i))}
-                        data-testid={`active-filter-institution-multi-${i}`}>
+                      <button key={`imul-${i}`} onClick={() => setInstitutionsMulti((prev) => prev.filter((v) => v !== i))} data-testid={`active-filter-institution-multi-${i}`}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-amber-500/60 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all cursor-pointer">
                         {i} ×
-                      </Badge>
+                      </button>
                     ))}
                     <button
                       onClick={() => { setStagesMulti([]); setModalitiesMulti([]); setInstitutionsMulti([]); }}
@@ -1755,24 +1756,22 @@ export default function Scout() {
                     {(patentOwnerFilter !== "all" || patentAssigneeSearch.trim() || patentDateFilter !== "any") && (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {patentOwnerFilter !== "all" && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner">
+                          <button onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-amber-500/60 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all capitalize cursor-pointer">
                             {patentOwnerFilter} ×
-                          </Badge>
+                          </button>
                         )}
                         {patentDateFilter !== "any" && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => {
-                            setPatentDateFilter("any");
-                            if (currentQuery) {
-                              patentMutation.mutate({ query: currentQuery });
-                            }
-                          }} data-testid="patent-active-filter-date">
+                          <button onClick={() => { setPatentDateFilter("any"); if (currentQuery) { patentMutation.mutate({ query: currentQuery }); } }} data-testid="patent-active-filter-date"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer">
                             {patentDateFilter === "6m" ? "Last 6 months" : patentDateFilter === "2022" ? "2022 and older" : patentDateFilter} ×
-                          </Badge>
+                          </button>
                         )}
                         {patentAssigneeSearch.trim() && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer max-w-[180px] sm:max-w-none" onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee">
+                          <button onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer max-w-[180px] sm:max-w-none">
                             <span className="truncate">"{patentAssigneeSearch}"</span> ×
-                          </Badge>
+                          </button>
                         )}
                         <button
                           onClick={() => {
@@ -2016,19 +2015,22 @@ export default function Scout() {
                     {(trialPhaseFilter !== "all" || trialStatusFilter !== "all" || trialSponsorSearch.trim()) && (
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {trialPhaseFilter !== "all" && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialPhaseFilter("all")} data-testid="trial-active-filter-phase">
+                          <button onClick={() => setTrialPhaseFilter("all")} data-testid="trial-active-filter-phase"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 transition-all capitalize cursor-pointer">
                             {trialPhaseFilter} ×
-                          </Badge>
+                          </button>
                         )}
                         {trialStatusFilter !== "all" && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialStatusFilter("all")} data-testid="trial-active-filter-status">
+                          <button onClick={() => setTrialStatusFilter("all")} data-testid="trial-active-filter-status"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-teal-500/60 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 transition-all capitalize cursor-pointer">
                             {trialStatusFilter} ×
-                          </Badge>
+                          </button>
                         )}
                         {trialSponsorSearch.trim() && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer max-w-[180px] sm:max-w-none" onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor">
+                          <button onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer max-w-[180px] sm:max-w-none">
                             <span className="truncate">"{trialSponsorSearch}"</span> ×
-                          </Badge>
+                          </button>
                         )}
                         <button
                           onClick={() => { setTrialPhaseFilter("all"); setTrialStatusFilter("all"); setTrialSponsorSearch(""); }}

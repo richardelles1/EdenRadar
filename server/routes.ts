@@ -10,7 +10,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -6322,6 +6322,55 @@ STRATEGIC ASSESSMENT
     }
   });
 
+  app.get("/api/admin/eden/analytics", async (req, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') AS queries_24h,
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days')  AS queries_7d,
+          COUNT(*) FILTER (WHERE intent = 'search'    AND created_at >= NOW() - INTERVAL '7 days') AS search_7d,
+          COUNT(*) FILTER (WHERE intent = 'aggregation' AND created_at >= NOW() - INTERVAL '7 days') AS aggregation_7d,
+          COUNT(*) FILTER (WHERE intent = 'conversational' AND created_at >= NOW() - INTERVAL '7 days') AS conversational_7d,
+          COUNT(*) FILTER (WHERE intent = 'back_ref'  AND created_at >= NOW() - INTERVAL '7 days') AS back_ref_7d,
+          COUNT(*) FILTER (WHERE intent = 'comparative' AND created_at >= NOW() - INTERVAL '7 days') AS comparative_7d,
+          COUNT(*) FILTER (WHERE intent = 'definitional' AND created_at >= NOW() - INTERVAL '7 days') AS definitional_7d,
+          COUNT(*) FILTER (WHERE empty_result = true AND intent = 'search' AND created_at >= NOW() - INTERVAL '7 days') AS empty_searches_7d,
+          ROUND(AVG(latency_ms) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days'))::int AS avg_latency_ms_7d
+        FROM eden_queries
+      `);
+      const feedbackResult = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE sentiment = 'up'   AND created_at >= NOW() - INTERVAL '7 days') AS up_7d,
+          COUNT(*) FILTER (WHERE sentiment = 'down' AND created_at >= NOW() - INTERVAL '7 days') AS down_7d
+        FROM eden_message_feedback
+      `);
+      const row = result.rows[0] as Record<string, unknown>;
+      const fb = feedbackResult.rows[0] as Record<string, unknown>;
+      const search7d = Number(row.search_7d ?? 0);
+      const empty7d = Number(row.empty_searches_7d ?? 0);
+      res.json({
+        queries24h: Number(row.queries_24h ?? 0),
+        queries7d: Number(row.queries_7d ?? 0),
+        intentBreakdown7d: {
+          search: search7d,
+          aggregation: Number(row.aggregation_7d ?? 0),
+          conversational: Number(row.conversational_7d ?? 0),
+          back_ref: Number(row.back_ref_7d ?? 0),
+          comparative: Number(row.comparative_7d ?? 0),
+          definitional: Number(row.definitional_7d ?? 0),
+        },
+        emptyResultRate7d: search7d > 0 ? Math.round((empty7d / search7d) * 100) : null,
+        avgLatencyMs7d: Number(row.avg_latency_ms_7d ?? 0) || null,
+        feedback7d: {
+          up: Number(fb.up_7d ?? 0),
+          down: Number(fb.down_7d ?? 0),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/admin/eden/enrich", async (req, res) => {
     if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
     try {
@@ -7606,7 +7655,16 @@ Do not respond with anything else.`;
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
+    // Analytics tracking — populated as the request progresses, flushed in finally.
+    const _qStart = Date.now();
+    let _qIntent = "search";
+    let _qFilters: Record<string, unknown> = {};
+    let _qAssetCount = 0;
+
     const sendEvent = (event: string, data: unknown) => {
+      if (event === "context" && data !== null && typeof data === "object" && "assets" in data) {
+        _qAssetCount = ((data as { assets?: unknown[] }).assets ?? []).length;
+      }
       res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
     };
 
@@ -7705,6 +7763,8 @@ Do not respond with anything else.`;
         ? precomputedEmbedding.value
         : null;
 
+      _qIntent = intentClass.intent ?? "search";
+
       // ── Merge LLM filters with accumulated session focus ──────────────────
       // LLM extracts what's in the current message; focusContext fills gaps with
       // prior accumulated context (e.g. a stage set two turns ago stays active).
@@ -7719,6 +7779,8 @@ Do not respond with anything else.`;
         recency: intentClass.filters.recency,
         trending: intentClass.filters.trending,
       };
+
+      _qFilters = filters as Record<string, unknown>;
 
       // Map recency window to a concrete Date for storage-layer filtering.
       const RECENCY_MS: Record<string, number> = {
@@ -8277,6 +8339,16 @@ Do not respond with anything else.`;
       sendEvent("error", { message: errMsg });
     } finally {
       res.end();
+      db.insert(edenQueries).values({
+        sessionId: sid,
+        userId: requestUserId ?? null,
+        queryText: message.trim().slice(0, 500),
+        intent: _qIntent,
+        filters: Object.keys(_qFilters).length ? _qFilters : null,
+        assetCount: _qAssetCount,
+        emptyResult: _qIntent === "search" && _qAssetCount === 0,
+        latencyMs: Date.now() - _qStart,
+      }).catch(() => { /* non-fatal */ });
     }
   });
 

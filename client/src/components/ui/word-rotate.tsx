@@ -19,17 +19,14 @@ export function WordRotate({
   }, [words.length, interval]);
 
   return (
-    <span
-      className={cn("inline-flex items-center overflow-hidden", className)}
-      style={{ verticalAlign: "baseline" }}
-    >
-      <AnimatePresence mode="wait">
+    <span className={cn("inline-block", className)}>
+      <AnimatePresence mode="popLayout">
         <motion.span
           key={i}
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.32, ease: [0.25, 0.1, 0.25, 1] }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.38, ease: "easeInOut" }}
           className="inline-block"
         >
           {words[i]}
