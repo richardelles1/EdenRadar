@@ -622,6 +622,20 @@ export async function runBiologyFill(
         }),
       });
       ruleMatchedCount++;
+    } else if (isToolModality(asset) || (isDeviceModality(asset) && !fromTarget)) {
+      // Confirmed no molecular biology mechanism — write sentinel so future runs skip it.
+      fastRule.push({
+        id: asset.id,
+        biology: "not applicable",
+        source: "not_applicable",
+        completenessScore: computeCompletenessScore({
+          modality: asset.modality, indication: asset.indication,
+          developmentStage: asset.development_stage, mechanismOfAction: asset.mechanism_of_action,
+          ipType: asset.ip_type, patentStatus: asset.patent_status,
+          sourceType: asset.source_type, summary: asset.summary,
+          biology: null,
+        }),
+      });
     } else {
       unmatched.push(asset);
     }

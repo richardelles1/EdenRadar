@@ -393,6 +393,15 @@ export function EdenChatThread({
                 />
               )}
 
+              {/* No-results state — search ran but found nothing */}
+              {msg.role === "assistant" && !msg.isStreaming && msg.activeSource !== undefined &&
+                (!msg.assets || msg.assets.length === 0) && !(msg.externalResults?.length) && (
+                <div className={`mt-2 flex items-center gap-1.5 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground/60`}>
+                  <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/40" />
+                  No TTO corpus matches — try broadening the search or adjusting filters
+                </div>
+              )}
+
               {/* TTO corpus citations */}
               {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                 <div className="mt-2" data-testid={`chat-citations-${i}`}>

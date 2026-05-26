@@ -51,6 +51,7 @@ export type SessionFocusContext = {
 export type EngagementSignals = {
   modalities: Record<string, number>;   // canonical modality → frequency count
   indications: Record<string, number>;  // indication keyword → frequency count
+  biologies: Record<string, number>;    // biology mechanism → frequency count
 };
 
 // Minimal shape of a stored session message (matches edenSessions.messages jsonb)
@@ -65,6 +66,7 @@ type SessionMessage = {
     indication: string;
     modality: string;
     developmentStage?: string;
+    biology?: string;
   }>;
   ts: string;
 };
@@ -458,7 +460,7 @@ export function deriveEngagementSignals(
   messages: SessionMessage[]
 ): EngagementSignals {
   const resetAt = _sessionResetMap.get(sessionId) ?? 0;
-  const signals: EngagementSignals = { modalities: {}, indications: {} };
+  const signals: EngagementSignals = { modalities: {}, indications: {}, biologies: {} };
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
@@ -479,6 +481,9 @@ export function deriveEngagementSignals(
       }
       if (a.indication && a.indication !== "unknown") {
         signals.indications[a.indication] = (signals.indications[a.indication] ?? 0) + weight;
+      }
+      if (a.biology && a.biology !== "unknown" && a.biology !== "other" && a.biology !== "not applicable") {
+        signals.biologies[a.biology] = (signals.biologies[a.biology] ?? 0) + weight;
       }
     }
   }
@@ -545,11 +550,16 @@ export function buildEngagementBlock(signals: EngagementSignals): string {
     .sort(([, a], [, b]) => b - a)
     .slice(0, 3)
     .map(([ind]) => ind);
-  if (!topModalities.length && !topIndications.length) return "";
+  const topBiologies = Object.entries(signals.biologies)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([bio]) => bio);
+  if (!topModalities.length && !topIndications.length && !topBiologies.length) return "";
   const lines = ["## Session engagement signals"];
   if (topModalities.length) lines.push(`Modalities this user has explored most: ${topModalities.join(", ")}`);
   if (topIndications.length) lines.push(`Indications this user has explored most: ${topIndications.join(", ")}`);
-  lines.push("Use these signals to make proactive suggestions — when answering, note related angles the user hasn't asked about yet. Reference the modality or indication naturally, not as a bullet list.");
+  if (topBiologies.length) lines.push(`Biology mechanisms this user has explored most: ${topBiologies.join(", ")}`);
+  lines.push("Use these signals to make proactive suggestions — when answering, note related angles the user hasn't asked about yet. Reference the modality, indication, or biology naturally, not as a bullet list.");
   return lines.join("\n");
 }
 
@@ -997,7 +1007,7 @@ async function resolveAggregationQuery(
     const rows = await runIndicationDistribution();
     if (!rows.length) return null;
     const lines = rows.map((r) => `  • ${r.category}: ${r.count} assets`).join("\n");
-    return `**Corpus category distribution (top ${rows.length} categories by asset count)**:\n${lines}\n\n[EDEN: Cross-reference this against your INDUSTRY_INTELLIGENCE_BLOCK. Name 2–3 therapeutic areas or modalities that are thin in the corpus but commercially active right now — be specific and direct. This is a white space and commercial intelligence question, not a summary request.]`;
+    return `**Corpus category distribution (top ${rows.length} categories by asset count)**:\n${lines}`;
   }
 
   return null;
@@ -1239,9 +1249,12 @@ export function rerankAssets(
   const engagedIndications = Object.entries(engagementSignals?.indications ?? {}).map(
     ([ind, count]) => ({ key: ind.toLowerCase(), count })
   );
+  const engagedBiologies = Object.entries(engagementSignals?.biologies ?? {}).map(
+    ([bio, count]) => ({ key: bio.toLowerCase(), count })
+  );
 
   const hasProfileBoosts = preferredModalities.length > 0 || preferredAreas.length > 0;
-  const hasEngagementBoosts = engagedModalities.length > 0 || engagedIndications.length > 0;
+  const hasEngagementBoosts = engagedModalities.length > 0 || engagedIndications.length > 0 || engagedBiologies.length > 0;
 
   // Short-circuit: when candidates fit within the limit and no active biology filter,
   // skip scoring to preserve existing semantic-similarity ordering.
@@ -1273,6 +1286,13 @@ export function rerankAssets(
       const ind = a.indication.toLowerCase();
       const match = engagedIndications.find((ei) => ind.includes(ei.key) || ei.key.includes(ind));
       if (match) boost += Math.min(1, match.count);
+    }
+
+    // Tier 2 (cont.): adaptive biology engagement boost
+    if (a.biology && a.biology !== "unknown") {
+      const bio = a.biology.toLowerCase();
+      const match = engagedBiologies.find((eb) => bio.includes(eb.key) || eb.key.includes(bio));
+      if (match) boost += Math.min(2, match.count);
     }
 
     // Tier 3: active session biology filter boost
@@ -1514,7 +1534,13 @@ export async function* aggregationQuery(
     ...conversationHistory.slice(-6),
     {
       role: "user",
-      content: `QUERY RESULT:\n${queryResult}\n\nUSER QUESTION: ${question}\n\nPresent the above data conversationally in 2-4 sentences. Be specific with numbers. Offer a follow-up.`,
+      content: (() => {
+        const isWhitespace = /white.?space|gap|under.?represent|missing|thin coverage|not enough|where.*lacking|what.*missing|under.?serv|blind spot/i.test(question);
+        const instruction = isWhitespace
+          ? "Cross-reference this data against your industry intelligence. Name 2–3 therapeutic areas or modalities that are thin in the corpus but commercially active right now — be specific and direct. This is a white space question, not a summary request. Offer a follow-up."
+          : "Present the above data conversationally in 2-4 sentences. Be specific with numbers. Offer a follow-up.";
+        return `QUERY RESULT:\n${queryResult}\n\nUSER QUESTION: ${question}\n\n${instruction}`;
+      })(),
     },
   ];
 

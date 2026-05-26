@@ -115,7 +115,7 @@ export function computeCompletenessScore(asset: CompletenessAsset): number | nul
   // biology soft bonus (5 pts) — canonical biology bucket raises signal quality;
   // excluded values: null / '' / 'unknown' / 'other'.
   const bio = (asset.biology ?? "").toLowerCase().trim();
-  if (bio && bio !== "unknown" && bio !== "other") score += 5;
+  if (bio && bio !== "unknown" && bio !== "other" && bio !== "not applicable") score += 5;
 
   return Math.min(100, score);
 }

@@ -3303,6 +3303,8 @@ export class DatabaseStorage implements IStorage {
     if (biology) conditions.push(sql`LOWER(biology) LIKE ${"%" + biology.toLowerCase() + "%"}`);
     if (since) conditions.push(sql`first_seen_at >= ${since.toISOString()}`);
 
+    conditions.push(sql`canonical_asset_id IS NULL`);
+    conditions.push(sql`source_type = 'tech_transfer'`);
     const where = conditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
     const result = await db.execute(sql`SELECT COUNT(*)::int AS count FROM ingested_assets WHERE ${where}`);
     return Number((result.rows[0] as Record<string, unknown>)?.count ?? 0);
