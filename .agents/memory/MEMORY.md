@@ -1,0 +1,1 @@
+- [MCP SDK dependency](mcp-sdk-dependency.md) — `@modelcontextprotocol/sdk` must be installed or the server won't start; not in package.json by default.
