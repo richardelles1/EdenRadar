@@ -13,10 +13,25 @@ export type ChatAsset = {
   similarity: number;
 };
 
+export type ExternalResult = {
+  id: string;
+  title: string;
+  url: string;
+  source: "clinicaltrials" | "patents" | "harvard";
+  status?: string;
+  sponsor?: string;
+  date?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type ActiveSource = "tto" | "clinicaltrials" | "patents" | "harvard";
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   assets?: ChatAsset[];
+  externalResults?: ExternalResult[];
+  activeSource?: ActiveSource;
   isStreaming?: boolean;
 };
 
@@ -35,7 +50,7 @@ export type EdenSessionSummary = {
 
 export type StreamingStage = "idle" | "searching" | "ranking" | "generating";
 
-type SseContextPayload = { sessionId?: string; assets: ChatAsset[] };
+type SseContextPayload = { sessionId?: string; assets: ChatAsset[]; externalResults?: ExternalResult[]; activeSource?: ActiveSource };
 type SseTokenPayload = { text: string };
 type SseDonePayload = { sessionId?: string };
 type SseErrorPayload = { message: string };
@@ -123,7 +138,12 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
             setMessages((prev) => {
               const upd = [...prev];
               const last = upd[upd.length - 1];
-              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, assets: d.assets ?? [] };
+              if (last?.role === "assistant") upd[upd.length - 1] = {
+                ...last,
+                assets: d.assets ?? [],
+                externalResults: d.externalResults ?? [],
+                activeSource: d.activeSource ?? "tto",
+              };
               return upd;
             });
           } else if (dispatched.type === "token") {

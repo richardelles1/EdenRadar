@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Dna, FlaskConical, Brain, Shield, TrendingUp, Building2, Microscope, Pill, Zap, Globe, BarChart2, Layers } from "lucide-react";
+import { Dna, FlaskConical, Brain, Shield, TrendingUp, Building2, Microscope, Pill, Zap, Globe, BarChart2, Layers, FileSearch, BookOpen, Clock, Flame, MapPin, Search } from "lucide-react";
 
 export function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; size?: number }) {
   const r = size / 2;
@@ -229,32 +229,32 @@ export function MarkdownContent({ text, isStreaming }: { text: string; isStreami
 export const PROMPT_CARDS = [
   {
     icon: Dna,
-    label: "CRISPR from top universities",
-    q: "Which CRISPR assets from top research universities are in preclinical stage?",
+    label: "CRISPR opportunities",
+    q: "Which CRISPR or base editing technologies are available for licensing from top research universities?",
     color: "from-emerald-500/10 to-emerald-600/5 border-emerald-500/20 hover:border-emerald-500/40",
     iconColor: "text-emerald-500",
-    tags: ["gene therapy", "crispr"],
-  },
-  {
-    icon: TrendingUp,
-    label: "Oncology asset count",
-    q: "How many oncology assets does Stanford TTO have?",
-    color: "from-violet-500/10 to-violet-600/5 border-violet-500/20 hover:border-violet-500/40",
-    iconColor: "text-violet-500",
-    tags: ["oncology", "cancer"],
+    tags: ["crispr", "gene editing", "base editing"],
   },
   {
     icon: FlaskConical,
+    label: "Oncology pipeline now",
+    q: "What are the most compelling oncology assets I should know about right now?",
+    color: "from-sky-500/10 to-sky-600/5 border-sky-500/20 hover:border-sky-500/40",
+    iconColor: "text-sky-500",
+    tags: ["oncology", "cancer", "tumor"],
+  },
+  {
+    icon: TrendingUp,
     label: "Gene therapy leaders",
-    q: "Who is doing the most work in gene therapy right now?",
-    color: "from-blue-500/10 to-blue-600/5 border-blue-500/20 hover:border-blue-500/40",
-    iconColor: "text-blue-500",
+    q: "Who's leading in gene therapy — show me the top university programs available for partnership",
+    color: "from-violet-500/10 to-violet-600/5 border-violet-500/20 hover:border-violet-500/40",
+    iconColor: "text-violet-500",
     tags: ["gene therapy", "aav", "viral vector"],
   },
   {
     icon: Shield,
-    label: "Autoimmune assets for us",
-    q: "Recommend assets for a company focused on autoimmune indications",
+    label: "Early autoimmune assets",
+    q: "Show me early-stage autoimmune or inflammatory disease assets available for partnership",
     color: "from-amber-500/10 to-amber-600/5 border-amber-500/20 hover:border-amber-500/40",
     iconColor: "text-amber-500",
     tags: ["autoimmune", "immunology", "inflammation"],
@@ -269,32 +269,32 @@ export const PROMPT_CARDS = [
   },
   {
     icon: Building2,
-    label: "MIT & Harvard pipeline",
-    q: "What therapeutics are coming out of MIT and Harvard TTO offices?",
+    label: "Most active TTOs",
+    q: "Which university TTOs have the largest and most active licensing portfolios — and what areas are they strongest in?",
     color: "from-teal-500/10 to-teal-600/5 border-teal-500/20 hover:border-teal-500/40",
     iconColor: "text-teal-500",
     tags: [],
   },
   {
     icon: Microscope,
-    label: "Antibody programs Phase 2+",
-    q: "Show me antibody or bispecific programs that have reached Phase 2 or later",
+    label: "Antibody Phase 2+",
+    q: "Show me the most advanced antibody and bispecific programs available for licensing — anything approaching or at clinical stage?",
     color: "from-indigo-500/10 to-indigo-600/5 border-indigo-500/20 hover:border-indigo-500/40",
     iconColor: "text-indigo-500",
     tags: ["antibody", "bispecific", "biologics", "mab"],
   },
   {
     icon: Pill,
-    label: "Small molecule metabolic",
-    q: "Find small molecule assets targeting metabolic diseases like obesity or diabetes",
+    label: "Metabolic small mol.",
+    q: "Find small molecule assets for metabolic diseases like obesity or diabetes",
     color: "from-orange-500/10 to-orange-600/5 border-orange-500/20 hover:border-orange-500/40",
     iconColor: "text-orange-500",
     tags: ["small molecule", "metabolic", "diabetes", "obesity"],
   },
   {
     icon: Zap,
-    label: "mRNA & RNA therapeutics",
-    q: "What mRNA or RNA therapeutic platforms are available for licensing?",
+    label: "mRNA platforms",
+    q: "What mRNA or RNA therapeutic platforms are out there for licensing?",
     color: "from-pink-500/10 to-pink-600/5 border-pink-500/20 hover:border-pink-500/40",
     iconColor: "text-pink-500",
     tags: ["mrna", "rna", "nucleotide", "oligonucleotide"],
@@ -309,7 +309,7 @@ export const PROMPT_CARDS = [
   },
   {
     icon: BarChart2,
-    label: "Compare oncology TTOs",
+    label: "Compare top TTOs",
     q: "Compare the oncology pipelines at Stanford, MIT, and Johns Hopkins",
     color: "from-purple-500/10 to-purple-600/5 border-purple-500/20 hover:border-purple-500/40",
     iconColor: "text-purple-500",
@@ -318,10 +318,58 @@ export const PROMPT_CARDS = [
   {
     icon: Layers,
     label: "Platform technologies",
-    q: "Find platform technologies applicable across multiple therapeutic areas",
+    q: "Find platform technologies from university TTOs that apply across multiple therapeutic areas — delivery platforms, chemistry platforms, anything cross-cutting",
     color: "from-lime-500/10 to-lime-600/5 border-lime-500/20 hover:border-lime-500/40",
     iconColor: "text-lime-600",
     tags: ["platform"],
+  },
+  {
+    icon: FileSearch,
+    label: "Trials enrolling now",
+    q: "What clinical trials are actively enrolling in oncology or rare disease right now?",
+    color: "from-blue-500/10 to-blue-600/5 border-blue-500/20 hover:border-blue-500/40",
+    iconColor: "text-blue-500",
+    tags: ["oncology", "rare disease", "clinical trial"],
+  },
+  {
+    icon: BookOpen,
+    label: "CRISPR patent map",
+    q: "Who holds the key patents in CRISPR and gene editing right now?",
+    color: "from-fuchsia-500/10 to-fuchsia-600/5 border-fuchsia-500/20 hover:border-fuchsia-500/40",
+    iconColor: "text-fuchsia-500",
+    tags: ["crispr", "gene editing", "patents"],
+  },
+  {
+    icon: Clock,
+    label: "New this month",
+    q: "What new TTO assets have been added to the corpus in the last 30 days?",
+    color: "from-green-500/10 to-green-600/5 border-green-500/20 hover:border-green-500/40",
+    iconColor: "text-green-500",
+    tags: ["oncology", "gene therapy", "autoimmune", "cns", "rare disease", "new"],
+  },
+  {
+    icon: Flame,
+    label: "Trending in BD right now",
+    q: "What's generating the most interest in university tech transfer right now — what's trending?",
+    color: "from-orange-600/10 to-red-600/5 border-orange-600/20 hover:border-orange-600/40",
+    iconColor: "text-orange-600",
+    tags: ["oncology", "cancer", "gene therapy", "trending", "hot"],
+  },
+  {
+    icon: MapPin,
+    label: "European TTO assets",
+    q: "Show me oncology and rare disease assets from European university technology transfer offices",
+    color: "from-sky-600/10 to-sky-700/5 border-sky-600/20 hover:border-sky-600/40",
+    iconColor: "text-sky-600",
+    tags: ["eu", "europe", "oxford", "cambridge", "international"],
+  },
+  {
+    icon: Search,
+    label: "Where are the gaps?",
+    q: "Where is the white space in the TTO corpus — which therapeutic areas are underrepresented given current BD trends?",
+    color: "from-slate-500/10 to-slate-600/5 border-slate-500/20 hover:border-slate-500/40",
+    iconColor: "text-slate-500",
+    tags: [],
   },
 ];
 
@@ -348,44 +396,124 @@ export function getPersonalizedCards(
   return scored.slice(0, count).map((s) => s.card);
 }
 
+// ── Conversational search labels ─────────────────────────────────────────
+const SEARCH_INSTITUTION_MAP: Array<[RegExp, string]> = [
+  [/\bstanford\b/i, "Stanford's pipeline"],
+  [/\bmit\b/i, "MIT's pipeline"],
+  [/\bharvard\b/i, "Harvard's pipeline"],
+  [/\bjohns\s+hopkins\b/i, "Johns Hopkins"],
+  [/\byale\b/i, "Yale's programs"],
+  [/\bcolumbia\b/i, "Columbia's pipeline"],
+  [/\bucsf\b/i, "UCSF's pipeline"],
+  [/\bduke\b/i, "Duke's programs"],
+  [/\bupenn\b|\bbpenn\b/i, "Penn's pipeline"],
+  [/\boxford\b/i, "Oxford's programs"],
+  [/\bcambridge\b/i, "Cambridge's pipeline"],
+];
+
+const SEARCH_INDICATION_MAP: Array<[RegExp, string]> = [
+  [/oncolog|cancer|tumor/i, "oncology assets"],
+  [/gene therapy|crispr|aav|base edit/i, "gene therapy programs"],
+  [/autoimmune|rheumat|inflam/i, "autoimmune assets"],
+  [/\bcns\b|neuro|alzheimer|parkinson/i, "CNS programs"],
+  [/metabol|diabetes|obesity|nash|fatty liver/i, "metabolic assets"],
+  [/rare disease|orphan/i, "rare disease assets"],
+  [/antibod|bispecific|\bmab\b|monoclonal/i, "antibody programs"],
+  [/mrna|rna therapeutic|oligonucleotide/i, "RNA platforms"],
+  [/immuno.oncol|checkpoint|car.t/i, "immuno-oncology assets"],
+  [/cardio|cardiac|\bheart\b/i, "cardiovascular assets"],
+  [/platform/i, "platform technologies"],
+];
+
+const SEARCH_EXTERNAL_MAP: Array<[RegExp, string]> = [
+  [/clinical trial|enrolling|NCT\d|\bIND\b|phase [123]/i, "ClinicalTrials.gov…"],
+  [/patent|prior art|\bPCT\b|\bUSPTO\b|\bWIPO\b/i, "patent filings…"],
+  [/harvard.*library|dataverse|research.*repository/i, "Harvard research…"],
+];
+
+const SEARCH_POOL = [
+  "Scanning the corpus…",
+  "Mapping the space…",
+  "Checking university pipelines…",
+  "Digging through recent assets…",
+  "Searching institutional programs…",
+  "Scanning licensed technologies…",
+  "Combing through the pipeline…",
+  "Reviewing available assets…",
+];
+
+export function getSearchLabel(query: string, poolIndex: number): string {
+  if (!query) return SEARCH_POOL[poolIndex % SEARCH_POOL.length];
+  for (const [regex, label] of SEARCH_EXTERNAL_MAP) {
+    if (regex.test(query)) return `Checking ${label}`;
+  }
+  for (const [regex, name] of SEARCH_INSTITUTION_MAP) {
+    if (regex.test(query)) return `Scanning ${name}…`;
+  }
+  for (const [regex, label] of SEARCH_INDICATION_MAP) {
+    if (regex.test(query)) return `Digging into ${label}…`;
+  }
+  return SEARCH_POOL[poolIndex % SEARCH_POOL.length];
+}
+
 // ── Shared follow-up pill logic ───────────────────────────────────────────
 export const FOLLOW_UP_RULES: Array<{ test: (text: string) => boolean; pills: string[] }> = [
   {
     test: (t) => /oncolog|cancer|tumor/i.test(t),
-    pills: ["Filter to Phase 1 oncology only", "Show oncology antibody programs", "Which have issued patents?"],
+    pills: ["Filter to Phase 1 oncology only", "Show oncology antibody programs"],
   },
   {
     test: (t) => /gene therapy|crispr|aav|viral vector/i.test(t),
-    pills: ["Show ex-vivo gene therapy assets", "Compare delivery modalities", "Who leads in AAV platforms?"],
+    pills: ["Show ex-vivo gene therapy assets", "Compare delivery modalities"],
   },
   {
     test: (t) => /autoimmune|rheumat|inflam/i.test(t),
-    pills: ["Show antibody-based options only", "Filter to Phase 2+", "Who is most active in autoimmune?"],
+    pills: ["Show antibody-based options only", "Filter to Phase 2+"],
   },
   {
     test: (t) => /cns|neuro|brain|alzheimer|parkinson/i.test(t),
-    pills: ["Show CNS small molecules only", "Which have clinical data?", "Top institutions in neurology?"],
+    pills: ["Show CNS small molecules only", "Which have clinical data?"],
   },
   {
     test: (t) => /stanford|mit|harvard|columbia|johns Hopkins/i.test(t),
-    pills: ["Compare these institutions", "Show only preclinical from these TTOs", "What's their most active area?"],
+    pills: ["Compare these institutions", "What's their most active area?"],
   },
   {
     test: (t) => /licens|available|partnership|deal/i.test(t),
-    pills: ["Show exclusive licensing opportunities", "Which have active TTO contacts?", "Filter by readiness stage"],
+    pills: ["Show exclusive licensing opportunities", "Filter by readiness stage"],
   },
   {
     test: (t) => /antibod|bispecific|mab|monoclonal/i.test(t),
-    pills: ["Show bispecific antibody programs", "Filter antibodies to oncology", "Who leads in antibody tech?"],
+    pills: ["Show bispecific antibody programs", "Filter antibodies to oncology"],
   },
   {
     test: (t) => /how many|count|number|how much/i.test(t),
-    pills: ["Break this down by stage", "Show the top institutions", "How does this compare by modality?"],
+    pills: ["Break this down by stage", "Show the top institutions"],
+  },
+  {
+    test: (t) => /NCT\d|clinical trial|enrolling|phase [123]|IND\b/i.test(t),
+    pills: ["Show TTO assets in this indication", "Filter to Phase 2+ trials"],
+  },
+  {
+    test: (t) => /patent|prior art|PCT|claim|WIPO|USPTO/i.test(t),
+    pills: ["Find TTO assets in this space", "Who holds these patents?"],
+  },
+  {
+    test: (t) => /new|recent|latest|just added|this month|this quarter|trending|hot right now|what's new/i.test(t),
+    pills: ["Show what's new in oncology", "What's trending in gene therapy?"],
+  },
+  {
+    test: (t) => /europe|european|\bEU\b|\bUK\b|oxford|cambridge|germany|france|switzerland|netherlands|sweden|danish|nordic/i.test(t),
+    pills: ["Show more European assets", "Filter to UK institutions only"],
+  },
+  {
+    test: (t) => /white.?space|gap|under.?represent|missing|thin|blind spot|not covered|what.*lacking/i.test(t),
+    pills: ["What's thin in gene therapy?", "Which modalities are underrepresented?"],
   },
 ];
 
 export function getFollowUpPills(responseText: string, hasAssets: boolean): string[] {
-  // Only show pills when Eden is presenting assets — suppress for facts, stats, greetings
+  // hasAssets is true when TTO corpus assets OR external results are present
   if (!hasAssets) return [];
   for (const rule of FOLLOW_UP_RULES) {
     if (rule.test(responseText)) {

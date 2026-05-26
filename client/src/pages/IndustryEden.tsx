@@ -2,14 +2,15 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { OrientationHint } from "@/components/OrientationHint";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Loader2, Zap, Mic, MicOff, ChevronRight, PanelLeft, Plus } from "lucide-react";
-import { EdenAvatar, EdenOrb, EdenIntro, getPersonalizedCards } from "@/components/EdenOrb";
+import { Loader2, Zap, Mic, MicOff, ChevronRight, PanelLeft, Plus, FlaskConical, FileSearch, Library, Database } from "lucide-react";
+import { EdenAvatar, EdenOrb, EdenIntro, getPersonalizedCards, getSearchLabel } from "@/components/EdenOrb";
 import { EdenChatThread } from "@/components/EdenChatThread";
-import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type StreamingStage } from "@/hooks/useEdenChat";
+import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type StreamingStage, type ActiveSource, type ExternalResult } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { getIndustryProfile } from "@/hooks/use-industry";
 import { useAuth } from "@/hooks/use-auth";
+import { getAuthHeaders } from "@/lib/queryClient";
 
 const SLASH_COMMANDS = [
   { cmd: "/thesis-match", desc: "Match assets to your deal criteria" },
@@ -20,11 +21,14 @@ const SLASH_COMMANDS = [
   { cmd: "/top-institutions", desc: "Rank TTOs in a therapeutic area" },
 ] as const;
 
-const STAGE_LABELS: Record<StreamingStage, string> = {
-  idle: "",
-  searching: "Searching corpus…",
-  ranking: "Ranking results…",
-  generating: "Generating response…",
+const RANKING_LABEL = "Ranking the closest matches…";
+const GENERATING_LABEL = "Pulling it together…";
+
+const SOURCE_DISPLAY: Record<ActiveSource, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
+  tto:            { label: "TTO Corpus", Icon: Database },
+  clinicaltrials: { label: "ClinicalTrials.gov", Icon: FlaskConical },
+  patents:        { label: "Patent Search", Icon: FileSearch },
+  harvard:        { label: "Harvard Library", Icon: Library },
 };
 
 // ── Empty state with personalized prompt cards ────────────────────────────
@@ -124,6 +128,7 @@ export default function IndustryEden() {
   const [slashIndex, setSlashIndex] = useState(0);
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
   const [messageFeedback, setMessageFeedback] = useState<Record<number, "up" | "down">>({});
+  const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
 
   const [introPlayed, setIntroPlayed] = useState(() => {
     try { return sessionStorage.getItem("eden-intro-played") === "1"; } catch { return false; }
@@ -154,16 +159,16 @@ export default function IndustryEden() {
       .map((a) => a.ingestedAssetId as number)
   );
 
-  const { data: embedData } = useQuery<{ embeddingCoverage: { totalEmbedded: number } }>({
-    queryKey: ["/api/admin/eden/stats"],
+  const { data: corpusData } = useQuery<{ total: number }>({
+    queryKey: ["/api/eden/corpus"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
-      if (!res.ok) return { embeddingCoverage: { totalEmbedded: 0 } };
+      const res = await fetch("/api/eden/corpus", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) return { total: 0 };
       return res.json();
     },
     staleTime: 60000,
   });
-  const totalIndexed = embedData?.embeddingCoverage?.totalEmbedded ?? 0;
+  const totalIndexed = corpusData?.total ?? 0;
 
   const {
     messages,
@@ -185,6 +190,8 @@ export default function IndustryEden() {
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const sentQueryRef = useRef<string>("");
+  const sendCountRef = useRef<number>(0);
 
   // Auto-grow textarea
   useEffect(() => {
@@ -223,6 +230,27 @@ export default function IndustryEden() {
     setSidebarOpen(false);
   }
 
+  const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant" && !m.isStreaming);
+  const activeSource: ActiveSource = lastAssistantMsg?.activeSource ?? "tto";
+
+  async function handleBookmark(result: ExternalResult) {
+    if (bookmarkedIds.has(result.id)) return;
+    setBookmarkedIds((prev) => new Set(prev).add(result.id));
+    try {
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch("/api/eden/bookmark", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+        body: JSON.stringify({ source: result.source, externalId: result.id, title: result.title, url: result.url, snapshotJson: result.metadata ?? null }),
+      });
+      if (!res.ok) throw new Error("server error");
+      toast({ title: "Saved to bookmarks", duration: 2000 });
+    } catch {
+      setBookmarkedIds((prev) => { const n = new Set(prev); n.delete(result.id); return n; });
+      toast({ title: "Couldn't save bookmark", variant: "destructive" });
+    }
+  }
+
   async function handleFeedback(msgIndex: number, sentiment: "up" | "down") {
     if (messageFeedback[msgIndex]) return;
     setMessageFeedback((prev) => ({ ...prev, [msgIndex]: sentiment }));
@@ -241,6 +269,11 @@ export default function IndustryEden() {
   }
 
   function handleSend(q?: string) {
+    const resolved = (q ?? input).trim();
+    if (resolved) {
+      sentQueryRef.current = resolved;
+      sendCountRef.current += 1;
+    }
     send(q);
     textareaRef.current?.focus();
   }
@@ -353,6 +386,27 @@ export default function IndustryEden() {
             >
               Claude · {totalIndexed > 0 ? `${(totalIndexed / 1000).toFixed(0)}k assets` : "…"}
             </span>
+            {/* Source mode pill — shows active data source, clickable to reset to TTO */}
+            {messages.length > 0 && (() => {
+              const { label, Icon } = SOURCE_DISPLAY[activeSource];
+              const isTto = activeSource === "tto";
+              return (
+                <button
+                  onClick={() => !isTto && handleSend("show me TTO corpus assets")}
+                  title={isTto ? "Searching TTO corpus (default)" : "Click to return to TTO corpus"}
+                  className={`flex items-center gap-1 text-[10px] font-medium rounded-full px-2 py-0.5 border transition-colors shrink-0 ${
+                    isTto
+                      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 cursor-default"
+                      : "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20 hover:bg-emerald-500/10 hover:text-emerald-700 hover:border-emerald-500/20 cursor-pointer"
+                  }`}
+                  data-testid="source-mode-pill"
+                >
+                  <Icon className="h-2.5 w-2.5 shrink-0" />
+                  {label}
+                  {!isTto && <span className="opacity-60 ml-0.5">← TTO</span>}
+                </button>
+              );
+            })()}
           </div>
         </div>
 
@@ -480,7 +534,9 @@ export default function IndustryEden() {
                 messageFeedback={messageFeedback}
                 expandedCitations={expandedCitations}
                 savedIngestedIds={savedIngestedIds}
+                bookmarkedIds={bookmarkedIds}
                 onFeedback={handleFeedback}
+                onBookmark={handleBookmark}
                 onSend={handleSend}
                 onToggleCitations={(i, open) => setExpandedCitations((prev) => ({ ...prev, [i]: open }))}
                 compact={false}
@@ -563,7 +619,13 @@ export default function IndustryEden() {
               {streaming && streamingStage !== "idle" && (
                 <div className="flex items-center gap-1.5 mt-1.5" data-testid="streaming-stage">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span className="text-[11px] text-muted-foreground/70">{STAGE_LABELS[streamingStage]}</span>
+                  <span className="text-[11px] text-muted-foreground/70">
+                    {streamingStage === "searching"
+                      ? getSearchLabel(sentQueryRef.current, sendCountRef.current)
+                      : streamingStage === "ranking"
+                      ? RANKING_LABEL
+                      : GENERATING_LABEL}
+                  </span>
                 </div>
               )}
 

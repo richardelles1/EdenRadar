@@ -6,7 +6,7 @@ import {
 } from "lucide-react";
 import { EdenAvatar } from "@/components/EdenOrb";
 import { EdenChatThread } from "@/components/EdenChatThread";
-import { useEdenChat, type EdenSessionSummary, type EdenUserContext } from "@/hooks/useEdenChat";
+import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type ExternalResult } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -295,7 +295,9 @@ export function EdenWidget() {
                   messageFeedback={messageFeedback}
                   expandedCitations={expandedCitations}
                   savedIngestedIds={savedIngestedIds}
+                  bookmarkedIds={new Set<string>()}
                   onFeedback={handleFeedback}
+                  onBookmark={(_r: ExternalResult) => {}}
                   onSend={handleSend}
                   onToggleCitations={(i, open) => setExpandedCitations((prev) => ({ ...prev, [i]: open }))}
                   compact

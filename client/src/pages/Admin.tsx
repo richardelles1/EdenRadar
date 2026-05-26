@@ -3361,6 +3361,7 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
 
   const [confirming, setConfirming] = useState(false);
   const [embedConfirming, setEmbedConfirming] = useState(false);
+  const [reEmbedBioConfirming, setReEmbedBioConfirming] = useState(false);
 
   const { data: embedStatus } = useQuery<{ running: boolean; processed: number; total: number }>({
     queryKey: ["/api/admin/eden/embed/status"],
@@ -3400,6 +3401,16 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
     },
     onSuccess: (data) => { setEmbedConfirming(false); toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets` }); refetchEdenStats(); },
     onError: (e: Error) => { setEmbedConfirming(false); toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" }); },
+  });
+
+  const reEmbedBioMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/embed", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) }, body: JSON.stringify({ mode: "biology" }) });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to start re-embedding"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setReEmbedBioConfirming(false); toast({ title: "Re-embed started", description: `Re-embedding ${data.total?.toLocaleString() ?? "?"} assets with biology/categories` }); },
+    onError: (e: Error) => { setReEmbedBioConfirming(false); toast({ title: "Failed to start re-embedding", description: e.message, variant: "destructive" }); },
   });
 
   const edenWasRunningRef = useRef(false);
@@ -4264,6 +4275,22 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                             {embedMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}~${embEstCost} confirm
                           </Button>
                           <Button variant="outline" size="sm" onClick={() => setEmbedConfirming(false)} className="h-7 text-xs">Cancel</Button>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-semibold text-foreground mb-1">Re-embed: Biology & Categories</h4>
+                      <p className="text-xs text-muted-foreground mb-2">Refresh vectors for enriched assets — adds biology taxonomy and category tags to existing embeddings.</p>
+                      {!reEmbedBioConfirming ? (
+                        <Button size="sm" onClick={() => setReEmbedBioConfirming(true)} disabled={embedLive != null} className="bg-indigo-600 hover:bg-indigo-700 text-white h-7 text-xs w-full" data-testid="button-re-embed-bio-run">
+                          <Sparkles className="h-3.5 w-3.5 mr-1.5" />Re-embed with Biology
+                        </Button>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" onClick={() => reEmbedBioMutation.mutate()} disabled={reEmbedBioMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white h-7 text-xs flex-1">
+                            {reEmbedBioMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : null}Confirm re-embed
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => setReEmbedBioConfirming(false)} className="h-7 text-xs">Cancel</Button>
                         </div>
                       )}
                     </div>
@@ -12077,6 +12104,7 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [confirming, setConfirming] = useState(false);
   const [embedConfirming, setEmbedConfirming] = useState(false);
+  const [reEmbedBioConfirming, setReEmbedBioConfirming] = useState(false);
   const [readinessOpen, setReadinessOpen] = useState(false);
 
   const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
@@ -12142,6 +12170,16 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
     },
     onSuccess: (data) => { setEmbedConfirming(false); toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` }); refetchEdenStats(); },
     onError: (e: Error) => { setEmbedConfirming(false); toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" }); },
+  });
+
+  const reEmbedBioMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/embed", { method: "POST", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) }, body: JSON.stringify({ mode: "biology" }) });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to start re-embedding"); }
+      return res.json();
+    },
+    onSuccess: (data) => { setReEmbedBioConfirming(false); toast({ title: "Biology re-embed started", description: `Re-embedding ${data.total?.toLocaleString() ?? "?"} assets with biology + categories` }); refetchEdenStats(); },
+    onError: (e: Error) => { setReEmbedBioConfirming(false); toast({ title: "Failed to start re-embedding", description: e.message, variant: "destructive" }); },
   });
 
   const cov = edenStats?.coverage;
@@ -12254,6 +12292,23 @@ function EdenReadinessPanel({ pw }: { pw: string }) {
                   {embedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Yes, Embed
                 </Button>
                 <Button variant="outline" onClick={() => setEmbedConfirming(false)} className="h-8 text-xs" data-testid="button-embed-cancel">Cancel</Button>
+              </div>
+            )}
+          </div>
+          <div data-testid="card-eden-re-embed-bio">
+            <h4 className="text-xs font-semibold text-foreground mb-1">Re-embed: Biology &amp; Categories</h4>
+            <p className="text-xs text-muted-foreground mb-3">Refreshes vector embeddings to include biology taxonomy and structured categories — improves Eden's semantic matching for mechanism-based queries. Only re-processes already-embedded assets that have biology or category data.</p>
+            {!reEmbedBioConfirming ? (
+              <Button onClick={() => setReEmbedBioConfirming(true)} disabled={embedLive != null} className="bg-indigo-600 hover:bg-indigo-700 text-white h-8 text-xs" data-testid="button-re-embed-bio-run">
+                <Sparkles className="h-3.5 w-3.5 mr-1.5" />Re-embed Biology + Categories
+              </Button>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs font-semibold text-amber-600">This will overwrite existing embeddings for biology-enriched assets. Continue?</p>
+                <Button onClick={() => reEmbedBioMutation.mutate()} disabled={reEmbedBioMutation.isPending} className="bg-indigo-600 hover:bg-indigo-700 text-white h-8 text-xs" data-testid="button-re-embed-bio-confirm">
+                  {reEmbedBioMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}Yes, Re-embed
+                </Button>
+                <Button variant="outline" onClick={() => setReEmbedBioConfirming(false)} className="h-8 text-xs" data-testid="button-re-embed-bio-cancel">Cancel</Button>
               </div>
             )}
           </div>

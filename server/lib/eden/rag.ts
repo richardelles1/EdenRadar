@@ -143,7 +143,7 @@ export const INSTITUTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   { pattern: /\bimperial\s+college\b/i, name: "imperial college" },
   { pattern: /\bkarolinska\b/i, name: "karolinska" },
   { pattern: /\beth\s+zurich\b/i, name: "eth zurich" },
-  { pattern: /\bokford\b|\boxford\b/i, name: "oxford" },
+  { pattern: /\boxford\b/i, name: "oxford" },
 ];
 
 export function detectInstitutionName(query: string, portfolioInstitutions?: string[]): string | null {
@@ -536,6 +536,23 @@ export function buildFocusContextBlock(focus: SessionFocusContext): string {
   return `## Active session focus\n${parts.join(" | ")}\n\nWhen answering, naturally acknowledge the active filters. If the user asks a count question, use the filtered count, not the global total.`;
 }
 
+export function buildEngagementBlock(signals: EngagementSignals): string {
+  const topModalities = Object.entries(signals.modalities)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([m]) => m);
+  const topIndications = Object.entries(signals.indications)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 3)
+    .map(([ind]) => ind);
+  if (!topModalities.length && !topIndications.length) return "";
+  const lines = ["## Session engagement signals"];
+  if (topModalities.length) lines.push(`Modalities this user has explored most: ${topModalities.join(", ")}`);
+  if (topIndications.length) lines.push(`Indications this user has explored most: ${topIndications.join(", ")}`);
+  lines.push("Use these signals to make proactive suggestions — when answering, note related angles the user hasn't asked about yet. Reference the modality or indication naturally, not as a bullet list.");
+  return lines.join("\n");
+}
+
 // ── Portfolio stats cache (10-minute TTL) ────────────────────────────────────
 
 export type PortfolioStats = {
@@ -874,6 +891,20 @@ async function runNewestByInstitution(institution: string, extra?: ExtraSQL): Pr
   return rows as AggResult;
 }
 
+async function runIndicationDistribution(): Promise<Array<{ category: string; count: number }>> {
+  const result = await db.execute<{ category: string; count: number }>(sql`
+    SELECT unnest(categories) AS category, COUNT(*)::int AS count
+    FROM ingested_assets
+    WHERE relevant = true
+      AND categories IS NOT NULL
+      AND array_length(categories, 1) > 0
+    GROUP BY category
+    ORDER BY count DESC
+    LIMIT 25
+  `);
+  return result.rows.map((r) => ({ category: String(r.category), count: Number(r.count) }));
+}
+
 // resolveAggregationQuery accepts parsed session filters + geoRx so ALL SQL
 // branches (stage breakdown, modality breakdown, institution counts, etc.) are
 // constrained by accumulated session context — not global across the full portfolio.
@@ -961,6 +992,14 @@ async function resolveAggregationQuery(
   // Note: generic count phrases ("how many do you have", "what's the total", "give me a count")
   // are intentionally NOT handled here — filteredCount() in the chat route handles them
   // with full session filter application.
+
+  if (/white.?space|gap|under.?represent|missing|thin coverage|not enough|where.*lacking|what.*missing|under.?serv|blind spot/i.test(lower)) {
+    const rows = await runIndicationDistribution();
+    if (!rows.length) return null;
+    const lines = rows.map((r) => `  • ${r.category}: ${r.count} assets`).join("\n");
+    return `**Corpus category distribution (top ${rows.length} categories by asset count)**:\n${lines}\n\n[EDEN: Cross-reference this against your INDUSTRY_INTELLIGENCE_BLOCK. Name 2–3 therapeutic areas or modalities that are thin in the corpus but commercially active right now — be specific and direct. This is a white space and commercial intelligence question, not a summary request.]`;
+  }
+
   return null;
 }
 
@@ -1030,16 +1069,19 @@ export function isConversational(query: string): boolean {
 // a single gpt-4o-mini call that returns structured JSON. Falls back to
 // { intent: "search" } on any failure — the safest default.
 
+export type LiveSource = "clinicaltrials" | "patents" | "harvard";
+
 export type IntentClassification = {
   intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational";
   filters: QueryFilters;
   backRefPosition: number | null; // 0=first, 1=second, 2=third
+  liveSource: LiveSource | null;  // non-null only when query explicitly targets external live data
 };
 
-const ROUTER_SYSTEM_PROMPT = `You are a biotech search intent classifier for a TTO (technology transfer office) asset discovery platform. Given a user message, classify the intent and extract search filters. Respond with JSON only.
+const ROUTER_SYSTEM_PROMPT = `You are a biotech search intent classifier for a TTO (technology transfer office) asset discovery platform. The PRIMARY corpus is TTO assets — always default to TTO corpus search unless the query unambiguously targets external live data sources. Respond with JSON only.
 
 INTENTS:
-- search: user wants to find/browse specific biotech assets (default when unclear)
+- search: user wants to find/browse TTO assets (DEFAULT — use when unclear)
 - aggregation: wants counts or statistics ("how many", "breakdown by", "top institutions")
 - back_ref: refers to a previously shown asset by position/anaphora ("the second one", "tell me more about it", "that one") — ONLY valid when hasPriorAssets=true
 - comparative: wants head-to-head comparison ("compare", "vs", "which is better")
@@ -1058,20 +1100,26 @@ FILTER EXTRACTION (null if not mentioned in the message):
 
 back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
 
+live_source: ONLY non-null when user EXPLICITLY asks for live external data (not general TTO search). Null in all other cases.
+- "clinicaltrials": user explicitly asks about currently enrolling trials, trial status, trial recruitment, open clinical trial search (NOT phase-filtered TTO asset queries)
+- "patents": user explicitly asks about patent landscape, IP holders, patent search, who holds patents in a space
+- "harvard": user explicitly asks for Harvard research datasets or Harvard Library catalog resources
+null for ALL general biotech/TTO searches, stage filters, indication searches, institution queries, comparisons
+
 Return exactly this shape:
-{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null}`;
+{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}`;
 
 export async function classifyIntent(
   message: string,
   hasPriorAssets: boolean,
 ): Promise<IntentClassification> {
-  const fallback: IntentClassification = { intent: "search", filters: {}, backRefPosition: null };
+  const fallback: IntentClassification = { intent: "search", filters: {}, backRefPosition: null, liveSource: null };
   try {
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
       temperature: 0,
-      max_tokens: 150,
+      max_tokens: 180,
       messages: [
         { role: "system", content: ROUTER_SYSTEM_PROMPT },
         { role: "user", content: `hasPriorAssets: ${hasPriorAssets}\n\nMessage: ${message}` },
@@ -1086,6 +1134,11 @@ export async function classifyIntent(
     const recency = validRecencies.includes(rawRecency as RecencyWindow)
       ? (rawRecency as RecencyWindow)
       : isTrending && !rawRecency ? "last90" : undefined;
+    const validLiveSources: LiveSource[] = ["clinicaltrials", "patents", "harvard"];
+    const rawLiveSource = (parsed.live_source as string) || null;
+    const liveSource: LiveSource | null = validLiveSources.includes(rawLiveSource as LiveSource)
+      ? (rawLiveSource as LiveSource)
+      : null;
     return {
       intent: (parsed.intent as IntentClassification["intent"]) ?? "search",
       filters: {
@@ -1099,6 +1152,7 @@ export async function classifyIntent(
         trending: isTrending || undefined,
       },
       backRefPosition: typeof parsed.back_ref_position === "number" ? parsed.back_ref_position : null,
+      liveSource,
     };
   } catch (err) {
     console.warn("[eden/router] classifyIntent failed, using search fallback:", (err as Error)?.message);
@@ -1134,6 +1188,13 @@ function buildContext(assets: RetrievedAsset[]): string {
         `  Institution: ${a.institution}`,
         a.technologyId ? `  Technology ID: ${a.technologyId}` : null,
         a.biology ? `  Biology: ${a.biology}` : null,
+        (() => {
+          if (!a.categories) return null;
+          try {
+            const parsed = JSON.parse(a.categories);
+            return Array.isArray(parsed) && parsed.length ? `  Categories: ${parsed.join(", ")}` : null;
+          } catch { return null; }
+        })(),
         a.mechanismOfAction ? `  Mechanism: ${a.mechanismOfAction}` : null,
         a.innovationClaim ? `  Innovation: ${a.innovationClaim}` : null,
         `  Target: ${a.target} | Modality: ${a.modality}`,
@@ -1142,6 +1203,9 @@ function buildContext(assets: RetrievedAsset[]): string {
         a.comparableDrugs ? `  Comparable drugs: ${a.comparableDrugs}` : null,
         a.licensingReadiness ? `  Licensing readiness: ${a.licensingReadiness}` : null,
         a.ipType ? `  IP type: ${a.ipType}` : null,
+        a.completenessScore != null
+          ? `  Data quality: ${Math.round(a.completenessScore)}/100${a.completenessScore >= 70 ? " (well-documented)" : a.completenessScore < 40 ? " (sparse — verify with TTO)" : ""}`
+          : null,
         a.summary ? `  Summary: ${a.summary.slice(0, 500)}` : null,
         a.sourceUrl ? `  URL: ${a.sourceUrl}` : null,
       ]
@@ -1273,6 +1337,8 @@ You're warm and direct, occasionally wry. You don't hedge excessively, you don't
 - For conversational exchanges, respond warmly and briefly (2–3 sentences max). Keep it human, no structure.
 - For research queries, present a maximum of 3 assets per response even if more were retrieved. Lead with the most commercially interesting one. Each asset gets one compelling hook sentence — not a field dump. Vary your opening style each response.
 - For count or portfolio questions, use your live portfolio numbers (provided below) rather than counting from retrieved assets. If the exact breakdown isn't in your stats, say so honestly.
+- Use "Data quality" scores (0–100) to calibrate your language. 70+ means well-documented and licensing-ready — present with confidence and lead with these. Below 40 means the record is sparse — note briefly that the user should verify details directly with the TTO. Never rank a thin record above a well-documented one when relevance is otherwise equal.
+- When results are filtered by region (EU, UK, Asia), acknowledge the geographic scope naturally in your framing — "Looking at European programs…" or "In the UK TTO space…". Don't just list assets as if geography is invisible.
 - You ask one smart follow-up when the query is genuinely ambiguous. Never several at once.
 - Never fabricate data. If the retrieved context doesn't cover something, say so and offer to look from a different angle.
 - Do NOT include a Sources section — asset cards are displayed separately in the interface.
@@ -1316,6 +1382,14 @@ You're warm and direct, occasionally wry. You don't hedge excessively, you don't
 ## Aggregation query results
 When the message begins with QUERY RESULT:, you have precise data from the database. Present it conversationally in 2–4 sentences. Use the exact numbers. Do not repeat the raw table. Do not say you don't have the data.
 
+## Handling edge cases — be honest, not evasive
+
+**Sparse results from a stage filter** (e.g. "Phase 2+ antibody programs"): TTO assets are predominantly preclinical — that's the nature of the ecosystem. When a stage filter yields fewer than 3 matches, say so plainly: show the most advanced available, note that TTO licensing typically happens before Phase 2, and offer to check ClinicalTrials.gov for actively enrolling trials in that modality. Do not pretend thin results are a complete answer.
+
+**Broad category queries** (e.g. "platform technologies", "early-stage assets broadly"): When retrieved assets span multiple unrelated categories, flag the breadth honestly — one sentence is enough. Lead with the most coherent or commercially interesting subset, then offer to narrow by therapeutic area, delivery mechanism, modality, or institution. Don't present a scatter of unrelated results as a curated list.
+
+**Activity or velocity ranking** (e.g. "most active TTOs", "who is leading"): You rank by portfolio size and asset count — you do not have real-time deal velocity or licensing activity data. Be transparent in one brief clause ("going by portfolio size…" or "by asset count, the leaders are…") so the user knows what the ranking reflects. If they want deal activity, suggest checking individual TTO websites or BD databases directly.
+
 ## Format example
 ✗ Weak:
 1. **Asset Name** (Institution)
@@ -1329,7 +1403,8 @@ When the message begins with QUERY RESULT:, you have precise data from the datab
 function buildSystemPrompt(
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  engagementSignals?: EngagementSignals
 ): string {
   const parts: string[] = [BASE_SYSTEM_PROMPT];
 
@@ -1349,6 +1424,11 @@ function buildSystemPrompt(
     if (focusBlock) parts.push(focusBlock);
   }
 
+  if (engagementSignals) {
+    const engBlock = buildEngagementBlock(engagementSignals);
+    if (engBlock) parts.push(engBlock);
+  }
+
   return parts.join("\n\n");
 }
 
@@ -1358,10 +1438,11 @@ export async function* ragQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  engagementSignals?: EngagementSignals
 ): AsyncGenerator<string> {
   const context = buildContext(assets);
-  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext, engagementSignals);
 
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
     { role: "system", content: systemPrompt },
