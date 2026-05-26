@@ -1323,6 +1323,45 @@ export const insertMarketSavedSearchSchema = createInsertSchema(marketSavedSearc
 export type InsertMarketSavedSearch = z.infer<typeof insertMarketSavedSearchSchema>;
 export type MarketSavedSearch = typeof marketSavedSearches.$inferSelect;
 
+// ── Scout Saved Searches ──────────────────────────────────────────────────────
+
+export type ScoutSavedSearchFilters = {
+  modalities?: string[];
+  stages?: string[];
+  biologies?: string[];
+  institutions?: string[];
+  sinceFilter?: string;
+};
+
+export const scoutSavedSearches = pgTable("scout_saved_searches", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  query: text("query"),
+  filters: jsonb("filters").$type<ScoutSavedSearchFilters>().notNull().default({}),
+  notifyByEmail: boolean("notify_by_email").notNull().default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, (t) => ({
+  userNameUnique: uniqueIndex("scout_saved_searches_user_name_unique").on(t.userId, t.name),
+}));
+
+export const insertScoutSavedSearchSchema = createInsertSchema(scoutSavedSearches)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    name: z.string().min(1).max(120),
+    query: z.string().max(500).optional().nullable(),
+    filters: z.object({
+      modalities: z.array(z.string()).optional(),
+      stages: z.array(z.string()).optional(),
+      biologies: z.array(z.string()).optional(),
+      institutions: z.array(z.string()).optional(),
+      sinceFilter: z.string().optional(),
+    }).optional().default({}),
+    notifyByEmail: z.boolean().optional().default(false),
+  });
+export type InsertScoutSavedSearch = z.infer<typeof insertScoutSavedSearchSchema>;
+export type ScoutSavedSearch = typeof scoutSavedSearches.$inferSelect;
+
 // ── Feedback-driven Relevance (Task #694) ────────────────────────────────────
 
 export const FEEDBACK_ACTIONS = ["save", "dismiss", "view", "nda_request"] as const;

@@ -775,6 +775,89 @@ export function sendMarketGraceNoticeEmail(
   });
 }
 
+// ── Weekly Recap digest ───────────────────────────────────────────────────────
+
+export interface WeeklyRecapEmailData {
+  weekLabel: string;
+  summary: string;
+  counts: { newAssets: number; saves: number; marketListings: number };
+  highlights: Array<{
+    assetName: string;
+    institution: string | null;
+    modality: string | null;
+    indication: string | null;
+  }>;
+}
+
+export function sendWeeklyRecapEmail(
+  to: string,
+  recipientName: string | null,
+  data: WeeklyRecapEmailData,
+  unsubscribeUrl: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const dashboardUrl = `${APP_URL}/industry/dashboard`;
+
+  const highlightRows = data.highlights.slice(0, 5).map((h) => {
+    const meta = [h.institution, h.modality, h.indication].filter(Boolean).join(" · ");
+    return `
+      <tr>
+        <td style="padding:10px 0;border-bottom:1px solid #f3f4f6;">
+          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">${h.assetName}</p>
+          ${meta ? `<p style="margin:0;font-size:12px;color:#6b7280;">${meta}</p>` : ""}
+        </td>
+      </tr>`;
+  }).join("");
+
+  const highlightSection = data.highlights.length > 0 ? `
+    <h2 style="margin:28px 0 12px;font-size:15px;font-weight:700;color:#111827;">Worth a look this week</h2>
+    <table width="100%" cellpadding="0" cellspacing="0">${highlightRows}</table>
+  ` : "";
+
+  const html = baseHtml(`
+    <p style="margin:0 0 4px;font-size:13px;color:#6b7280;letter-spacing:0.05em;text-transform:uppercase;">${data.weekLabel}</p>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenRadar Weekly Recap</h1>
+    <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">${greeting} here's what happened in your pipeline this week.</p>
+
+    ${data.summary ? `<p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;font-style:italic;">"${data.summary}"</p>` : ""}
+
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:6px;margin-bottom:24px;">
+      <tr>
+        <td style="padding:20px 24px;">
+          <table width="100%" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="text-align:center;padding:0 12px;">
+                <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#059669;">${data.counts.newAssets}</p>
+                <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">New Assets</p>
+              </td>
+              <td style="text-align:center;padding:0 12px;border-left:1px solid #e5e7eb;">
+                <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#059669;">${data.counts.saves}</p>
+                <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Pipeline Saves</p>
+              </td>
+              <td style="text-align:center;padding:0 12px;border-left:1px solid #e5e7eb;">
+                <p style="margin:0 0 4px;font-size:28px;font-weight:700;color:#059669;">${data.counts.marketListings}</p>
+                <p style="margin:0;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Market Listings</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    ${highlightSection}
+
+    <a href="${dashboardUrl}"
+       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;margin-top:24px;">
+      View Full Recap →
+    </a>
+  `, { unsubscribeUrl });
+
+  return sendEmail(to, `Your EdenRadar recap — ${data.weekLabel}`, html, {
+    from: FROM_DIGEST,
+    unsubscribeUrl,
+  });
+}
+
 export function sendAdminNotificationEmail(
   subject: string,
   bodyHtml: string,

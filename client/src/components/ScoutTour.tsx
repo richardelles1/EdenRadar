@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { X, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const STORAGE_KEY = "scout-tour-done-v1";
+export const SCOUT_TOUR_STORAGE_KEY = "scout-tour-done-v1";
 
 interface TourStep {
   testId: string | null;
@@ -25,8 +25,8 @@ const STEPS: TourStep[] = [
   },
   {
     testId: "button-toggle-buyer-profile",
-    title: "Set your deal focus",
-    body: "Tell EdenScout your therapeutic areas, preferred modalities, and deal stages. Every result is re-scored against your criteria.",
+    title: "Your deal focus",
+    body: "Your selections here personalise every score. Adjust therapeutic areas, modalities, or stages at any time to refine results.",
     tooltipSide: "bottom",
   },
   {
@@ -90,11 +90,10 @@ export function ScoutTour({ onClose }: ScoutTourProps) {
   }
 
   function finish() {
-    localStorage.setItem(STORAGE_KEY, "1");
+    localStorage.setItem(SCOUT_TOUR_STORAGE_KEY, "1");
     onClose();
   }
 
-  // Position the tour card near the spotlit element (or centered for modal steps)
   const cardStyle = (): React.CSSProperties => {
     if (!targetRect) {
       return {
@@ -118,7 +117,6 @@ export function ScoutTour({ onClose }: ScoutTourProps) {
 
   return (
     <>
-      {/* Dim backdrop for non-spotlight steps */}
       {!targetRect && (
         <div
           className="fixed inset-0"
@@ -127,11 +125,8 @@ export function ScoutTour({ onClose }: ScoutTourProps) {
           aria-hidden
         />
       )}
-
-      {/* Spotlight ring — box-shadow creates the dark mask around the target */}
       {targetRect && <Spotlight rect={targetRect} />}
 
-      {/* Tour card */}
       <div
         style={cardStyle()}
         role="dialog"
@@ -139,7 +134,6 @@ export function ScoutTour({ onClose }: ScoutTourProps) {
         aria-label={currentStep.title}
         className="bg-card border border-border rounded-xl shadow-2xl p-5"
       >
-        {/* Progress dots + close */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex gap-1.5">
             {STEPS.map((_, i) => (
@@ -193,7 +187,7 @@ export function useScoutTour() {
   const [show, setShow] = useState(false);
 
   useEffect(() => {
-    const done = localStorage.getItem(STORAGE_KEY);
+    const done = localStorage.getItem(SCOUT_TOUR_STORAGE_KEY);
     if (!done) {
       const t = setTimeout(() => setShow(true), 900);
       return () => clearTimeout(t);
@@ -202,7 +196,7 @@ export function useScoutTour() {
 
   return {
     show,
-    retrigger: () => { localStorage.removeItem(STORAGE_KEY); setShow(true); },
+    retrigger: () => { localStorage.removeItem(SCOUT_TOUR_STORAGE_KEY); setShow(true); },
     close: () => setShow(false),
   };
 }

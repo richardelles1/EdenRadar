@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search, TrendingUp, Building2, FlaskConical, Clock, ArrowRight, Flame, Bell, Layers, SlidersHorizontal } from "lucide-react";
+import { Search, TrendingUp, Building2, FlaskConical, Clock, ArrowRight, Flame, Bell, Layers, Rocket } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getIndustryProfile } from "@/hooks/use-industry";
@@ -48,13 +48,14 @@ interface AlertDeltaResponse {
   since?: string;
 }
 
-function GettingStarted({ navigate }: { navigate: (path: string) => void }) {
+function GettingStarted({ navigate, firstArea }: { navigate: (path: string) => void; firstArea?: string }) {
+  const searchExample = firstArea ? `"${firstArea.toLowerCase()}"` : '"KRAS inhibitor"';
   const STEPS = [
     {
       icon: Search,
       color: "emerald",
       title: "Run your first search",
-      desc: 'Try "KRAS inhibitor" or "GLP-1 obesity". Results are scored 1–10 for your deal thesis.',
+      desc: `Try ${searchExample} or "GLP-1 obesity". Results are scored 1–10 for your deal thesis.`,
       cta: "Open Scout",
       href: "/scout",
     },
@@ -103,7 +104,7 @@ function GettingStarted({ navigate }: { navigate: (path: string) => void }) {
   return (
     <div className="space-y-3" data-testid="getting-started">
       <div className="flex items-center gap-2">
-        <SlidersHorizontal className="w-4 h-4 text-primary" />
+        <Rocket className="w-4 h-4 text-primary" />
         <h2 className="text-sm font-semibold text-foreground">Get started</h2>
         <span className="text-[10px] text-muted-foreground">— three steps to your first deal signal</span>
       </div>
@@ -380,7 +381,7 @@ export default function Dashboard() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search TTO assets across 138+ institutions..."
+            placeholder="Search TTO assets across 350+ institutions..."
             className="w-full h-11 pl-10 pr-24 rounded-xl border border-border bg-card text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/60 transition-all"
             data-testid="dashboard-search-input"
           />
@@ -408,6 +409,10 @@ export default function Dashboard() {
             <StatCard label="Top Modality" value={topModality?.modality ?? "—"} sub={topModality ? `${topModality.count.toLocaleString()} assets` : ""} />
           </div>
         ) : null}
+
+        {recentSearches.length === 0 && !isLoading && (
+          <GettingStarted navigate={navigate} firstArea={profile.therapeuticAreas?.[0]} />
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {stats && stats.byModality.length > 0 && (
@@ -481,10 +486,6 @@ export default function Dashboard() {
             )}
           </div>
         </div>
-
-        {recentSearches.length === 0 && !isLoading && (
-          <GettingStarted navigate={navigate} />
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {recentAssets.length > 0 && (

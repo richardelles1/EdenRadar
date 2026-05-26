@@ -10,7 +10,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage, type EnrichFilter, type RetrievedAsset, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, scoutSavedSearches, insertScoutSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
 import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -1435,6 +1435,73 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[scout/recently-added] Error:", err);
       return res.status(500).json({ assets: [], error: err.message });
+    }
+  });
+
+  // ── Scout Saved Searches ────────────────────────────────────────────────────
+
+  app.get("/api/scout/saved-searches", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const rows = await db.select().from(scoutSavedSearches)
+        .where(eq(scoutSavedSearches.userId, userId))
+        .orderBy(desc(scoutSavedSearches.createdAt));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/scout/saved-searches", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const data = insertScoutSavedSearchSchema.parse({ ...req.body, userId });
+      // Enforce per-user cap of 50.
+      const [{ cnt }] = await db.select({ cnt: drizzleCount() }).from(scoutSavedSearches)
+        .where(eq(scoutSavedSearches.userId, userId));
+      if (Number(cnt) >= 50) {
+        return res.status(400).json({ error: "Saved search limit reached (50). Delete some before adding more." });
+      }
+      try {
+        const [row] = await db.insert(scoutSavedSearches).values(data).returning();
+        res.status(201).json(row);
+      } catch (dbErr: any) {
+        if (dbErr.code === "23505") {
+          return res.status(409).json({ error: "A saved search with that name already exists." });
+        }
+        throw dbErr;
+      }
+    } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/scout/saved-searches/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = Number(req.params.id);
+      const { notifyByEmail } = z.object({ notifyByEmail: z.boolean() }).parse(req.body);
+      const [row] = await db.update(scoutSavedSearches)
+        .set({ notifyByEmail })
+        .where(and(eq(scoutSavedSearches.id, id), eq(scoutSavedSearches.userId, userId)))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Not found" });
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/scout/saved-searches/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = Number(req.params.id);
+      await db.delete(scoutSavedSearches)
+        .where(and(eq(scoutSavedSearches.id, id), eq(scoutSavedSearches.userId, userId)));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

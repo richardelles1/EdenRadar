@@ -21,7 +21,10 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles, Info } from "lucide-react";
+import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles, Info, Bookmark, BookmarkCheck } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from "@/components/ui/dialog";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -865,6 +868,35 @@ export default function Scout() {
   const handleCancelTrials = () => { trialAbortRef.current?.abort(); };
   const handleCancelResearch = () => { researchAbortRef.current?.abort(); };
 
+  // ── Save Search ────────────────────────────────────────────────────────────
+  const [saveSearchOpen, setSaveSearchOpen] = useState(false);
+  const [saveSearchName, setSaveSearchName] = useState("");
+  const [saveSearchSaved, setSaveSearchSaved] = useState(false);
+
+  const saveSearchMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/scout/saved-searches", {
+        name: saveSearchName.trim(),
+        query: currentQuery || null,
+        filters: {
+          modalities: modalityFilters.length > 0 ? modalityFilters : undefined,
+          stages: stageFilters.length > 0 ? stageFilters : undefined,
+          biologies: biologiesFilter.length > 0 ? biologiesFilter : undefined,
+          institutions: institutionFilter !== "all" ? [institutionFilter] : undefined,
+          sinceFilter: sinceFilter !== "any" ? sinceFilter : undefined,
+        },
+      }),
+    onSuccess: () => {
+      setSaveSearchOpen(false);
+      setSaveSearchName("");
+      setSaveSearchSaved(true);
+      toast({ title: "Search saved", description: "Find it in Alerts → Saved Searches." });
+    },
+    onError: (err: any) => {
+      toast({ title: "Could not save", description: err.message, variant: "destructive" });
+    },
+  });
+
   const handleGenerateReport = () => {
     const query = currentQuery || inputQuery;
     if (!query.trim()) {
@@ -1233,12 +1265,14 @@ export default function Scout() {
 
             {/* Sources dropdown + pre-search suggestion chips */}
             <div className="max-w-3xl mx-auto space-y-3">
-              <SourcesDropdown
-                researchSources={researchSources}
-                onSourcesChange={setResearchSources}
-                open={sourcesDropdownOpen}
-                onOpenChange={setSourcesDropdownOpen}
-              />
+              {hasSearched && (
+                <SourcesDropdown
+                  researchSources={researchSources}
+                  onSourcesChange={setResearchSources}
+                  open={sourcesDropdownOpen}
+                  onOpenChange={setSourcesDropdownOpen}
+                />
+              )}
               {!hasSearched && (
                 <div className="space-y-4 animate-in fade-in duration-500">
                   {/* Value proposition */}
@@ -1671,9 +1705,49 @@ export default function Scout() {
                         )}
                         {reportMutation.isPending ? "Generating..." : "Match Report"}
                       </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="gap-1.5 text-[11px] h-7 text-muted-foreground hover:text-foreground"
+                        onClick={() => { setSaveSearchName(currentQuery || ""); setSaveSearchOpen(true); }}
+                        data-testid="button-save-search"
+                      >
+                        {saveSearchSaved ? <BookmarkCheck className="w-3 h-3 text-emerald-500" /> : <Bookmark className="w-3 h-3" />}
+                        {saveSearchSaved ? "Saved" : "Save Search"}
+                      </Button>
                     </div>
                   </>
                 )}
+
+                {/* Save Search dialog */}
+                <Dialog open={saveSearchOpen} onOpenChange={setSaveSearchOpen}>
+                  <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                      <DialogTitle className="text-base">Save this search</DialogTitle>
+                      <DialogDescription className="text-sm">
+                        Give it a name. Find it later in Alerts → Saved Searches.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <Input
+                      placeholder="e.g. KRAS oncology preclinical"
+                      value={saveSearchName}
+                      onChange={(e) => setSaveSearchName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter" && saveSearchName.trim()) saveSearchMutation.mutate(); }}
+                      autoFocus
+                      data-testid="input-save-search-name"
+                    />
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={() => setSaveSearchOpen(false)}>Cancel</Button>
+                      <Button
+                        onClick={() => saveSearchMutation.mutate()}
+                        disabled={!saveSearchName.trim() || saveSearchMutation.isPending}
+                        data-testid="button-save-search-confirm"
+                      >
+                        {saveSearchMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Save"}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
 
                 {profileBannerQuery && hasSearched && (
                   <div className="flex items-center gap-3 px-4 py-2.5 mb-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm">
