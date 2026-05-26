@@ -11963,6 +11963,98 @@ function SubscriptionData() {
   );
 }
 
+function EdenQueryMetrics({ pw }: { pw: string }) {
+  const { data } = useQuery<{
+    queries24h: number;
+    queries7d: number;
+    intentBreakdown7d: Record<string, number>;
+    emptyResultRate7d: number | null;
+    avgLatencyMs7d: number | null;
+    feedback7d: { up: number; down: number };
+  }>({
+    queryKey: ["/api/admin/eden/analytics"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/analytics", { headers: pw ? { Authorization: `Bearer ${pw}` } : {} });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 60000,
+    enabled: !!pw,
+  });
+
+  const total7d = data ? Object.values(data.intentBreakdown7d).reduce((a, b) => a + b, 0) : 0;
+  const intents = data ? [
+    { key: "search", label: "Search" },
+    { key: "aggregation", label: "Count/Breakdown" },
+    { key: "conversational", label: "Conversational" },
+    { key: "back_ref", label: "Follow-up" },
+    { key: "comparative", label: "Compare" },
+    { key: "definitional", label: "Definition" },
+  ].filter(({ key }) => (data.intentBreakdown7d[key] ?? 0) > 0) : [];
+
+  const feedbackTotal = data ? data.feedback7d.up + data.feedback7d.down : 0;
+  const feedbackScore = feedbackTotal > 0 && data
+    ? Math.round((data.feedback7d.up / feedbackTotal) * 100)
+    : null;
+
+  if (!data) return null;
+
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" /><span className="text-xs">Queries (24h)</span></div>
+          <p className="text-2xl font-semibold text-foreground">{data.queries24h.toLocaleString()}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-muted-foreground"><Activity className="h-4 w-4" /><span className="text-xs">Queries (7d)</span></div>
+          <p className="text-2xl font-semibold text-foreground">{data.queries7d.toLocaleString()}</p>
+          {total7d > 0 && <p className="text-xs text-muted-foreground">{(data.queries7d / Math.max(1, total7d) * 100).toFixed(0)}% search</p>}
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-muted-foreground"><TrendingUp className="h-4 w-4" /><span className="text-xs">Empty result rate (7d)</span></div>
+          <p className={`text-2xl font-semibold ${data.emptyResultRate7d !== null && data.emptyResultRate7d > 20 ? "text-amber-500" : "text-foreground"}`}>
+            {data.emptyResultRate7d !== null ? `${data.emptyResultRate7d}%` : "—"}
+          </p>
+          <p className="text-xs text-muted-foreground">of search queries</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <ThumbsUp className="h-4 w-4" /><span className="text-xs">Feedback score (7d)</span>
+          </div>
+          <p className="text-2xl font-semibold text-foreground">
+            {feedbackScore !== null ? `${feedbackScore}%` : "—"}
+          </p>
+          {feedbackTotal > 0 && (
+            <p className="text-xs text-muted-foreground">{data.feedback7d.up}↑ {data.feedback7d.down}↓ · {feedbackTotal} rated</p>
+          )}
+        </div>
+      </div>
+
+      {intents.length > 0 && (
+        <div className="rounded-lg border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Intent breakdown (7d)</p>
+          <div className="space-y-1.5">
+            {intents.map(({ key, label }) => {
+              const count = data.intentBreakdown7d[key] ?? 0;
+              const pct = total7d > 0 ? Math.round((count / total7d) * 100) : 0;
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground w-28 shrink-0">{label}</span>
+                  <div className="flex-1 h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-emerald-500/60" style={{ width: `${pct}%` }} />
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground w-16 text-right">{count.toLocaleString()} · {pct}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlatformInfo({ pw }: { pw: string }) {
   const { data, isLoading } = useQuery<{
     totalUsers: number;
@@ -12051,13 +12143,14 @@ function PlatformInfo({ pw }: { pw: string }) {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">Eden AI Conversations</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard label="Last 24 Hours" value={data?.edenSessions24h ?? 0} icon={MessageSquare} testid="stat-eden-24h" />
-          <StatCard label="Last 7 Days" value={data?.edenSessions7d ?? 0} icon={MessageSquare} testid="stat-eden-7d" />
-          <StatCard label="Last 30 Days" value={data?.edenSessions30d ?? 0} icon={MessageSquare} testid="stat-eden-30d" />
-          <StatCard label="All Time" value={data?.edenSessionsAllTime ?? 0} icon={MessageSquare} testid="stat-eden-alltime" />
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">Eden AI</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-3">
+          <StatCard label="Sessions (24h)" value={data?.edenSessions24h ?? 0} icon={MessageSquare} testid="stat-eden-24h" />
+          <StatCard label="Sessions (7d)" value={data?.edenSessions7d ?? 0} icon={MessageSquare} testid="stat-eden-7d" />
+          <StatCard label="Sessions (30d)" value={data?.edenSessions30d ?? 0} icon={MessageSquare} testid="stat-eden-30d" />
+          <StatCard label="Sessions (all time)" value={data?.edenSessionsAllTime ?? 0} icon={MessageSquare} testid="stat-eden-alltime" />
         </div>
+        <EdenQueryMetrics pw={pw} />
       </div>
 
       <div>
