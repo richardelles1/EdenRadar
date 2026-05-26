@@ -21,6 +21,8 @@ export type UserContext = {
 
 export type GeoKey = "us" | "eu" | "uk" | "asia";
 
+export type RecencyWindow = "last30" | "last90" | "last180" | "lastyear";
+
 export type QueryFilters = {
   modality?: string;
   geography?: GeoKey;
@@ -28,6 +30,11 @@ export type QueryFilters = {
   indication?: string;
   institution?: string;
   biology?: string;
+  // Temporal filters — per-query only, never accumulated into SessionFocusContext.
+  // "last30/90/180/lastyear" maps to first_seen_at >= NOW() - INTERVAL.
+  // trending=true adds a completeness_score threshold and signals EDEN to add market context.
+  recency?: RecencyWindow;
+  trending?: boolean;
 };
 
 export type SessionFocusContext = {
@@ -359,7 +366,7 @@ export function parseQueryFilters(query: string, sessionContext?: SessionFocusCo
 }
 
 export function hasMeaningfulFilters(filters: QueryFilters): boolean {
-  return !!(filters.modality || filters.geography || filters.stage || filters.indication || filters.institution || filters.biology);
+  return !!(filters.modality || filters.geography || filters.stage || filters.indication || filters.institution || filters.biology || filters.recency);
 }
 
 // ── Session focus management ──────────────────────────────────────────────
@@ -756,6 +763,13 @@ export function extractBackRefInstitution(query: string, portfolioInstitutions?:
 type AggResult = Record<string, unknown>[];
 type ExtraSQL = ReturnType<typeof sql>;
 
+const RECENCY_INTERVALS: Record<RecencyWindow, string> = {
+  last30: "30 days",
+  last90: "90 days",
+  last180: "180 days",
+  lastyear: "1 year",
+};
+
 // Build a SQL AND-fragment from session filters (does NOT include `relevant = true`).
 // Returns undefined when no filters are active (no extra WHERE clause needed).
 function buildExtraSQL(filters: QueryFilters, geoRx?: string): ExtraSQL | undefined {
@@ -766,6 +780,12 @@ function buildExtraSQL(filters: QueryFilters, geoRx?: string): ExtraSQL | undefi
   if (filters.indication) parts.push(sql`indication ILIKE ${`%${filters.indication}%`}`);
   if (filters.institution) parts.push(sql`institution ILIKE ${`%${filters.institution}%`}`);
   if (filters.biology) parts.push(sql`biology ILIKE ${`%${filters.biology}%`}`);
+  if (filters.recency) {
+    const interval = RECENCY_INTERVALS[filters.recency];
+    parts.push(sql`first_seen_at >= NOW() - INTERVAL ${interval}`);
+  }
+  // Trending: require well-documented assets so EDEN can give meaningful market context
+  if (filters.trending) parts.push(sql`completeness_score >= 0.65`);
   if (!parts.length) return undefined;
   return parts.reduce((acc, cond) => sql`${acc} AND ${cond}`);
 }
@@ -1033,11 +1053,13 @@ FILTER EXTRACTION (null if not mentioned in the message):
 - institution: university or TTO name if explicitly mentioned
 - geography: us | eu | uk | asia (only if a region or country is explicitly mentioned)
 - biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation")
+- recency: time window when user signals recency interest — "last30" (new, recent, last month, last 30 days), "last90" (last quarter, last 3 months, last 90 days), "last180" (last 6 months, last half year), "lastyear" (this year, last year, past year) — null if no time signal
+- trending: true when user asks about "hot", "rising", "trending", "getting attention", "exciting right now", "what's interesting lately" — implies recency:"last90" if recency is null; false/null otherwise
 
 back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
 
 Return exactly this shape:
-{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null},"back_ref_position":null}`;
+{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null}`;
 
 export async function classifyIntent(
   message: string,
@@ -1058,6 +1080,12 @@ export async function classifyIntent(
     const raw = resp.choices[0]?.message?.content ?? "{}";
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const f = (parsed.filters ?? {}) as Record<string, unknown>;
+    const isTrending = !!(f.trending);
+    const rawRecency = (f.recency as string) || null;
+    const validRecencies: RecencyWindow[] = ["last30", "last90", "last180", "lastyear"];
+    const recency = validRecencies.includes(rawRecency as RecencyWindow)
+      ? (rawRecency as RecencyWindow)
+      : isTrending && !rawRecency ? "last90" : undefined;
     return {
       intent: (parsed.intent as IntentClassification["intent"]) ?? "search",
       filters: {
@@ -1067,6 +1095,8 @@ export async function classifyIntent(
         institution: (f.institution as string) || undefined,
         geography: (f.geography as QueryFilters["geography"]) || undefined,
         biology: (f.biology as string) || undefined,
+        recency,
+        trending: isTrending || undefined,
       },
       backRefPosition: typeof parsed.back_ref_position === "number" ? parsed.back_ref_position : null,
     };
