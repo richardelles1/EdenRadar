@@ -310,37 +310,25 @@ const INTEL_CHANNELS = [
     icon: Search,
     tag: "Active",
     title: "Natural language search",
-    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds. No database query language required.",
-    color: "hsl(var(--portal-scout))",
-    colorDim: "hsl(var(--portal-scout) / 0.08)",
-    borderColor: "hsl(var(--portal-scout) / 0.5)",
+    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
   },
   {
     icon: Sparkles,
     tag: "Conversational",
     title: "EDEN intelligence engine",
     desc: "Go deeper with EDEN. Ask follow-up questions, request a full patent landscape, compare competing programs, or synthesize literature across 40+ live sources — all cited, all in plain English.",
-    color: "hsl(var(--portal-lab))",
-    colorDim: "hsl(var(--portal-lab) / 0.08)",
-    borderColor: "hsl(var(--portal-lab) / 0.5)",
   },
   {
     icon: Bell,
     tag: "Automated",
     title: "Standing alerts",
-    desc: "Set your criteria once. The moment a new matching asset appears from any of the 350+ monitored institutions, your team is notified — before it surfaces publicly. No manual scanning, no missed deals.",
-    color: "hsl(var(--portal-discovery))",
-    colorDim: "hsl(var(--portal-discovery) / 0.08)",
-    borderColor: "hsl(var(--portal-discovery) / 0.5)",
+    desc: "Set your criteria once. The moment a new matching asset appears from any of the 350+ monitored institutions, your team is notified before it surfaces publicly. No manual scanning, no missed deals.",
   },
   {
     icon: BarChart3,
     tag: "Structured",
     title: "Landscape intelligence",
     desc: "Every asset arrives with an EDEN-compiled context layer: patent coverage, clinical trial cross-reference, competitive program mapping, inventor history, and a deal readiness score 0–100.",
-    color: "hsl(var(--portal-market))",
-    colorDim: "hsl(var(--portal-market) / 0.08)",
-    borderColor: "hsl(var(--portal-market) / 0.5)",
   },
 ];
 
@@ -426,31 +414,26 @@ export default function HowItWorks() {
             {INTEL_CHANNELS.map((ch, i) => (
               <CardTilt key={i} className="rounded-xl">
                 <div
-                  className="flex flex-col gap-4 p-6 rounded-xl bg-card h-full transition-colors duration-200"
+                  className="flex flex-col gap-5 p-7 rounded-xl h-full"
                   style={{
-                    borderWidth: "1px",
-                    borderStyle: "solid",
-                    borderColor: "hsl(var(--border))",
-                    borderLeftWidth: "3px",
-                    borderLeftColor: ch.color,
+                    background: "linear-gradient(150deg, hsl(var(--card)) 0%, hsl(var(--primary) / 0.04) 100%)",
+                    border: "1px solid hsl(var(--border))",
+                    borderTop: "2px solid hsl(var(--primary) / 0.40)",
                   }}
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center justify-between">
                     <div
-                      className="flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center"
-                      style={{ background: ch.colorDim }}
+                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
+                      style={{ background: "hsl(var(--primary) / 0.10)" }}
                     >
-                      <ch.icon className="w-5 h-5" style={{ color: ch.color }} />
+                      <ch.icon className="w-5 h-5 text-primary" />
                     </div>
-                    <span
-                      className="text-[10px] font-bold uppercase tracking-widest mt-1 flex-shrink-0"
-                      style={{ color: ch.color }}
-                    >
+                    <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary/50">
                       {ch.tag}
                     </span>
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground mb-2">{ch.title}</h3>
+                    <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
                     <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
                   </div>
                 </div>
