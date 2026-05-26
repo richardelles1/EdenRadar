@@ -1386,6 +1386,26 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/scout/stats", async (_req, res) => {
+    try {
+      const result = await db.execute(sql`
+        SELECT
+          COUNT(*)::int AS relevant_assets,
+          COUNT(DISTINCT institution)::int AS institutions
+        FROM ingested_assets
+        WHERE relevant = true
+      `);
+      const row = result.rows[0] as Record<string, unknown>;
+      return res.json({
+        relevantAssets: Number(row?.relevant_assets ?? 0),
+        institutions: Number(row?.institutions ?? 0),
+      });
+    } catch (err: any) {
+      console.error("[scout/stats] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load stats" });
+    }
+  });
+
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const dashUserId = await tryGetUserId(req);

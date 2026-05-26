@@ -21,7 +21,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles } from "lucide-react";
+import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -41,6 +41,11 @@ type SearchResponse = {
 
 type SavedAssetsResponse = {
   assets: SavedAsset[];
+};
+
+type ScoutStats = {
+  relevantAssets: number;
+  institutions: number;
 };
 
 
@@ -504,6 +509,10 @@ export default function Scout() {
   const { data: coverageData } = useQuery<InstitutionsCoverageResponse>({
     queryKey: ["/api/institutions"],
     staleTime: 10 * 60 * 1000,
+  });
+  const { data: scoutStats } = useQuery<ScoutStats>({
+    queryKey: ["/api/scout/stats"],
+    staleTime: 15 * 60 * 1000,
   });
   const coveredInstitutions = useMemo(
     () => (coverageData?.institutions ?? []).map((i) => i.name),
@@ -1059,78 +1068,92 @@ export default function Scout() {
     <div className="min-h-full flex flex-col bg-gradient-to-b from-background via-background to-muted/20">
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
-          <div className="relative px-4 sm:px-6 pt-10 pb-6 space-y-5 overflow-hidden">
-            {/* Atmospheric radial bloom — anchored to the search bar zone */}
-            <div className="pointer-events-none absolute inset-x-0 -top-24 -z-10 flex justify-center">
-              <div className="h-[480px] w-[800px] rounded-full bg-primary/10 dark:bg-primary/[0.13] blur-3xl" />
-            </div>
-
-            <div className="max-w-3xl mx-auto text-center mb-2 relative">
-              <button
-                onClick={() => setLocation("/settings")}
-                className="absolute right-0 top-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
-                data-testid="button-scout-settings"
-                title="Settings"
-              >
-                <Settings className="w-4 h-4" />
-              </button>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
-                <span className="gradient-text dark:gradient-text gradient-text-light">
-                  Asset Discovery
-                </span>
-              </h1>
-              <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-                Semantic search across TTO assets from leading research institutions, scored against your buyer thesis.
-              </p>
-            </div>
-
-            {/* Pre-search state — stats bar + suggestion chips */}
-            {!hasSearched && (
-              <div className="max-w-3xl mx-auto space-y-4 animate-in fade-in duration-500">
-                <div className="flex items-center justify-center gap-5 sm:gap-8 flex-wrap">
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-primary/10 border border-primary/15 flex items-center justify-center">
-                      <Building2 className="w-3.5 h-3.5 text-primary" />
-                    </div>
-                    <div className="leading-tight">
-                      <span className="text-sm font-bold text-foreground">{liveInstitutionCount || "50+"}</span>
-                      <span className="text-xs text-muted-foreground ml-1.5">institutions</span>
-                    </div>
+          <div className="px-4 sm:px-6 pt-6 pb-6 space-y-4">
+            {/* Command bar — Intelligence-style header panel */}
+            <div
+              className="max-w-3xl mx-auto rounded-xl border border-primary/15 p-4 sm:p-5"
+              style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))" }}
+            >
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div className="flex items-center gap-3">
+                  <div
+                    className="w-9 h-9 rounded-md flex items-center justify-center shrink-0"
+                    style={{ background: "hsl(142 71% 45% / 0.12)" }}
+                  >
+                    <Search className="w-4 h-4" style={{ color: "hsl(142 71% 45%)" }} />
                   </div>
-                  <div className="hidden sm:block w-px h-5 bg-border" />
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-emerald-500/10 border border-emerald-500/15 flex items-center justify-center">
-                      <FlaskConical className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h1 className="text-2xl font-bold text-foreground tracking-tight">EdenScout</h1>
+                      <span
+                        className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                        style={{ background: "hsl(142 71% 45% / 0.12)", color: "hsl(142 71% 45%)" }}
+                      >
+                        Live
+                      </span>
                     </div>
-                    <div className="leading-tight">
-                      <span className="text-sm font-bold text-foreground">300+</span>
-                      <span className="text-xs text-muted-foreground ml-1.5">TTO assets</span>
-                    </div>
-                  </div>
-                  <div className="hidden sm:block w-px h-5 bg-border" />
-                  <div className="flex items-center gap-2.5">
-                    <div className="w-7 h-7 rounded-lg bg-amber-500/10 border border-amber-500/15 flex items-center justify-center">
-                      <ScrollText className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                    </div>
-                    <div className="leading-tight">
-                      <span className="text-xs text-muted-foreground">Patents · Trials · Research</span>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Search TTO assets, patents, trials, and research signals — scored against your buyer thesis.
+                    </p>
                   </div>
                 </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
-                    <button
-                      key={chip}
-                      onClick={() => handleChipClick(chip)}
-                      className="px-3.5 py-1.5 rounded-full border border-border/70 bg-background/60 hover:border-primary/50 hover:bg-primary/5 hover:text-primary text-xs text-muted-foreground transition-all duration-150 backdrop-blur-sm"
-                      data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
-                    >
-                      {chip}
-                    </button>
-                  ))}
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
+                    style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}
+                  >
+                    <span className="font-black tabular-nums text-foreground">
+                      {scoutStats ? scoutStats.relevantAssets.toLocaleString() : "33,000+"}
+                    </span>
+                    <span className="text-muted-foreground">TTO assets</span>
+                  </div>
+
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs cursor-default"
+                          style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
+                          data-testid="coverage-indicator"
+                        >
+                          <Building2 className="w-3 h-3 text-muted-foreground" />
+                          <span className="font-black tabular-nums text-foreground">
+                            {scoutStats?.institutions || liveInstitutionCount || 346}
+                          </span>
+                          <span className="text-muted-foreground">institutions</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="max-w-[300px] p-3">
+                        <p className="text-[11px] font-semibold text-foreground mb-2">Coverage includes:</p>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                          {coveredInstitutions.slice(0, 20).map((inst) => (
+                            <p key={inst} className="text-[10px] text-muted-foreground">{inst}</p>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-primary mt-2">New institutions added weekly.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+
+                  <div
+                    className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
+                    style={{ background: "hsl(var(--muted) / 0.5)", border: "1px solid hsl(var(--border))" }}
+                  >
+                    <span className="text-muted-foreground">Patents · Trials · 35+ sources</span>
+                  </div>
+
+                  <button
+                    onClick={() => setLocation("/settings")}
+                    className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                    data-testid="button-scout-settings"
+                    title="Settings"
+                  >
+                    <Settings className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
-            )}
+            </div>
 
             {/* Search bar — elevated with ambient glow ring */}
             <div className="max-w-3xl mx-auto flex gap-2 relative">
@@ -1165,36 +1188,28 @@ export default function Scout() {
               )}
             </div>
 
-            <div className="max-w-3xl mx-auto flex items-center gap-4">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <div
-                      className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-default select-none"
-                      data-testid="coverage-indicator"
-                    >
-                      <Globe className="w-3 h-3 shrink-0" />
-                      <span>{liveInstitutionCount} institutions indexed</span>
-                    </div>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="max-w-[300px] p-3">
-                    <p className="text-[11px] font-semibold text-foreground mb-2">Coverage includes:</p>
-                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      {coveredInstitutions.slice(0, 20).map((inst) => (
-                        <p key={inst} className="text-[10px] text-muted-foreground">{inst}</p>
-                      ))}
-                    </div>
-                    <p className="text-[10px] text-primary mt-2">New institutions added weekly.</p>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <div className="h-3 w-px bg-border/60" />
+            {/* Sources dropdown + pre-search suggestion chips */}
+            <div className="max-w-3xl mx-auto space-y-3">
               <SourcesDropdown
                 researchSources={researchSources}
                 onSourcesChange={setResearchSources}
                 open={sourcesDropdownOpen}
                 onOpenChange={setSourcesDropdownOpen}
               />
+              {!hasSearched && (
+                <div className="flex flex-wrap gap-2 animate-in fade-in duration-500">
+                  {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
+                    <button
+                      key={chip}
+                      onClick={() => handleChipClick(chip)}
+                      className="px-3.5 py-1.5 rounded-full border border-border/70 bg-background/60 hover:border-primary/50 hover:bg-primary/5 hover:text-primary text-xs text-muted-foreground transition-all duration-150"
+                      data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                    >
+                      {chip}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} onClear={handleClearProfile} />
