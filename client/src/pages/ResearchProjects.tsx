@@ -6,11 +6,12 @@ import {
   Plus,
   Trash2,
   FileText,
+  Calendar,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog,
@@ -28,17 +29,38 @@ import {
 } from "@/components/ui/select";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
+import { PORTAL_ACCENT, accentMix } from "@/components/sidebar-primitives";
 import type { ResearchProject, SavedReference } from "@shared/schema";
 import { computeReadinessScore } from "@/lib/readiness";
 
+const ACCENT = PORTAL_ACCENT.lab;
+
 type ProjectsResponse = { projects: ResearchProject[] };
 
-export const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
-  planning: { label: "Planning", color: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30" },
-  active: { label: "Active", color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30" },
-  on_hold: { label: "On Hold", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
-  completed: { label: "Completed", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
+export const STATUS_CONFIG: Record<string, { label: string; dot: string; badge: string }> = {
+  planning: {
+    label: "Planning",
+    dot: "bg-gray-400",
+    badge: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
+  },
+  active: {
+    label: "Active",
+    dot: "bg-violet-500",
+    badge: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  },
+  on_hold: {
+    label: "On Hold",
+    dot: "bg-amber-500",
+    badge: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  },
+  completed: {
+    label: "Completed",
+    dot: "bg-emerald-500",
+    badge: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  },
 };
+
+const STATUS_FILTERS = ["All", "active", "planning", "on_hold", "completed"] as const;
 
 function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -51,6 +73,7 @@ export default function ResearchProjects() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("All");
   const [newTitle, setNewTitle] = useState("");
   const [newArea, setNewArea] = useState("");
   const [newHypothesis, setNewHypothesis] = useState("");
@@ -121,46 +144,122 @@ export default function ResearchProjects() {
   });
 
   const projects = projectsData?.projects ?? [];
+  const filtered = statusFilter === "All"
+    ? projects
+    : projects.filter((p) => p.status === statusFilter);
+
+  const counts = {
+    All: projects.length,
+    active: projects.filter((p) => p.status === "active").length,
+    planning: projects.filter((p) => p.status === "planning").length,
+    on_hold: projects.filter((p) => p.status === "on_hold").length,
+    completed: projects.filter((p) => p.status === "completed").length,
+  };
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FolderOpen className="w-5 h-5 text-violet-500" />
-          <h1 className="text-xl font-bold text-foreground">My Projects</h1>
+      {/* Header */}
+      <div
+        className="rounded-xl border border-border p-4 flex items-center justify-between gap-4"
+        style={{ background: accentMix(ACCENT, 4) }}
+      >
+        <div className="flex items-center gap-3">
+          <div
+            className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+            style={{ background: ACCENT }}
+          >
+            <FolderOpen className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold text-foreground">My Projects</h1>
+            <p className="text-xs text-muted-foreground">
+              {projects.length} total · {counts.active} active
+            </p>
+          </div>
         </div>
         <Button
-          className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
           onClick={() => setDialogOpen(true)}
+          size="sm"
+          className="gap-1.5 text-xs font-semibold text-white"
+          style={{ background: ACCENT }}
           data-testid="button-new-project"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           New Project
         </Button>
       </div>
 
+      {/* Status filter chips */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        {STATUS_FILTERS.map((f) => {
+          const isActive = statusFilter === f;
+          const conf = f === "All" ? null : STATUS_CONFIG[f];
+          const label = f === "All" ? "All" : conf?.label ?? f;
+          const count = counts[f];
+          return (
+            <button
+              key={f}
+              onClick={() => setStatusFilter(f)}
+              className="flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-all"
+              style={
+                isActive
+                  ? {
+                      background: accentMix(ACCENT, 10),
+                      color: ACCENT,
+                      borderColor: accentMix(ACCENT, 35),
+                    }
+                  : {
+                      background: "transparent",
+                      color: "hsl(var(--muted-foreground))",
+                      borderColor: "hsl(var(--border) / 0.5)",
+                    }
+              }
+            >
+              {conf && (
+                <span className={`w-1.5 h-1.5 rounded-full ${conf.dot}`} />
+              )}
+              {label}
+              <span
+                className="text-[10px] tabular-nums"
+                style={{ opacity: isActive ? 1 : 0.6 }}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Cards */}
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-lg" />)}
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-52 rounded-lg" />)}
         </div>
-      ) : projects.length === 0 ? (
-        <div className="border border-dashed border-border rounded-lg p-10 text-center">
-          <FolderOpen className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground mb-3">No projects yet. Create one to start organizing your research.</p>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => setDialogOpen(true)}
-            data-testid="button-new-project-empty"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Create your first project
-          </Button>
+      ) : filtered.length === 0 ? (
+        <div
+          className="rounded-lg border border-dashed border-border p-12 text-center"
+          style={{ background: accentMix(ACCENT, 3) }}
+        >
+          <FolderOpen className="w-10 h-10 mx-auto mb-3 opacity-20" />
+          <p className="text-sm text-muted-foreground mb-3">
+            {statusFilter === "All" ? "No projects yet." : `No ${STATUS_CONFIG[statusFilter]?.label.toLowerCase()} projects.`}
+          </p>
+          {statusFilter === "All" && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 text-xs"
+              onClick={() => setDialogOpen(true)}
+              data-testid="button-new-project-empty"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Create your first project
+            </Button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {projects.map((p) => (
+          {filtered.map((p) => (
             <ProjectCard
               key={p.id}
               project={p}
@@ -176,14 +275,23 @@ export default function ResearchProjects() {
         </div>
       )}
 
-      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetDialog(); } setDialogOpen(open); }}>
+      {/* Create dialog */}
+      <Dialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (!open) resetDialog();
+          setDialogOpen(open);
+        }}
+      >
         <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" data-testid="dialog-create-project">
           <DialogHeader>
             <DialogTitle>New Research Project</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Title *</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Title *
+              </label>
               <Input
                 placeholder="Project title"
                 value={newTitle}
@@ -192,7 +300,9 @@ export default function ResearchProjects() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Research Question / Hypothesis</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Research Question / Hypothesis
+              </label>
               <Textarea
                 placeholder="What question does this project aim to answer?"
                 value={newHypothesis}
@@ -202,7 +312,9 @@ export default function ResearchProjects() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Research Area</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Research Area
+              </label>
               <Input
                 placeholder="e.g., KRAS inhibitor, mRNA delivery"
                 value={newArea}
@@ -211,7 +323,9 @@ export default function ResearchProjects() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Status</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Status
+              </label>
               <Select value={newStatus} onValueChange={setNewStatus}>
                 <SelectTrigger data-testid="select-new-project-status">
                   <SelectValue />
@@ -225,7 +339,9 @@ export default function ResearchProjects() {
               </Select>
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Objectives</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Objectives
+              </label>
               <Textarea
                 placeholder="Key objectives for this project"
                 value={newObjectives}
@@ -235,7 +351,9 @@ export default function ResearchProjects() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Methodology</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Methodology
+              </label>
               <Textarea
                 placeholder="Research methodology and approach"
                 value={newMethodology}
@@ -245,7 +363,9 @@ export default function ResearchProjects() {
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-foreground mb-1 block">Target Completion</label>
+              <label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-1.5 block">
+                Target Completion
+              </label>
               <Input
                 type="date"
                 value={newTargetCompletion}
@@ -255,13 +375,20 @@ export default function ResearchProjects() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => { resetDialog(); setDialogOpen(false); }} data-testid="button-cancel-create-project">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => { resetDialog(); setDialogOpen(false); }}
+              data-testid="button-cancel-create-project"
+            >
               Cancel
             </Button>
             <Button
               disabled={!newTitle.trim() || createProject.isPending}
               onClick={() => createProject.mutate()}
-              className="bg-violet-600 hover:bg-violet-700 text-white"
+              size="sm"
+              className="text-white"
+              style={{ background: ACCENT }}
               data-testid="button-create-project-submit"
             >
               Create Project
@@ -291,7 +418,9 @@ export function ProjectCard({
   const { data: refsData } = useQuery<{ references: SavedReference[] }>({
     queryKey: ["/api/research/references", researcherId, project.id],
     queryFn: async () => {
-      const r = await fetch(`/api/research/references?projectId=${project.id}`, { headers: researcherHeaders });
+      const r = await fetch(`/api/research/references?projectId=${project.id}`, {
+        headers: researcherHeaders,
+      });
       if (!r.ok) throw new Error("Failed to fetch references");
       return r.json();
     },
@@ -302,78 +431,122 @@ export function ProjectCard({
   const statusConf = STATUS_CONFIG[project.status] ?? STATUS_CONFIG.planning;
   const readiness = computeReadinessScore(project);
 
+  const scoreColor =
+    readiness.score >= 70
+      ? "hsl(142 52% 36%)"
+      : readiness.score >= 40
+        ? "hsl(38 92% 50%)"
+        : "hsl(0 84% 60%)";
+
   return (
     <div
-      className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors flex flex-col gap-2 cursor-pointer"
+      className="relative rounded-lg border border-border bg-card flex flex-col overflow-hidden cursor-pointer"
+      style={{ minHeight: compact ? 120 : 200 }}
       onClick={onClick}
+      onMouseEnter={(e) => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.borderColor = `${PORTAL_ACCENT.lab}40`;
+        el.style.transform = "translateY(-1px)";
+        el.style.boxShadow = `0 4px 20px ${PORTAL_ACCENT.lab}14`;
+      }}
+      onMouseLeave={(e) => {
+        const el = e.currentTarget as HTMLDivElement;
+        el.style.borderColor = "";
+        el.style.transform = "";
+        el.style.boxShadow = "";
+      }}
       data-testid={`project-card-${project.id}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <h3 className="text-sm font-semibold text-foreground leading-snug">{project.title}</h3>
-        {onDelete && !compact && (
+      {/* Left accent strip */}
+      <div
+        className="absolute left-0 inset-y-0 w-[3px]"
+        style={{ backgroundColor: PORTAL_ACCENT.lab }}
+      />
+
+      {/* Score badge */}
+      <div
+        className="absolute top-3 right-3 w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-bold border-2"
+        style={{
+          background: accentMix(scoreColor, 10),
+          color: scoreColor,
+          borderColor: accentMix(scoreColor, 30),
+        }}
+        data-testid={`readiness-score-${project.id}`}
+      >
+        {readiness.score}
+      </div>
+
+      <div className="flex-1 flex flex-col gap-2 p-4 pl-5 pr-14">
+        {/* Status + area */}
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span
+            className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${statusConf.badge}`}
+          >
+            <span className={`inline-block w-1.5 h-1.5 rounded-full mr-1 ${statusConf.dot}`} />
+            {statusConf.label}
+          </span>
+          {project.researchArea && (
+            <span
+              className="text-[10px] font-medium px-1.5 py-0.5 rounded border truncate max-w-[120px]"
+              style={{
+                background: accentMix(PORTAL_ACCENT.lab, 8),
+                color: PORTAL_ACCENT.lab,
+                borderColor: accentMix(PORTAL_ACCENT.lab, 25),
+              }}
+            >
+              {project.researchArea}
+            </span>
+          )}
+        </div>
+
+        {/* Title */}
+        <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
+          {project.title}
+        </h3>
+
+        {/* Hypothesis preview */}
+        {!compact && project.hypothesis && (
+          <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed flex-1">
+            {project.hypothesis}
+          </p>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 pl-5 pb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <FileText className="w-3 h-3" />
+            <span className="tabular-nums">{refs.length}</span> ref{refs.length !== 1 ? "s" : ""}
+          </span>
+          {!compact && project.targetCompletion && (
+            <span className="flex items-center gap-1">
+              <Calendar className="w-3 h-3" />
+              {formatDate(project.targetCompletion)}
+            </span>
+          )}
+        </div>
+
+        {!compact && onDelete && (
           <button
             onClick={onDelete}
-            className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+            className="text-muted-foreground/40 hover:text-red-500 transition-colors"
             data-testid={`button-delete-project-${project.id}`}
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
-      <div className="flex items-center gap-2 flex-wrap">
-        <Badge className={`text-[11px] ${statusConf.color}`} data-testid={`badge-status-${project.id}`}>
-          {statusConf.label}
-        </Badge>
-        {project.researchArea && (
-          <Badge variant="secondary" className="text-[11px] w-fit bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30">
-            {project.researchArea}
-          </Badge>
-        )}
-        {(() => {
-          const s = (project.adminStatus ?? "draft") as string;
-          const published = project.publishToIndustry === true && s === "published";
-          const pending = project.publishToIndustry === true && s === "pending";
-          const rejected = s === "rejected";
-          if (!published && !pending && !rejected) return null;
-          const cls = published
-            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-            : pending
-              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-              : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30";
-          const label = published ? "Published" : pending ? "Pending review" : "Rejected";
-          return (
-            <Badge className={`text-[11px] ${cls}`} data-testid={`badge-publish-${project.id}`}>
-              {label}
-            </Badge>
-          );
-        })()}
-      </div>
-      {project.hypothesis && !compact && (
-        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{project.hypothesis}</p>
-      )}
+
+      {/* Readiness bar */}
       {!compact && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Readiness</span>
-            <span className={`text-[11px] font-semibold ${readiness.textColor}`} data-testid={`readiness-score-${project.id}`}>
-              {readiness.score}/100
-            </span>
-          </div>
-          <div className="h-1 rounded-full bg-muted overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${readiness.barColor}`}
-              style={{ width: `${readiness.score}%` }}
-            />
-          </div>
+        <div className="h-0.5 bg-muted w-full">
+          <div
+            className="h-full transition-all"
+            style={{ width: `${readiness.score}%`, backgroundColor: scoreColor }}
+          />
         </div>
       )}
-      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-auto">
-        <span className="flex items-center gap-1">
-          <FileText className="w-3 h-3" />
-          {refs.length} ref{refs.length !== 1 ? "s" : ""}
-        </span>
-        <span>Last edited {formatDate(project.lastEditedAt)}</span>
-      </div>
     </div>
   );
 }

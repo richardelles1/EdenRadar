@@ -928,15 +928,15 @@ function scheduleNext(): void {
     const effectiveConcurrency = sweepConcurrencyOverride ?? getMaxHttpConcurrent();
     if (liveCount >= effectiveConcurrency) break;
 
-    // ── Staleness gate ────────────────────────────────────────────────────────
-    if (isFresh(institution)) {
+    // ── Staleness gate (skipped during staleness-first scan — visit all) ──────
+    if (!stalenessFirstActive && isFresh(institution)) {
       queueIndex++;
       freshSkippedThisCycle++;
       continue;
     }
 
-    // ── Backoff gate ──────────────────────────────────────────────────────────
-    if (isInBackoff(institution)) {
+    // ── Backoff gate (skipped during staleness-first scan — visit all) ────────
+    if (!stalenessFirstActive && isInBackoff(institution)) {
       queueIndex++;
       skippedThisCycle++;
       continue;

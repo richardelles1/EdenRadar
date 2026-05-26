@@ -8999,6 +8999,88 @@ Do not respond with anything else.`;
         outcome: z.string(),
       }).nullable().optional(),
       protocolChecklist: z.record(z.boolean()).nullable().optional(),
+      eligibilityCriteria: z.object({
+        inclusion: z.array(z.string()),
+        exclusion: z.array(z.string()),
+        studyDesigns: z.array(z.string()),
+        populationCriteria: z.string(),
+        mechanismTags: z.array(z.string()).optional().default([]),
+      }).nullable().optional(),
+      searchStrategy: z.object({
+        databases: z.array(z.string()),
+        searchStrings: z.array(z.object({
+          database: z.string(), query: z.string(), date: z.string(), count: z.number(),
+        })),
+        dateFrom: z.string(),
+        dateTo: z.string(),
+        filters: z.array(z.string()),
+        notes: z.string(),
+      }).nullable().optional(),
+      screeningPapers: z.array(z.object({
+        id: z.string(),
+        title: z.string(),
+        authors: z.string(),
+        year: z.string(),
+        abstract: z.string(),
+        url: z.string(),
+        source: z.string(),
+        doi: z.string().optional().default(""),
+        aiScore: z.number().nullable().optional(),
+        abstractDecision: z.enum(["include", "exclude", "maybe"]).nullable(),
+        abstractRationale: z.string(),
+        fullTextDecision: z.enum(["include", "exclude"]).nullable(),
+        fullTextRationale: z.string(),
+        fullTextUrl: z.string(),
+        reviewer2AbstractDecision: z.enum(["include", "exclude", "maybe"]).nullable().optional(),
+        reviewer2AbstractRationale: z.string().optional().default(""),
+        reviewer2FullTextDecision: z.enum(["include", "exclude"]).nullable().optional(),
+        reviewer2FullTextRationale: z.string().optional().default(""),
+      })).nullable().optional(),
+      extractionFields: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        type: z.enum(["text", "number", "select"]),
+        options: z.array(z.string()).optional(),
+      })).nullable().optional(),
+      extractedData: z.array(z.object({
+        paperId: z.string(),
+        data: z.record(z.string()),
+      })).nullable().optional(),
+      riskOfBias: z.array(z.object({
+        paperId: z.string(),
+        title: z.string(),
+        domains: z.array(z.object({
+          name: z.string(), rating: z.string(), rationale: z.string(),
+        })),
+      })).nullable().optional(),
+      robTool: z.string().nullable().optional(),
+      evidenceSynthesisText: z.object({
+        narrative: z.string(),
+        heterogeneity: z.string(),
+        strengthOfEvidence: z.string(),
+        certaintyGrade: z.string(),
+      }).nullable().optional(),
+      researchResults: z.object({
+        mainFindings: z.string(),
+        conclusions: z.string(),
+        limitations: z.string(),
+        implications: z.string(),
+      }).nullable().optional(),
+      disseminationPlan: z.object({
+        targetJournals: z.array(z.string()),
+        conferenceTargets: z.array(z.string()),
+        preprintStrategy: z.string(),
+        timelineToSubmit: z.string(),
+        openAccessPlan: z.string(),
+        dataSharePlan: z.string(),
+      }).nullable().optional(),
+      prosperoId: z.string().nullable().optional(),
+      protocolVersion: z.string().nullable().optional(),
+      protocolLockedAt: z.string().nullable().optional(),
+      protocolDeviations: z.array(z.object({
+        id: z.string(), date: z.string(), nature: z.string(),
+        impact: z.enum(["minor", "major"]), rationale: z.string(), createdAt: z.string(),
+      })).nullable().optional(),
     });
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -9012,6 +9094,7 @@ Do not respond with anything else.`;
       "startupPotential","fundingStatus","technicalRisk","regulatoryRisk",
       "keyScientificUnknowns","expectedTimeline","successCriteria","discoveryTitle",
       "discoverySummary","technologyType","developmentStage",
+      "prosperoId","protocolVersion","robTool",
     ] as const;
     for (const f of textFields) {
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];
@@ -9024,6 +9107,20 @@ Do not respond with anything else.`;
     ] as const;
     for (const f of jsonFields) {
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];
+    }
+    // Deep workflow JSONB fields (migration 0013 + 0014)
+    const deepJsonFields = [
+      "eligibilityCriteria","searchStrategy","screeningPapers",
+      "extractionFields","extractedData","riskOfBias",
+      "evidenceSynthesisText","researchResults","disseminationPlan",
+      "protocolDeviations",
+    ] as const;
+    for (const f of deepJsonFields) {
+      if ((validated as any)[f] !== undefined) (updates as any)[f] = (validated as any)[f];
+    }
+    if ((validated as any).protocolLockedAt !== undefined) {
+      const v = (validated as any).protocolLockedAt;
+      (updates as any).protocolLockedAt = v ? new Date(v) : null;
     }
     if (validated.openForCollaboration !== undefined) updates.openForCollaboration = validated.openForCollaboration;
     let unpublishRequested = false;

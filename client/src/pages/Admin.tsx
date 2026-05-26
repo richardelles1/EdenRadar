@@ -137,6 +137,7 @@ interface SchedulerStatus {
   currentTier: 1 | 2 | 3 | 4 | null;
   tierOnly: number | null;
   stalenessFirst: boolean;
+  dailySweep: boolean;
   resumedAtPosition: number | null;
 }
 
@@ -375,7 +376,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
       if (!res.ok) throw new Error("Failed to fetch enrichment status");
       return res.json();
     },
-    refetchInterval: 5_000,
+    refetchInterval: (query) => query.state.data?.status === "running" ? 3_000 : 30_000,
   });
 
   const { data: qualityHistory } = useQuery<QualitySnapshot[]>({
@@ -1174,6 +1175,7 @@ function DataHealth({ pw }: { pw: string }) {
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [healthPanelOpen, setHealthPanelOpen] = useState(false);
   const lastStableOrder = useRef<string[]>([]);
+  const userCollapsedRef = useRef<string | null>(null);
   const { toast } = useToast();
 
   const { data, isLoading, error } = useQuery<CollectorHealthData>({
@@ -1194,6 +1196,7 @@ function DataHealth({ pw }: { pw: string }) {
   });
 
   const [pendingSyncInst, setPendingSyncInst] = useState<string | null>(null);
+  const [cancellingInstitution, setCancellingInstitution] = useState<string | null>(null);
 
   const syncMutation = useMutation({
     mutationFn: async (institution: string) => {
@@ -1230,6 +1233,8 @@ function DataHealth({ pw }: { pw: string }) {
       }
       return res.json();
     },
+    onMutate: (institution) => { setCancellingInstitution(institution); },
+    onSettled: () => { setCancellingInstitution(null); },
     onSuccess: (_d, institution) => {
       toast({ title: "Sync cancelled", description: `Sync for ${institution} cancelled` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
@@ -1416,6 +1421,10 @@ function DataHealth({ pw }: { pw: string }) {
   });
 
   const handleDailySweepClick = () => {
+    if (schedPaused && sched.dailySweep) {
+      schedulerStartMutation.mutate();
+      return;
+    }
     if (!dailySweepConfirm) {
       setDailySweepConfirm(true);
       if (dailySweepConfirmTimer.current) clearTimeout(dailySweepConfirmTimer.current);
@@ -1528,6 +1537,7 @@ function DataHealth({ pw }: { pw: string }) {
       return res.json();
     },
     enabled: healthPanelOpen,
+    refetchInterval: healthPanelOpen ? 30_000 : false,
   });
 
   const clearBackoffMutation = useMutation({
@@ -1551,7 +1561,7 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
-  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, site_down: 1, rate_limited: 2, degraded: 2, parser_failure: 2, network_blocked: 2, warning: 3, blocked: 3, syncing: 4, never: 5, ok: 6 };
+  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, site_down: 1, rate_limited: 2, degraded: 2, parser_failure: 2, network_blocked: 2, empty_response: 2, warning: 3, blocked: 3, syncing: 4, never: 5, ok: 6 };
 
   const sortedRowsForFreeze = React.useMemo(() => {
     if (!data) return [];
@@ -1592,7 +1602,7 @@ function DataHealth({ pw }: { pw: string }) {
   const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
   const firstSyncingInstitution = syncingRows[0]?.institution ?? null;
   useEffect(() => {
-    if (firstSyncingInstitution && !expandedInstitution) {
+    if (firstSyncingInstitution && !expandedInstitution && userCollapsedRef.current !== firstSyncingInstitution) {
       setExpandedInstitution(firstSyncingInstitution);
     }
   }, [firstSyncingInstitution]);
@@ -1668,13 +1678,21 @@ function DataHealth({ pw }: { pw: string }) {
   const syncedToday = data.syncedToday ?? 0;
 
   const handleSyncClick = (institution: string) => {
+    if (data?.rows.find((r) => r.institution === institution)?.health === "syncing") return;
     setPendingSyncInst(institution);
     setExpandedInstitution(institution);
     syncMutation.mutate(institution);
   };
 
   const handleRowClick = (institution: string) => {
-    setExpandedInstitution((prev) => prev === institution ? null : institution);
+    setExpandedInstitution((prev) => {
+      if (prev === institution) {
+        userCollapsedRef.current = institution;
+        return null;
+      }
+      if (userCollapsedRef.current === institution) userCollapsedRef.current = null;
+      return institution;
+    });
   };
 
   const schedRunning = sched.state === "running";
@@ -1764,7 +1782,7 @@ function DataHealth({ pw }: { pw: string }) {
                       <button
                         className="ml-1 flex-shrink-0 rounded-sm text-blue-600/60 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors p-0.5"
                         onClick={() => cancelMutation.mutate(inst as string)}
-                        disabled={cancelMutation.isPending}
+                        disabled={cancellingInstitution === (inst as string)}
                         title={`Cancel sync for ${inst}`}
                         data-testid={`button-cancel-scheduler-${(inst as string).toLowerCase().replace(/\s+/g, "-")}`}
                       >
@@ -1880,6 +1898,8 @@ function DataHealth({ pw }: { pw: string }) {
                     <><Loader2 className="w-3 h-3 mr-1 animate-spin" />T{tier} running</>
                   ) : isThisTierPaused ? (
                     `Resume T${tier}`
+                  ) : isConfirming && schedPaused && sched.tierOnly !== null && sched.tierOnly !== tier ? (
+                    `Discard T${sched.tierOnly} & run T${tier}?`
                   ) : isConfirming ? (
                     `Confirm T${tier}?`
                   ) : (
@@ -1909,24 +1929,29 @@ function DataHealth({ pw }: { pw: string }) {
             <span className="text-xs text-muted-foreground font-medium flex-shrink-0 mr-0.5">Daily Sweep:</span>
             {(() => {
               const anyRunning = schedRunning || schedulerDailySweepMutation.isPending;
+              const isDailySweepPaused = schedPaused && sched.dailySweep;
               return (
                 <Button
                   size="sm"
                   variant="outline"
                   className={`h-7 text-xs font-medium px-3 transition-colors ${
-                    schedulerDailySweepMutation.isPending
+                    schedulerDailySweepMutation.isPending || (schedulerStartMutation.isPending && isDailySweepPaused)
                       ? "border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                      : isDailySweepPaused
+                      ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
                       : dailySweepConfirm
                       ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
                       : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
                   }`}
                   onClick={handleDailySweepClick}
-                  disabled={anyRunning}
+                  disabled={anyRunning && !isDailySweepPaused}
                   data-testid="button-daily-sweep"
                   title="Run a full daily sweep: all standard institutions staleness-ordered, then complex institutions sequentially"
                 >
-                  {schedulerDailySweepMutation.isPending ? (
+                  {schedulerDailySweepMutation.isPending || schedulerStartMutation.isPending ? (
                     <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Sweep running</>
+                  ) : schedPaused && sched.dailySweep ? (
+                    "Resume Daily Sweep"
                   ) : dailySweepConfirm ? (
                     "Confirm Daily Sweep?"
                   ) : (
@@ -2003,7 +2028,9 @@ function DataHealth({ pw }: { pw: string }) {
             <Activity className="h-4 w-4 text-primary" />
             <span className="font-semibold text-foreground text-sm">Live Connections</span>
             <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{data.totalInstitutions}</span>
-            <span className="text-[11px] text-muted-foreground/60">Sequence scan active</span>
+            {schedRunning && !sched.tierOnly && !sched.stalenessFirst && !sched.dailySweep && (
+              <span className="text-[11px] text-muted-foreground/60">Sequence scan active</span>
+            )}
           </div>
           <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${liveOpen ? "rotate-90" : ""}`} />
         </button>
@@ -2013,16 +2040,22 @@ function DataHealth({ pw }: { pw: string }) {
             <div className="flex flex-col gap-2 px-4 py-3 border-b border-border">
               <div className="flex flex-wrap items-center gap-1.5">
                 {(([
-                  { key: "all",      label: "All",          activeClass: "bg-primary text-primary-foreground border-primary" },
-                  { key: "ok",       label: "Working",      activeClass: "bg-emerald-600 text-white border-emerald-600" },
-                  { key: "warning",  label: "Warning",      activeClass: "bg-yellow-500 text-white border-yellow-500" },
-                  { key: "degraded", label: "Degraded",     activeClass: "bg-amber-500 text-white border-amber-500" },
-                  { key: "stale",    label: "Stale",        activeClass: "bg-orange-500 text-white border-orange-500" },
-                  { key: "failing",         label: "Failing",        activeClass: "bg-red-600 text-white border-red-600" },
-                  { key: "network_blocked", label: "Network blocked", activeClass: "bg-orange-600 text-white border-orange-600" },
-                  { key: "never",           label: "Never synced",   activeClass: "bg-muted text-foreground border-border" },
-                ] as { key: "all" | HealthStatus; label: string; activeClass: string }[]).map(({ key, label, activeClass }) => {
+                  { key: "all",             label: "All",             activeClass: "bg-primary text-primary-foreground border-primary",       always: true },
+                  { key: "ok",              label: "Working",         activeClass: "bg-emerald-600 text-white border-emerald-600",            always: true },
+                  { key: "warning",         label: "Warning",         activeClass: "bg-yellow-500 text-white border-yellow-500",             always: true },
+                  { key: "degraded",        label: "Degraded",        activeClass: "bg-amber-500 text-white border-amber-500",               always: true },
+                  { key: "stale",           label: "Stale",           activeClass: "bg-orange-500 text-white border-orange-500",             always: true },
+                  { key: "failing",         label: "Failing",         activeClass: "bg-red-600 text-white border-red-600",                   always: true },
+                  { key: "site_down",       label: "Site down",       activeClass: "bg-amber-600 text-white border-amber-600",               always: false },
+                  { key: "rate_limited",    label: "Rate limited",    activeClass: "bg-orange-600 text-white border-orange-600",             always: false },
+                  { key: "blocked",         label: "Blocked",         activeClass: "bg-amber-500 text-white border-amber-500",               always: false },
+                  { key: "network_blocked", label: "Network blocked", activeClass: "bg-orange-600 text-white border-orange-600",             always: true },
+                  { key: "parser_failure",  label: "Parser failure",  activeClass: "bg-red-500 text-white border-red-500",                   always: false },
+                  { key: "empty_response",  label: "Empty response",  activeClass: "bg-yellow-600 text-white border-yellow-600",             always: false },
+                  { key: "never",           label: "Never synced",    activeClass: "bg-muted text-foreground border-border",                 always: true },
+                ] as { key: "all" | HealthStatus; label: string; activeClass: string; always: boolean }[]).map(({ key, label, activeClass, always }) => {
                   const count = key === "all" ? sortedRows.length : sortedRows.filter((r) => r.health === key).length;
+                  if (!always && count === 0) return null;
                   return (
                     <button
                       key={key}
@@ -2190,7 +2223,7 @@ function DataHealth({ pw }: { pw: string }) {
                           </td>
                           <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                             {row.health === "syncing" ? (
-                              <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">{(row.phase === "scraping" ? "collecting" : row.phase) ?? "syncing"}</span>
                             ) : (
                               relativeTime(row.lastSyncAt)
                             )}
@@ -2198,7 +2231,7 @@ function DataHealth({ pw }: { pw: string }) {
                           <td className="text-left py-2 px-3" data-testid={`error-${instSlug}`}>
                             {row.health === "syncing" ? (
                               <div className="w-full max-w-[180px]">
-                                <div className="text-[10px] text-blue-500 font-medium mb-1">{row.phase ?? "starting…"}</div>
+                                <div className="text-[10px] text-blue-500 font-medium mb-1">{(row.phase === "scraping" ? "Collecting..." : row.phase) ?? "starting…"}</div>
                                 <div className="h-1.5 rounded-full bg-blue-500/15 overflow-hidden">
                                   <div
                                     className="h-full rounded-full bg-blue-500 animate-pulse transition-all duration-700"
@@ -2222,7 +2255,7 @@ function DataHealth({ pw }: { pw: string }) {
                                   size="sm"
                                   className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
                                   onClick={() => cancelMutation.mutate(row.institution)}
-                                  disabled={cancelMutation.isPending}
+                                  disabled={cancellingInstitution === row.institution}
                                   title={`Cancel stale session for ${row.institution}`}
                                   data-testid={`button-cancel-${instSlug}`}
                                 >
@@ -2235,7 +2268,7 @@ function DataHealth({ pw }: { pw: string }) {
                                   size="sm"
                                   className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
                                   onClick={() => cancelMutation.mutate(row.institution)}
-                                  disabled={cancelMutation.isPending}
+                                  disabled={cancellingInstitution === row.institution}
                                   title={`Cancel running sync for ${row.institution}`}
                                   data-testid={`button-cancel-sync-${instSlug}`}
                                 >
@@ -6429,11 +6462,16 @@ function BulkCsvImport({ pw }: { pw: string }) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<{ updated: number; skipped: number; validationSkipped: number; skippedDetails: Array<{ index: number; id?: number; reason: string }> } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<{ batch: number; total: number } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
   const CSV_FIELDS = ["id","assetName","institution","summary","abstract","target","modality","indication","developmentStage","categories","mechanismOfAction","innovationClaim","unmetNeed","comparableDrugs","licensingReadiness","ipType","completenessScore"] as const;
 
   function handleFile(file: File) {
+    if (file.size > 50 * 1024 * 1024) {
+      toast({ title: "File too large", description: "Maximum file size is 50 MB.", variant: "destructive" });
+      return;
+    }
     setResult(null);
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -6487,28 +6525,36 @@ function BulkCsvImport({ pw }: { pw: string }) {
     if (!parsedRows) return;
     setImporting(true);
     setResult(null);
+    setImportProgress(null);
+    const CHUNK_SIZE = 500;
+    const rows = buildRows(parsedRows);
+    const chunks: typeof rows[] = [];
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) chunks.push(rows.slice(i, i + CHUNK_SIZE));
+    const acc = { updated: 0, skipped: 0, validationSkipped: 0, skippedDetails: [] as Array<{ index: number; id?: number; reason: string }> };
     try {
-      const rows = buildRows(parsedRows);
-      const res = await fetch(`/api/admin/assets/bulk-update`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-        body: JSON.stringify(rows),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Import failed");
-      setResult({
-        updated: data.updated,
-        skipped: data.skipped,
-        validationSkipped: data.validationSkipped ?? 0,
-        skippedDetails: data.skippedDetails ?? [],
-      });
+      for (let c = 0; c < chunks.length; c++) {
+        if (chunks.length > 1) setImportProgress({ batch: c + 1, total: chunks.length });
+        const res = await fetch(`/api/admin/assets/bulk-update`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+          body: JSON.stringify(chunks[c]),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Import failed");
+        acc.updated += data.updated ?? 0;
+        acc.skipped += data.skipped ?? 0;
+        acc.validationSkipped += data.validationSkipped ?? 0;
+        acc.skippedDetails.push(...(data.skippedDetails ?? []));
+      }
+      setResult(acc);
       setParsedRows(null);
       setFileName(null);
-      toast({ title: "Import complete", description: `${data.updated} assets updated.` });
+      toast({ title: "Import complete", description: `${acc.updated} assets updated.` });
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
+      setImportProgress(null);
     }
   }
 
@@ -6625,7 +6671,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
               data-testid="button-confirm-import"
             >
               {importing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <ArrowUpCircle className="h-3.5 w-3.5 mr-1.5" />}
-              {importing ? "Importing…" : `Import ${willUpdateCount.toLocaleString()} rows`}
+              {importing && importProgress ? `Batch ${importProgress.batch}/${importProgress.total}…` : importing ? "Importing…" : `Import ${willUpdateCount.toLocaleString()} rows`}
             </Button>
           </div>
 

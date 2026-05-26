@@ -482,6 +482,86 @@ export const researchProjects = pgTable("research_projects", {
     outcome: string;
   }>(),
   protocolChecklist: jsonb("protocol_checklist").$type<Record<string, boolean>>(),
+  // §3 Eligibility Criteria
+  eligibilityCriteria: jsonb("eligibility_criteria").$type<{
+    inclusion: string[];
+    exclusion: string[];
+    studyDesigns: string[];
+    populationCriteria: string;
+  }>(),
+  // §4 Search Strategy
+  searchStrategy: jsonb("search_strategy").$type<{
+    databases: string[];
+    searchStrings: Array<{ database: string; query: string; date: string; count: number }>;
+    dateFrom: string;
+    dateTo: string;
+    filters: string[];
+    notes: string;
+  }>(),
+  // §5 Screening
+  screeningPapers: jsonb("screening_papers").$type<Array<{
+    id: string;
+    title: string;
+    authors: string;
+    year: string;
+    abstract: string;
+    url: string;
+    source: string;
+    abstractDecision: "include" | "exclude" | "maybe" | null;
+    abstractRationale: string;
+    fullTextDecision: "include" | "exclude" | null;
+    fullTextRationale: string;
+    fullTextUrl: string;
+  }>>(),
+  // §8 Data Extraction
+  extractionFields: jsonb("extraction_fields").$type<Array<{
+    id: string;
+    name: string;
+    type: "text" | "number" | "select";
+    options?: string[];
+  }>>(),
+  extractedData: jsonb("extracted_data").$type<Array<{
+    paperId: string;
+    data: Record<string, string>;
+  }>>(),
+  // §9 Risk of Bias
+  riskOfBias: jsonb("risk_of_bias").$type<Array<{
+    paperId: string;
+    title: string;
+    domains: Array<{ name: string; rating: string; rationale: string }>;
+  }>>(),
+  robTool: text("rob_tool"),
+  // §10 Evidence Synthesis
+  evidenceSynthesisText: jsonb("evidence_synthesis_text").$type<{
+    narrative: string;
+    heterogeneity: string;
+    strengthOfEvidence: string;
+    certaintyGrade: string;
+  }>(),
+  // §11 Results & Conclusions
+  researchResults: jsonb("research_results").$type<{
+    mainFindings: string;
+    conclusions: string;
+    limitations: string;
+    implications: string;
+  }>(),
+  // §13 Dissemination Plan
+  disseminationPlan: jsonb("dissemination_plan").$type<{
+    targetJournals: string[];
+    conferenceTargets: string[];
+    preprintStrategy: string;
+    timelineToSubmit: string;
+    openAccessPlan: string;
+    dataSharePlan: string;
+  }>(),
+  // Protocol Registration (§1)
+  prosperoId: text("prospero_id"),
+  protocolVersion: text("protocol_version"),
+  protocolLockedAt: timestamp("protocol_locked_at"),
+  protocolDeviations: jsonb("protocol_deviations").$type<Array<{
+    id: string; date: string; nature: string;
+    impact: "minor" | "major"; rationale: string; createdAt: string;
+  }>>(),
 });
 
 export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({

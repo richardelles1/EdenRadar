@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Search, ExternalLink, Loader2, ChevronLeft, ChevronRight,
   Bookmark, BookmarkCheck, X, SlidersHorizontal, ChevronDown,
-  Sparkles, ChevronUp, RefreshCw, Save, Lightbulb, HelpCircle, Star, ArrowRight,
+  Sparkles, ChevronUp, Save, Lightbulb, HelpCircle, Star, ArrowRight,
+  Database,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,7 +18,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { PipelinePicker } from "@/components/PipelinePicker";
 import { useToast } from "@/hooks/use-toast";
+import { PORTAL_ACCENT, accentMix } from "@/components/sidebar-primitives";
 import type { ResearchProject, SavedReference } from "@shared/schema";
+
+const ACCENT = PORTAL_ACCENT.lab;
+
+const SIGNAL_TINT: Record<string, { bg: string; strip: string; badge: string; badgeTxt: string }> = {
+  paper:          { bg: "border-violet-500/15 bg-violet-500/4 dark:bg-violet-950/15",   strip: "bg-violet-500",  badge: "bg-violet-500/10 border-violet-500/20",  badgeTxt: "text-violet-600 dark:text-violet-400" },
+  preprint:       { bg: "border-amber-500/15 bg-amber-500/4 dark:bg-amber-950/15",      strip: "bg-amber-500",   badge: "bg-amber-500/10 border-amber-500/20",    badgeTxt: "text-amber-600 dark:text-amber-400" },
+  clinical_trial: { bg: "border-teal-500/15 bg-teal-500/4 dark:bg-teal-950/15",        strip: "bg-teal-500",    badge: "bg-teal-500/10 border-teal-500/20",      badgeTxt: "text-teal-600 dark:text-teal-400" },
+  patent:         { bg: "border-amber-500/15 bg-amber-500/4 dark:bg-amber-950/15",      strip: "bg-amber-500",   badge: "bg-amber-500/10 border-amber-500/20",    badgeTxt: "text-amber-600 dark:text-amber-400" },
+  tech_transfer:  { bg: "border-emerald-500/15 bg-emerald-500/4 dark:bg-emerald-950/15", strip: "bg-emerald-500", badge: "bg-emerald-500/10 border-emerald-500/20", badgeTxt: "text-emerald-600 dark:text-emerald-400" },
+  grant:          { bg: "border-emerald-500/15 bg-emerald-500/4 dark:bg-emerald-950/15", strip: "bg-emerald-500", badge: "bg-emerald-500/10 border-emerald-500/20", badgeTxt: "text-emerald-600 dark:text-emerald-400" },
+  dataset:        { bg: "border-sky-500/15 bg-sky-500/4 dark:bg-sky-950/15",            strip: "bg-sky-500",     badge: "bg-sky-500/10 border-sky-500/20",        badgeTxt: "text-sky-600 dark:text-sky-400" },
+  researcher:     { bg: "border-sky-500/15 bg-sky-500/4 dark:bg-sky-950/15",            strip: "bg-sky-500",     badge: "bg-sky-500/10 border-sky-500/20",        badgeTxt: "text-sky-600 dark:text-sky-400" },
+};
 
 type Signal = {
   id: string;
@@ -277,6 +292,7 @@ function shuffleArray<T>(arr: T[]): T[] {
 }
 
 function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
+  // eslint-disable-next-line
   const allCards: InsightCard[] = useMemo(() => {
     const tips: InsightCard[] = RESEARCH_TIPS.map((t) => ({ type: "tip", text: t }));
     const facts: InsightCard[] = PLATFORM_FACTS.map((t) => ({ type: "fact", text: t }));
@@ -309,27 +325,31 @@ function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
   const current = allCards[cardIndex];
 
   return (
-    <div className="rounded-xl border bg-card p-5 space-y-4" data-testid="search-insights-panel">
-      <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
-        <Sparkles className="w-3.5 h-3.5 text-violet-500" />
-        Querying {activeSources.length} source{activeSources.length !== 1 ? "s" : ""}
+    <div
+      className="rounded-xl border p-5 space-y-4"
+      style={{ background: accentMix(ACCENT, 4), borderColor: accentMix(ACCENT, 20) }}
+      data-testid="search-insights-panel"
+    >
+      <div className="flex items-center gap-2 text-xs font-semibold" style={{ color: ACCENT }}>
+        <Sparkles className="w-3.5 h-3.5" />
+        Querying {activeSources.length} source{activeSources.length !== 1 ? "s" : ""} in parallel
       </div>
 
       <div className="flex flex-wrap gap-1.5">
         {activeSources.map((key, i) => (
           <span
             key={key}
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-500 ${
+            className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium border transition-all duration-500"
+            style={
               i === highlightIdx
-                ? "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                : "border-border bg-muted/50 text-muted-foreground"
-            }`}
+                ? { borderColor: accentMix(ACCENT, 40), background: accentMix(ACCENT, 12), color: ACCENT }
+                : { borderColor: "hsl(var(--border))", background: "hsl(var(--muted) / 0.5)", color: "hsl(var(--muted-foreground))" }
+            }
             data-testid={`source-pill-${key}`}
           >
             <span
-              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
-                i === highlightIdx ? "bg-violet-500 scale-125" : "bg-muted-foreground/40"
-              }`}
+              className="w-1.5 h-1.5 rounded-full transition-all duration-500"
+              style={{ backgroundColor: i === highlightIdx ? ACCENT : "hsl(var(--muted-foreground) / 0.4)" }}
             />
             {SOURCE_LABELS[key] ?? key}
           </span>
@@ -564,11 +584,11 @@ export default function ResearchDataSources() {
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sources</h3>
+              <h3 className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">Sources</h3>
               <div className="flex gap-1.5">
-                <button className="text-[10px] text-violet-500 hover:underline" onClick={selectAllSources} data-testid="button-select-all-sources">Select all</button>
-                <span className="text-[10px] text-muted-foreground">|</span>
-                <button className="text-[10px] text-violet-500 hover:underline" onClick={resetSources} data-testid="button-reset-sources">Reset</button>
+                <button className="text-[10px] hover:underline" style={{ color: ACCENT }} onClick={selectAllSources} data-testid="button-select-all-sources">Select all</button>
+                <span className="text-[10px] text-muted-foreground">·</span>
+                <button className="text-[10px] hover:underline" style={{ color: ACCENT }} onClick={resetSources} data-testid="button-reset-sources">Reset</button>
               </div>
             </div>
             <div className="space-y-3">
@@ -635,52 +655,70 @@ export default function ResearchDataSources() {
       )}
 
       <div ref={resultsRef} className="flex-1 overflow-y-auto p-6 space-y-5">
-        <div className="flex items-center gap-3">
+        {/* Command header */}
+        <div
+          className="rounded-xl border border-border p-4 flex items-center gap-4"
+          style={{ background: accentMix(ACCENT, 4) }}
+        >
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: ACCENT }}>
+            <Database className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-foreground">Database Search</p>
+            <p className="text-xs text-muted-foreground">
+              {selectedSources.length} of {ALL_SOURCE_KEYS.length} sources active · {ALL_SOURCE_KEYS.length}+ databases
+            </p>
+          </div>
           {!showFilters && (
-            <Button variant="outline" size="icon" className="shrink-0" onClick={() => setShowFilters(true)} data-testid="button-open-filters">
-              <SlidersHorizontal className="w-4 h-4" />
+            <Button variant="outline" size="sm" className="shrink-0 gap-1.5 text-xs" onClick={() => setShowFilters(true)} data-testid="button-open-filters">
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              Filters
             </Button>
           )}
-          <div className="flex gap-2 flex-1">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                className="pl-9"
-                placeholder="Search across all data sources..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                data-testid="input-literature-search"
-              />
-            </div>
-            <Button
-              onClick={handleSearch}
-              disabled={isLoading || !query.trim()}
-              className="gap-2 bg-violet-600 hover:bg-violet-700 text-white"
-              data-testid="button-literature-search"
-            >
-              {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-              Search
-            </Button>
+        </div>
+
+        {/* Search bar */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              className="pl-9"
+              placeholder="Search across all data sources…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+              data-testid="input-literature-search"
+            />
           </div>
+          <Button
+            onClick={handleSearch}
+            disabled={isLoading || !query.trim()}
+            size="sm"
+            className="gap-2 text-white shrink-0"
+            style={{ background: ACCENT }}
+            data-testid="button-literature-search"
+          >
+            {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+            Search
+          </Button>
         </div>
 
         {activeFilters.length > 0 && (
-          <div className="flex flex-wrap gap-1.5" data-testid="active-filters">
+          <div className="flex flex-wrap gap-1.5 items-center" data-testid="active-filters">
             {activeFilters.map(([key, value]) => (
-              <Badge
+              <button
                 key={key}
-                variant="secondary"
-                className="gap-1 text-xs cursor-pointer hover:bg-destructive/10"
                 onClick={() => clearFilter(key)}
+                className="flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full border transition-colors"
+                style={{ background: accentMix(ACCENT, 10), color: ACCENT, borderColor: accentMix(ACCENT, 30) }}
                 data-testid={`filter-chip-${key}`}
               >
                 {getFilterLabel(key, value)}
                 <X className="w-3 h-3" />
-              </Badge>
+              </button>
             ))}
             <button
-              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              className="text-[11px] text-muted-foreground hover:text-foreground"
               onClick={() => { setFilters({}); setPage(1); }}
               data-testid="button-clear-all-filters"
             >
@@ -691,13 +729,15 @@ export default function ResearchDataSources() {
 
         {!activeQuery && (
           <div className="space-y-3">
-            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Suggested searches</p>
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Suggested searches</p>
             <div className="flex flex-wrap gap-2">
               {SUGGESTED.map((s) => (
                 <button
                   key={s}
                   onClick={() => { setQuery(s); setActiveQuery(s); setPage(1); }}
-                  className="px-3 py-1.5 rounded-full border border-border bg-card text-xs font-medium text-muted-foreground hover:text-foreground hover:border-violet-500/30 transition-colors"
+                  className="px-3 py-1.5 rounded-full border border-border bg-card text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = accentMix(ACCENT, 50); }}
+                  onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.borderColor = ""; }}
                   data-testid={`suggested-search-${s.replace(/\s+/g, "-")}`}
                 >
                   {s}
@@ -752,7 +792,8 @@ export default function ResearchDataSources() {
               <Button
                 size="sm"
                 variant="outline"
-                className="gap-1.5 text-xs border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
+                className="gap-1.5 text-xs"
+                style={{ borderColor: accentMix(ACCENT, 40), color: ACCENT }}
                 disabled={synthesizeMutation.isPending}
                 onClick={() => synthesizeMutation.mutate()}
                 data-testid="button-synthesize"
@@ -771,10 +812,10 @@ export default function ResearchDataSources() {
             </div>
 
             {synthesizeMutation.isPending && !synthesis && (
-              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-3" data-testid="synthesis-loading">
+              <div className="rounded-xl border p-5 space-y-3" style={{ borderColor: accentMix(ACCENT, 25), background: accentMix(ACCENT, 4) }} data-testid="synthesis-loading">
                 <div className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
-                  <span className="text-sm font-medium text-violet-600 dark:text-violet-400">
+                  <Loader2 className="w-4 h-4 animate-spin" style={{ color: ACCENT }} />
+                  <span className="text-sm font-medium" style={{ color: ACCENT }}>
                     Analyzing {Math.min(allSignals.length, 10)} results...
                   </span>
                 </div>
@@ -787,14 +828,14 @@ export default function ResearchDataSources() {
             )}
 
             {synthesis && (
-              <div className="rounded-xl border border-violet-500/20 bg-card overflow-hidden" data-testid="synthesis-panel">
+              <div className="rounded-xl border overflow-hidden" style={{ borderColor: accentMix(ACCENT, 25), background: accentMix(ACCENT, 3) }} data-testid="synthesis-panel">
                 <button
                   className="w-full flex items-center justify-between p-4 hover:bg-accent/30 transition-colors"
                   onClick={() => setSynthesisCollapsed(!synthesisCollapsed)}
                   data-testid="button-synthesis-toggle"
                 >
                   <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-violet-500" />
+                    <Sparkles className="w-4 h-4" style={{ color: ACCENT }} />
                     <span className="text-sm font-semibold text-foreground">AI Synthesis</span>
                     <Badge variant="secondary" className="text-[10px]">
                       {Math.min(allSignals.length, 10)} of {allSignals.length} results analyzed
@@ -1046,18 +1087,15 @@ function FilterSection({
     <AccordionItem value={id} className="border-b-0">
       <AccordionTrigger className="py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide hover:no-underline" data-testid={`filter-trigger-${id}`}>
         {title}
-        {value && <span className="ml-1 w-1.5 h-1.5 rounded-full bg-violet-500 inline-block" />}
+        {value && <span className="ml-1 w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: ACCENT }} />}
       </AccordionTrigger>
       <AccordionContent className="pb-2">
         <div className="space-y-0.5">
           {options.map((opt) => (
             <button
               key={opt.value}
-              className={`w-full text-left px-2 py-1.5 rounded text-xs transition-colors ${
-                value === opt.value
-                  ? "bg-violet-500/10 text-violet-600 dark:text-violet-400 font-medium"
-                  : "text-foreground hover:bg-accent/60"
-              }`}
+              className="w-full text-left px-2 py-1.5 rounded text-xs transition-colors hover:bg-accent/60"
+              style={value === opt.value ? { background: accentMix(ACCENT, 10), color: ACCENT, fontWeight: 500 } : {}}
               onClick={() => onChange(value === opt.value ? undefined : opt.value)}
               data-testid={`filter-option-${id}-${opt.value}`}
             >
@@ -1125,22 +1163,33 @@ function SignalCard({
     },
   });
 
+  const tint = SIGNAL_TINT[signal.source_type] ?? { bg: "border-border bg-card", strip: "bg-gray-400", badge: "bg-gray-500/10 border-gray-500/20", badgeTxt: "text-gray-600 dark:text-gray-400" };
+
   return (
     <div
-      className={`border rounded-lg p-4 bg-card hover:border-violet-500/20 transition-colors flex flex-col gap-2 ${isSynthesized ? "border-violet-500/30 ring-1 ring-violet-500/10" : "border-border"}`}
+      className={`relative border rounded-lg p-4 flex flex-col gap-2 overflow-hidden transition-all ${tint.bg} ${isSynthesized ? "ring-1" : ""}`}
+      style={isSynthesized ? { ["--tw-ring-color" as string]: accentMix(ACCENT, 30) } : {}}
+      onMouseEnter={(e) => { (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)"; }}
+      onMouseLeave={(e) => { (e.currentTarget as HTMLDivElement).style.transform = ""; }}
       data-testid={`signal-result-${index}`}
     >
+      <div className={`absolute left-0 inset-y-0 w-[3px] rounded-l-lg ${tint.strip}`} />
+
       <div className="flex items-start gap-3 justify-between">
         <h3 className="text-sm font-semibold text-foreground leading-snug flex-1 line-clamp-2">{signal.title}</h3>
         <div className="flex items-center gap-2 shrink-0">
           {isSynthesized && (
-            <Badge variant="secondary" className="text-[9px] bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30" data-testid={`badge-synthesized-${index}`}>
+            <span
+              className="text-[9px] font-semibold px-1.5 py-0.5 rounded border"
+              style={{ background: accentMix(ACCENT, 10), color: ACCENT, borderColor: accentMix(ACCENT, 30) }}
+              data-testid={`badge-synthesized-${index}`}
+            >
               ✦ Synthesized
-            </Badge>
+            </span>
           )}
-          <Badge variant="secondary" className="text-[10px]">
+          <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded border uppercase tracking-wide ${tint.badge} ${tint.badgeTxt}`}>
             {SOURCE_TYPE_LABELS[signal.source_type] ?? signal.source_type}
-          </Badge>
+          </span>
           <PipelinePicker
             payload={{
               asset_name: signal.title,
@@ -1157,7 +1206,8 @@ function SignalCard({
           <Popover open={bookmarkOpen} onOpenChange={setBookmarkOpen}>
             <PopoverTrigger asChild>
               <button
-                className={`p-1 rounded transition-colors ${isSaved ? "text-violet-500" : "text-muted-foreground hover:text-foreground"}`}
+                className="p-1 rounded transition-colors"
+                style={{ color: isSaved ? ACCENT : "hsl(var(--muted-foreground))" }}
                 data-testid={`button-bookmark-${index}`}
                 title="Save to research project"
               >
@@ -1186,7 +1236,8 @@ function SignalCard({
               />
               <Button
                 size="sm"
-                className="w-full bg-violet-600 hover:bg-violet-700 text-white text-xs"
+                className="w-full text-white text-xs"
+                style={{ background: ACCENT }}
                 disabled={saveMutation.isPending || isSaved}
                 onClick={() => saveMutation.mutate()}
                 data-testid={`button-save-bookmark-${index}`}

@@ -4,16 +4,69 @@ export type ReadinessResult = { score: number; textColor: string; barColor: stri
 
 export function computeReadinessScore(p: ResearchProject): ReadinessResult {
   let score = 0;
-  if (p.description?.trim()) score += 10;
-  if (p.primaryResearchQuestion?.trim()) score += 8;
-  if (p.hypothesis?.trim()) score += 10;
-  if ((p.keyPapers ?? []).length > 0) score += 15;
-  if (p.methodology?.trim()) score += 8;
-  if (p.patentStatus) score += 10;
-  if (p.fundingStatus) score += 8;
-  if (p.developmentStage && p.developmentStage !== "unknown") score += 7;
-  if (p.discoveryTitle?.trim()) score += 12;
-  if (p.discoverySummary?.trim()) score += 12;
+
+  // §1 Overview & Protocol (10pts)
+  if (p.description?.trim()) score += 5;
+  if (p.researchDomain) score += 3;
+  if ((p as any).prosperoId?.trim()) score += 2;
+
+  // §2 Research Question (10pts)
+  if (p.primaryResearchQuestion?.trim()) score += 5;
+  if (p.hypothesis?.trim()) score += 5;
+
+  // §3 Eligibility Criteria (5pts)
+  const elig = (p as any).eligibilityCriteria;
+  if (elig?.inclusion?.length > 0) score += 3;
+  if (elig?.exclusion?.length > 0) score += 2;
+
+  // §4 Search Strategy (5pts)
+  const search = (p as any).searchStrategy;
+  if (search?.databases?.length > 0) score += 3;
+  if (search?.searchStrings?.length > 0) score += 2;
+
+  // §5 Screening (5pts)
+  const papers = (p as any).screeningPapers ?? [];
+  const included = papers.filter((x: any) => x.fullTextDecision === "include");
+  if (papers.length > 0) score += 2;
+  if (included.length > 0) score += 3;
+
+  // §6 Literature (5pts)
+  if ((p.keyPapers ?? []).length > 0) score += 5;
+
+  // §7 Methods (7pts)
+  if (p.methodology?.trim()) score += 4;
+  if (p.experimentalDesign?.trim()) score += 3;
+
+  // §8 Data Extraction (5pts)
+  const extracted = (p as any).extractedData ?? [];
+  if (extracted.length > 0) score += 5;
+
+  // §9 Risk of Bias (5pts)
+  const rob = (p as any).riskOfBias ?? [];
+  if (rob.length > 0) score += 5;
+
+  // §10 Evidence Synthesis (5pts)
+  const synthesis = (p as any).evidenceSynthesisText;
+  if (synthesis?.narrative?.trim()) score += 3;
+  if (synthesis?.certaintyGrade) score += 2;
+
+  // §11 Results (8pts)
+  const results = (p as any).researchResults;
+  if (results?.mainFindings?.trim()) score += 5;
+  if (results?.conclusions?.trim()) score += 3;
+
+  // §12 Discovery Card (15pts)
+  if (p.discoveryTitle?.trim()) score += 7;
+  if (p.discoverySummary?.trim()) score += 5;
+  if (p.patentStatus) score += 3;
+
+  // §13 Dissemination (5pts)
+  const diss = (p as any).disseminationPlan;
+  if (diss?.targetJournals?.length > 0) score += 3;
+  if (diss?.timelineToSubmit) score += 2;
+
+  // Cap at 100
+  score = Math.min(score, 100);
 
   const textColor =
     score >= 70
