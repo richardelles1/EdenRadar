@@ -337,12 +337,14 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
     setFaceIdx((i) => Math.min(i, Math.max(0, faces.length - 1)));
   }, [faces.length]);
 
-  // When type filter changes, auto-navigate to first matching signal face
+  // When type filter or signal count changes, auto-navigate to first matching signal face.
+  // Using signals.length (not the array ref) avoids firing on reference-equality churn while
+  // still catching attach/detach events that matter for navigation.
   useEffect(() => {
     if (!highlightType || highlightType === "all" || highlightType === "tto") { setFaceIdx(0); return; }
     const idx = signals.findIndex((s) => getSourceCategory(s.sourceName) === highlightType);
     setFaceIdx(idx >= 0 ? idx + 1 : 0);
-  }, [highlightType]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [highlightType, signals.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isTto = isTtoSource(asset.sourceName);
   const hasMultipleFaces = faces.length > 1;
@@ -430,7 +432,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
           </button>
 
           {/* Detach button — visible only when viewing a signal face inside a TTO deck */}
-          {faceIdx > 0 && onDetachSignal && (
+          {faceIdx > 0 && faceIdx <= signals.length && onDetachSignal && (
             <button
               onClick={(e) => { e.stopPropagation(); onDetachSignal(signals[faceIdx - 1].id); }}
               onPointerDown={(e) => e.stopPropagation()}
@@ -1472,7 +1474,7 @@ export default function Pipeline() {
 
                 {/* New pipeline — pinned below header so it's always visible */}
                 {!isViewer && (
-                  <div className="px-2 pt-2 pb-1 shrink-0">
+                  <div className="px-2 pt-2 pb-1 border-b border-border shrink-0">
                     {creatingPipeline ? (
                       <div className="flex gap-1.5">
                         <input
