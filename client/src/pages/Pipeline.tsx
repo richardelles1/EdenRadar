@@ -50,7 +50,7 @@ const STATUS_CONFIG: Record<string, { label: string; pill: string }> = {
 };
 
 const BOARD_COLUMNS: { key: string | null; label: string; colorClass: string; dotClass: string }[] = [
-  { key: null,           label: "New",           colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
+  { key: null,           label: "No Stage",      colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
   { key: "watching",    label: "Watching",       colorClass: "border-neutral-500/30 bg-neutral-500/5",  dotClass: "bg-neutral-400" },
   { key: "evaluating",  label: "Evaluating",     colorClass: "border-blue-500/30 bg-blue-500/5",        dotClass: "bg-blue-400" },
   { key: "in_discussion", label: "In Discussion",colorClass: "border-emerald-500/30 bg-emerald-500/5",  dotClass: "bg-emerald-400" },
@@ -179,7 +179,7 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
 
 // ── CardFaceContent — pure visual component for a single card face ────────────
 
-function CardFaceContent({ asset, hovered = false, compact = false, inDeck = false }: { asset: PipelineAsset; hovered?: boolean; compact?: boolean; inDeck?: boolean }) {
+function CardFaceContent({ asset, hovered = false, compact = false, inDeck = false, bottomPadClass }: { asset: PipelineAsset; hovered?: boolean; compact?: boolean; inDeck?: boolean; bottomPadClass?: string }) {
   const cat = getSourceCategory(asset.sourceName);
   const tint = SCOUT_CARD_TINTS[cat];
   const isTto = isTtoSource(asset.sourceName);
@@ -218,7 +218,7 @@ function CardFaceContent({ asset, hovered = false, compact = false, inDeck = fal
       </div>
 
       {/* Content */}
-      <div className={`absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] ${compact ? "pb-3" : "pb-10"}`}>
+      <div className={`absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] ${bottomPadClass ?? (compact ? "pb-3" : "pb-10")}`}>
         <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
           {displayTitle}
         </h3>
@@ -316,12 +316,14 @@ function CardFaceContent({ asset, hovered = false, compact = false, inDeck = fal
 
 // ── PipelineCard — full multi-face deck with animated face transitions ─────────
 
-function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: {
+function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, pipelineName, highlightType }: {
   asset: PipelineAsset;
   signals?: PipelineAsset[];
   onDelete: (id: number) => void;
   onClick?: () => void;
+  onDetachSignal?: (signalId: number) => void;
   pipelineName?: string;
+  highlightType?: GridFilterType;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
@@ -334,6 +336,15 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: 
   useEffect(() => {
     setFaceIdx((i) => Math.min(i, Math.max(0, faces.length - 1)));
   }, [faces.length]);
+
+  // When type filter or signal count changes, auto-navigate to first matching signal face.
+  // Using signals.length (not the array ref) avoids firing on reference-equality churn while
+  // still catching attach/detach events that matter for navigation.
+  useEffect(() => {
+    if (!highlightType || highlightType === "all" || highlightType === "tto") { setFaceIdx(0); return; }
+    const idx = signals.findIndex((s) => getSourceCategory(s.sourceName) === highlightType);
+    setFaceIdx(idx >= 0 ? idx + 1 : 0);
+  }, [highlightType, signals.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const isTto = isTtoSource(asset.sourceName);
   const hasMultipleFaces = faces.length > 1;
@@ -391,24 +402,27 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: 
           data-testid={`pipeline-card-${asset.id}`}
         >
           {/* Face layers — each face is the full card visual */}
-          {faces.map((face, idx) => (
-            <div
-              key={face.id}
-              className="absolute inset-0"
-              style={{
-                opacity: idx === faceIdx ? 1 : 0,
-                transform: idx === faceIdx
-                  ? "translateX(0) scale(1)"
-                  : idx < faceIdx
-                  ? "translateX(-24px) scale(0.97)"
-                  : "translateX(24px) scale(0.97)",
-                transition: "opacity 0.18s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1)",
-                pointerEvents: idx === faceIdx ? "auto" : "none",
-              }}
-            >
-              <CardFaceContent asset={face} hovered={hovered} inDeck={idx > 0} />
-            </div>
-          ))}
+          {(() => {
+            const ttoBottomPad = hasMultipleFaces && !!pipelineName ? "pb-[58px]" : undefined;
+            return faces.map((face, idx) => (
+              <div
+                key={face.id}
+                className="absolute inset-0"
+                style={{
+                  opacity: idx === faceIdx ? 1 : 0,
+                  transform: idx === faceIdx
+                    ? "translateX(0) scale(1)"
+                    : idx < faceIdx
+                    ? "translateX(-24px) scale(0.97)"
+                    : "translateX(24px) scale(0.97)",
+                  transition: "opacity 0.18s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1)",
+                  pointerEvents: idx === faceIdx ? "auto" : "none",
+                }}
+              >
+                <CardFaceContent asset={face} hovered={hovered} inDeck={idx > 0} bottomPadClass={idx === 0 ? ttoBottomPad : undefined} />
+              </div>
+            ));
+          })()}
 
           {/* Delete button */}
           <button
@@ -420,10 +434,22 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, pipelineName }: 
             <Trash2 className="w-3.5 h-3.5" />
           </button>
 
+          {/* Detach button — visible only when viewing a signal face inside a TTO deck */}
+          {faceIdx > 0 && faceIdx <= signals.length && onDetachSignal && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onDetachSignal(signals[faceIdx - 1].id); }}
+              onPointerDown={(e) => e.stopPropagation()}
+              title="Remove from stack — sends back to Uncategorised"
+              className="absolute top-1.5 left-1.5 z-[20] flex items-center gap-1 px-2 py-1 rounded-full bg-black/55 backdrop-blur-sm text-[9px] text-white hover:bg-red-500/80 transition-colors"
+            >
+              <X className="w-2.5 h-2.5" /> Detach
+            </button>
+          )}
+
           {/* Pipeline name badge — shown when viewing All Assets */}
           {pipelineName && (
-            <div className={`absolute ${hasMultipleFaces ? "bottom-10" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-3rem)]`}>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-full">{pipelineName}</span>
+            <div className={`absolute ${hasMultipleFaces ? "bottom-[38px]" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-1.5rem)]`}>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-[6rem]">{pipelineName}</span>
             </div>
           )}
 
@@ -781,7 +807,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
           <TabsContent value="overview" className="flex-1 flex flex-col min-h-0 m-0">
 
             {/* Scrollable content */}
-            <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-5">
+            <div className="flex-1 overflow-y-auto pipeline-scroll px-5 py-5 flex flex-col gap-5">
 
               {/* Metadata grid */}
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm">
@@ -823,11 +849,13 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
                 )}
               </div>
 
-              {/* Summary */}
+              {/* Summary — capped so supporting signals stay visible */}
               {asset.summary && (
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Summary</p>
-                  <p className="text-sm text-foreground/90 leading-relaxed">{asset.summary}</p>
+                  <div className="max-h-36 overflow-y-auto pipeline-scroll pr-1">
+                    <p className="text-sm text-foreground/90 leading-relaxed">{asset.summary}</p>
+                  </div>
                 </div>
               )}
 
@@ -922,7 +950,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
                   onClick={() => { onDelete(asset.id); onClose(); }}
                   className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Remove from Pipeline
+                  <Trash2 className="w-3.5 h-3.5" /> Remove from saved
                 </button>
               )}
             </div>
@@ -962,7 +990,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
             </div>
 
             {/* Notes feed — scrollable */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3">
+            <div className="flex-1 overflow-y-auto pipeline-scroll px-5 py-4 flex flex-col gap-3">
               {notesLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
@@ -1058,6 +1086,7 @@ export default function Pipeline() {
   const [renamePipelineName, setRenamePipelineName] = useState("");
   const [briefModal, setBriefModal] = useState<BriefData | null>(null);
   const [briefLoading, setBriefLoading] = useState<number | null>(null);
+  const [briefCache, setBriefCache] = useState<Map<number, BriefData>>(new Map());
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
@@ -1070,15 +1099,21 @@ export default function Pipeline() {
       const res = await apiRequest("POST", `/api/pipeline-lists/${listId}/brief`, {});
       return res.json() as Promise<BriefData>;
     },
-    onSuccess: (result) => { setBriefModal(result); setBriefLoading(null); },
+    onSuccess: (result, listId) => {
+      setBriefModal(result);
+      setBriefLoading(null);
+      setBriefCache((m) => { const n = new Map(m); n.set(listId, result); return n; });
+    },
     onError: (err: any) => {
       toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
       setBriefLoading(null);
     },
   });
 
-  const handleBrief = () => {
+  const handleBrief = (forceRegen = false) => {
     if (typeof filterPipeline !== "number") return;
+    const cached = briefCache.get(filterPipeline);
+    if (cached && !forceRegen) { setBriefModal(cached); return; }
     setBriefLoading(filterPipeline);
     briefMutation.mutate(filterPipeline);
   };
@@ -1160,7 +1195,7 @@ export default function Pipeline() {
 
   const STAGE_SORT_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
   function applySort<T extends PipelineAsset>(items: T[]): T[] {
-    return [...items].sort((a, b) => {
+    const sortFn = (a: T, b: T): number => {
       if (sortOrder === "az") return a.assetName.localeCompare(b.assetName);
       if (sortOrder === "stage") {
         const ai = STAGE_SORT_ORDER.findIndex((s) => a.developmentStage?.toLowerCase().includes(s));
@@ -1168,7 +1203,11 @@ export default function Pipeline() {
         return (bi === -1 ? -1 : bi) - (ai === -1 ? -1 : ai);
       }
       return b.id - a.id;
-    });
+    };
+    // TTO assets always render first regardless of sort criterion
+    const ttos = items.filter((a) => isTtoSource(a.sourceName));
+    const sigs = items.filter((a) => !isTtoSource(a.sourceName));
+    return [...ttos.sort(sortFn), ...sigs.sort(sortFn)];
   }
   const sortedCards = applySort(typeFilteredCards);
   const sortedDecks = applySort(filteredDecks);
@@ -1404,6 +1443,7 @@ export default function Pipeline() {
                   className="h-8 text-xs gap-1.5 border-border"
                   onClick={handleBrief}
                   disabled={typeof filterPipeline !== "number" || briefLoading !== null}
+                  title={typeof filterPipeline !== "number" ? "Select a pipeline to generate a brief" : undefined}
                   data-testid="button-pipeline-brief"
                 >
                   {briefLoading !== null ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
@@ -1442,6 +1482,44 @@ export default function Pipeline() {
                     <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Pipelines</span>
                   </div>
                 </div>
+
+                {/* New pipeline — pinned below header so it's always visible */}
+                {!isViewer && (
+                  <div className="px-2 pt-2 pb-1 border-b border-border shrink-0">
+                    {creatingPipeline ? (
+                      <div className="flex gap-1.5">
+                        <input
+                          autoFocus
+                          value={newPipelineName}
+                          onChange={(e) => setNewPipelineName(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim());
+                            if (e.key === "Escape") { setCreatingPipeline(false); setNewPipelineName(""); }
+                          }}
+                          placeholder="Pipeline name…"
+                          className="flex-1 min-w-0 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground"
+                        />
+                        <button
+                          onClick={() => { if (newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim()); }}
+                          disabled={!newPipelineName.trim() || createPipelineMutation.isPending}
+                          className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0"
+                        >
+                          {createPipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setCreatingPipeline(true)}
+                        className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+                        data-testid="button-sidebar-new-pipeline"
+                      >
+                        <Plus className="w-3.5 h-3.5 shrink-0" />
+                        New Pipeline
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <ScrollArea className="flex-1">
                   <div className="px-2 py-2 flex flex-col gap-0.5">
                     <button
@@ -1461,7 +1539,7 @@ export default function Pipeline() {
                     >
                       <span className="truncate">Uncategorised</span>
                       <span className={`text-[10px] tabular-nums font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center ${filterPipeline === null ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"}`}>
-                        {savedAssets.filter((a) => a.pipelineListId == null).length}
+                        {deckAssets.filter((d) => d.pipelineListId == null).length + unlinkedSignals.filter((s) => s.pipelineListId == null).length}
                       </span>
                     </button>
                     {pipelines.length > 0 && <div className="my-1.5 border-t border-border" />}
@@ -1545,40 +1623,6 @@ export default function Pipeline() {
                   </div>
                 )}
 
-                {/* Create new pipeline */}
-                <div className="px-2 py-2 border-t border-border shrink-0">
-                  {creatingPipeline ? (
-                    <div className="flex gap-1.5">
-                      <input
-                        autoFocus
-                        value={newPipelineName}
-                        onChange={(e) => setNewPipelineName(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" && newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim());
-                          if (e.key === "Escape") { setCreatingPipeline(false); setNewPipelineName(""); }
-                        }}
-                        placeholder="Pipeline name…"
-                        className="flex-1 min-w-0 text-xs border border-border rounded-lg px-2.5 py-1.5 bg-transparent focus:outline-none focus:border-primary/40 text-foreground placeholder:text-muted-foreground"
-                      />
-                      <button
-                        onClick={() => { if (newPipelineName.trim()) createPipelineMutation.mutate(newPipelineName.trim()); }}
-                        disabled={!newPipelineName.trim() || createPipelineMutation.isPending}
-                        className="w-7 h-7 rounded-lg flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0"
-                      >
-                        {createPipelineMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                      </button>
-                    </div>
-                  ) : (!isViewer && (
-                    <button
-                      onClick={() => setCreatingPipeline(true)}
-                      className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
-                      data-testid="button-sidebar-new-pipeline"
-                    >
-                      <Plus className="w-3.5 h-3.5 shrink-0" />
-                      New pipeline
-                    </button>
-                  ))}
-                </div>
               </aside>
 
               {/* ── Main content area ─────────────────────────────────────── */}
@@ -1606,7 +1650,15 @@ export default function Pipeline() {
                         <div className="flex items-center justify-between gap-3 flex-wrap mb-5">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             {(["all", "tto", "trial", "patent", "research"] as const).map((type) => {
-                              const count = type === "all" ? gridCards.length : gridCards.filter((c) => getSourceCategory(c.sourceName) === type).length;
+                              const count = type === "all" ? gridCards.length : gridCards.filter((c) => {
+                              const cat = getSourceCategory(c.sourceName);
+                              if (cat === type) return true;
+                              if (type !== "tto" && cat === "tto") {
+                                const deck = deckAssets.find((d) => d.id === c.id);
+                                return deck?.signals.some((s) => getSourceCategory(s.sourceName) === type) ?? false;
+                              }
+                              return false;
+                            }).length;
                               if (type !== "all" && count === 0) return null;
                               return (
                                 <button
@@ -1653,8 +1705,10 @@ export default function Pipeline() {
                                   asset={card}
                                   signals={deck?.signals ?? []}
                                   onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
+                                  onDetachSignal={!isViewer ? handleDetachSignal : undefined}
                                   onClick={() => setActiveAssetId(card.id)}
                                   pipelineName={cardPipelineName}
+                                  highlightType={filterType}
                                 />
                               );
                             })}
@@ -1754,6 +1808,7 @@ export default function Pipeline() {
         data={briefModal}
         open={!!briefModal}
         onClose={() => setBriefModal(null)}
+        onRegenerate={() => { setBriefModal(null); handleBrief(true); }}
       />
     </div>
   );

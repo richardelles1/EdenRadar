@@ -437,21 +437,29 @@ export function scoreAvailability(asset: Partial<ScoredAsset>): DimensionResult 
 }
 
 // ─── TTO-specific dimension: Search Relevance ─────────────────────────────────
-// Derived from the hybrid RRF score, normalized to [0,100] by the caller
-// (routes.ts). When no query is present (filter-only browse) the caller passes
-// undefined and this returns hasData:false — its 45% weight is auto-
-// redistributed to the remaining dimensions by computeTotal, so filter-only
-// results are still ranked by fit + quality + availability.
-export function scoreSearchRelevance(normalizedScore?: number): DimensionResult {
+// Score is an absolute field-match grade computed by fieldMatchScore() in
+// routes.ts: 95 = term in asset name, 85 = indication/target, 75 = moa/modality,
+// 65 = description, 55 = secondary fields, 40 = FTS/vector only.
+// When no query is present (filter-only browse) the caller passes undefined and
+// this returns hasData:false — its 80% weight is auto-redistributed to the
+// remaining dimensions by computeTotal.
+// basisOverride carries the field-specific label computed at the call site so
+// the tooltip accurately names which field each query term matched.
+export function scoreSearchRelevance(normalizedScore?: number, basisOverride?: string): DimensionResult {
   if (normalizedScore == null) {
     return { score: 50, hasData: false, basis: "No query — relevance not applicable" };
   }
   const s = Math.max(0, Math.min(100, Math.round(normalizedScore)));
-  let basis: string;
-  if (s >= 80) basis = `Strong query match (relevance: ${s}/100)`;
-  else if (s >= 55) basis = `Good query match (relevance: ${s}/100)`;
-  else if (s >= 30) basis = `Moderate query match (relevance: ${s}/100)`;
-  else basis = `Weak query match (relevance: ${s}/100)`;
+  // Fall back to threshold-band labels only when no per-asset basis was provided
+  // (e.g. callers outside the scout-search route).
+  const basis = basisOverride ?? (
+    s >= 90 ? "Query term found in asset name" :
+    s >= 80 ? "Query term found in indication or target" :
+    s >= 70 ? "Query term found in mechanism or modality" :
+    s >= 60 ? "Query term found in description" :
+    s >= 50 ? "Query term found in secondary fields" :
+              `Semantic or full-text match (score: ${s}/100)`
+  );
   return { score: s, hasData: true, basis };
 }
 

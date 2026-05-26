@@ -9,7 +9,7 @@ import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
+import { storage, type EnrichFilter, type RetrievedAsset, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db, pool } from "./db";
@@ -342,6 +342,72 @@ function saveRefetchState(key: string, value: unknown): void {
     fs.mkdirSync(path.dirname(REFETCH_STATE_FILE), { recursive: true });
     fs.writeFileSync(REFETCH_STATE_FILE, JSON.stringify(_refetchState, null, 2));
   } catch {}
+}
+
+// ─── Scout search: field-level query match scoring ────────────────────────────
+// Hoisted to module scope — not re-instantiated on every request.
+
+export type FieldMatchResult = { score: number; basis: string };
+
+/** Unwrap a raw DB field to a plain comparable string.
+ *  Handles JSONB-serialised arrays (categories: '["gene_therapy","oncology"]')
+ *  and underscore-joined values so substring matching works correctly. */
+function toText(raw: string | null | undefined): string {
+  if (!raw) return "";
+  if (raw.trimStart().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return (parsed as string[]).join(" ").replace(/_/g, " ");
+    } catch {}
+  }
+  return raw.replace(/_/g, " ");
+}
+
+/** Absolute field-level query-match score for a single TTO asset.
+ *  Score reflects WHERE each term appears, not the asset's rank among other results —
+ *  every asset with the term in its name scores 95 regardless of result-set size.
+ *
+ *  Returns null when every query token is < 3 characters (e.g. "IL", "NK AR").
+ *  The caller must leave normalizedRrfById unpopulated in that case so
+ *  scoreSearchRelevance receives undefined → hasData:false, which causes
+ *  computeTotal to redistribute the 80% search_relevance weight to
+ *  record_quality and availability rather than pinning every asset at 50. */
+export function computeFieldMatch(q: string, r: RetrievedAsset): FieldMatchResult | null {
+  const terms = q.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+  if (terms.length === 0) return null;
+
+  const tiers: { text: string; score: number; label: string }[] = [
+    { text: toText(r.assetName).toLowerCase(),                                    score: 95, label: "asset name" },
+    { text: `${toText(r.indication)} ${toText(r.target)}`.toLowerCase(),          score: 85, label: "indication or target" },
+    { text: `${toText(r.modality)} ${toText(r.mechanismOfAction)}`.toLowerCase(), score: 75, label: "mechanism or modality" },
+    { text: `${toText(r.innovationClaim)} ${toText(r.summary)}`.toLowerCase(),    score: 65, label: "description" },
+    { text: `${toText(r.biology)} ${toText(r.categories)}`.toLowerCase(),         score: 55, label: "secondary fields" },
+  ];
+
+  type TermResult = { score: number; label: string | null };
+  const termResults: TermResult[] = terms.map((term) => {
+    for (const tier of tiers) {
+      if (tier.text.includes(term)) return { score: tier.score, label: tier.label };
+    }
+    return { score: 40, label: null }; // FTS/vector match on indexed content not in structured fields
+  });
+
+  const avg = termResults.reduce((sum, t) => sum + t.score, 0) / termResults.length;
+  const score = Math.min(100, Math.round(avg));
+
+  const structuredHits = termResults.filter((t) => t.label !== null);
+  const hasUnstructured = termResults.some((t) => t.label === null);
+  let basis: string;
+  if (structuredHits.length === 0) {
+    basis = `Semantic or full-text match (score: ${score}/100)`;
+  } else {
+    const bestLabel = structuredHits.reduce((best, t) => t.score > best.score ? t : best).label!;
+    basis = hasUnstructured
+      ? `Query terms found in ${bestLabel} (partial structured match)`
+      : `Query terms found in ${bestLabel}`;
+  }
+
+  return { score, basis };
 }
 
 export async function registerRoutes(
@@ -878,34 +944,16 @@ export async function registerRoutes(
         }
       }
 
-      // Normalize query relevance scores to [20, 100] for the search_relevance
-      // dimension. Last-place gets 20 so a single-retrieval-path match isn't
-      // penalised; best match gets 100. Two paths:
-      //  - Hybrid (both keyword + vector): normalize RRF scores
-      //  - Keyword-only (hybrid disabled, common in prod): normalize textRelevance
-      // When no query was issued (filter-only browse), the map stays empty and
-      // scoreSearchRelevance returns hasData:false — computeTotal auto-redistributes
-      // the 45% weight to the remaining dimensions.
-      const normalizedRrfById = new Map<number, number>();
-      if (runHybrid && hybridScoreById.size > 0) {
-        const vals = [...hybridScoreById.values()].map((h) => h.rrfScore);
-        const maxR = Math.max(...vals);
-        const minR = Math.min(...vals);
-        const rrfRange = maxR - minR || 1;
-        for (const [id, h] of hybridScoreById) {
-          // [30, 100]: every result that appeared in search deserves at least 30
-          normalizedRrfById.set(id, 30 + Math.round(((h.rrfScore - minR) / rrfRange) * 70));
-        }
-      } else if (!runHybrid && trimmedQuery && results.length > 0) {
-        // Keyword-only path: normalize textRelevance (ts_rank_cd) to [30, 100].
-        // Any result surfaced by the search engine is relevant; 0 implies "no match"
-        // which is wrong since FTS already pre-filtered for relevance.
-        const textScores = results.map((r) => r.textRelevance ?? 0);
-        const maxT = Math.max(...textScores);
-        const minT = Math.min(...textScores);
-        const textRange = maxT - minT || 1;
+      // Score each retrieved asset against the query using computeFieldMatch (module
+      // scope). A null return means every query token was < 3 chars (abbreviation
+      // search); those assets are omitted from the map so scoreSearchRelevance
+      // receives undefined → hasData:false → weight auto-redistributes to
+      // record_quality + availability rather than assigning a flat, meaningless 50.
+      const normalizedRrfById = new Map<number, FieldMatchResult>();
+      if (trimmedQuery) {
         for (const r of results) {
-          normalizedRrfById.set(r.id, 30 + Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 70));
+          const fm = computeFieldMatch(trimmedQuery, r);
+          if (fm !== null) normalizedRrfById.set(r.id, fm);
         }
       }
 
@@ -1080,7 +1128,8 @@ export async function registerRoutes(
           latest_signal_date: r.lastSeenAt ?? "",
         };
 
-        const searchRelevanceResult = scoreSearchRelevance(normalizedRrfById.get(r.id));
+        const fmEntry = normalizedRrfById.get(r.id);
+        const searchRelevanceResult = scoreSearchRelevance(fmEntry?.score, fmEntry?.basis);
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
@@ -1191,11 +1240,10 @@ export async function registerRoutes(
       const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
       const completenessOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.completeness ?? 0;
       const recencyOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.recencyMs ?? 0;
-      // TTO score sort (4-dimension model):
+      // TTO score sort:
       //   1. Exact-name matches pinned to top.
-      //   2. Score is the primary order. The 4-dimension model weights:
-      //      search_relevance 45%, fit 35%, record_quality 12%, availability 8%
-      //      — so score already IS the combined relevance+fit signal.
+      //   2. Score is the primary order. Weights: search_relevance 80% (absolute
+      //      field-match grade) + fit_bonus (additive) + record_quality 12% + availability 8%.
       //   3. RRF / text_relevance as secondary tiebreaker between equal scores.
       //   4. Completeness → recency as final tiebreakers.
       assets.sort((a, b) => {

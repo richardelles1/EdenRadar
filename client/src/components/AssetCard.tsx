@@ -121,18 +121,18 @@ const PILL_MUTED_TEXT = "text-zinc-500 dark:text-zinc-400";
 function stagePillClass(stage: string): string {
   const s = stage.toLowerCase();
   if (s.includes("phase 3") || s.includes("phase iii") || s.includes("approved") || s.includes("marketed")) {
-    return `bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 ${PILL_MUTED_TEXT}`;
+    return `bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 border-l-emerald-400/90 dark:border-l-emerald-500/60 ${PILL_MUTED_TEXT}`;
   }
   if (s.includes("phase 2") || s.includes("phase ii")) {
-    return `bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 ${PILL_MUTED_TEXT}`;
+    return `bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 border-l-violet-400/90 dark:border-l-violet-500/60 ${PILL_MUTED_TEXT}`;
   }
   if (s.includes("phase 1") || s.includes("phase i") || s.includes("phase i/ii")) {
-    return `bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 ${PILL_MUTED_TEXT}`;
+    return `bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 border-l-sky-400/90 dark:border-l-sky-500/60 ${PILL_MUTED_TEXT}`;
   }
-  return `bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 ${PILL_MUTED_TEXT}`;
+  return `bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 border-l-zinc-400/70 dark:border-l-zinc-500/50 ${PILL_MUTED_TEXT}`;
 }
 
-const MODALITY_PILL_CLASS = "bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400";
+const MODALITY_PILL_CLASS = "bg-transparent border border-zinc-300/50 dark:border-zinc-600/40 text-zinc-500 dark:text-zinc-400";
 
 type AssetCardProps = {
   asset: ScoredAsset;
@@ -374,7 +374,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {/* Indication — what disease this targets; content-level info, sits below title as text not a pill */}
           {indicationLabel && (
             <p
-              className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mt-1 line-clamp-1"
+              className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mt-1.5 line-clamp-1"
               data-testid={`text-indication-${asset.id}`}
             >
               {indicationLabel}
@@ -383,12 +383,12 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
           {/* Metadata pill row — stage + modality + status signals */}
           {hasPills && (
-            <div className="flex flex-wrap gap-1 mt-2">
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
               {stageLabel && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(stageLabel)} ${asset.stage_changed_at ? "ring-1 ring-amber-400/60" : ""}`}
+                      className={`text-[10px] font-medium px-2 py-0.5 rounded-sm border-l-2 select-none ${stagePillClass(stageLabel)} ${asset.stage_changed_at ? "ring-1 ring-amber-400/60" : ""}`}
                       data-testid={`pill-stage-${asset.id}`}
                     >
                       {stageLabel}
@@ -406,7 +406,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               )}
               {modalityLabel && (
                 <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${MODALITY_PILL_CLASS}`}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-sm select-none ${MODALITY_PILL_CLASS}`}
                   data-testid={`pill-modality-${asset.id}`}
                 >
                   {modalityLabel}
@@ -414,7 +414,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               )}
               {classUnknown && (
                 <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400`}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-sm select-none bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400`}
                   title="Asset class unknown — partial data"
                   data-testid={`pill-class-unknown-${asset.id}`}
                 >
@@ -425,7 +425,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="text-[10px] font-medium px-2 py-0.5 rounded-full select-none bg-amber-50 dark:bg-amber-900/20 border border-amber-200/70 dark:border-amber-700/40 text-amber-600 dark:text-amber-400"
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-sm select-none bg-amber-50 dark:bg-amber-900/20 border border-amber-200/70 dark:border-amber-700/40 text-amber-600 dark:text-amber-400"
                       data-testid={`pill-limited-data-${asset.id}`}
                     >
                       Limited data
@@ -440,7 +440,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full select-none bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400"
+                      className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-sm select-none bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400"
                       data-testid={`pill-rising-${asset.id}`}
                     >
                       <TrendingUp className="w-2.5 h-2.5" />
@@ -459,7 +459,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-full select-none cursor-default ${
+                      className={`inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-sm select-none cursor-default ${
                         (asset.source_types?.length ?? 0) >= 4
                           ? "bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-600 dark:text-emerald-400"
                           : "bg-sky-50 dark:bg-sky-900/20 border border-sky-200/70 dark:border-sky-700/40 text-sky-600 dark:text-sky-400"
@@ -489,7 +489,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span
-                      className="ml-0.5 inline-flex items-center px-1.5 py-0 rounded-full text-[9px] font-semibold bg-zinc-100 dark:bg-zinc-700/60 text-zinc-500 dark:text-zinc-300 border border-zinc-200/70 dark:border-zinc-600/50 select-none cursor-default leading-4"
+                      className="ml-0.5 inline-flex items-center px-1.5 py-0 rounded-sm text-[9px] font-semibold bg-zinc-100 dark:bg-zinc-700/60 text-zinc-500 dark:text-zinc-300 border border-zinc-200/70 dark:border-zinc-600/50 select-none cursor-default leading-4"
                       data-testid={`badge-institutions-${asset.id}`}
                     >
                       +{asset.institutions!.length - 1}
@@ -659,7 +659,7 @@ export function SavedAssetCard({
 
           {/* Institution chip */}
           {asset.sourceName && asset.sourceName !== "pubmed" && (
-            <span className="self-start text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 truncate max-w-full">
+            <span className="self-start text-[10px] px-1.5 py-0.5 rounded-sm bg-transparent text-emerald-700 dark:text-emerald-300 border border-primary/20 truncate max-w-full">
               {asset.sourceName}
             </span>
           )}

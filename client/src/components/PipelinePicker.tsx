@@ -525,7 +525,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
                       <p className="text-xs text-muted-foreground italic px-1 py-1">No saved TTO assets yet — save a TTO asset first.</p>
                     ) : (
                       <div className="max-h-36 overflow-y-auto flex flex-col gap-0.5 rounded-md border border-border">
-                        {dialogTtoList.slice(0, 12).map((a) => {
+                        {dialogTtoList.map((a) => {
                           const pl = pipelines.find((p) => p.id === a.pipelineListId);
                           return (
                             <button
@@ -661,6 +661,16 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
           </DialogHeader>
 
           <div className="flex flex-col gap-0.5 flex-1 min-h-0 overflow-y-auto">
+            {isSaved && (
+              <p className="text-[10px] text-muted-foreground px-2 pb-1.5">
+                Currently in:{" "}
+                <span className="font-medium text-foreground">
+                  {currentPipelineListId === null
+                    ? "Uncategorised"
+                    : (pipelines.find((p) => p.id === currentPipelineListId)?.name ?? "—")}
+                </span>
+              </p>
+            )}
             {(() => {
               const isCurrentUncat = isSaved && currentPipelineListId === null;
               return (
