@@ -1155,37 +1155,19 @@ export default function Scout() {
               </div>
             </div>
 
-            {/* Search bar — elevated with ambient glow ring */}
-            <div className="max-w-3xl mx-auto flex gap-2 relative">
-              <div
-                className="absolute -inset-1 rounded-xl pointer-events-none"
-                style={{ boxShadow: "0 0 0 1px hsl(var(--primary) / 0.10), 0 6px 28px hsl(var(--primary) / 0.09)" }}
-                aria-hidden="true"
+            {/* Search bar */}
+            <div className="max-w-3xl mx-auto">
+              <SearchBar
+                query={inputQuery}
+                onQueryChange={setInputQuery}
+                onSearch={(q) => handleSearch(q)}
+                onClear={handleClearSearch}
+                isLoading={searchMutation.isPending}
+                sources={[]}
+                selectedSource=""
+                onSourceChange={() => {}}
+                placeholder="Search indications, targets, modalities, mechanisms..."
               />
-              <div className="relative flex-1 z-10">
-                <SearchBar
-                  query={inputQuery}
-                  onQueryChange={setInputQuery}
-                  onSearch={(q) => handleSearch(q)}
-                  isLoading={searchMutation.isPending}
-                  sources={[]}
-                  selectedSource=""
-                  onSourceChange={() => {}}
-                  placeholder="Search indications, targets, modalities, mechanisms..."
-                />
-              </div>
-              {inputQuery.trim().length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="relative z-10 shrink-0 h-12 w-12 text-muted-foreground hover:text-foreground"
-                  onClick={handleClearSearch}
-                  data-testid="button-clear-search"
-                  title="New search"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
             </div>
 
             {/* Sources dropdown + pre-search suggestion chips */}
@@ -1355,7 +1337,7 @@ export default function Scout() {
                     onClick={() => setResultTab("research")}
                     className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "research"
-                        ? "bg-primary text-primary-foreground"
+                        ? "bg-violet-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
                     }`}
                     data-testid="result-tab-research"
@@ -1370,7 +1352,7 @@ export default function Scout() {
                       <span className="hidden md:inline text-[10px] italic font-normal opacity-70">Compiling...</span>
                     ) : (
                       <span className={`inline-flex items-center justify-center min-w-[18px] h-4 md:h-5 rounded px-1 md:px-1.5 text-[9px] md:text-[10px] font-bold ${
-                        resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
+                        resultTab === "research" ? "bg-white/25 text-white" : "bg-violet-500/10 text-violet-600 dark:text-violet-400"
                       }`}>
                         {researchResults.length}
                       </span>
