@@ -50,7 +50,7 @@ const STATUS_CONFIG: Record<string, { label: string; pill: string }> = {
 };
 
 const BOARD_COLUMNS: { key: string | null; label: string; colorClass: string; dotClass: string }[] = [
-  { key: null,           label: "New",           colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
+  { key: null,           label: "No Stage",      colorClass: "border-border bg-muted/10",               dotClass: "bg-muted-foreground/40" },
   { key: "watching",    label: "Watching",       colorClass: "border-neutral-500/30 bg-neutral-500/5",  dotClass: "bg-neutral-400" },
   { key: "evaluating",  label: "Evaluating",     colorClass: "border-blue-500/30 bg-blue-500/5",        dotClass: "bg-blue-400" },
   { key: "in_discussion", label: "In Discussion",colorClass: "border-emerald-500/30 bg-emerald-500/5",  dotClass: "bg-emerald-400" },
@@ -179,7 +179,7 @@ function SignalMiniCard({ signal, onDetach, draggable = false }: {
 
 // ── CardFaceContent — pure visual component for a single card face ────────────
 
-function CardFaceContent({ asset, hovered = false, compact = false, inDeck = false }: { asset: PipelineAsset; hovered?: boolean; compact?: boolean; inDeck?: boolean }) {
+function CardFaceContent({ asset, hovered = false, compact = false, inDeck = false, bottomPadClass }: { asset: PipelineAsset; hovered?: boolean; compact?: boolean; inDeck?: boolean; bottomPadClass?: string }) {
   const cat = getSourceCategory(asset.sourceName);
   const tint = SCOUT_CARD_TINTS[cat];
   const isTto = isTtoSource(asset.sourceName);
@@ -218,7 +218,7 @@ function CardFaceContent({ asset, hovered = false, compact = false, inDeck = fal
       </div>
 
       {/* Content */}
-      <div className={`absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] ${compact ? "pb-3" : "pb-10"}`}>
+      <div className={`absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[52px] ${bottomPadClass ?? (compact ? "pb-3" : "pb-10")}`}>
         <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
           {displayTitle}
         </h3>
@@ -402,24 +402,27 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
           data-testid={`pipeline-card-${asset.id}`}
         >
           {/* Face layers — each face is the full card visual */}
-          {faces.map((face, idx) => (
-            <div
-              key={face.id}
-              className="absolute inset-0"
-              style={{
-                opacity: idx === faceIdx ? 1 : 0,
-                transform: idx === faceIdx
-                  ? "translateX(0) scale(1)"
-                  : idx < faceIdx
-                  ? "translateX(-24px) scale(0.97)"
-                  : "translateX(24px) scale(0.97)",
-                transition: "opacity 0.18s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1)",
-                pointerEvents: idx === faceIdx ? "auto" : "none",
-              }}
-            >
-              <CardFaceContent asset={face} hovered={hovered} inDeck={idx > 0} />
-            </div>
-          ))}
+          {(() => {
+            const ttoBottomPad = hasMultipleFaces && !!pipelineName ? "pb-[58px]" : undefined;
+            return faces.map((face, idx) => (
+              <div
+                key={face.id}
+                className="absolute inset-0"
+                style={{
+                  opacity: idx === faceIdx ? 1 : 0,
+                  transform: idx === faceIdx
+                    ? "translateX(0) scale(1)"
+                    : idx < faceIdx
+                    ? "translateX(-24px) scale(0.97)"
+                    : "translateX(24px) scale(0.97)",
+                  transition: "opacity 0.18s ease, transform 0.22s cubic-bezier(0.34,1.3,0.64,1)",
+                  pointerEvents: idx === faceIdx ? "auto" : "none",
+                }}
+              >
+                <CardFaceContent asset={face} hovered={hovered} inDeck={idx > 0} bottomPadClass={idx === 0 ? ttoBottomPad : undefined} />
+              </div>
+            ));
+          })()}
 
           {/* Delete button */}
           <button
@@ -445,8 +448,8 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
 
           {/* Pipeline name badge — shown when viewing All Assets */}
           {pipelineName && (
-            <div className={`absolute ${hasMultipleFaces ? "bottom-10" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-3rem)]`}>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-full">{pipelineName}</span>
+            <div className={`absolute ${hasMultipleFaces ? "bottom-[38px]" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-1.5rem)]`}>
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-[6rem]">{pipelineName}</span>
             </div>
           )}
 
@@ -947,7 +950,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
                   onClick={() => { onDelete(asset.id); onClose(); }}
                   className="flex items-center gap-2 text-sm text-destructive hover:text-destructive/80 transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Remove from Pipeline
+                  <Trash2 className="w-3.5 h-3.5" /> Remove from saved
                 </button>
               )}
             </div>
@@ -1083,6 +1086,7 @@ export default function Pipeline() {
   const [renamePipelineName, setRenamePipelineName] = useState("");
   const [briefModal, setBriefModal] = useState<BriefData | null>(null);
   const [briefLoading, setBriefLoading] = useState<number | null>(null);
+  const [briefCache, setBriefCache] = useState<Map<number, BriefData>>(new Map());
 
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
@@ -1095,15 +1099,21 @@ export default function Pipeline() {
       const res = await apiRequest("POST", `/api/pipeline-lists/${listId}/brief`, {});
       return res.json() as Promise<BriefData>;
     },
-    onSuccess: (result) => { setBriefModal(result); setBriefLoading(null); },
+    onSuccess: (result, listId) => {
+      setBriefModal(result);
+      setBriefLoading(null);
+      setBriefCache((m) => { const n = new Map(m); n.set(listId, result); return n; });
+    },
     onError: (err: any) => {
       toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
       setBriefLoading(null);
     },
   });
 
-  const handleBrief = () => {
+  const handleBrief = (forceRegen = false) => {
     if (typeof filterPipeline !== "number") return;
+    const cached = briefCache.get(filterPipeline);
+    if (cached && !forceRegen) { setBriefModal(cached); return; }
     setBriefLoading(filterPipeline);
     briefMutation.mutate(filterPipeline);
   };
@@ -1433,6 +1443,7 @@ export default function Pipeline() {
                   className="h-8 text-xs gap-1.5 border-border"
                   onClick={handleBrief}
                   disabled={typeof filterPipeline !== "number" || briefLoading !== null}
+                  title={typeof filterPipeline !== "number" ? "Select a pipeline to generate a brief" : undefined}
                   data-testid="button-pipeline-brief"
                 >
                   {briefLoading !== null ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
@@ -1797,6 +1808,7 @@ export default function Pipeline() {
         data={briefModal}
         open={!!briefModal}
         onClose={() => setBriefModal(null)}
+        onRegenerate={() => { setBriefModal(null); handleBrief(true); }}
       />
     </div>
   );

@@ -878,34 +878,80 @@ export async function registerRoutes(
         }
       }
 
-      // Normalize query relevance scores to [20, 100] for the search_relevance
-      // dimension. Last-place gets 20 so a single-retrieval-path match isn't
-      // penalised; best match gets 100. Two paths:
-      //  - Hybrid (both keyword + vector): normalize RRF scores
-      //  - Keyword-only (hybrid disabled, common in prod): normalize textRelevance
-      // When no query was issued (filter-only browse), the map stays empty and
-      // scoreSearchRelevance returns hasData:false — computeTotal auto-redistributes
-      // the 45% weight to the remaining dimensions.
-      const normalizedRrfById = new Map<number, number>();
-      if (runHybrid && hybridScoreById.size > 0) {
-        const vals = [...hybridScoreById.values()].map((h) => h.rrfScore);
-        const maxR = Math.max(...vals);
-        const minR = Math.min(...vals);
-        const rrfRange = maxR - minR || 1;
-        for (const [id, h] of hybridScoreById) {
-          // [30, 100]: every result that appeared in search deserves at least 30
-          normalizedRrfById.set(id, 30 + Math.round(((h.rrfScore - minR) / rrfRange) * 70));
+      // Compute an absolute query-match score per asset based on which structured
+      // field contains each query term. Score reflects WHERE the match occurs, not
+      // where the asset ranks relative to others — every asset whose title contains
+      // "COVID" scores ~95 regardless of how many other title matches exist.
+      // RRF rank still drives sort order; this score drives the grade shown to the user.
+      // Returns null when no evaluable terms exist (all < 3 chars, e.g. "IL", "NK")
+      // so the caller can leave the map empty and trigger hasData:false weight
+      // redistribution rather than assigning a misleading score of 50.
+      type FieldMatchResult = { score: number; basis: string };
+      const fieldMatchScore = (q: string, r: RetrievedAssetT): FieldMatchResult | null => {
+        const terms = q.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+        if (terms.length === 0) return null;
+
+        // Normalize underscores to spaces and unwrap JSON-array strings.
+        // r.categories is a JSONB column serialised as text: '["gene_therapy","oncology"]'.
+        // Without this, "gene therapy" splits into "gene" (matches gene_therapy) and
+        // "therapy" (does not — underscore breaks the substring), scoring incorrectly.
+        const toText = (raw: string | null): string => {
+          if (!raw) return "";
+          if (raw.trimStart().startsWith("[")) {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) return (parsed as string[]).join(" ").replace(/_/g, " ");
+            } catch {}
+          }
+          return raw.replace(/_/g, " ");
+        };
+
+        const tiers: { text: string; score: number; label: string }[] = [
+          { text: toText(r.assetName).toLowerCase(),                                                      score: 95, label: "asset name" },
+          { text: `${toText(r.indication)} ${toText(r.target)}`.toLowerCase(),                            score: 85, label: "indication or target" },
+          { text: `${toText(r.modality)} ${toText(r.mechanismOfAction)}`.toLowerCase(),                   score: 75, label: "mechanism or modality" },
+          { text: `${toText(r.innovationClaim)} ${toText(r.summary)}`.toLowerCase(),                      score: 65, label: "description" },
+          { text: `${toText(r.biology)} ${toText(r.categories)}`.toLowerCase(),                           score: 55, label: "secondary fields" },
+        ];
+
+        type TermResult = { score: number; label: string | null };
+        const termResults: TermResult[] = terms.map((term) => {
+          for (const tier of tiers) {
+            if (tier.text.includes(term)) return { score: tier.score, label: tier.label };
+          }
+          // Term not in any structured field — asset was retrieved by FTS or vector
+          // on indexed content (full abstract, portal description) we don't store.
+          return { score: 40, label: null };
+        });
+
+        const avg = termResults.reduce((sum, t) => sum + t.score, 0) / termResults.length;
+        const score = Math.min(100, Math.round(avg));
+
+        // Build an accurate basis from actual per-term match locations.
+        const structuredHits = termResults.filter((t) => t.label !== null);
+        const hasUnstructured = termResults.some((t) => t.label === null);
+        let basis: string;
+        if (structuredHits.length === 0) {
+          basis = `Semantic or full-text match (score: ${score}/100)`;
+        } else {
+          const bestLabel = structuredHits.reduce((best, t) => t.score > best.score ? t : best).label!;
+          basis = hasUnstructured
+            ? `Query terms found in ${bestLabel} (partial structured match)`
+            : `Query terms found in ${bestLabel}`;
         }
-      } else if (!runHybrid && trimmedQuery && results.length > 0) {
-        // Keyword-only path: normalize textRelevance (ts_rank_cd) to [30, 100].
-        // Any result surfaced by the search engine is relevant; 0 implies "no match"
-        // which is wrong since FTS already pre-filtered for relevance.
-        const textScores = results.map((r) => r.textRelevance ?? 0);
-        const maxT = Math.max(...textScores);
-        const minT = Math.min(...textScores);
-        const textRange = maxT - minT || 1;
+
+        return { score, basis };
+      };
+
+      // Only insert into the map when fieldMatchScore returns a result — a null
+      // return (all terms < 3 chars) leaves the map empty so scoreSearchRelevance
+      // receives undefined and returns hasData:false, correctly redistributing the
+      // 80% weight to record_quality and availability instead of assigning a flat 50.
+      const normalizedRrfById = new Map<number, FieldMatchResult>();
+      if (trimmedQuery) {
         for (const r of results) {
-          normalizedRrfById.set(r.id, 30 + Math.round((((r.textRelevance ?? 0) - minT) / textRange) * 70));
+          const fm = fieldMatchScore(trimmedQuery, r);
+          if (fm !== null) normalizedRrfById.set(r.id, fm);
         }
       }
 
@@ -1080,7 +1126,8 @@ export async function registerRoutes(
           latest_signal_date: r.lastSeenAt ?? "",
         };
 
-        const searchRelevanceResult = scoreSearchRelevance(normalizedRrfById.get(r.id));
+        const fmEntry = normalizedRrfById.get(r.id);
+        const searchRelevanceResult = scoreSearchRelevance(fmEntry?.score, fmEntry?.basis);
         const completenessResult = scoreCompleteness(partialAsset);
         const availabilityResult = scoreAvailability(partialAsset);
 
@@ -1191,11 +1238,10 @@ export async function registerRoutes(
       const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
       const completenessOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.completeness ?? 0;
       const recencyOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.recencyMs ?? 0;
-      // TTO score sort (4-dimension model):
+      // TTO score sort:
       //   1. Exact-name matches pinned to top.
-      //   2. Score is the primary order. The 4-dimension model weights:
-      //      search_relevance 45%, fit 35%, record_quality 12%, availability 8%
-      //      — so score already IS the combined relevance+fit signal.
+      //   2. Score is the primary order. Weights: search_relevance 80% (absolute
+      //      field-match grade) + fit_bonus (additive) + record_quality 12% + availability 8%.
       //   3. RRF / text_relevance as secondary tiebreaker between equal scores.
       //   4. Completeness → recency as final tiebreakers.
       assets.sort((a, b) => {

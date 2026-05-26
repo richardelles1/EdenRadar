@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FileText, Copy, Check, Printer } from "lucide-react";
+import { FileText, Copy, Check, Printer, RefreshCw } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -51,10 +51,12 @@ export function PipelineBriefDialog({
   data,
   open,
   onClose,
+  onRegenerate,
 }: {
   data: BriefData | null;
   open: boolean;
   onClose: () => void;
+  onRegenerate?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -130,6 +132,12 @@ export function PipelineBriefDialog({
         </ScrollArea>
 
         <DialogFooter className="shrink-0 flex items-center justify-end gap-2 sm:justify-end">
+          {onRegenerate && (
+            <Button variant="ghost" size="sm" onClick={onRegenerate} className="h-7 text-xs gap-1.5 mr-auto" data-testid="button-brief-regenerate">
+              <RefreshCw className="w-3 h-3" />
+              Regenerate
+            </Button>
+          )}
           <Button variant="outline" size="sm" onClick={handleCopy} className="h-7 text-xs gap-1.5" data-testid="button-brief-copy">
             {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
             {copied ? "Copied!" : "Copy"}
