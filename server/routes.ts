@@ -3252,41 +3252,8 @@ STRATEGIC ASSESSMENT
     }
   });
 
-  app.post("/api/pipeline/brief", async (req, res) => {
-    try {
-      const { stage } = z.object({ stage: z.string().min(1) }).parse(req.body);
-      const result = await db.execute(sql`
-        SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage, sa.source_name, sa.source_journal
-        FROM saved_assets sa
-        WHERE LOWER(TRIM(COALESCE(sa.development_stage, 'unknown'))) = ${stage.toLowerCase().trim()}
-        ORDER BY sa.id DESC
-        LIMIT 50
-      `);
-      const assets = result.rows as Record<string, unknown>[];
-      if (assets.length === 0) {
-        return res.json({ brief: "No assets in this pipeline stage.", assetCount: 0 });
-      }
-      const assetList = assets.map((a, i) =>
-        `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Disease: ${String(a.disease_indication ?? "—")} | Source: ${String(a.source_name || a.source_journal || "—")}`
-      ).join("\n");
-      const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
-      const prompt = `You are a biotech intelligence analyst. Below is a list of drug development assets at the ${stageLabel} stage from a curated pipeline tracker.\n\nGenerate a concise pipeline brief with the following sections:\nAsset Overview: Count and general description\nTherapeutic Targets & Mechanisms: Common targets and mechanisms of action\nModality Mix: Types of modalities represented (small molecules, biologics, etc.)\nDisease Focus: Key indications and disease areas\nStrategic Summary: 2-3 sentences on the strategic significance of this pipeline stage\n\nAssets:\n${assetList}\n\nRespond with well-formatted plain text. Do not use markdown symbols or headers with #. Use clear labeled sections separated by blank lines.`;
-      const { default: OpenAI } = await import("openai");
-      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-      const completion = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
-        max_tokens: 700,
-        temperature: 0.4,
-      });
-      const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
-      logAppEvent("pipeline_brief_generated", { stage, assetCount: assets.length });
-      return res.json({ brief, assetCount: assets.length });
-    } catch (err: any) {
-      console.error("[pipeline/brief] Error:", err);
-      return res.status(500).json({ error: friendlyOpenAIError(err) });
-    }
-  });
+  // /api/pipeline/brief removed — endpoint had no auth and no user_id filter,
+  // exposing all users' saved assets to any unauthenticated caller.
 
   app.get("/api/pipelines", async (req, res) => {
     try {
@@ -9299,8 +9266,27 @@ Do not respond with anything else.`;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    // Allowlist prevents mass-assignment of server-controlled fields
+    // (adminStatus, researcherId, published, archived, adminNote).
+    const discoveryPatchSchema = z.object({
+      title: z.string().min(1).max(200).optional(),
+      summary: z.string().optional(),
+      researchArea: z.string().optional(),
+      technologyType: z.string().optional(),
+      institution: z.string().optional(),
+      lab: z.string().optional().nullable(),
+      developmentStage: z.string().optional(),
+      ipStatus: z.string().optional(),
+      seeking: z.string().optional(),
+      contactEmail: z.string().email().optional(),
+      publicationLink: z.string().optional().nullable(),
+      patentLink: z.string().optional().nullable(),
+      attachmentUrls: z.array(z.string()).optional(),
+    });
+    const parsed = discoveryPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const card = await storage.updateDiscoveryCard(id, researcherId, req.body);
+      const card = await storage.updateDiscoveryCard(id, researcherId, parsed.data);
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
     } catch (err: any) {
@@ -9769,8 +9755,21 @@ If a field cannot be determined, use "N/A".`
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    // Allowlist prevents mass-assignment of userId or other server-controlled fields.
+    const grantPatchSchema = z.object({
+      title: z.string().min(1).optional(),
+      url: z.string().optional().nullable(),
+      agencyName: z.string().optional(),
+      deadline: z.string().optional().nullable(),
+      amount: z.string().optional().nullable(),
+      notes: z.string().optional().nullable(),
+      status: z.string().optional(),
+      projectId: z.number().optional().nullable(),
+    });
+    const parsed = grantPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const grant = await storage.updateSavedGrant(id, researcherId, req.body);
+      const grant = await storage.updateSavedGrant(id, researcherId, parsed.data);
       res.json({ grant });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10257,7 +10256,13 @@ If a field cannot be determined, use "N/A".`
       return res.status(400).json({ error: "query is required" });
     }
     const trimmed = query.trim().replace(/;+$/, "");
-    if (!/^SELECT\b/i.test(trimmed)) {
+    // Strip comments before checking — prevents `/**/SELECT` bypass.
+    const stripped = trimmed.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/--[^\n]*/g, " ").trim();
+    if (!/^SELECT\b/i.test(stripped)) {
+      return res.status(400).json({ error: "Only SELECT statements are allowed" });
+    }
+    // Block DML inside CTEs (e.g. WITH x AS (DELETE ...) SELECT 1).
+    if (/\b(INSERT|UPDATE|DELETE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE)\b/i.test(stripped)) {
       return res.status(400).json({ error: "Only SELECT statements are allowed" });
     }
     try {
