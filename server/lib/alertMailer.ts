@@ -8,14 +8,13 @@ import { sendEmail, FROM_DIGEST, unsubscribeUrlFor } from "../email";
 const DIGEST_SAMPLE_LIMIT = 8;
 const SUPPORT_EMAIL = "support@edenradar.com";
 
-function frequencyWindowHours(frequency: string): number {
-  if (frequency === "weekly") return 168;
-  return 24;
+function frequencyWindowHours(matchAlerts: string): number {
+  if (matchAlerts === "frequent") return 4;
+  return 24; // "daily"
 }
 
-function frequencyLabel(frequency: string): string {
-  if (frequency === "weekly") return "Weekly";
-  if (frequency === "realtime") return "Realtime";
+function frequencyLabel(matchAlerts: string): string {
+  if (matchAlerts === "frequent") return "Frequent";
   return "Daily";
 }
 
@@ -248,42 +247,49 @@ async function evaluateAlerts(): Promise<void> {
       continue;
     }
 
-    // Only send to users who have opted in to email digest
     const profile = profileMap.get(alert.userId);
     if (!profile) {
       console.log(`[alertMailer] Alert ${alert.id} — skip: no industry_profile for user ${alert.userId}`);
       skippedCount++;
       continue;
     }
-    if (!profile.subscribedToDigest) {
-      console.log(`[alertMailer] Alert ${alert.id} — skip: user ${alert.userId} not subscribed to digest`);
+
+    // Resolve match alert preference — new model (matchAlerts) or legacy fallback.
+    const prefs = profile.notificationPrefs as { matchAlerts?: string; frequency?: string } | null;
+    let matchAlerts: string;
+    if (prefs?.matchAlerts !== undefined) {
+      matchAlerts = prefs.matchAlerts;
+    } else if (!profile.subscribedToDigest) {
+      matchAlerts = "off";
+    } else {
+      matchAlerts = prefs?.frequency === "realtime" ? "frequent" : "daily";
+    }
+
+    if (matchAlerts === "off") {
+      console.log(`[alertMailer] Alert ${alert.id} — skip: match alerts disabled for user ${alert.userId}`);
       skippedCount++;
       continue;
     }
 
-    // Respect the user's chosen frequency (daily/weekly). "realtime" always sends.
-    const frequency = (profile.notificationPrefs as { frequency?: string } | null)?.frequency ?? "daily";
-    if (frequency !== "realtime") {
-      const windowHours = frequencyWindowHours(frequency);
-      const elapsed = alert.lastAlertSentAt
-        ? ((Date.now() - alert.lastAlertSentAt.getTime()) / (1000 * 60 * 60)).toFixed(1)
-        : "never sent";
-      if (!shouldSendNow(alert.lastAlertSentAt ?? null, windowHours)) {
-        console.log(
-          `[alertMailer] Alert ${alert.id} — skip: frequency gate (${frequency}, ${elapsed}h elapsed, need ${windowHours}h)`
-        );
-        skippedCount++;
-        continue;
-      }
-      if (!isWithinDeliveryWindow()) {
-        console.log(`[alertMailer] Alert ${alert.id} — skip: outside delivery window (6am–10pm ET)`);
-        skippedCount++;
-        continue;
-      }
+    const windowHours = frequencyWindowHours(matchAlerts);
+    const elapsed = alert.lastAlertSentAt
+      ? ((Date.now() - alert.lastAlertSentAt.getTime()) / (1000 * 60 * 60)).toFixed(1)
+      : "never sent";
+    if (!shouldSendNow(alert.lastAlertSentAt ?? null, windowHours)) {
+      console.log(
+        `[alertMailer] Alert ${alert.id} — skip: frequency gate (${matchAlerts}, ${elapsed}h elapsed, need ${windowHours}h)`
+      );
+      skippedCount++;
+      continue;
+    }
+    if (!isWithinDeliveryWindow()) {
+      console.log(`[alertMailer] Alert ${alert.id} — skip: outside delivery window (6am–10pm ET)`);
+      skippedCount++;
+      continue;
     }
 
-    // First-run cap: 6h for realtime, 48h for daily/weekly.
-    const firstRunFloor = frequency === "realtime" ? sixHoursAgo : fortyEightHoursAgo;
+    // First-run cap: 6h for frequent, 48h for daily.
+    const firstRunFloor = matchAlerts === "frequent" ? sixHoursAgo : fortyEightHoursAgo;
     const since = alert.lastAlertSentAt ?? firstRunFloor;
     let matched: DispatchAsset[];
 
@@ -312,7 +318,7 @@ async function evaluateAlerts(): Promise<void> {
     const totalCount = matched.length;
     const sampleAssets = matched.slice(0, DIGEST_SAMPLE_LIMIT);
     const subject = `${totalCount} new asset${totalCount !== 1 ? "s" : ""}: ${alertName} — EdenRadar`;
-    const windowLabel = `${alertName} · ${frequencyLabel(frequency)}`;
+    const windowLabel = `${alertName} · ${frequencyLabel(matchAlerts)}`;
     const appBaseUrl = process.env.APP_BASE_URL ?? process.env.APP_URL ?? "https://edenradar.com";
     const unsubscribeUrl = unsubscribeUrlFor(alert.userId);
 
@@ -347,9 +353,7 @@ async function evaluateAlerts(): Promise<void> {
         assetNames: matched.map((a) => a.assetName),
         assetSourceUrls: matched.map((a) => a.sourceUrl ?? ""),
         assetCount: matched.length,
-        windowHours: frequencyWindowHours(
-          (profile.notificationPrefs as { frequency?: string } | null)?.frequency ?? "daily"
-        ),
+        windowHours,
         isTest: false,
       });
 

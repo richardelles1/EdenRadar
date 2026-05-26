@@ -11960,6 +11960,7 @@ If a field cannot be determined, use "N/A".`
       const [project] = await db
         .insert(researchProjects)
         .values({
+          researcherId: concept.userId,
           title: concept.title,
           researchDomain: concept.therapeuticArea,
           description: `${concept.oneLiner}\n\n${concept.problem}`,
@@ -13569,7 +13570,7 @@ If multiple assets appear, return each as a separate array item.`;
         dealStages: z.array(z.string()).default([]),
         modalities: z.array(z.string()).default([]),
         onboardingDone: z.boolean().default(false),
-        notificationPrefs: z.object({ frequency: z.enum(["realtime", "daily", "weekly"]) }).nullable().default(null),
+        notificationPrefs: z.object({ matchAlerts: z.enum(["off", "daily", "frequent"]), weeklyRecap: z.boolean() }).nullable().default(null),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -13643,7 +13644,10 @@ If multiple assets appear, return each as a separate array item.`;
       const userRole = req.headers["x-user-role"] as string;
       if (!userId) return res.status(400).json({ error: "Missing user id" });
       if (userRole !== "industry") return res.status(403).json({ error: "Industry role required" });
-      const schema = z.object({ frequency: z.enum(["realtime", "daily", "weekly"]) });
+      const schema = z.object({
+        matchAlerts: z.enum(["off", "daily", "frequent"]),
+        weeklyRecap: z.boolean(),
+      });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid body" });
       const existing = await storage.getIndustryProfileByUserId(userId);
@@ -13652,10 +13656,10 @@ If multiple assets appear, return each as a separate array item.`;
         therapeuticAreas: [], dealStages: [], modalities: [],
         onboardingDone: false, notificationPrefs: null,
       };
-      const updated = await storage.upsertIndustryProfile(userId, {
-        ...base,
-        notificationPrefs: { frequency: parsed.data.frequency },
-      });
+      const notificationPrefs = { matchAlerts: parsed.data.matchAlerts, weeklyRecap: parsed.data.weeklyRecap };
+      const updated = await storage.upsertIndustryProfile(userId, { ...base, notificationPrefs });
+      // Keep subscribedToDigest in sync so legacy alertMailer path works for existing users
+      await storage.setIndustryProfileSubscription(userId, parsed.data.matchAlerts !== "off").catch(() => {});
       return res.json({ notificationPrefs: updated.notificationPrefs });
     } catch (err: any) {
       console.error("[users/notification-prefs]", err);

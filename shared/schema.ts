@@ -40,7 +40,7 @@ export const industryProfiles = pgTable("industry_profiles", {
   dealStages: text("deal_stages").array().notNull().default(sql`'{}'::text[]`),
   modalities: text("modalities").array().notNull().default(sql`'{}'::text[]`),
   onboardingDone: boolean("onboarding_done").notNull().default(false),
-  notificationPrefs: jsonb("notification_prefs").$type<{ frequency: string }>().default({ frequency: "daily" }),
+  notificationPrefs: jsonb("notification_prefs").$type<{ matchAlerts: "off" | "daily" | "frequent"; weeklyRecap: boolean } | { frequency: string }>(),
   subscribedToDigest: boolean("subscribed_to_digest").notNull().default(false),
   lastAlertSentAt: timestamp("last_alert_sent_at"),
   alertLastAssetId: integer("alert_last_asset_id"),
