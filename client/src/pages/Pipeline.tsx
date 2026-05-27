@@ -690,7 +690,10 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, o
       return res.json();
     },
     onMutate: (s) => { const prev = localStatus; setLocalStatus(s); return { prev }; },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/saved-assets"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      onPipelineMoved?.();
+    },
     onError: (err, _, ctx) => { if (ctx) setLocalStatus(ctx.prev); toast({ title: "Status update failed", description: err.message, variant: "destructive" }); },
   });
 
@@ -1282,6 +1285,7 @@ export default function Pipeline() {
         return { ...old, assets: old.assets.map((a) => a.id === vars.id ? { ...a, status: vars.status } : a) };
       });
       setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
+      if (typeof filterPipeline === "number") setBriefCache((m) => { const n = new Map(m); n.delete(filterPipeline); return n; });
       toast({ title: "Stage updated" });
     },
     onError: (err: any, _vars, ctx: any) => {
