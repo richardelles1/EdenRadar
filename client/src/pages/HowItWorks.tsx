@@ -408,34 +408,29 @@ export default function HowItWorks() {
               Four distinct channels — each designed so the right asset finds you, whether you're actively searching or not.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="divide-y divide-border/60">
             {INTEL_CHANNELS.map((ch, i) => (
-              <CardTilt key={i} className="rounded-xl">
-                <div
-                  className="flex flex-col gap-5 p-7 rounded-xl h-full"
-                  style={{
-                    background: "linear-gradient(150deg, hsl(var(--card)) 0%, hsl(var(--primary) / 0.04) 100%)",
-                    border: "1px solid hsl(var(--border))",
-                    borderTop: "2px solid hsl(var(--primary) / 0.40)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: "hsl(var(--primary) / 0.10)" }}
-                    >
-                      <ch.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary/50">
-                      {ch.tag}
-                    </span>
+              <div
+                key={i}
+                className="stagger-item grid grid-cols-[4rem_1fr] sm:grid-cols-[8rem_1fr] gap-6 sm:gap-10 py-8 items-start"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <div className="flex flex-col items-start gap-3 pt-0.5">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: "hsl(var(--primary) / 0.10)" }}
+                  >
+                    <ch.icon className="w-5 h-5 text-primary" />
                   </div>
-                  <div>
-                    <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
-                  </div>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/50 leading-tight">
+                    {ch.tag}
+                  </span>
                 </div>
-              </CardTilt>
+                <div>
+                  <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
+                </div>
+              </div>
             ))}
           </div>
         </section>
@@ -495,11 +490,11 @@ export default function HowItWorks() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-            {TIER_OVERVIEW.map((tier) => (
+            {TIER_OVERVIEW.map((tier, i) => (
               <div
                 key={tier.name}
-                className="flex flex-col rounded-xl overflow-hidden"
-                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+                className="flex flex-col rounded-xl overflow-hidden stagger-item"
+                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}`, animationDelay: `${i * 80}ms` }}
               >
                 <div className="px-5 py-4 bg-card border-b border-border">
                   <div className="flex items-center gap-3 mb-3">

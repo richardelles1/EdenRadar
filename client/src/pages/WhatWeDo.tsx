@@ -395,20 +395,20 @@ export default function WhatWeDo() {
               Built for every stakeholder in biotech innovation
             </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="divide-y divide-border/60">
             {WHO_ITS_FOR.map((w, i) => (
               <div
                 key={i}
-                className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200 stagger-item"
-                style={{ animationDelay: `${i * 80}ms` }}
+                className="stagger-item grid grid-cols-1 sm:grid-cols-[1fr_1.6fr] gap-4 sm:gap-10 py-7 items-start"
+                style={{ animationDelay: `${i * 70}ms` }}
               >
-                <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <w.icon className="w-5 h-5 text-primary" />
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 bg-primary/10">
+                    <w.icon className="w-4 h-4 text-primary" />
+                  </div>
+                  <h3 className="font-semibold text-foreground">{w.title}</h3>
                 </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1.5">{w.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{w.desc}</p>
-                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed sm:py-1">{w.desc}</p>
               </div>
             ))}
           </div>

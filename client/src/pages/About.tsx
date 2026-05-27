@@ -259,20 +259,23 @@ export default function About() {
               Our values
             </h2>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="divide-y divide-border/60">
             {VALUES.map((v, i) => (
-              <div key={i} className="stagger-item" style={{ animationDelay: `${i * 80}ms` }}>
-                <CardTilt className="rounded-xl">
-                  <div className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <v.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-foreground mb-1.5">{v.title}</h3>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
-                    </div>
-                  </div>
-                </CardTilt>
+              <div
+                key={i}
+                className="stagger-item grid grid-cols-[3rem_1fr] sm:grid-cols-[5rem_1fr] gap-6 py-8 items-start"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <span
+                  className="text-5xl sm:text-6xl font-bold tabular-nums leading-none select-none font-mono mt-0.5"
+                  style={{ color: "hsl(var(--primary) / 0.20)" }}
+                >
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <div>
+                  <h3 className="font-bold text-foreground text-base mb-2">{v.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
+                </div>
               </div>
             ))}
           </div>
@@ -281,10 +284,10 @@ export default function About() {
         {/* Bottom CTA */}
         <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4">
-            Ready to see what EdenRadar can do?
+            The discovery gap is a solvable problem.
           </h2>
           <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-            Join the growing community of biotech professionals using AI to find the next generation of assets.
+            EdenRadar was built to close it — systematically, at scale, starting with the first search you run.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button
