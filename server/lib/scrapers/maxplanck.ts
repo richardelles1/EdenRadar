@@ -7,16 +7,7 @@ const DOMAINS = [
   "https://www.max-planck-innovation.de",
 ];
 
-const BIOTECH_CATEGORIES = [
-  "medicine",
-  "nucleic-acid-protein-and-cell-related-technologies",
-  "processes-and-methods-incl-screening",
-  "research-tools",
-  "green-biotech",
-  "imaging-microscopy",
-];
-
-const MAX_OFFERS = 60;
+const MAX_OFFERS = 9999;
 const LISTING_TIMEOUT_MS = 10_000;
 const DETAIL_TIMEOUT_MS = 8_000;
 const DETAIL_CONCURRENCY = 3;
@@ -97,29 +88,26 @@ export const maxPlanckScraper: InstitutionScraper = {
 
     for (const base of DOMAINS) {
       if (signal?.aborted) break;
-      for (const category of BIOTECH_CATEGORIES) {
+      const paths = [
+        `${base}/technology-offers/all-categories.html`,
+        `${base}/en/technology-offers/all-categories.html`,
+      ];
+      for (const listUrl of paths) {
         if (signal?.aborted) break;
-        const paths = [
-          `${base}/technology-offers/${category}.html`,
-          `${base}/en/technology-offers/${category}.html`,
-        ];
-        for (const catUrl of paths) {
-          if (signal?.aborted) break;
-          try {
-            const html = await fetchPageHtml(catUrl, signal);
-            if (!html) continue;
-            const offers = extractOffersFromHtml(html);
-            for (const o of offers) {
-              if (!seen.has(o.slug)) {
-                seen.add(o.slug);
-                allOffers.push({ ...o, category });
-                workingBase = base;
-              }
+        try {
+          const html = await fetchPageHtml(listUrl, signal);
+          if (!html) continue;
+          const offers = extractOffersFromHtml(html);
+          for (const o of offers) {
+            if (!seen.has(o.slug)) {
+              seen.add(o.slug);
+              allOffers.push(o);
+              workingBase = base;
             }
-            if (offers.length > 0) break;
-          } catch {
-            continue;
           }
+          if (allOffers.length > 0) break;
+        } catch {
+          continue;
         }
       }
       if (allOffers.length > 0) break;
@@ -238,7 +226,7 @@ export const maxPlanckScraper: InstitutionScraper = {
       (r) => r.description !== r.title
     ).length;
     console.log(
-      `[scraper] ${INST}: ${finalResults.length} listings (${enrichedCount} detail-enriched, ${BIOTECH_CATEGORIES.length} categories attempted, concurrency=${DETAIL_CONCURRENCY})`
+      `[scraper] ${INST}: ${finalResults.length} listings (${enrichedCount} detail-enriched, concurrency=${DETAIL_CONCURRENCY})`
     );
     return finalResults;
   },

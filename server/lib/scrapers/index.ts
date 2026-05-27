@@ -428,6 +428,7 @@ import {
   aarhusUniversityScraper,
   copenhagenInventionScraper,
   institutPasteurScraper,
+  hkuTtoScraper,
 } from "./new-institutions";
 
 // ── New TTO scrapers (2026-05-21) ─────────────────────────────────────────────
@@ -1121,9 +1122,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   villanovaScraper,               // Villanova University — single-page listing, ~16 techs (PDF links)
   // ── New moat scrapers (2026-05-26) ───────────────────────────────────────────
   babrahamScraper,                // Babraham Institute — in-part "babraham" (epigenetics, immunology)
-  aarhusUniversityScraper,        // Aarhus University — HTML listing, 150+ innovation projects
-  copenhagenInventionScraper,     // University of Copenhagen — HTML invention catalogue
-  institutPasteurScraper,         // Institut Pasteur — direct HTML, 4 tech categories
+  aarhusUniversityScraper,        // Aarhus University — stub (contact-only overview page, no enumerable listing)
+  copenhagenInventionScraper,     // University of Copenhagen — stub (invention-catalogue URL 404, no replacement found)
+  institutPasteurScraper,         // Institut Pasteur — stub (licensing page is a contact-us placeholder)
+  hkuTtoScraper,                  // University of Hong Kong TTO — custom HTML, /technology/<slug> (~16 listings)
 ];
 
 // Stamp the tier field on every scraper object at startup so that
