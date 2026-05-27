@@ -10693,11 +10693,12 @@ If a field cannot be determined, use "N/A".`
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
 
-      await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
+      const inviteAdmin = await getAdminUser(req);
+      const inviterName = inviteAdmin?.user_metadata?.fullName as string | undefined;
+      await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink, inviterName).catch((err) =>
         console.error("[email] Team invite email failed:", err)
       );
 
-      const inviteAdmin = await getAdminUser(req);
       if (inviteAdmin) {
         await insertAdminEvent({ adminUserId: inviteAdmin.id, adminEmail: inviteAdmin.email, action: "org_member_added", targetUserId: userId, targetEmail: email, targetOrgId: orgId, payload: { role, memberName: fullName } });
       }
