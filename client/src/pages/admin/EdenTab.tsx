@@ -16,7 +16,8 @@ import { queryClient } from "@/lib/queryClient";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
-import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
+import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse, EdenStatsResponse } from "./_shared";
+import { CitationCard } from "./Dispatch";
 import { EdenAvatar, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
 import { useEdenChat, type ChatAsset, type ChatMessage, type EdenSessionSummary } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -554,6 +555,4 @@ function MiniBackfillButton({ pw, onDone }: { pw: string; onDone: () => void }) 
   );
 }
 
-function AdminInner() {
-
-export { EdenTab };
+export { EdenTab, MiniBackfillButton };

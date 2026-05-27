@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Download, Database, RefreshCw, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, Key, PowerOff, RotateCcw, ArrowUpCircle, Shield, ShieldCheck, Lock, LogOut, DollarSign, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -273,8 +273,6 @@ function parseCsv(text: string): Record<string, string>[] {
   }
   return rows;
 }
-
-function BulkCsvImport({ pw }: { pw: string }) {
 
 function PipelineReviewQueue({ pw }: { pw: string }) {
   const { toast } = useToast();
@@ -871,17 +869,5 @@ interface AdminUser {
   createdAt: string;
   lastSignInAt: string | null;
 }
-
-interface AdminIndustryProfile {
-  userId: string;
-  companyName: string;
-  companyType: string;
-  therapeuticAreas: string[];
-  dealStages: string[];
-  modalities: string[];
-  onboardingDone: boolean;
-}
-
-function AccountCenter({ pw }: { pw: string }) {
 
 export { IndustryProjectsQueue, PipelineReviewQueue, ConceptQueue, ConceptEscalationQueue, ResearchQueue };

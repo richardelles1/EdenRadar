@@ -18,6 +18,7 @@ import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
 import { setImpersonationToken, getImpersonationToken } from "@/lib/queryClient";
+import type { AdminUser } from "./AccountCenter";
 
 interface ImpersonationSessionRow {
   id: number;

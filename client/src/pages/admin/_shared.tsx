@@ -176,6 +176,46 @@ interface SyncStatusResponse {
   syncRunningFor: string | null;
 }
 
+type EdenCoverage = {
+  totalRelevant: number;
+  deepEnriched: number;
+  withMoa: number;
+  withInnovationClaim: number;
+  withUnmetNeed: number;
+  withComparableDrugs: number;
+  avgCompletenessScore: number | null;
+};
+
+type EdenEmbeddingCoverage = {
+  totalRelevant: number;
+  totalEmbedded: number;
+};
+
+type EnrichBreakdown = {
+  fresh: number;
+  legacy: number;
+  lowQualityRetry: number;
+  nullCategory?: number;
+  total: number;
+};
+
+type EdenStatsResponse = {
+  coverage: EdenCoverage;
+  embeddingCoverage: EdenEmbeddingCoverage;
+  latestJob: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
+  needingDeepEnrich?: number;
+  breakdown?: EnrichBreakdown;
+  live: { processed: number; total: number } | null;
+};
+
+type EdenEmbedStatusResponse = {
+  running: boolean;
+  processed: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+};
+
 export {
   formatDate, timeAgo, relativeTime, getErrorType,
   HealthDot, HealthLabel,
@@ -184,4 +224,5 @@ export type {
   HealthStatus, ErrorType,
   CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData,
   SyncSessionData, SyncStatusResponse,
+  EdenCoverage, EdenEmbeddingCoverage, EnrichBreakdown, EdenStatsResponse, EdenEmbedStatusResponse,
 };

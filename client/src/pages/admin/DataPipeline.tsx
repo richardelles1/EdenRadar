@@ -16,7 +16,9 @@ import { queryClient } from "@/lib/queryClient";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
-import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
+import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse, EdenStatsResponse, EdenEmbedStatusResponse } from "./_shared";
+import { DataHealth } from "./DataHealth";
+import { BulkCsvImport } from "./ManualImport";
 
 function DataPipeline({ pw }: { pw: string }) {
   return (

@@ -18,6 +18,21 @@ import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
 
+interface AnalyticsOverview {
+  searchesPerDay: { day: string; count: number }[];
+  sessionsPerDay: { day: string; count: number }[];
+  savedAssetsPerDay: { day: string; count: number }[];
+  dispatchesPerWeek: { week: string; count: number }[];
+  signupsPerWeek: { week: string; count: number }[];
+  featureUsage: { event: string; count: number }[];
+  recentEvents: { id: number; event: string; metadata: Record<string, unknown> | null; createdAt: string }[];
+  totals: { searches: number; sessions: number; savedAssets: number; dispatches: number };
+}
+
+interface TopSearchData {
+  searches: { query: string; count: number }[];
+}
+
 function MiniBarChart({ data, label, color = "bg-primary" }: { data: { day: string; count: number }[]; label: string; color?: string }) {
   if (data.length === 0) {
     return (

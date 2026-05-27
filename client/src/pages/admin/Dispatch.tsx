@@ -17,6 +17,8 @@ import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } fro
 import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
+import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
+import { type ChatAsset } from "@/hooks/useEdenChat";
 
 function devStageBadgeClass(stage?: string): string {
   if (!stage) return "bg-muted text-muted-foreground border-border";
@@ -113,8 +115,6 @@ function CitationCard({ asset, index, savedIngestedIds }: {
     </div>
   );
 }
-
-function EdenTab({ pw }: { pw: string }) {
 
 type DiscoveryAsset = {
   id: number;
@@ -1816,6 +1816,4 @@ function DispatchTab({ pw }: { pw: string }) {
   );
 }
 
-function SubscriptionData() {
-
-export { DispatchTab };
+export { DispatchTab, CitationCard };

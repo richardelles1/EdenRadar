@@ -17,6 +17,64 @@ import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } fro
 import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
+import { EnrichmentPipelinePanel, Enrichment } from "./Enrichment";
+
+interface DimRow {
+  value: string;
+  count: number;
+  avg_completeness: number | null;
+  fill_target: number | null;
+  fill_indication: number | null;
+  fill_biology: number | null;
+}
+
+interface BrowsedAsset {
+  id: number;
+  asset_name: string;
+  institution: string | null;
+  target: string | null;
+  indication: string | null;
+  modality: string | null;
+  development_stage: string | null;
+  ip_type: string | null;
+  licensing_readiness: string | null;
+  completeness_score: number | null;
+  mechanism_of_action: string | null;
+  innovation_claim: string | null;
+  unmet_need: string | null;
+  comparable_drugs: string | null;
+  source_url: string | null;
+  abstract: string | null;
+  summary: string | null;
+  first_seen_at: string | null;
+  enriched_at: string | null;
+  patent_status: string | null;
+  categories: string[] | null;
+  inventors: string[] | null;
+  human_verified: Record<string, boolean> | null;
+  enrichment_sources: Record<string, string> | null;
+}
+
+type AssetBrowserInit = { dim: "modality" | "stage" | "indication" | "biology" | "missing"; value: string } | null;
+
+function computeLocalScore(
+  fields: { target?: string; modality?: string; indication?: string; development_stage?: string; summary?: string; abstract?: string; innovation_claim?: string; mechanism_of_action?: string },
+  nonEditablePts: number
+): number {
+  const pts = (v?: string, w = 0) => (v && v !== "unknown" && v.length >= 3 ? w : 0);
+  return nonEditablePts +
+    pts(fields.target, 15) + pts(fields.modality, 15) + pts(fields.indication, 15) +
+    pts(fields.development_stage, 10) + pts(fields.summary, 10) + pts(fields.abstract, 10) +
+    pts(fields.innovation_claim, 5) + pts(fields.mechanism_of_action, 5);
+}
+
+function getNonEditablePts(asset: BrowsedAsset): number {
+  let pts = 0;
+  if (asset.categories && asset.categories.length > 0) pts += 5;
+  if (asset.inventors && asset.inventors.length > 0) pts += 5;
+  if (asset.patent_status && asset.patent_status !== "unknown" && asset.patent_status.length >= 3) pts += 5;
+  return pts;
+}
 
 function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect: (dim: "modality" | "stage" | "indication" | "biology", value: string) => void }) {
   const [activeTab, setActiveTab] = useState<"modality" | "stage" | "indication" | "biology">("modality");
@@ -659,8 +717,6 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
   );
 }
 
-function FieldBadge({ value }: { value: string | null }) {
-
 function PotentialDuplicates({ pw }: { pw: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -860,8 +916,6 @@ function PotentialDuplicates({ pw }: { pw: string }) {
     </div>
   );
 }
-
-function PipelineReviewQueue({ pw }: { pw: string }) {
 
 function DataQualityTab({ pw }: { pw: string }) {
   const [gaveUpTrigger, setGaveUpTrigger] = useState(0);
@@ -1203,22 +1257,5 @@ function RelevancePanel({ pw }: { pw: string }) {
   );
 }
 
-// ─── Analytics Tab ──────────────────────────────────────────────────────────
-
-interface AnalyticsOverview {
-  searchesPerDay: { day: string; count: number }[];
-  sessionsPerDay: { day: string; count: number }[];
-  savedAssetsPerDay: { day: string; count: number }[];
-  dispatchesPerWeek: { week: string; count: number }[];
-  signupsPerWeek: { week: string; count: number }[];
-  featureUsage: { event: string; count: number }[];
-  recentEvents: { id: number; event: string; metadata: Record<string, unknown> | null; createdAt: string }[];
-  totals: { searches: number; sessions: number; savedAssets: number; dispatches: number };
-}
-
-interface TopSearchData {
-  searches: { query: string; count: number }[];
-}
-
-
-export { DataQualityTab };
+export { DataQualityTab, DimensionBreakdown, AssetBrowser, AssetEditorPanel };
+export type { AssetBrowserInit };

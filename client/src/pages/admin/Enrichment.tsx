@@ -16,7 +16,131 @@ import { queryClient } from "@/lib/queryClient";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
-import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
+import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse, EdenStatsResponse } from "./_shared";
+import { MiniBackfillButton } from "./EdenTab";
+import { DimensionBreakdown, AssetBrowser, AssetEditorPanel, type AssetBrowserInit } from "./DataQuality";
+import { ExportMenu } from "@/components/ExportMenu";
+
+interface EnrichmentStats {
+  total: number;
+  relevantAssets: number;
+  unknownCount: number;
+  byField: { target: number; modality: number; indication: number; developmentStage: number };
+}
+
+interface EnrichmentStatus {
+  status: "idle" | "running" | "done" | "error" | "interrupted";
+  processed: number;
+  total: number;
+  improved: number;
+  resumed?: boolean;
+  jobId?: number;
+  error?: string;
+  tokenCost?: number;
+  filters?: { institution?: string; modality?: string; tier?: string; missingField?: string; stage?: string; indication?: string };
+}
+
+interface BandInfo {
+  id: "rich" | "decent" | "sparse" | "very_sparse" | "bare";
+  count: number;
+  gapFillCount: number;
+  missingTarget: number;
+  missingModality: number;
+  missingIndication: number;
+  missingStage: number;
+  missingMoa: number;
+  missingUnmet: number;
+  missingComparable: number;
+  missingInnovation: number;
+  totalMissingFields: number;
+  estCostFull: number;
+  estCostGapFill: number;
+  needsRescrape: boolean;
+  populationB: number;
+}
+
+interface BandStatusResponse {
+  running: boolean;
+  band: string | null;
+  gapFill: boolean;
+  processed: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+  liveCostUsd: number;
+  liveProjectedTotalUsd: number;
+  liveInputTokens: number;
+  liveOutputTokens: number;
+  liveFieldCounts: Record<string, number>;
+  targetFields: string[];
+  lastSummary: {
+    band: string; gapFill: boolean; total: number; succeeded: number; failed: number;
+    inputTokens: number; outputTokens: number; costUsd: number; durationMs: number;
+    fieldsFilledNames: string[];
+    fieldFillCounts: Record<string, number>;
+    avgScoreBefore: number | null;
+    avgScoreAfter: number | null;
+    bandMovements: Record<string, number>;
+    completedAt: string;
+  } | null;
+}
+
+interface DatasetQualityGlobal {
+  total_relevant: number;
+  scored_count: number;
+  avg_score: number | null;
+  tier_excellent: number;
+  tier_good: number;
+  tier_partial: number;
+  tier_poor: number;
+  tier_unscored: number;
+  fill_target: number | null;
+  fill_indication: number | null;
+  fill_modality: number | null;
+  fill_stage: number | null;
+  fill_licensing: number | null;
+  fill_patent: number | null;
+  fill_biology: number | null;
+  fill_moa: number | null;
+  added_7d: number;
+  added_30d: number;
+}
+
+interface InstitutionRow {
+  institution: string;
+  relevant_count: number;
+  avg_completeness: number | null;
+  fill_target: number | null;
+  fill_indication: number | null;
+  fill_biology: number | null;
+  fill_moa: number | null;
+}
+
+interface ClassRow {
+  asset_class: string;
+  count: number;
+  avg_score: number | null;
+  fill_target: number | null;
+  fill_modality: number | null;
+  fill_indication: number | null;
+  fill_stage: number | null;
+  sparse_count: number;
+}
+
+interface DatasetQualityResponse {
+  global: DatasetQualityGlobal;
+  institutions: InstitutionRow[];
+}
+
+interface DrilldownAsset {
+  id: number;
+  asset_name: string;
+  target: string | null;
+  indication: string | null;
+  modality: string | null;
+  development_stage: string | null;
+  completeness_score: number | null;
+}
 
 function FieldBadge({ value }: { value: string | null }) {
   const isKnown = value && value !== "unknown" && value !== "";
@@ -2880,6 +3004,4 @@ function Enrichment({ pw, initialGaveUpFilter }: { pw: string; initialGaveUpFilt
   );
 }
 
-function IndustryProjectsQueue({ pw }: { pw: string }) {
-
-export { Enrichment };
+export { Enrichment, EnrichmentPipelinePanel };

@@ -18,6 +18,29 @@ import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
 
+interface AdminUser {
+  id: string;
+  email: string;
+  name?: string | null;
+  contactEmail: string | null;
+  role: PortalRole | null;
+  subscribedToDigest: boolean;
+  marketEntitlement?: { active: boolean; source: "admin" | "stripe" | null; grantedAt: string | null } | null;
+  status: string;
+  createdAt: string;
+  lastSignInAt: string | null;
+}
+
+interface AdminIndustryProfile {
+  userId: string;
+  companyName: string;
+  companyType: string;
+  therapeuticAreas: string[];
+  dealStages: string[];
+  modalities: string[];
+  onboardingDone: boolean;
+}
+
 function AccountCenter({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [showInvite, setShowInvite] = useState(false);
@@ -814,27 +837,5 @@ function QuarantinePanel({ pw }: { pw: string }) {
   );
 }
 
-// ── New Arrivals ─────────────────────────────────────────────────────────────
-
-type NewArrivalAsset = {
-  id: number;
-  assetName: string;
-  firstSeenAt: string;
-  sourceUrl: string | null;
-};
-
-type NewArrivalGroup = {
-  institution: string;
-  count: number;
-  assets: NewArrivalAsset[];
-};
-
-type NewArrivalsData = {
-  totalUnindexed: number;
-  totalInstitutions: number;
-  groups: NewArrivalGroup[];
-};
-
-function NewArrivals({ pw }: { pw: string }) {
-
-export { AccountCenter };
+export { AccountCenter, QuarantinePanel };
+export type { AdminUser };

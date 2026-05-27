@@ -17,6 +17,26 @@ import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } fro
 import type { ConceptCard } from "@shared/schema";
 import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel } from "./_shared";
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
+import { QuarantinePanel } from "./AccountCenter";
+
+type NewArrivalAsset = {
+  id: number;
+  assetName: string;
+  firstSeenAt: string;
+  sourceUrl: string | null;
+};
+
+type NewArrivalGroup = {
+  institution: string;
+  count: number;
+  assets: NewArrivalAsset[];
+};
+
+type NewArrivalsData = {
+  totalUnindexed: number;
+  totalInstitutions: number;
+  groups: NewArrivalGroup[];
+};
 
 function NewArrivals({ pw }: { pw: string }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -314,7 +334,5 @@ type EdenEmbedStatusResponse = {
   succeeded: number;
   failed: number;
 };
-
-function devStageBadgeClass(stage?: string): string {
 
 export { NewArrivals };

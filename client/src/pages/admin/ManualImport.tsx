@@ -19,6 +19,53 @@ import { formatDate, timeAgo, relativeTime, getErrorType, HealthDot, HealthLabel
 import type { HealthStatus, ErrorType, CollectorHealthRow, SchedulerStatus, ActiveSearchRow, CollectorHealthData, SyncSessionData, SyncStatusResponse } from "./_shared";
 import { ExportMenu } from "@/components/ExportMenu";
 
+function parseCsv(text: string): Record<string, string>[] {
+  const rows: Record<string, string>[] = [];
+  let i = 0;
+  const len = text.length;
+
+  function parseField(): string {
+    if (i < len && text[i] === '"') {
+      i++;
+      let val = "";
+      while (i < len) {
+        if (text[i] === '"') {
+          i++;
+          if (i < len && text[i] === '"') { val += '"'; i++; }
+          else break;
+        } else {
+          val += text[i++];
+        }
+      }
+      return val;
+    }
+    let val = "";
+    while (i < len && text[i] !== "," && text[i] !== "\n" && text[i] !== "\r") val += text[i++];
+    return val;
+  }
+
+  function parseLine(): string[] {
+    const fields: string[] = [];
+    while (i < len && text[i] !== "\n" && text[i] !== "\r") {
+      fields.push(parseField());
+      if (i < len && text[i] === ",") i++;
+    }
+    if (i < len && text[i] === "\r") i++;
+    if (i < len && text[i] === "\n") i++;
+    return fields;
+  }
+
+  const headers = parseLine();
+  while (i < len) {
+    const line = parseLine();
+    if (line.every((f) => f === "")) continue;
+    const obj: Record<string, string> = {};
+    headers.forEach((h, idx) => { obj[h] = line[idx] ?? ""; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
 function BulkCsvImport({ pw }: { pw: string }) {
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -285,8 +332,6 @@ function BulkCsvImport({ pw }: { pw: string }) {
     </div>
   );
 }
-
-function PotentialDuplicates({ pw }: { pw: string }) {
 
 type ParsedImportAsset = {
   name: string;
@@ -920,4 +965,4 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   );
 }
 
-export { ManualImportTab };
+export { ManualImportTab, BulkCsvImport };
