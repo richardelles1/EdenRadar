@@ -1737,10 +1737,7 @@ export const michiganStateScraper = createTechPublisherScraper(
 );
 
 // Flintbox scrapers
-export const denverScraper = createFlintboxScraper(
-  { slug: "du", orgId: 53, accessKey: "efe8f8a7-f085-4c9e-905d-3435c5fc9393" },
-  "University of Denver"
-);
+export const denverScraper = createStubScraper("University of Denver");
 export const kansasScraper = createFlintboxScraper(
   { slug: "ku", orgId: 33, accessKey: "409f7eb2-4324-4a1a-9858-80459ce84ce2" },
   "University of Kansas"
