@@ -632,12 +632,13 @@ function KanbanColumn({ col, decks, onDelete, onCardClick }: {
 
 const TAB_TRIGGER_CLS = "text-xs px-0 h-full rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=inactive]:text-muted-foreground bg-transparent shadow-none data-[state=active]:shadow-none";
 
-function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, pipelines = [], isViewer = false }: {
+function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, onPipelineMoved, pipelines = [], isViewer = false }: {
   asset: PipelineAsset | null;
   signals?: PipelineAsset[];
   onClose: () => void;
   onDetachSignal: (signalId: number) => void;
   onDelete: (id: number) => void;
+  onPipelineMoved?: () => void;
   pipelines?: PipelineList[];
   isViewer?: boolean;
 }) {
@@ -704,6 +705,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      onPipelineMoved?.();
       toast({ title: "Pipeline updated" });
     },
     onError: (err, _, ctx) => {
@@ -1075,6 +1077,8 @@ export default function Pipeline() {
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [parentOverrides, setParentOverrides] = useState<Map<number, number | null>>(new Map());
   const [statusOverrides, setStatusOverrides] = useState<Map<number, string | null>>(new Map());
+  const attachVersion = useRef(new Map<number, number>());
+  const statusVersion = useRef(new Map<number, number>());
   const [creatingPipeline, setCreatingPipeline] = useState(false);
   const [newPipelineName, setNewPipelineName] = useState("");
   const [renamingPipelineId, setRenamingPipelineId] = useState<number | null>(null);
@@ -1218,6 +1222,9 @@ export default function Pipeline() {
     onSuccess: (_, id) => {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       if (activeAssetId === id) setActiveAssetId(null);
+      if (typeof filterPipeline === "number") {
+        setBriefCache((m) => { const n = new Map(m); n.delete(filterPipeline); return n; });
+      }
       toast({ title: "Removed from pipeline" });
     },
     onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
@@ -1234,21 +1241,24 @@ export default function Pipeline() {
       if (!res.ok) throw new Error("Failed to attach signal");
     },
     onMutate: ({ signalId, parentId }) => {
+      const ver = (attachVersion.current.get(signalId) ?? 0) + 1;
+      attachVersion.current.set(signalId, ver);
       setParentOverrides((m) => new Map(m).set(signalId, parentId));
-      return { signalId };
+      return { signalId, ver };
     },
-    onSuccess: (_, vars) => {
-      // Write directly into the cache and clear the override in the same batch —
-      // no intermediate render with stale data, so no flash back to old position.
+    onSuccess: (_, vars, ctx) => {
+      if (!ctx || attachVersion.current.get(ctx.signalId) !== ctx.ver) return;
       qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
         if (!old) return old;
         return { ...old, assets: old.assets.map((a) => a.id === vars.signalId ? { ...a, parentSavedAssetId: vars.parentId } : a) };
       });
-      setParentOverrides((m) => { const n = new Map(m); n.delete(vars.signalId); return n; });
+      setParentOverrides((m) => { const n = new Map(m); n.delete(ctx.signalId); return n; });
       toast({ title: vars.parentId ? "Signal attached" : "Signal detached" });
     },
     onError: (err: any, _vars, ctx: any) => {
-      if (ctx) setParentOverrides((m) => { const n = new Map(m); n.delete(ctx.signalId); return n; });
+      if (ctx && attachVersion.current.get(ctx.signalId) === ctx.ver) {
+        setParentOverrides((m) => { const n = new Map(m); n.delete(ctx.signalId); return n; });
+      }
       toast({ title: "Attach failed", description: err.message, variant: "destructive" });
     },
   });
@@ -1259,22 +1269,25 @@ export default function Pipeline() {
       if (!res.ok) throw new Error("Failed to update status");
     },
     onMutate: ({ id, status }) => {
+      const ver = (statusVersion.current.get(id) ?? 0) + 1;
+      statusVersion.current.set(id, ver);
       setStatusOverrides((m) => new Map(m).set(id, status));
-      return { id };
+      return { id, ver };
     },
-    onSuccess: (_, vars) => {
-      // Cancel any in-flight refetch before applying the cache update so a
-      // stale response landing after this point can't overwrite the new status.
+    onSuccess: (_, vars, ctx) => {
+      if (!ctx || statusVersion.current.get(ctx.id) !== ctx.ver) return;
       qc.cancelQueries({ queryKey: ["/api/saved-assets"] });
       qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
         if (!old) return old;
         return { ...old, assets: old.assets.map((a) => a.id === vars.id ? { ...a, status: vars.status } : a) };
       });
-      setStatusOverrides((m) => { const n = new Map(m); n.delete(vars.id); return n; });
+      setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
       toast({ title: "Stage updated" });
     },
     onError: (err: any, _vars, ctx: any) => {
-      if (ctx) setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
+      if (ctx && statusVersion.current.get(ctx.id) === ctx.ver) {
+        setStatusOverrides((m) => { const n = new Map(m); n.delete(ctx.id); return n; });
+      }
       toast({ title: "Status update failed", description: err.message, variant: "destructive" });
     },
   });
@@ -1793,6 +1806,7 @@ export default function Pipeline() {
         onClose={() => setActiveAssetId(null)}
         onDetachSignal={handleDetachSignal}
         onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
+        onPipelineMoved={() => setBriefCache(new Map())}
         pipelines={pipelines}
         isViewer={isViewer}
       />
