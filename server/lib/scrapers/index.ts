@@ -423,6 +423,11 @@ import {
   ntnuScraper,
   // Temple University — Drupal 7 + DataTables, single-page
   templeScraper,
+  // Task #718 — New moat scrapers 2026-05-26
+  babrahamScraper,
+  aarhusUniversityScraper,
+  copenhagenInventionScraper,
+  institutPasteurScraper,
 } from "./new-institutions";
 
 // ── New TTO scrapers (2026-05-21) ─────────────────────────────────────────────
@@ -1114,6 +1119,11 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   kaistScraper,                   // KAIST TLO — paginated patent portfolio, English, ~7,340 patents
   sjuScraper,                     // Saint Joseph's University — static Drupal listing, ~18 techs
   villanovaScraper,               // Villanova University — single-page listing, ~16 techs (PDF links)
+  // ── New moat scrapers (2026-05-26) ───────────────────────────────────────────
+  babrahamScraper,                // Babraham Institute — in-part "babraham" (epigenetics, immunology)
+  aarhusUniversityScraper,        // Aarhus University — HTML listing, 150+ innovation projects
+  copenhagenInventionScraper,     // University of Copenhagen — HTML invention catalogue
+  institutPasteurScraper,         // Institut Pasteur — direct HTML, 4 tech categories
 ];
 
 // Stamp the tier field on every scraper object at startup so that

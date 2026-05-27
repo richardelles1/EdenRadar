@@ -1506,8 +1506,8 @@ export const karolinskaScraper = createStubScraper("Karolinska Institutet");
 export const inven2Scraper = createStubScraper("University of Oslo");
 export const visScraper = createStubScraper("University of Bergen");
 // ntnuScraper — implemented in ntnu.ts (WP REST API, avada_portfolio CPT)
-export const ucphScraper = createStubScraper("University of Copenhagen");
-export const aarhusScraper = createStubScraper("Aarhus University");
+// ucphScraper — upgraded: see copenhagenInventionScraper below (Task #718)
+// aarhusScraper — upgraded: see aarhusUniversityScraper below (Task #718)
 export const dtuScraper = createStubScraper("Technical University of Denmark");
 export const lundScraper = createStubScraper("Lund University");
 export const chalmersScraper = createStubScraper("Chalmers University of Technology");
@@ -7539,6 +7539,232 @@ export const insermTransfertScraper: InstitutionScraper = {
       );
 
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── in-part: Babraham Institute ───────────────────────────────────────────────
+// babraham.portals.in-part.com confirmed public 2026-05-26.
+export const babrahamScraper = createInPartScraper("babraham", "Babraham Institute");
+
+// ── Aarhus University Technology Transfer ────────────────────────────────────
+// international.au.dk — Technologies for Licensing and Investment listing page.
+// 150+ innovation projects. Probed: 2026-05-26.
+export const aarhusUniversityScraper: InstitutionScraper = {
+  institution: "Aarhus University",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const INST = "Aarhus University";
+    const LIST_URL = "https://international.au.dk/collaboration/technology-transfer/technologies-for-licensing-and-investment";
+    const BASE = "https://international.au.dk";
+
+    try {
+      const $ = await fetchHtml(LIST_URL, 15_000, signal);
+      if (!$) {
+        console.log(`[scraper] ${INST}: failed to load listing page`);
+        return [];
+      }
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+
+      // AU CMS: technology items appear as linked headings or card anchors
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(fullUrl)) return;
+        if (!fullUrl.includes("international.au.dk") && !fullUrl.includes("tech.au.dk")) return;
+        if (fullUrl === LIST_URL || fullUrl.endsWith("/technologies-for-licensing-and-investment")) return;
+
+        const text = cleanText($(el).text());
+        if (!text || text.length < 8) return;
+        const lc = text.toLowerCase();
+        if (
+          lc === "read more" || lc === "learn more" || lc === "contact" ||
+          lc.includes("cookie") || lc.includes("sitemap") || lc.includes("privacy") ||
+          text.length > 180
+        ) return;
+
+        seen.add(fullUrl);
+        const desc = cleanText($(el).closest("article, .card, .item, li, div").find("p").first().text()) || "";
+        results.push({ title: text, description: desc, url: fullUrl, institution: INST });
+      });
+
+      // Fallback: article/card headings with explicit link
+      $("article, .card, .technology-item, .listing-item").each((_, el) => {
+        const heading = cleanText($(el).find("h2, h3, h4").first().text());
+        if (!heading || heading.length < 8) return;
+        const href = $(el).find("a[href]").first().attr("href") ?? "";
+        if (!href) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        const desc = cleanText($(el).find("p").first().text()) || "";
+        results.push({ title: heading, description: desc, url: fullUrl, institution: INST });
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── University of Copenhagen Invention Catalogue ──────────────────────────────
+// research.ku.dk/collaboration/inventions/invention-catalogue/
+// Static HTML invention catalogue. Probed: 2026-05-26.
+export const copenhagenInventionScraper: InstitutionScraper = {
+  institution: "University of Copenhagen",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const INST = "University of Copenhagen";
+    const LIST_URL = "https://research.ku.dk/collaboration/inventions/invention-catalogue/";
+    const BASE = "https://research.ku.dk";
+
+    try {
+      const $ = await fetchHtml(LIST_URL, 15_000, signal);
+      if (!$) {
+        console.log(`[scraper] ${INST}: failed to load invention catalogue`);
+        return [];
+      }
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(fullUrl)) return;
+        if (!fullUrl.includes("research.ku.dk")) return;
+        if (
+          fullUrl === LIST_URL ||
+          fullUrl.endsWith("/invention-catalogue/") ||
+          fullUrl.includes("/invention-catalogue/#")
+        ) return;
+
+        const text = cleanText($(el).text());
+        if (!text || text.length < 8) return;
+        const lc = text.toLowerCase();
+        if (
+          lc === "read more" || lc === "learn more" || lc === "contact" ||
+          lc.includes("cookie") || lc.includes("sitemap") || text.length > 180
+        ) return;
+
+        seen.add(fullUrl);
+        const desc = cleanText($(el).closest("article, .card, .item, li, div").find("p").first().text()) || "";
+        results.push({ title: text, description: desc, url: fullUrl, institution: INST });
+      });
+
+      $("article, .card, .invention-item").each((_, el) => {
+        const heading = cleanText($(el).find("h2, h3, h4").first().text());
+        if (!heading || heading.length < 8) return;
+        const href = $(el).find("a[href]").first().attr("href") ?? "";
+        if (!href) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        const desc = cleanText($(el).find("p").first().text()) || "";
+        results.push({ title: heading, description: desc, url: fullUrl, institution: INST });
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── Institut Pasteur Licensing Opportunities ──────────────────────────────────
+// pasteur.fr/en/innovation/industry-partnerships/licensing-opportunities
+// 4 enumerable technology categories (Diagnostic, Therapeutics, Vaccines, Technology).
+// Probed: 2026-05-26.
+export const institutPasteurScraper: InstitutionScraper = {
+  institution: "Institut Pasteur",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const INST = "Institut Pasteur";
+    const LIST_URL = "https://www.pasteur.fr/en/innovation/industry-partnerships/licensing-opportunities";
+    const BASE = "https://www.pasteur.fr";
+
+    try {
+      const $ = await fetchHtml(LIST_URL, 15_000, signal);
+      if (!$) {
+        console.log(`[scraper] ${INST}: failed to load licensing page`);
+        return [];
+      }
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(fullUrl)) return;
+        if (!fullUrl.includes("pasteur.fr")) return;
+        if (
+          fullUrl === LIST_URL ||
+          fullUrl.endsWith("/licensing-opportunities") ||
+          fullUrl.endsWith("/licensing-opportunities/")
+        ) return;
+
+        const text = cleanText($(el).text());
+        if (!text || text.length < 8) return;
+        const lc = text.toLowerCase();
+        if (
+          lc === "read more" || lc === "learn more" || lc === "contact us" ||
+          lc.includes("cookie") || lc.includes("sitemap") || lc.includes("privacy") ||
+          text.length > 180
+        ) return;
+
+        seen.add(fullUrl);
+        const desc = cleanText($(el).closest("article, .card, .item, li, div").find("p").first().text()) || "";
+        results.push({ title: text, description: desc, url: fullUrl, institution: INST });
+      });
+
+      $("article, .card, .technology, li.tech-item").each((_, el) => {
+        const heading = cleanText($(el).find("h2, h3, h4").first().text());
+        if (!heading || heading.length < 8) return;
+        const href = $(el).find("a[href]").first().attr("href") ?? "";
+        if (!href) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        const desc = cleanText($(el).find("p").first().text()) || "";
+        results.push({ title: heading, description: desc, url: fullUrl, institution: INST });
+      });
+
+      if (results.length > 0) {
+        await enrichWithDetailPages(
+          results,
+          {
+            description: [
+              ".field--name-body p",
+              ".field--name-field-description p",
+              ".content-page__body p",
+              "article .field p",
+              "main .paragraph p",
+              "main p",
+            ],
+            technologyId: [
+              ".field--name-field-reference",
+              "[class*='reference']",
+              "[class*='tech-id']",
+            ],
+          },
+          250,
+          signal,
+        );
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
