@@ -1138,9 +1138,7 @@ export default function Assets() {
             <div>
               <h1 className="text-2xl font-bold text-foreground">
                 Drug Development{" "}
-                <span className="gradient-text dark:gradient-text gradient-text-light">
-                  Pipelines
-                </span>
+                <span className="text-primary">Pipelines</span>
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
                 {teamScope

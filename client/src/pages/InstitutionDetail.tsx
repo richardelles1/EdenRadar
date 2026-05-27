@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
 import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
+import { TtoContactCard } from "@/components/TtoContactCard";
 import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
@@ -695,18 +696,21 @@ export default function InstitutionDetail() {
                 )}
               </div>
             </div>
-            {inst?.website && (
-              <a href={inst.website} target="_blank" rel="noopener noreferrer">
-                <Button
-                  variant="outline"
-                  className="gap-2 border-card-border"
-                  data-testid="button-view-tto-site"
-                >
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  View TTO Site
-                </Button>
-              </a>
-            )}
+            <div className="flex flex-col items-end gap-2">
+              {inst?.website && (
+                <a href={inst.website} target="_blank" rel="noopener noreferrer">
+                  <Button
+                    variant="outline"
+                    className="gap-2 border-card-border"
+                    data-testid="button-view-tto-site"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    View TTO Site
+                  </Button>
+                </a>
+              )}
+              <TtoContactCard institution={inst?.name ?? slugTitle} compact className="max-w-xs" />
+            </div>
           </div>
         </div>
       </div>

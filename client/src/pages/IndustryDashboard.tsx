@@ -860,7 +860,7 @@ export default function IndustryDashboard() {
           <div className="space-y-1">
             <h1 className="text-3xl font-bold text-foreground tracking-tight" data-testid="dashboard-greeting">
               {greeting}{firstName ? (
-                <>{", "}<span className="gradient-text">{firstName}</span>!</>
+                <>{", "}<span className="text-primary">{firstName}</span>!</>
               ) : "!"}
             </h1>
             <p className="text-sm text-muted-foreground" data-testid="dashboard-subtitle">

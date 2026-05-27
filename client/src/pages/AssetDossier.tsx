@@ -31,6 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { ScoredAsset, DossierPayload, SignalEvent } from "@/lib/types";
+import { TtoContactCard } from "@/components/TtoContactCard";
 
 const STAGE_COLORS: Record<string, string> = {
   discovery:  "bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30",
@@ -765,6 +766,13 @@ export default function AssetDossier() {
                   </a>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TTO Contacts */}
+          {asset.institution && (
+            <div className="mt-4 pt-3 border-t border-primary/10">
+              <TtoContactCard institution={asset.institution} />
             </div>
           )}
 

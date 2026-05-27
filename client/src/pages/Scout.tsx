@@ -7,7 +7,7 @@ import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { ResearchCard } from "@/components/ResearchCard";
 import { BuyerProfileForm } from "@/components/BuyerProfileForm";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { HoverBorderGradient } from "@/components/ui/hover-border-gradient";
@@ -265,7 +265,7 @@ function SourcesDropdown({
           <ChevronDown className="w-3 h-3 opacity-60" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0 max-h-[420px] overflow-hidden flex flex-col">
+      <PopoverContent align="start" className="w-80 max-w-[calc(100vw-2rem)] p-0 max-h-[420px] overflow-hidden flex flex-col">
         <div className="px-3 py-2.5 border-b border-border shrink-0">
           <p className="text-[11px] font-semibold text-foreground">Academic Sources</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -655,7 +655,7 @@ export default function Scout() {
       try {
         const res = await fetch("/api/search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
           body: JSON.stringify({ query, sources: backendSources, maxPerSource: 20, buyerProfile }),
           signal: controller.signal,
         });
@@ -693,7 +693,7 @@ export default function Scout() {
         }
         const res = await fetch("/api/search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
           body: JSON.stringify(body),
           signal: controller.signal,
         });
@@ -727,7 +727,7 @@ export default function Scout() {
       try {
         const res = await fetch("/api/search", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
           body: JSON.stringify({ query, sources: ["clinicaltrials"], maxPerSource: 50, buyerProfile }),
           signal: controller.signal,
         });
@@ -760,7 +760,7 @@ export default function Scout() {
       try {
         const res = await fetch("/api/report", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
           body: JSON.stringify({ query, sources: ["tech_transfer"], maxPerSource: 6, buyerProfile }),
           signal: controller.signal,
         });
@@ -1280,7 +1280,7 @@ export default function Scout() {
             </div>
 
             {/* Search bar */}
-            <div className="max-w-3xl mx-auto">
+            <div role="search" className="max-w-3xl mx-auto">
               <SearchBar
                 query={inputQuery}
                 onQueryChange={setInputQuery}
@@ -1410,8 +1410,12 @@ export default function Scout() {
           {hasSearched && !searchMutation.isPending && (
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex justify-center w-full">
-                <div className="grid w-full items-stretch rounded-lg border border-border overflow-hidden shadow-sm" style={{ gridTemplateColumns: '1fr 1px 1fr 1px 1fr 1px 1fr' }} data-testid="result-tab-toggle">
+                <div role="tablist" aria-label="Result type" className="grid w-full items-stretch rounded-lg border border-border overflow-hidden shadow-sm" style={{ gridTemplateColumns: '1fr 1px 1fr 1px 1fr 1px 1fr' }} data-testid="result-tab-toggle">
                   <button
+                    role="tab"
+                    aria-selected={resultTab === "assets"}
+                    aria-controls="panel-assets"
+                    id="tab-assets"
                     onClick={() => setResultTab("assets")}
                     className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "assets"
@@ -1431,6 +1435,10 @@ export default function Scout() {
                   </button>
                   <div className="w-px bg-border shrink-0" />
                   <button
+                    role="tab"
+                    aria-selected={resultTab === "patents"}
+                    aria-controls="panel-patents"
+                    id="tab-patents"
                     onClick={() => setResultTab("patents")}
                     className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "patents"
@@ -1456,6 +1464,10 @@ export default function Scout() {
                   </button>
                   <div className="w-px bg-border shrink-0" />
                   <button
+                    role="tab"
+                    aria-selected={resultTab === "trials"}
+                    aria-controls="panel-trials"
+                    id="tab-trials"
                     onClick={() => setResultTab("trials")}
                     className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "trials"
@@ -1482,6 +1494,10 @@ export default function Scout() {
                   </button>
                   <div className="w-px bg-border shrink-0" />
                   <button
+                    role="tab"
+                    aria-selected={resultTab === "research"}
+                    aria-controls="panel-research"
+                    id="tab-research"
                     onClick={() => setResultTab("research")}
                     className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "research"
@@ -1548,25 +1564,25 @@ export default function Scout() {
               <div className="flex flex-wrap items-center gap-2">
                 {stageFilters.map((s) => (
                   <button key={`sf-${s}`} onClick={() => setStageFilters((prev) => prev.filter((v) => v !== s))} data-testid={`active-filter-stage-${s}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all capitalize cursor-pointer">
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/25 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:border-primary/40 hover:text-foreground transition-all capitalize cursor-pointer">
                     Stage: {s} ×
                   </button>
                 ))}
                 {modalityFilters.map((m) => (
                   <button key={`mf-${m}`} onClick={() => setModalityFilters((prev) => prev.filter((v) => v !== m))} data-testid={`active-filter-modality-${m}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all capitalize cursor-pointer">
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/25 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:border-primary/40 hover:text-foreground transition-all capitalize cursor-pointer">
                     {m} ×
                   </button>
                 ))}
                 {institutionFilter !== "all" && (
                   <button onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution"
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer">
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/25 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:border-primary/40 hover:text-foreground transition-all cursor-pointer">
                     {institutionFilter} ×
                   </button>
                 )}
                 {biologiesFilter.map((b) => (
                   <button key={`bio-chip-${b}`} onClick={() => setBiologiesFilter((prev) => prev.filter((v) => v !== b))} data-testid={`active-filter-biology-${b}`}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-teal-500/60 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 transition-all capitalize cursor-pointer">
+                    className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-teal-500/30 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 hover:border-teal-500/50 transition-all capitalize cursor-pointer">
                     {b} ×
                   </button>
                 ))}
@@ -1574,19 +1590,19 @@ export default function Scout() {
                   <>
                     {stagesMulti.map((s) => (
                       <button key={`smul-${s}`} onClick={() => setStagesMulti((prev) => prev.filter((v) => v !== s))} data-testid={`active-filter-stage-multi-${s}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 transition-all capitalize cursor-pointer">
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-violet-500/30 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:border-violet-500/50 transition-all capitalize cursor-pointer">
                         Stage: {s} ×
                       </button>
                     ))}
                     {modalitiesMulti.map((m) => (
                       <button key={`mmul-${m}`} onClick={() => setModalitiesMulti((prev) => prev.filter((v) => v !== m))} data-testid={`active-filter-modality-multi-${m}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/60 bg-primary/5 text-primary hover:bg-primary/10 transition-all capitalize cursor-pointer">
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 hover:border-primary/50 transition-all capitalize cursor-pointer">
                         {m} ×
                       </button>
                     ))}
                     {institutionsMulti.map((i) => (
                       <button key={`imul-${i}`} onClick={() => setInstitutionsMulti((prev) => prev.filter((v) => v !== i))} data-testid={`active-filter-institution-multi-${i}`}
-                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-amber-500/60 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all cursor-pointer">
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all cursor-pointer">
                         {i} ×
                       </button>
                     ))}
@@ -1604,6 +1620,9 @@ export default function Scout() {
           )}
 
           <div
+            role="tabpanel"
+            id={`panel-${resultTab}`}
+            aria-labelledby={`tab-${resultTab}`}
             className="flex-1 px-4 sm:px-6 pb-10 space-y-6"
             style={{
               backgroundImage: "radial-gradient(circle, hsl(var(--primary) / 0.045) 1px, transparent 1px)",
@@ -1939,19 +1958,19 @@ export default function Scout() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {patentOwnerFilter !== "all" && (
                           <button onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-amber-500/60 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 transition-all capitalize cursor-pointer">
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-amber-500/30 bg-amber-500/5 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 hover:border-amber-500/50 transition-all capitalize cursor-pointer">
                             {patentOwnerFilter} ×
                           </button>
                         )}
                         {patentDateFilter !== "any" && (
                           <button onClick={() => { setPatentDateFilter("any"); if (currentQuery) { patentMutation.mutate({ query: currentQuery }); } }} data-testid="patent-active-filter-date"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer">
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/25 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:border-primary/40 hover:text-foreground transition-all cursor-pointer">
                             {patentDateFilter === "6m" ? "Last 6 months" : patentDateFilter === "2022" ? "2022 and older" : patentDateFilter} ×
                           </button>
                         )}
                         {patentAssigneeSearch.trim() && (
                           <button onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer max-w-[180px] sm:max-w-none">
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/25 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:border-primary/40 hover:text-foreground transition-all cursor-pointer max-w-[180px] sm:max-w-none">
                             <span className="truncate">"{patentAssigneeSearch}"</span> ×
                           </button>
                         )}
@@ -2100,7 +2119,7 @@ export default function Scout() {
                               </span>
                             );
                             return e.filterKey !== null ? (
-                              <button key={e.rawKey} onClick={() => setTrialPhaseFilter(trialPhaseFilter === e.filterKey ? "all" : e.filterKey!)} className="focus:outline-none">
+                              <button key={e.rawKey} onClick={() => setTrialPhaseFilter(trialPhaseFilter === e.filterKey ? "all" : e.filterKey!)} className="rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
                                 {pill}
                               </button>
                             ) : (
@@ -2127,7 +2146,7 @@ export default function Scout() {
                               </span>
                             );
                             return e.filterKey !== null ? (
-                              <button key={e.rawKey} onClick={() => setTrialStatusFilter(trialStatusFilter === e.filterKey ? "all" : e.filterKey!)} className="focus:outline-none">
+                              <button key={e.rawKey} onClick={() => setTrialStatusFilter(trialStatusFilter === e.filterKey ? "all" : e.filterKey!)} className="rounded-full focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
                                 {pill}
                               </button>
                             ) : (
@@ -2198,19 +2217,19 @@ export default function Scout() {
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {trialPhaseFilter !== "all" && (
                           <button onClick={() => setTrialPhaseFilter("all")} data-testid="trial-active-filter-phase"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-violet-500/60 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 transition-all capitalize cursor-pointer">
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-violet-500/30 bg-violet-500/5 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:border-violet-500/50 transition-all capitalize cursor-pointer">
                             {trialPhaseFilter} ×
                           </button>
                         )}
                         {trialStatusFilter !== "all" && (
                           <button onClick={() => setTrialStatusFilter("all")} data-testid="trial-active-filter-status"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-teal-500/60 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 transition-all capitalize cursor-pointer">
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-teal-500/30 bg-teal-500/5 text-teal-700 dark:text-teal-400 hover:bg-teal-500/10 hover:border-teal-500/50 transition-all capitalize cursor-pointer">
                             {trialStatusFilter} ×
                           </button>
                         )}
                         {trialSponsorSearch.trim() && (
                           <button onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor"
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-[11px] font-medium border-l-2 border-l-primary/50 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:text-foreground transition-all cursor-pointer max-w-[180px] sm:max-w-none">
+                            className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-medium border border-primary/25 bg-primary/5 text-foreground/75 hover:bg-primary/10 hover:border-primary/40 hover:text-foreground transition-all cursor-pointer max-w-[180px] sm:max-w-none">
                             <span className="truncate">"{trialSponsorSearch}"</span> ×
                           </button>
                         )}

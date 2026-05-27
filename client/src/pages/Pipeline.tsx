@@ -1120,7 +1120,7 @@ export default function Pipeline() {
   const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
     refetchInterval: 30000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const { data: pipelinesData } = useQuery<PipelinesResponse>({
@@ -1410,7 +1410,7 @@ export default function Pipeline() {
           <div className="max-w-screen-2xl mx-auto px-6 py-4 flex items-center justify-between gap-4">
             <div>
               <h1 className="text-xl font-bold text-foreground">
-                Pipeline <span className="gradient-text dark:gradient-text gradient-text-light">Builder</span>
+                Pipeline <span className="text-primary">Builder</span>
               </h1>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {totalAssets > 0
