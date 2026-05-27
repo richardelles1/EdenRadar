@@ -23,6 +23,20 @@ export function isFatalOpenAIError(err: unknown): boolean {
   );
 }
 
+export function friendlyOpenAIError(err: unknown): string {
+  if (isFatalOpenAIError(err)) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("401") || msg.includes("invalid_api_key") || msg.includes("Incorrect API key")) {
+      return "OpenAI API key is invalid. Please check the OPENAI_API_KEY secret in your Replit settings.";
+    }
+    if (msg.includes("429") || msg.includes("quota") || msg.includes("insufficient_quota")) {
+      return "OpenAI quota exceeded or rate limited. Please check your OpenAI account billing.";
+    }
+  }
+  if (err instanceof Error) return err.message;
+  return "Search failed. Please try again.";
+}
+
 function buildExtractionPrompt(signal: RawSignal, text: string): string {
   if (signal.source_type === "patent") {
     return `You are a biotech patent analyst. Extract structured drug asset information from the following patent record.

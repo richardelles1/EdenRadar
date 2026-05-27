@@ -696,12 +696,7 @@ function AssetDrawer({ asset, signals = [], onClose, onDetachSignal, onDelete, p
   const pipelineMutation = useMutation<unknown, Error, number | null, { prev: number | null }>({
     mutationFn: async (pipelineListId) => {
       if (!asset) throw new Error("No asset");
-      const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/saved-assets/${asset.id}/pipeline`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ pipeline_list_id: pipelineListId }),
-      });
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/pipeline`, { pipeline_list_id: pipelineListId });
       if (!res.ok) throw new Error("Failed to move asset");
       return res.json();
     },
@@ -1260,12 +1255,7 @@ export default function Pipeline() {
 
   const boardStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string | null }) => {
-      const authHeaders = await getAuthHeaders();
-      const res = await fetch(`/api/saved-assets/${id}/status`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ status }),
-      });
+      const res = await apiRequest("PATCH", `/api/saved-assets/${id}/status`, { status });
       if (!res.ok) throw new Error("Failed to update status");
     },
     onMutate: ({ id, status }) => {
@@ -1273,6 +1263,9 @@ export default function Pipeline() {
       return { id };
     },
     onSuccess: (_, vars) => {
+      // Cancel any in-flight refetch before applying the cache update so a
+      // stale response landing after this point can't overwrite the new status.
+      qc.cancelQueries({ queryKey: ["/api/saved-assets"] });
       qc.setQueryData<SavedAssetsResponse>(["/api/saved-assets"], (old) => {
         if (!old) return old;
         return { ...old, assets: old.assets.map((a) => a.id === vars.id ? { ...a, status: vars.status } : a) };
