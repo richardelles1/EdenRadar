@@ -521,15 +521,18 @@ STRATEGIC ASSESSMENT
       if (!await canAccessSavedAsset(before, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       if (parent_saved_asset_id === id) return res.status(400).json({ error: "Asset cannot be its own parent" });
       if (parent_saved_asset_id !== null) {
-        let cursor: number | null = parent_saved_asset_id;
-        const visited = new Set<number>();
-        while (cursor !== null) {
-          if (cursor === id) return res.status(400).json({ error: "Circular parent reference detected" });
-          if (visited.has(cursor)) break;
-          visited.add(cursor);
-          const node = await storage.getSavedAsset(cursor);
-          cursor = node?.parentSavedAssetId ?? null;
-        }
+        const cycleCheck = await db.execute(sql`
+          WITH RECURSIVE chain(node) AS (
+            SELECT ${parent_saved_asset_id}::int
+            UNION ALL
+            SELECT sa.parent_saved_asset_id
+            FROM saved_assets sa
+            JOIN chain c ON sa.id = c.node
+            WHERE sa.parent_saved_asset_id IS NOT NULL
+          )
+          SELECT 1 FROM chain WHERE node = ${id} LIMIT 1
+        `);
+        if (cycleCheck.rows.length > 0) return res.status(400).json({ error: "Circular parent reference detected" });
       }
       const asset = await storage.updateSavedAssetParent(id, parent_saved_asset_id);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
