@@ -218,6 +218,46 @@ export const TTO_SEEDS: TtoSeed[] = [
   { institution: "Yeda Research and Development", ttoUrl: "https://www.yeda.org.il", staffPageUrl: "https://www.yeda.org.il/about/staff/" },
 ];
 
+// ── DB-driven seed builder ─────────────────────────────────────────────────────
+
+/**
+ * Queries ingested_assets for all relevant institutions, extracts the TTO domain
+ * from each institution's sample source_url, and merges with the hardcoded TTO_SEEDS
+ * (which take priority because they carry known-good staffPageUrl overrides).
+ */
+export async function getSeedsFromDB(): Promise<TtoSeed[]> {
+  const hardcodedMap = new Map(TTO_SEEDS.map(s => [s.institution.toLowerCase(), s]));
+
+  const rows = await db.execute(sql`
+    SELECT institution, MIN(source_url) AS sample_url
+    FROM ingested_assets
+    WHERE relevant = true
+      AND source_url IS NOT NULL
+      AND source_url <> ''
+    GROUP BY institution
+    ORDER BY institution
+  `);
+
+  const seeds: TtoSeed[] = [];
+  for (const row of rows.rows as { institution: string; sample_url: string }[]) {
+    const hardcoded = hardcodedMap.get(row.institution.toLowerCase());
+    if (hardcoded) {
+      seeds.push(hardcoded);
+      continue;
+    }
+    try {
+      const origin = new URL(row.sample_url).origin;
+      if (origin && origin !== "null") {
+        seeds.push({ institution: row.institution, ttoUrl: origin });
+      }
+    } catch {
+      // unparseable URL — skip
+    }
+  }
+
+  return seeds;
+}
+
 // ── Core scraping functions ────────────────────────────────────────────────────
 
 async function fetchPage(url: string, signal?: AbortSignal): Promise<string | null> {
@@ -398,14 +438,26 @@ export interface ScrapeProgress {
 }
 
 export async function runTtoContactScrape(
-  seeds: TtoSeed[] = TTO_SEEDS,
+  seeds: TtoSeed[] | null = null,
   onProgress?: (p: ScrapeProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  opts: { skipExisting?: boolean } = {}
 ): Promise<{ total: number; inserted: number; results: ScrapeProgress[] }> {
+  const resolvedSeeds = seeds ?? await getSeedsFromDB();
+
+  let filteredSeeds = resolvedSeeds;
+  if (opts.skipExisting && resolvedSeeds.length > 0) {
+    const covered = await db.execute(sql`
+      SELECT DISTINCT lower(institution) AS inst FROM tto_contacts
+    `);
+    const coveredSet = new Set((covered.rows as any[]).map(r => r.inst as string));
+    filteredSeeds = resolvedSeeds.filter(s => !coveredSet.has(s.institution.toLowerCase()));
+  }
+
   const results: ScrapeProgress[] = [];
   let totalInserted = 0;
 
-  for (const seed of seeds) {
+  for (const seed of filteredSeeds) {
     if (signal?.aborted) break;
     try {
       const contacts = await scrapeStaffPage(seed, signal);
@@ -421,5 +473,5 @@ export async function runTtoContactScrape(
     }
   }
 
-  return { total: seeds.length, inserted: totalInserted, results };
+  return { total: filteredSeeds.length, inserted: totalInserted, results };
 }
