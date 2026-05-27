@@ -299,7 +299,7 @@ Return ONLY the JSON array, no other text.`;
     const parsed = JSON.parse(cleaned);
     return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return emails.slice(0, 5).map(email => ({ email }));
+    return emails.slice(0, 5).map(email => ({ email, name: "" }));
   }
 }
 

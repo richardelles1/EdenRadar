@@ -10,7 +10,7 @@ export function registerContactRoutes(app: Express): void {
   // ── Public: contacts for an institution (auth required) ──────────────────
   app.get("/api/tto-contacts/:institution", verifyAnyAuth, async (req, res) => {
     try {
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(req.params.institution as string);
       const result = await db.execute(sql`
         SELECT id, institution, name, title, email, phone, linkedin_url, tto_url, verified_at
         FROM tto_contacts
@@ -167,7 +167,7 @@ export function registerContactRoutes(app: Express): void {
   // ── Admin: delete contact ─────────────────────────────────────────────────
   app.delete("/api/admin/tto-contacts/:id", requireAdmin, async (req, res) => {
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(req.params.id as string, 10);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       await db.execute(sql`DELETE FROM tto_contacts WHERE id = ${id}`);
       return res.json({ ok: true });
