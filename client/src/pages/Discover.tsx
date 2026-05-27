@@ -493,9 +493,7 @@ export default function Discover() {
           <div className="px-4 sm:px-6 pt-8 pb-5 space-y-4">
             <div className="max-w-3xl mx-auto text-center mb-6">
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
-                <span className="gradient-text dark:gradient-text gradient-text-light">
-                  Asset Discovery
-                </span>
+                <span className="text-primary">Asset Discovery</span>
               </h1>
               <p className="text-muted-foreground text-sm max-w-xl mx-auto">
                 Multi-source biotech intelligence: scored, ranked, and matched to your buyer thesis.
