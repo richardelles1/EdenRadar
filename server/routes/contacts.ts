@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { verifyAnyAuth, tryGetUserId, requireAdmin } from "../lib/supabaseAuth";
-import { runTtoContactScrape, upsertContacts, TTO_SEEDS, type TtoContact } from "../lib/ttoContactScraper";
+import { runTtoContactScrape, getSeedsFromDB, upsertContacts, type TtoContact } from "../lib/ttoContactScraper";
 
 let scrapeRunning = false;
 
@@ -56,12 +56,10 @@ export function registerContactRoutes(app: Express): void {
   app.post("/api/admin/tto-contacts/scrape", requireAdmin, async (req, res) => {
     if (scrapeRunning) return res.status(409).json({ error: "Scrape already running" });
 
-    const { institutions } = req.body as { institutions?: string[] };
-    const seeds = institutions
-      ? TTO_SEEDS.filter(s => institutions.includes(s.institution))
-      : TTO_SEEDS;
-
-    if (seeds.length === 0) return res.status(400).json({ error: "No matching seeds" });
+    const { institutions, skipExisting = true } = req.body as {
+      institutions?: string[];
+      skipExisting?: boolean;
+    };
 
     scrapeRunning = true;
     const ac = new AbortController();
@@ -75,8 +73,26 @@ export function registerContactRoutes(app: Express): void {
       try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
     };
 
-    runTtoContactScrape(seeds, (p) => write(p), ac.signal)
-      .then(({ total, inserted, results }) => {
+    // Resolve seeds: DB-driven (all 346 institutions), optionally filtered
+    let seedsPromise = getSeedsFromDB();
+    if (institutions && institutions.length > 0) {
+      const instSet = new Set(institutions);
+      seedsPromise = seedsPromise.then(all => all.filter(s => instSet.has(s.institution)));
+    }
+
+    seedsPromise
+      .then(seeds => {
+        if (seeds.length === 0) {
+          write({ done: true, error: "No matching institutions found" });
+          scrapeRunning = false;
+          res.end();
+          return;
+        }
+        return runTtoContactScrape(seeds, (p) => write(p), ac.signal, { skipExisting });
+      })
+      .then(result => {
+        if (!result) return;
+        const { total, inserted, results } = result;
         const empty = results.filter(r => r.status === "empty").map(r => r.institution);
         const errors = results.filter(r => r.status === "error").map(r => r.institution);
         write({ done: true, total, inserted, empty, errors });
