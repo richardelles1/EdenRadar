@@ -150,8 +150,11 @@ function BulkCsvImport({ pw }: { pw: string }) {
           headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
           body: JSON.stringify(chunks[c]),
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Import failed");
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({})) as { error?: string };
+          throw new Error(err.error ?? "Import failed");
+        }
+        const data = await res.json() as { updated: number; skipped: number; validationSkipped: number; skippedDetails: Array<{ index: number; id?: number; reason: string }> };
         acc.updated += data.updated ?? 0;
         acc.skipped += data.skipped ?? 0;
         acc.validationSkipped += data.validationSkipped ?? 0;
@@ -476,9 +479,11 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
         headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ name: newInstName.trim(), ttoUrl: newInstTtoUrl.trim() || undefined }),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Failed to create institution");
-      return d;
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error || "Failed to create institution");
+      }
+      return res.json();
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/institutions", pw] });
@@ -518,9 +523,11 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
         headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: formData,
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Parse failed");
-      return d as { assets: ParsedImportAsset[]; institution: string; failedImages?: string[] };
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error || "Parse failed");
+      }
+      return res.json() as Promise<{ assets: ParsedImportAsset[]; institution: string; failedImages?: string[] }>;
     },
     onSuccess: (data) => {
       setParsedAssets(data.assets);
@@ -546,9 +553,11 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
           ),
         }),
       });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error || "Commit failed");
-      return d as { imported: number; skipped: number };
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error || "Commit failed");
+      }
+      return res.json() as Promise<{ imported: number; skipped: number }>;
     },
     onSuccess: (data) => {
       setImportResult(data);
