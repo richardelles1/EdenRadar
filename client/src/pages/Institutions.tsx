@@ -9,6 +9,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Building2, Search, ShieldOff, SlidersHorizontal } from "lucide-react";
 import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
 
+const BIOLOGY_CARD_COLORS = [
+  "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20",
+  "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20",
+  "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/20",
+  "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20",
+];
+
+function portfolioDepthColor(count: number): string {
+  if (count >= 50) return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+  if (count >= 10) return "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+  return "bg-muted/60 text-muted-foreground";
+}
+
 type Continent = "All" | "North America" | "Europe" | "Asia-Pacific";
 const CONTINENTS: Continent[] = ["All", "North America", "Europe", "Asia-Pacific"];
 
@@ -206,11 +223,11 @@ function InstitutionCard({
           )}
 
           {inst.topBiology && inst.topBiology.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {inst.topBiology.map((b) => (
+            <div className="flex flex-wrap gap-1.5">
+              {inst.topBiology.map((b, i) => (
                 <span
                   key={b}
-                  className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-primary/8 text-primary/70 border border-primary/15 leading-tight"
+                  className={`text-[11px] font-medium px-2 py-0.5 rounded-full border leading-tight ${BIOLOGY_CARD_COLORS[i % BIOLOGY_CARD_COLORS.length]}`}
                   data-testid={`biology-pill-${inst.slug}`}
                 >
                   {b}
@@ -225,13 +242,15 @@ function InstitutionCard({
               {loading ? (
                 <Skeleton className="h-3 w-16 inline-block" />
               ) : count > 0 ? (
-                <><span className="font-semibold text-foreground">{count}</span> active listings</>
+                <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${portfolioDepthColor(count)}`}>
+                  {count} listings
+                </span>
               ) : showRestricted ? (
-                <span className="italic text-muted-foreground/60">Access restricted</span>
+                <span className="italic text-muted-foreground/60 text-[11px]">Access restricted</span>
               ) : showNoPortal ? (
-                <span className="italic text-muted-foreground/60">No public portal</span>
+                <span className="italic text-muted-foreground/60 text-[11px]">No public portal</span>
               ) : (
-                <span className="italic text-muted-foreground/60">—</span>
+                <span className="italic text-muted-foreground/60 text-[11px]">—</span>
               )}
             </span>
             <span

@@ -363,6 +363,8 @@ export default function Scout() {
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
+  const serverProfileApplied = useRef(false);
+  const serverSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const didAutoInitBiology = useRef(false);
   const patentAbortRef = useRef<AbortController | null>(null);
   const trialAbortRef = useRef<AbortController | null>(null);
@@ -499,7 +501,14 @@ export default function Scout() {
     try {
       localStorage.setItem(BUYER_PROFILE_KEY, JSON.stringify(buyerProfile));
     } catch {}
-  }, [buyerProfile]);
+    // Only sync to server after the initial server value has been applied,
+    // to avoid overwriting a server profile with a stale localStorage value.
+    if (!serverProfileApplied.current) return;
+    if (serverSyncTimer.current) clearTimeout(serverSyncTimer.current);
+    serverSyncTimer.current = setTimeout(() => {
+      saveBuyerProfileToServer.mutate(buyerProfile);
+    }, 1000);
+  }, [buyerProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleClearProfile() {
     skipNextPersist.current = true;
@@ -531,6 +540,28 @@ export default function Scout() {
   }, []);
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
+
+  // Server-side buyer profile — fetched once on mount. Server wins over localStorage
+  // so the profile stays consistent across devices.
+  const { data: serverBuyerProfile, isSuccess: serverProfileLoaded } = useQuery<BuyerProfile | null>({
+    queryKey: ["/api/me/buyer-profile"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const saveBuyerProfileToServer = useMutation({
+    mutationFn: (profile: BuyerProfile) => apiRequest("PUT", "/api/me/buyer-profile", profile),
+  });
+
+  // When the server query resolves, apply it to local state (server wins for non-null values).
+  useEffect(() => {
+    if (!serverProfileLoaded) return;
+    serverProfileApplied.current = true;
+    if (!serverBuyerProfile) return;
+    skipNextPersist.current = true;
+    setBuyerProfile((curr) => ({ ...curr, ...serverBuyerProfile }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverProfileLoaded]);
+
   const { data: institutionsData } = useQuery<InstitutionsResponse>({
     queryKey: ["/api/scout/institutions"],
     staleTime: 10 * 60 * 1000,

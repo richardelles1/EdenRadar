@@ -1506,8 +1506,8 @@ export const karolinskaScraper = createStubScraper("Karolinska Institutet");
 export const inven2Scraper = createStubScraper("University of Oslo");
 export const visScraper = createStubScraper("University of Bergen");
 // ntnuScraper — implemented in ntnu.ts (WP REST API, avada_portfolio CPT)
-export const ucphScraper = createStubScraper("University of Copenhagen");
-export const aarhusScraper = createStubScraper("Aarhus University");
+// ucphScraper — upgraded: see copenhagenInventionScraper below (Task #718)
+// aarhusScraper — upgraded: see aarhusUniversityScraper below (Task #718)
 export const dtuScraper = createStubScraper("Technical University of Denmark");
 export const lundScraper = createStubScraper("Lund University");
 export const chalmersScraper = createStubScraper("Chalmers University of Technology");
@@ -1737,10 +1737,7 @@ export const michiganStateScraper = createTechPublisherScraper(
 );
 
 // Flintbox scrapers
-export const denverScraper = createFlintboxScraper(
-  { slug: "du", orgId: 53, accessKey: "efe8f8a7-f085-4c9e-905d-3435c5fc9393" },
-  "University of Denver"
-);
+export const denverScraper = createStubScraper("University of Denver");
 export const kansasScraper = createFlintboxScraper(
   { slug: "ku", orgId: 33, accessKey: "409f7eb2-4324-4a1a-9858-80459ce84ce2" },
   "University of Kansas"
@@ -7544,5 +7541,88 @@ export const insermTransfertScraper: InstitutionScraper = {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
+  },
+};
+
+// ── in-part: Babraham Institute ───────────────────────────────────────────────
+// babraham.portals.in-part.com confirmed public 2026-05-26.
+export const babrahamScraper = createInPartScraper("babraham", "Babraham Institute");
+
+// Aarhus University — stub. TTO overview page at international.au.dk describes
+// 150+ projects but links only to contacts; no enumerable individual-tech URLs.
+export const aarhusUniversityScraper = createStubScraper(
+  "Aarhus University",
+  "contact-only overview page; no enumerable tech listing (probed 2026-05-26)",
+);
+
+// University of Copenhagen — stub. Original URL research.ku.dk/.../invention-
+// catalogue/ is 404; innovation.ku.dk/english/technology-transfer/ returns 200
+// but has no enumerable individual tech listing (probed 2026-05-26).
+export const copenhagenInventionScraper = createStubScraper(
+  "University of Copenhagen",
+  "invention-catalogue URL is 404; innovation.ku.dk has no tech listing (probed 2026-05-26)",
+);
+
+// Institut Pasteur — stub. Licensing page is a "contact us" placeholder; the
+// 4 described categories (Diagnostic, Therapeutics, Vaccines, Technology) have
+// no individually linked tech pages (probed 2026-05-26).
+export const institutPasteurScraper = createStubScraper(
+  "Institut Pasteur",
+  "licensing page is a contact-us placeholder with no enumerable tech links (probed 2026-05-26)",
+);
+
+// ── HKU TTO ───────────────────────────────────────────────────────────────────
+// tto.hku.hk/technology — individual /technology/<slug> pages confirmed 2026-05-26.
+// ~8 listings per category across biotechnology + engineering-and-service.
+export const hkuTtoScraper: InstitutionScraper = {
+  institution: "University of Hong Kong",
+  scraperType: "http",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const INST = "University of Hong Kong";
+    const BASE = "https://tto.hku.hk";
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+
+    const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>) => {
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href.match(/\/technology\/[a-z0-9-]+$/)) return;
+        const title = cleanText($(el).text());
+        if (!title || title.length < 4) return;  // skip image/icon wrappers before dedup check
+        const url = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (seen.has(url)) return;
+        seen.add(url);
+        results.push({ title, description: "", url, institution: INST });
+      });
+    };
+
+    const categories = ["biotechnology", "engineering-and-service"];
+    const pages = await Promise.allSettled(
+      categories.map((cat) =>
+        fetchHtml(`${BASE}/technology?main=${cat}`, 20_000, signal)
+      )
+    );
+    for (const r of pages) {
+      if (r.status === "fulfilled" && r.value) extractListings(r.value);
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings`);
+    if (results.length === 0) return [];
+
+    await enrichWithDetailPages(
+      results,
+      {
+        description: [
+          ".technology-detail__description",
+          ".tech-description",
+          ".entry-content",
+          "article .content",
+          "main p",
+        ],
+      },
+      300,
+      signal,
+    );
+    return results;
   },
 };

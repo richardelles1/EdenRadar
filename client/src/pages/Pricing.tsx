@@ -183,7 +183,7 @@ function PlanCTA({
           <button
             onClick={handleOpenPortal}
             disabled={portalLoading}
-            className="w-full text-center text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex items-center justify-center gap-1"
+            className="w-full text-center text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex items-center justify-center gap-1 min-h-[44px]"
             data-testid={`button-pricing-portal-${plan.id}`}
           >
             {portalLoading ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <ExternalLink className="w-2.5 h-2.5" />}
@@ -696,7 +696,7 @@ export default function Pricing() {
   return (
     <div className="min-h-screen bg-background">
       <Nav />
-      <div className="max-w-5xl mx-auto px-6 py-12 space-y-16">
+      <main className="max-w-5xl mx-auto px-6 py-12 space-y-16">
 
         {/* Header */}
         <div className="space-y-4">
@@ -720,8 +720,10 @@ export default function Pricing() {
             data-testid="toggle-pricing-product"
           >
             <button
+              id="tab-scout"
               role="tab"
               aria-selected={view === "scout"}
+              aria-controls="panel-scout"
               onClick={() => selectView("scout")}
               className="px-4 h-8 rounded-full text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
               style={
@@ -734,8 +736,10 @@ export default function Pricing() {
               EdenScout
             </button>
             <button
+              id="tab-market"
               role="tab"
               aria-selected={view === "market"}
+              aria-controls="panel-market"
               onClick={() => selectView("market")}
               className="px-4 h-8 rounded-full text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
               style={
@@ -775,7 +779,9 @@ export default function Pricing() {
         )}
 
         {/* Primary product (driven by pill toggle) */}
-        {view === "scout" ? scoutGrid : marketBlock}
+        <div id={`panel-${view}`} role="tabpanel" aria-labelledby={`tab-${view}`} tabIndex={0}>
+          {view === "scout" ? scoutGrid : marketBlock}
+        </div>
 
         {/* Secondary product */}
         <div className="space-y-3">
@@ -923,7 +929,7 @@ export default function Pricing() {
           </p>
         </div>
 
-      </div>
+      </main>
     </div>
   );
 }

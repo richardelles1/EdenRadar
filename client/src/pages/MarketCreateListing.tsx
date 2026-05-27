@@ -40,6 +40,18 @@ const ENGAGEMENT_OPTIONS = [
   { value: "closed", label: "Closed" },
 ];
 
+const TRL_LABELS: Record<number, string> = {
+  1: "Basic principles observed",
+  2: "Technology concept formulated",
+  3: "Experimental proof of concept",
+  4: "Technology validated in lab",
+  5: "Validated in relevant environment",
+  6: "Demonstrated in relevant environment",
+  7: "Operational prototype demonstrated",
+  8: "System complete and qualified",
+  9: "Operational system proven",
+};
+
 const listingSchema = z.object({
   therapeuticArea: z.string().min(1, "Required"),
   modality: z.string().min(1, "Required"),
@@ -61,6 +73,11 @@ const listingSchema = z.object({
     exactPatentIds: z.boolean().optional(),
     mechanismDetail: z.boolean().optional(),
   }).default({}),
+  // TTO fields
+  trlLevel: z.number().int().min(1).max(9).optional().nullable(),
+  patentNumbers: z.string().optional(),
+  inventorAffiliation: z.string().optional(),
+  ttoRefNumber: z.string().optional(),
 });
 
 const BLIND_FIELD_OPTIONS: Array<{
@@ -247,6 +264,7 @@ export default function MarketCreateListing() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
+  const [isTtoListing, setIsTtoListing] = useState(false);
   const [linkedAsset, setLinkedAsset] = useState<SuggestedAsset | null>(null);
   const [prefilledFields, setPrefilledFields] = useState<string[]>([]);
   // Tracks fields that were auto-filled but subsequently edited by the seller
@@ -269,6 +287,10 @@ export default function MarketCreateListing() {
       blind: false,
       assetName: "",
       blindFields: {},
+      trlLevel: undefined,
+      patentNumbers: "",
+      inventorAffiliation: "",
+      ttoRefNumber: "",
     },
   });
 
@@ -279,6 +301,10 @@ export default function MarketCreateListing() {
         priceRangeMin: data.priceRangeMin ? parseInt(data.priceRangeMin, 10) : undefined,
         priceRangeMax: data.priceRangeMax ? parseInt(data.priceRangeMax, 10) : undefined,
         ingestedAssetId: linkedAsset?.id ?? undefined,
+        // Normalize empty TTO strings to null so backend accepts them
+        patentNumbers: data.patentNumbers || null,
+        inventorAffiliation: data.inventorAffiliation || null,
+        ttoRefNumber: data.ttoRefNumber || null,
         ...(asDraft ? { status: "draft" } : {}),
       };
       const res = await fetch("/api/market/listings", {
@@ -526,6 +552,69 @@ export default function MarketCreateListing() {
                   </FormItem>
                 )} />
               </div>
+
+              {/* TTO Mode */}
+              <div className="rounded-lg border border-border p-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-medium text-foreground">Technology Transfer Office (TTO)</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">Enable TTO-specific fields: TRL level, patent numbers, inventor info</p>
+                </div>
+                <Switch checked={isTtoListing} onCheckedChange={setIsTtoListing} />
+              </div>
+
+              {isTtoListing && (
+                <div className="rounded-lg border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-400">TTO Details</p>
+                  <div className="grid sm:grid-cols-2 gap-3">
+                    <FormField control={form.control} name="trlLevel" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Technology Readiness Level</FormLabel>
+                        <FormControl>
+                          <Select
+                            onValueChange={v => field.onChange(parseInt(v, 10))}
+                            value={field.value != null ? String(field.value) : ""}
+                          >
+                            <SelectTrigger><SelectValue placeholder="Select TRL (1–9)" /></SelectTrigger>
+                            <SelectContent>
+                              {[1,2,3,4,5,6,7,8,9].map(n => (
+                                <SelectItem key={n} value={String(n)}>TRL {n} — {TRL_LABELS[n]}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                    <FormField control={form.control} name="ttoRefNumber" render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>TTO Reference # <span className="text-muted-foreground text-[10px]">(optional)</span></FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. UCLA-2024-123" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )} />
+                  </div>
+                  <FormField control={form.control} name="patentNumbers" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Patent Numbers <span className="text-muted-foreground text-[10px]">(optional, comma-separated)</span></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. US10,123,456, PCT/US2024/01234" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                  <FormField control={form.control} name="inventorAffiliation" render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Inventor Affiliation <span className="text-muted-foreground text-[10px]">(optional)</span></FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g. Dept. of Chemistry, MIT" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </div>
+              )}
             </div>
           )}
 

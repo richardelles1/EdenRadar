@@ -165,15 +165,19 @@ export function unsubscribeUrlForEmail(email: string): string {
 interface BaseHtmlOpts {
   unsubscribeUrl?: string;
   replyToHint?: string;
+  accentColor?: string;
 }
 
 function baseHtml(bodyContent: string, opts: BaseHtmlOpts = {}): string {
+  const accent = opts.accentColor ?? "#059669";
   const contactLine = opts.replyToHint
-    ? `Questions? Reply to this email or contact <a href="mailto:${opts.replyToHint}" style="color:#059669;text-decoration:none;">${opts.replyToHint}</a>.`
-    : `Questions? Contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.`;
+    ? `Questions? Reply to this email or contact <a href="mailto:${opts.replyToHint}" style="color:${accent};text-decoration:none;">${opts.replyToHint}</a>.`
+    : `Questions? Contact <a href="mailto:${SUPPORT_EMAIL}" style="color:${accent};text-decoration:none;">${SUPPORT_EMAIL}</a>.`;
   const unsubLine = opts.unsubscribeUrl
     ? `<br /><a href="${opts.unsubscribeUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe from these notifications</a>.`
     : "";
+  // Inline EdenRadar icon mark — the favicon droplet with DNA strokes
+  const iconMark = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="26" height="26" style="display:inline-block;vertical-align:middle;"><path d="M16 2C16 2 6 8 6 18c0 5.5 4.5 10 10 10s10-4.5 10-10C26 8 16 2 16 2z" fill="${accent}"/><path d="M16 8v16M16 14c-3-2-6-1-7 1M16 18c3-2 6-1 7 1" stroke="#ffffff" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -186,11 +190,15 @@ function baseHtml(bodyContent: string, opts: BaseHtmlOpts = {}): string {
     <tr>
       <td align="center">
         <table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;border:1px solid #e5e7eb;overflow:hidden;">
-          <!-- Header -->
+          <!-- Header — white background, brand wordmark -->
           <tr>
-            <td style="background:#059669;padding:28px 40px;">
-              <span style="font-size:20px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">EdenRadar</span>
+            <td style="background:#ffffff;padding:22px 40px 18px;">
+              ${iconMark}<span style="margin-left:8px;font-size:19px;font-weight:700;letter-spacing:-0.4px;vertical-align:middle;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;"><span style="color:#111827;">Eden</span><span style="color:${accent};">Radar</span></span>
             </td>
+          </tr>
+          <!-- Accent bar -->
+          <tr>
+            <td style="background:${accent};height:2px;font-size:0;line-height:0;">&nbsp;</td>
           </tr>
           <!-- Body -->
           <tr>
@@ -201,10 +209,11 @@ function baseHtml(bodyContent: string, opts: BaseHtmlOpts = {}): string {
           <!-- Footer -->
           <tr>
             <td style="padding:20px 40px 28px;border-top:1px solid #f3f4f6;">
-              <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
-                EdenRadar &mdash; Biotech intelligence for industry buyers.<br />
+              <p style="margin:0 0 14px;font-size:12px;color:#9ca3af;line-height:1.5;">
+                EdenRadar. Biotech intelligence for industry buyers.<br />
                 ${contactLine}${unsubLine}
               </p>
+              <img src="${APP_URL}/edennx-logo.png" alt="EdenNX" width="48" height="48" style="display:block;border:0;opacity:0.55;" />
             </td>
           </tr>
         </table>
@@ -283,24 +292,41 @@ export async function sendEmail(
 export function sendWelcomeEmail(to: string, name: string): Promise<void> {
   const displayName = name?.trim() || "there";
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome to EdenRadar, ${displayName}.</h1>
-    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-      Your account is ready. You now have access to <strong>EdenDiscovery</strong> and <strong>EdenLab</strong>,
-      and you can explore TTO assets from leading research institutions.
-    </p>
+    <h1 style="margin:0 0 10px;font-size:24px;font-weight:700;color:#111827;letter-spacing:-0.4px;">Welcome, ${displayName}.</h1>
     <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
-      If your organization has an EdenScout subscription, your team administrator will connect your account.
+      Your EdenRadar account is ready. You have access to biotech intelligence tools used by
+      leading industry buyers. Start exploring below.
     </p>
-    <a href="${LOGIN_URL}"
-       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
-      Go to EdenRadar
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
+      <tr>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;">
+          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">EdenDiscovery</p>
+          <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Search and filter TTO assets across hundreds of research institutions.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 16px;border-bottom:1px solid #f3f4f6;">
+          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">EdenLab</p>
+          <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Build and manage your deal pipeline, save assets, and track progress.</p>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:14px 16px;">
+          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">EdenScout</p>
+          <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Set deal alerts and receive weekly pipeline recaps. Available on team plans.</p>
+        </td>
+      </tr>
+    </table>
+    <a href="${APP_URL}/discover"
+       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:13px 32px;border-radius:6px;">
+      Start Exploring &rarr;
     </a>
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
-      If you did not create this account, please contact us immediately at
+      Didn't create this account? Contact us immediately at
       <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
   `, { replyToHint: SUPPORT_EMAIL });
-  return sendEmail(to, "Welcome to EdenRadar.", html, { from: FROM_NOREPLY, replyTo: SUPPORT_EMAIL });
+  return sendEmail(to, `Welcome to EdenRadar, ${displayName}.`, html, { from: FROM_NOREPLY, replyTo: SUPPORT_EMAIL });
 }
 
 export function sendTeamInviteEmail(
@@ -309,8 +335,15 @@ export function sendTeamInviteEmail(
   orgName: string,
   planTier: string,
   setPasswordLink?: string,
+  inviterName?: string,
 ): Promise<void> {
   const displayName = name?.trim() || "there";
+  const headline = inviterName?.trim()
+    ? `${inviterName} at ${orgName} has invited you to EdenRadar.`
+    : `${orgName} has invited you to EdenRadar.`;
+  const intro = inviterName?.trim()
+    ? `Hi ${displayName}, ${inviterName} has set up your account as part of ${orgName}'s <strong>${planLabel(planTier)}</strong> plan.`
+    : `Hi ${displayName}, your account has been set up as part of ${orgName}'s <strong>${planLabel(planTier)}</strong> plan.`;
   const actionBlock = setPasswordLink
     ? `<a href="${setPasswordLink}"
          style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
@@ -325,106 +358,20 @@ export function sendTeamInviteEmail(
         Sign in to EdenRadar
       </a>`;
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">${orgName} has added you to EdenRadar.</h1>
-    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-      Hi ${displayName}, your account has been set up as part of your organization's
-      <strong>${planLabel(planTier)}</strong> plan.
-    </p>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">${headline}</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">${intro}</p>
     <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
       You will have access to EdenScout, EdenDiscovery, and EdenLab once you set your password below.
     </p>
     ${actionBlock}
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
-      If you were not expecting this invitation, please contact
+      Not expecting this invitation? Contact
       <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
   `, { replyToHint: SUPPORT_EMAIL });
-  return sendEmail(to, `${orgName} has added you to EdenRadar.`, html, { from: FROM_NOREPLY, replyTo: SUPPORT_EMAIL });
+  return sendEmail(to, headline, html, { from: FROM_NOREPLY, replyTo: SUPPORT_EMAIL });
 }
 
-export interface AlertAsset {
-  id: number;
-  assetName: string;
-  institution: string;
-  modality: string;
-  developmentStage: string;
-  indication: string;
-  sourceUrl?: string | null;
-}
-
-export function sendThesisAlertEmail(
-  to: string,
-  displayName: string,
-  assets: AlertAsset[],
-  therapeuticAreas: string[],
-  modalities: string[],
-  unsubscribeUrl?: string,
-): Promise<void> {
-  const name = displayName?.trim() || "there";
-  const focusSummary = [
-    ...(therapeuticAreas.length > 0 ? [therapeuticAreas.slice(0, 3).join(", ")] : []),
-    ...(modalities.length > 0 ? [modalities.slice(0, 2).join(", ")] : []),
-  ].join(" · ");
-
-  const assetRows = assets
-    .slice(0, 10)
-    .map(
-      (a) => `
-      <tr>
-        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;">
-          ${
-            a.sourceUrl
-              ? `<a href="${a.sourceUrl}" style="font-size:14px;font-weight:600;color:#059669;text-decoration:none;">${a.assetName}</a>`
-              : `<span style="font-size:14px;font-weight:600;color:#111827;">${a.assetName}</span>`
-          }
-          <div style="margin-top:3px;font-size:12px;color:#6b7280;">${a.institution}</div>
-        </td>
-        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;font-size:12px;color:#374151;white-space:nowrap;">
-          ${a.modality !== "unknown" ? a.modality : "-"}
-        </td>
-        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;font-size:12px;color:#374151;white-space:nowrap;text-transform:capitalize;">
-          ${a.developmentStage !== "unknown" ? a.developmentStage : "-"}
-        </td>
-      </tr>`,
-    )
-    .join("");
-
-  const html = baseHtml(`
-    <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111827;">New assets matching your focus, ${name}.</h1>
-    <p style="margin:0 0 6px;font-size:14px;color:#6b7280;">
-      ${focusSummary ? `Focus: ${focusSummary}` : "Based on your saved deal focus."}
-    </p>
-    <p style="margin:0 0 24px;font-size:14px;color:#374151;line-height:1.6;">
-      ${assets.length} new asset${assets.length !== 1 ? "s" : ""} ingested since your last alert that match your thesis.
-    </p>
-    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:24px;">
-      <thead>
-        <tr style="background:#f9fafb;">
-          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Asset</th>
-          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Modality</th>
-          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Stage</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${assetRows}
-      </tbody>
-    </table>
-    <a href="${APP_URL}/discover"
-       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 24px;border-radius:6px;">
-      Explore in EdenScout
-    </a>
-    <p style="margin:20px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
-      You are receiving this because you opted in to asset match alerts.
-      Update your preferences in <a href="${APP_URL}/industry/profile" style="color:#059669;text-decoration:none;">account settings</a>.
-    </p>
-  `, { unsubscribeUrl });
-  return sendEmail(
-    to,
-    `${assets.length} new asset${assets.length !== 1 ? "s" : ""} match your deal focus — EdenRadar`,
-    html,
-    { from: FROM_DIGEST, replyTo: SUPPORT_EMAIL, unsubscribeUrl },
-  );
-}
 
 export function sendSubscriptionWelcomeEmail(
   to: string,
@@ -541,7 +488,7 @@ export function sendTrialEndingEmail(
     <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout trial expires tomorrow</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
       ${greeting} your EdenScout free trial expires on <strong>${trialEndDate}</strong>. After that date
-      you will be charged automatically unless you cancel first. To stay on the plan — or to cancel —
+      you will be charged automatically unless you cancel first. To stay on the plan or cancel,
       manage your subscription in Settings.
     </p>
     ${planLine}
@@ -568,7 +515,7 @@ export function sendMarketMutualInterestEmail(
 ): Promise<void> {
   const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Mutual interest confirmed — EdenMarket</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Mutual interest confirmed</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
       ${greeting} both parties have confirmed mutual interest in <strong>${assetLabel}</strong>.
     </p>
@@ -583,7 +530,7 @@ export function sendMarketMutualInterestEmail(
       Both parties must sign the NDA before deal room documents and communication become accessible.
       Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
     </p>
-  `, { replyToHint: MARKET_EMAIL });
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
   return sendEmail(to, `Mutual interest confirmed — ${assetLabel} — EdenMarket`, html, {
     from: FROM_MARKET,
     replyTo: MARKET_EMAIL,
@@ -598,7 +545,7 @@ export function sendMarketNdaSignedEmail(
 ): Promise<void> {
   const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">NDA fully executed — deal room is open</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">NDA fully executed. Deal room is open.</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
       ${greeting} both parties have signed the mutual NDA for <strong>${assetLabel}</strong>.
       The deal room is now fully unlocked.
@@ -613,7 +560,7 @@ export function sendMarketNdaSignedEmail(
     <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       A copy of the signed NDA is available in your deal room for your records.
     </p>
-  `, { replyToHint: MARKET_EMAIL });
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
   return sendEmail(to, `Deal room open — ${assetLabel} — EdenMarket`, html, {
     from: FROM_MARKET,
     replyTo: MARKET_EMAIL,
@@ -663,7 +610,7 @@ export function sendDealRoomMessageEmail(
       To avoid filling your inbox, we send at most one message notification per
       hour per deal. Open the deal room to see all replies in real time.
     </p>
-  `, { replyToHint: MARKET_EMAIL });
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
   return sendEmail(to, `New message — ${assetLabel} — EdenMarket`, html, {
     from: FROM_MARKET,
     replyTo: MARKET_EMAIL,
@@ -698,7 +645,7 @@ export function sendDealRoomDocumentEmail(
     <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       Documents are stored securely in your deal room and only visible to you and the other party.
     </p>
-  `, { replyToHint: MARKET_EMAIL });
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
   return sendEmail(to, `New document — ${assetLabel} — EdenMarket`, html, {
     from: FROM_MARKET,
     replyTo: MARKET_EMAIL,
@@ -731,7 +678,7 @@ export function sendMarketAdHocEmail(
   subject: string,
   bodyHtml: string,
 ): Promise<void> {
-  return sendEmail(to, subject, baseHtml(bodyHtml, { replyToHint: MARKET_EMAIL }), {
+  return sendEmail(to, subject, baseHtml(bodyHtml, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' }), {
     from: FROM_MARKET,
     replyTo: MARKET_EMAIL,
   });
@@ -768,7 +715,7 @@ export function sendMarketGraceNoticeEmail(
       Questions? Reply to this email or reach us at
       <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
     </p>
-  `, { replyToHint: MARKET_EMAIL });
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
   return sendEmail(to, "Your EdenMarket subscription cancelled — 30-day grace period started", html, {
     from: FROM_MARKET,
     replyTo: MARKET_EMAIL,
@@ -819,7 +766,7 @@ export function sendWeeklyRecapEmail(
     <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenRadar Weekly Recap</h1>
     <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">${greeting} here's what happened in your pipeline this week.</p>
 
-    ${data.summary ? `<p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;font-style:italic;">"${data.summary}"</p>` : ""}
+    ${data.summary ? `<p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6;">${data.summary}</p>` : ""}
 
     <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:6px;margin-bottom:24px;">
       <tr>
@@ -855,6 +802,101 @@ export function sendWeeklyRecapEmail(
   return sendEmail(to, `Your EdenRadar recap — ${data.weekLabel}`, html, {
     from: FROM_DIGEST,
     unsubscribeUrl,
+  });
+}
+
+export function sendMarketEoiDeclinedEmail(
+  to: string,
+  recipientName: string,
+  assetLabel: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Expression of Interest update</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} the seller has reviewed your Expression of Interest for <strong>${assetLabel}</strong>
+      and has decided not to proceed with your submission at this time.
+    </p>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      There are many reasons a seller may decline an EOI unrelated to your organisation: timing, exclusivity, or existing negotiations. We encourage you to continue exploring other listings that match your focus.
+    </p>
+    <a href="${APP_URL}/market"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Browse EdenMarket
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
+  return sendEmail(to, `EOI update — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
+export function sendMarketObserverInviteEmail(
+  to: string,
+  observerName: string,
+  inviterOrgName: string,
+  assetLabel: string,
+  role: string,
+  acceptUrl: string,
+): Promise<void> {
+  const greeting = observerName?.trim() ? `Hi ${observerName},` : "Hi,";
+  const roleLabel = role === "counsel" ? "legal counsel" : role === "advisor" ? "advisor" : "observer";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">You've been invited to a deal room</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} <strong>${inviterOrgName}</strong> has invited you as <strong>${roleLabel}</strong> to access the EdenMarket deal room for <strong>${assetLabel}</strong>.
+    </p>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      As an observer, you will have read-only access to deal room documents and communications. Your access link is unique; do not share it.
+    </p>
+    <a href="${acceptUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Accept Invitation
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      This link expires in 7 days. Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
+  return sendEmail(to, `Deal room access — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
+export function sendMarketFeedbackRequestEmail(
+  to: string,
+  recipientName: string,
+  assetLabel: string,
+  dealId: number,
+  role: "seller" | "buyer",
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const feedbackUrl = `${APP_URL}/market/deals/${dealId}?tab=feedback`;
+  const context = role === "seller"
+    ? "As the seller, your perspective on how the deal progressed is invaluable."
+    : "As the buyer, your experience throughout the process helps us improve EdenMarket for everyone.";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Share your deal experience</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} your deal for <strong>${assetLabel}</strong> has been marked as complete.
+    </p>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${context} Your feedback takes less than 2 minutes and helps EdenMarket surface better deal intelligence for the whole community.
+    </p>
+    <a href="${feedbackUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Share Feedback
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      All responses are kept confidential. Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL, accentColor: '#7c3aed' });
+  return sendEmail(to, `How did your deal go? — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
   });
 }
 

@@ -633,9 +633,25 @@ export default function MarketListingDetail() {
               : <>
                   <DetailRow icon={Shield} label="IP Status" value={listing.ipStatus} />
                   {listing.ipSummary && <DetailRow icon={Shield} label="IP Summary" value={listing.ipSummary} />}
+                  {listing.patentNumbers && <DetailRow icon={Shield} label="Patents" value={listing.patentNumbers} />}
                 </>
             }
           </div>
+          {/* TTO-specific metadata */}
+          {(listing.trlLevel != null || listing.inventorAffiliation || listing.ttoRefNumber) && (
+            <div className="pt-3 border-t border-border space-y-2">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Technology Transfer Office</p>
+              {listing.trlLevel != null && (
+                <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">TRL:</span> {listing.trlLevel} / 9</p>
+              )}
+              {listing.inventorAffiliation && (
+                <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Affiliation:</span> {listing.inventorAffiliation}</p>
+              )}
+              {listing.ttoRefNumber && (
+                <p className="text-xs text-muted-foreground"><span className="font-medium text-foreground">Ref #:</span> {listing.ttoRefNumber}</p>
+              )}
+            </div>
+          )}
 
           {/* EOI section */}
           {!isSeller && (

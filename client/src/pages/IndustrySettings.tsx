@@ -62,12 +62,12 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string; co
   return { score: 2, label: "Strong", color: "#10b981" };
 }
 
-type Frequency = "realtime" | "daily" | "weekly";
+type MatchAlerts = "off" | "daily" | "frequent";
 
-const FREQUENCY_OPTIONS: { value: Frequency; label: string; description: string; badge?: string }[] = [
-  { value: "realtime", label: "Real-time", description: "Within minutes of new assets being indexed — no time window restriction", badge: "Fastest" },
+const MATCH_ALERT_OPTIONS: { value: MatchAlerts; label: string; description: string; badge?: string }[] = [
+  { value: "frequent", label: "Frequent", description: "Up to 4× per day — fires within hours of each indexing run when new matches exist", badge: "Fastest" },
   { value: "daily", label: "Daily digest", description: "Once per day, delivered between 6am–10pm ET" },
-  { value: "weekly", label: "Weekly digest", description: "Once per week, delivered between 6am–10pm ET" },
+  { value: "off", label: "Off", description: "No match alert emails" },
 ];
 
 function SectionHeader({
@@ -281,10 +281,9 @@ export default function IndustrySettings() {
 
   const isIndustry = role === "industry";
 
-  const [emailDigest, setEmailDigest] = useState(false);
-  const [digestLoading, setDigestLoading] = useState(false);
-  const [frequency, setFrequency] = useState<Frequency>("daily");
-  const [freqLoading, setFreqLoading] = useState(false);
+  const [matchAlerts, setMatchAlerts] = useState<MatchAlerts>("daily");
+  const [weeklyRecapEnabled, setWeeklyRecapEnabled] = useState(false);
+  const [notifLoading, setNotifLoading] = useState(false);
   const [pwModalOpen, setPwModalOpen] = useState(false);
   const [lastAlertSentAt, setLastAlertSentAt] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
@@ -490,22 +489,23 @@ export default function IndustrySettings() {
   }, [org?.id]);
 
   useEffect(() => {
-    setEmailDigest(user?.user_metadata?.subscribedToDigest === true);
-  }, [user?.user_metadata?.subscribedToDigest]);
-
-  useEffect(() => {
     if (!isIndustry || !session?.access_token) return;
     fetch("/api/industry/profile", {
       headers: { Authorization: `Bearer ${session.access_token}` },
     })
       .then((r) => r.json())
       .then(({ profile: p }) => {
-        if (p?.notificationPrefs?.frequency) {
-          const freq = p.notificationPrefs.frequency;
-          if (freq === "realtime" || freq === "daily" || freq === "weekly") {
-            setFrequency(freq as Frequency);
+        const prefs = p?.notificationPrefs as { matchAlerts?: string; frequency?: string; weeklyRecap?: boolean } | null;
+        if (prefs?.matchAlerts !== undefined) {
+          if (prefs.matchAlerts === "off" || prefs.matchAlerts === "daily" || prefs.matchAlerts === "frequent") {
+            setMatchAlerts(prefs.matchAlerts as MatchAlerts);
           }
+        } else if (prefs?.frequency) {
+          setMatchAlerts(prefs.frequency === "realtime" ? "frequent" : "daily");
+        } else if (p && !p.subscribedToDigest) {
+          setMatchAlerts("off");
         }
+        setWeeklyRecapEnabled(prefs?.weeklyRecap === true);
         setLastAlertSentAt(p?.lastAlertSentAt ?? null);
       })
       .catch(() => {});
@@ -564,38 +564,16 @@ export default function IndustrySettings() {
     window.location.href = "/login";
   }
 
-  async function handleDigestToggle(value: boolean) {
+  async function handleNotifPrefsChange(newMatchAlerts: MatchAlerts, newWeeklyRecap: boolean) {
     if (!session?.access_token) return;
-    setDigestLoading(true);
-    try {
-      const res = await fetch("/api/users/subscribe", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ subscribedToDigest: value }),
-      });
-      const body = await res.json();
-      if (!res.ok) {
-        toast({ title: "Update failed", description: body.error ?? "Unknown error", variant: "destructive" });
-      } else {
-        setEmailDigest(body.subscribedToDigest);
-        toast({ title: value ? "Email digest enabled" : "Email digest disabled" });
-      }
-    } catch {
-      toast({ title: "Network error", variant: "destructive" });
-    } finally {
-      setDigestLoading(false);
-    }
-  }
-
-  async function handleFrequencyChange(value: Frequency) {
-    if (!session?.access_token) return;
-    setFrequency(value);
-    setFreqLoading(true);
+    setMatchAlerts(newMatchAlerts);
+    setWeeklyRecapEnabled(newWeeklyRecap);
+    setNotifLoading(true);
     try {
       const res = await fetch("/api/users/notification-prefs", {
         method: "PATCH",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-        body: JSON.stringify({ frequency: value }),
+        body: JSON.stringify({ matchAlerts: newMatchAlerts, weeklyRecap: newWeeklyRecap }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -604,7 +582,7 @@ export default function IndustrySettings() {
     } catch {
       toast({ title: "Network error", variant: "destructive" });
     } finally {
-      setFreqLoading(false);
+      setNotifLoading(false);
     }
   }
 
@@ -740,54 +718,60 @@ export default function IndustrySettings() {
       <div className="rounded-xl border border-card-border bg-card p-5">
         <SectionHeader icon={Bell} title="Notifications" description="Control how EdenRadar notifies you about new activity" />
         <div className="space-y-5">
+
+          {/* Match alerts */}
+          <div>
+            <p className="text-sm font-medium text-foreground mb-0.5">Match alerts</p>
+            <p className="text-xs text-muted-foreground mb-3">Email when new assets match your saved criteria</p>
+            <div className="space-y-2">
+              {MATCH_ALERT_OPTIONS.map((opt) => (
+                <button key={opt.value} type="button"
+                  onClick={() => handleNotifPrefsChange(opt.value, weeklyRecapEnabled)}
+                  disabled={notifLoading}
+                  data-testid={`match-alert-${opt.value}`}
+                  className={cn(
+                    "w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-left transition-all duration-150",
+                    matchAlerts === opt.value
+                      ? "border-emerald-500/40 bg-emerald-500/5 text-foreground"
+                      : "border-border text-muted-foreground hover:border-emerald-500/20 hover:text-foreground"
+                  )}>
+                  <span className="flex flex-col">
+                    <span className="flex items-center gap-1.5">
+                      <span className="text-sm font-medium">{opt.label}</span>
+                      {opt.badge && (
+                        <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-semibold tracking-wide leading-none">
+                          {opt.badge}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{opt.description}</span>
+                  </span>
+                  {matchAlerts === opt.value && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
+                </button>
+              ))}
+            </div>
+            {lastAlertSentAt && matchAlerts !== "off" && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-2" data-testid="text-last-alert-sent">
+                Last sent: {formatRelativeTime(lastAlertSentAt)}
+              </p>
+            )}
+          </div>
+
+          <Separator />
+
+          {/* Weekly recap */}
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-foreground">Email alerts when new assets match your focus areas</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Get a digest of newly indexed TTO assets that match your therapeutic areas and modalities</p>
-              {lastAlertSentAt && (
-                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1" data-testid="text-last-alert-sent">
-                  Last sent: {formatRelativeTime(lastAlertSentAt)}
-                </p>
-              )}
+              <p className="text-sm font-medium text-foreground">Weekly recap</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Monday morning summary of last week — new assets, team activity, top searches</p>
             </div>
-            <Switch checked={emailDigest} onCheckedChange={handleDigestToggle}
-              disabled={digestLoading} data-testid="toggle-email-digest" />
+            <Switch
+              checked={weeklyRecapEnabled}
+              onCheckedChange={(v) => handleNotifPrefsChange(matchAlerts, v)}
+              disabled={notifLoading}
+              data-testid="toggle-weekly-recap"
+            />
           </div>
-          {emailDigest && (
-            <>
-              <Separator />
-              <div>
-                <p className="text-xs font-semibold text-foreground mb-2">Digest frequency</p>
-                <div className="space-y-2">
-                  {FREQUENCY_OPTIONS.map((opt) => (
-                    <button key={opt.value} type="button"
-                      onClick={() => handleFrequencyChange(opt.value)}
-                      disabled={freqLoading}
-                      data-testid={`freq-${opt.value}`}
-                      className={cn(
-                        "w-full flex items-center justify-between px-3 py-2.5 rounded-lg border text-left transition-all duration-150",
-                        frequency === opt.value
-                          ? "border-emerald-500/40 bg-emerald-500/5 text-foreground"
-                          : "border-border text-muted-foreground hover:border-emerald-500/20 hover:text-foreground"
-                      )}>
-                      <span className="flex flex-col">
-                        <span className="flex items-center gap-1.5">
-                          <span className="text-sm font-medium">{opt.label}</span>
-                          {opt.badge && (
-                            <span className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 px-1.5 py-0.5 rounded-full font-semibold tracking-wide leading-none">
-                              {opt.badge}
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-xs text-muted-foreground">{opt.description}</span>
-                      </span>
-                      {frequency === opt.value && <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
         </div>
       </div>
 

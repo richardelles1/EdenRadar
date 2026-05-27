@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw,
-  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown, Dna, TrendingUp,
+  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown, Dna, TrendingUp, X,
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
 import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
@@ -14,6 +14,10 @@ import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
+
+const ACCENT = "hsl(142 71% 45%)";
+
+// ── Stage & Biology config ────────────────────────────────────────────────────
 
 const STAGE_COLORS: Record<string, string> = {
   "discovery":   "bg-violet-500/10 text-violet-600 dark:text-violet-400",
@@ -24,7 +28,54 @@ const STAGE_COLORS: Record<string, string> = {
   "approved":    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 };
 
+const STAGE_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
+
+const STAGE_BAR_COLORS: Record<string, string> = {
+  "discovery":   "bg-violet-500",
+  "preclinical": "bg-amber-500",
+  "phase 1":     "bg-cyan-500",
+  "phase 2":     "bg-sky-500",
+  "phase 3":     "bg-blue-500",
+  "approved":    "bg-emerald-500",
+};
+
+const BIOLOGY_COLORS = [
+  "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20",
+  "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20",
+  "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/20",
+  "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
+  "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/20",
+  "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
+  "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
+  "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20",
+];
+
 type SortMode = "newest" | "commercial" | "az" | "za";
+
+// ── Drawer types ──────────────────────────────────────────────────────────────
+
+type DrawerFilter =
+  | { type: "biology"; label: string }
+  | { type: "stage"; stage: string }
+  | { type: "indication"; indication: string }
+  | null;
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function parseCategories(raw: unknown): string[] {
+  if (Array.isArray(raw)) return raw.map(String);
+  if (typeof raw === "string") {
+    try { const p = JSON.parse(raw); return Array.isArray(p) ? p.map(String) : []; }
+    catch { return [raw]; }
+  }
+  return [];
+}
+
+function normalizeLabel(s: string): string {
+  return s.toLowerCase().replace(/_/g, " ").trim();
+}
+
+// ── ScoreBadge ────────────────────────────────────────────────────────────────
 
 function ScoreBadge({ score }: { score: number }) {
   const color =
@@ -41,6 +92,8 @@ function ScoreBadge({ score }: { score: number }) {
     </span>
   );
 }
+
+// ── AssetRow ──────────────────────────────────────────────────────────────────
 
 function AssetRow({ asset, index, savedIngestedIds }: {
   asset: IngestedAsset;
@@ -178,36 +231,40 @@ function AssetRow({ asset, index, savedIngestedIds }: {
   );
 }
 
-const STAGE_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
+// ── ResearchDnaPanel ──────────────────────────────────────────────────────────
 
-const STAGE_BAR_COLORS: Record<string, string> = {
-  "discovery":   "bg-violet-500",
-  "preclinical": "bg-amber-500",
-  "phase 1":     "bg-cyan-500",
-  "phase 2":     "bg-sky-500",
-  "phase 3":     "bg-blue-500",
-  "approved":    "bg-emerald-500",
-};
-
-const BIOLOGY_COLORS = [
-  "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20",
-  "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20",
-  "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/20",
-  "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/20",
-  "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20",
-];
-
-function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institutions").InstitutionProfile | null; loading: boolean }) {
-  const hasBiology = (profile?.biologyBreakdown?.length ?? 0) > 0;
-  const hasStage = (profile?.stageBreakdown?.length ?? 0) > 0;
+function ResearchDnaPanel({
+  profile,
+  loading,
+  onBiologyClick,
+  onStageClick,
+  onIndicationClick,
+}: {
+  profile: InstitutionProfile | null;
+  loading: boolean;
+  onBiologyClick?: (label: string) => void;
+  onStageClick?: (stage: string) => void;
+  onIndicationClick?: (indication: string) => void;
+}) {
+  const hasBiology    = (profile?.biologyBreakdown?.length ?? 0) > 0;
+  const hasStage      = (profile?.stageBreakdown?.length ?? 0) > 0;
   const hasIndications = (profile?.topIndications?.length ?? 0) > 0;
-  const hasStandout = (profile?.standoutAssets?.length ?? 0) > 0;
-  const hasAny = hasBiology || hasStage || hasIndications || hasStandout;
+  const hasStandout   = (profile?.standoutAssets?.length ?? 0) > 0;
+  const hasAny        = hasBiology || hasStage || hasIndications || hasStandout;
 
-  if (!loading && !hasAny) return null;
+  if (!loading && !hasAny) {
+    return (
+      <div className="rounded-xl border border-card-border bg-card p-5" data-testid="research-dna-panel">
+        <div className="flex items-center gap-2 mb-3">
+          <Dna className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Research DNA</h2>
+        </div>
+        <p className="text-xs text-muted-foreground/60 italic">
+          No portfolio data indexed yet. Run a scan to build this institution&apos;s intelligence profile.
+        </p>
+      </div>
+    );
+  }
 
   const maxBiologyCnt = profile?.biologyBreakdown?.[0]?.count ?? 1;
   const totalStageCnt = profile?.stageBreakdown?.reduce((s, r) => s + r.count, 0) ?? 1;
@@ -225,6 +282,11 @@ function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institu
       <div className="flex items-center gap-2">
         <Dna className="w-4 h-4 text-primary" />
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Research DNA</h2>
+        {!loading && hasAny && (
+          <span className="text-[10px] text-muted-foreground/60 ml-auto">
+            Click any item to see assets
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -238,10 +300,15 @@ function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institu
           ) : hasBiology ? (
             <div className="space-y-1.5">
               {profile!.biologyBreakdown.map((b, i) => (
-                <div key={b.label} className="flex items-center gap-2" data-testid={`biology-bar-${i}`}>
+                <div
+                  key={b.label}
+                  className="flex items-center gap-2 rounded-md p-1 -mx-1 cursor-pointer hover:bg-accent/40 group transition-colors"
+                  onClick={() => onBiologyClick?.(b.label)}
+                  data-testid={`biology-bar-${i}`}
+                >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border ${BIOLOGY_COLORS[i % BIOLOGY_COLORS.length]}`}>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-all group-hover:ring-1 group-hover:ring-primary/30 ${BIOLOGY_COLORS[i % BIOLOGY_COLORS.length]}`}>
                         {b.label}
                       </span>
                       <span className="text-[10px] text-muted-foreground tabular-nums ml-2 shrink-0">{b.count}</span>
@@ -276,8 +343,13 @@ function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institu
                 const barColor = STAGE_BAR_COLORS[key] ?? "bg-muted-foreground/40";
                 const labelColor = STAGE_COLORS[key] ?? "bg-muted text-muted-foreground";
                 return (
-                  <div key={s.stage} className="flex items-center gap-2" data-testid={`stage-bar-${key}`}>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${labelColor}`}>
+                  <div
+                    key={s.stage}
+                    className="flex items-center gap-2 rounded-md p-1 -mx-1 cursor-pointer hover:bg-accent/40 group transition-colors"
+                    onClick={() => onStageClick?.(s.stage ?? "")}
+                    data-testid={`stage-bar-${key}`}
+                  >
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 transition-all group-hover:ring-1 group-hover:ring-primary/30 ${labelColor}`}>
                       {s.stage}
                     </span>
                     <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
@@ -306,7 +378,12 @@ function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institu
             ) : hasIndications ? (
               <ul className="space-y-1">
                 {profile!.topIndications.map((ind, i) => (
-                  <li key={ind} className="flex items-center gap-1.5 text-xs text-foreground" data-testid={`indication-${i}`}>
+                  <li
+                    key={ind}
+                    className="flex items-center gap-1.5 text-xs text-foreground rounded-md p-1 -mx-1 cursor-pointer hover:bg-accent/40 transition-colors"
+                    onClick={() => onIndicationClick?.(ind)}
+                    data-testid={`indication-${i}`}
+                  >
                     <span className="w-3.5 h-3.5 rounded-full bg-primary/15 text-primary text-[9px] font-bold flex items-center justify-center shrink-0">
                       {i + 1}
                     </span>
@@ -357,12 +434,126 @@ function ResearchDnaPanel({ profile, loading }: { profile: import("@/lib/institu
   );
 }
 
+// ── CategoryDrawer ────────────────────────────────────────────────────────────
+
+function CategoryDrawer({
+  filter,
+  assets,
+  onClose,
+}: {
+  filter: NonNullable<DrawerFilter>;
+  assets: IngestedAsset[];
+  onClose: () => void;
+}) {
+  const title =
+    filter.type === "biology"    ? filter.label :
+    filter.type === "stage"      ? `${filter.stage} stage` :
+                                   filter.indication;
+
+  const subtitle =
+    filter.type === "biology"    ? "Biology-matched assets from this institution" :
+    filter.type === "stage"      ? "Assets at this development stage" :
+                                   "Assets targeting this indication";
+
+  return (
+    <>
+      <div
+        className="fixed inset-0 bg-black/25 z-40 backdrop-blur-[1px]"
+        onClick={onClose}
+      />
+      <div
+        className="fixed right-0 top-0 h-full w-[440px] max-w-full bg-card border-l border-border z-50 flex flex-col shadow-2xl"
+        style={{ animation: "slide-in-right 220ms ease both" }}
+      >
+        {/* Drawer header */}
+        <div className="flex items-start justify-between p-5 border-b border-border shrink-0">
+          <div className="flex-1 min-w-0 pr-3">
+            <h3 className="text-sm font-bold text-foreground leading-tight capitalize">{title}</h3>
+            <p className="text-xs text-muted-foreground mt-1 leading-snug">{subtitle}</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              {assets.length} asset{assets.length !== 1 ? "s" : ""}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Asset list */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {assets.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-center px-4">
+              <p className="text-sm text-muted-foreground">No assets matched in this category.</p>
+              <p className="text-xs text-muted-foreground/60">
+                Assets may not be enriched yet — run an enrich pass to populate category data.
+              </p>
+            </div>
+          ) : (
+            assets.map((asset) => {
+              const modality = detectModality(asset.assetName);
+              const stage    = detectStage(asset.assetName, asset.developmentStage);
+              const score    = computeCommercialScore(asset);
+              return (
+                <Link key={asset.id} href={`/asset/${asset.id}`}>
+                  <div className="group p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all cursor-pointer">
+                    <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                      {asset.assetName}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {modality && (
+                        <span
+                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
+                          style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
+                        >
+                          {modality}
+                        </span>
+                      )}
+                      {stage && (
+                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STAGE_COLORS[stage.toLowerCase()] ?? "bg-muted text-muted-foreground"}`}>
+                          {stage}
+                        </span>
+                      )}
+                      <span className="ml-auto">
+                        <ScoreBadge score={score} />
+                      </span>
+                    </div>
+                  </div>
+                </Link>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer CTA */}
+        <div className="p-4 border-t border-border shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
+            style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
+          >
+            Back to profile
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
 type SavedAssetsResponse = { assets: Array<{ ingestedAssetId: number | null }> };
+
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function InstitutionDetail() {
   const { slug } = useParams<{ slug: string }>();
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
+  const [drawerFilter, setDrawerFilter] = useState<DrawerFilter>(null);
 
   const { data: instListData } = useQuery<InstitutionsListResponse>({
     queryKey: ["/api/institutions"],
@@ -399,29 +590,57 @@ export default function InstitutionDetail() {
   const rawAssets = data?.assets ?? [];
   const isBlocked = inst?.accessRestricted ?? false;
 
+  // Filter assets client-side based on what was clicked in the DNA panel
+  const drawerAssets = useMemo(() => {
+    if (!drawerFilter || !rawAssets.length) return [];
+    if (drawerFilter.type === "biology") {
+      const norm = normalizeLabel(drawerFilter.label);
+      return rawAssets.filter((a) => {
+        const cats = parseCategories((a as unknown as Record<string, unknown>).categories);
+        return cats.some((c) => normalizeLabel(c) === norm);
+      });
+    }
+    if (drawerFilter.type === "stage") {
+      const norm = drawerFilter.stage.toLowerCase();
+      return rawAssets.filter((a) => detectStage(a.assetName, a.developmentStage)?.toLowerCase() === norm);
+    }
+    if (drawerFilter.type === "indication") {
+      const norm = drawerFilter.indication.toLowerCase().trim();
+      return rawAssets.filter((a) => (a.indication ?? "").toLowerCase().trim() === norm);
+    }
+    return [];
+  }, [drawerFilter, rawAssets]);
+
   const filtered = search.trim()
     ? rawAssets.filter((a) => a.assetName.toLowerCase().includes(search.toLowerCase()))
     : rawAssets;
 
   const sorted = [...filtered].sort((a, b) => {
-    if (sortMode === "newest") return new Date(b.firstSeenAt).getTime() - new Date(a.firstSeenAt).getTime();
+    if (sortMode === "newest")     return new Date(b.firstSeenAt).getTime() - new Date(a.firstSeenAt).getTime();
     if (sortMode === "commercial") return computeCommercialScore(b) - computeCommercialScore(a);
-    if (sortMode === "az") return a.assetName.localeCompare(b.assetName);
-    if (sortMode === "za") return b.assetName.localeCompare(a.assetName);
+    if (sortMode === "az")         return a.assetName.localeCompare(b.assetName);
+    if (sortMode === "za")         return b.assetName.localeCompare(a.assetName);
     return 0;
   });
 
   const activeCount = isLoading ? null : rawAssets.length;
 
   const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-    { value: "newest", label: "Newest First" },
+    { value: "newest",     label: "Newest First" },
     { value: "commercial", label: "Best Commercial" },
-    { value: "az", label: "A → Z" },
-    { value: "za", label: "Z → A" },
+    { value: "az",         label: "A → Z" },
+    { value: "za",         label: "Z → A" },
   ];
 
   return (
     <div className="min-h-full">
+      <style>{`
+        @keyframes slide-in-right {
+          from { transform: translateX(100%); }
+          to   { transform: translateX(0); }
+        }
+      `}</style>
+      {/* ── Header ── */}
       <div className="border-b border-border bg-card/30">
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
           <Link href="/institutions">
@@ -449,12 +668,31 @@ export default function InstitutionDetail() {
                     </Badge>
                   )}
                 </div>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {inst
-                    ? [inst.city, inst.ttoName].filter(Boolean).join(" · ") ||
-                      "Indexed by EdenRadar"
-                    : "Institution not in curated directory"}
-                </p>
+                <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                  <p className="text-sm text-muted-foreground">
+                    {inst
+                      ? [inst.city, inst.ttoName].filter(Boolean).join(" · ") || "Indexed by EdenRadar"
+                      : "Institution not in curated directory"}
+                  </p>
+                  {activeCount !== null && activeCount > 0 && (
+                    <Badge variant="secondary" className="text-[10px] bg-primary/10 text-primary border-0">
+                      {activeCount} listings
+                    </Badge>
+                  )}
+                </div>
+                {inst?.specialties && inst.specialties.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {inst.specialties.map((s) => (
+                      <Badge
+                        key={s}
+                        variant="secondary"
+                        className="text-[10px] font-medium bg-primary/8 text-primary/80 border-0 px-2 py-0.5"
+                      >
+                        {s}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             {inst?.website && (
@@ -473,43 +711,19 @@ export default function InstitutionDetail() {
         </div>
       </div>
 
+      {/* ── Content ── */}
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div className="p-4 rounded-lg border border-card-border bg-card">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">TTO Office</p>
-            <p className="text-sm font-medium text-foreground">{inst?.ttoName ?? "—"}</p>
-          </div>
-          <div className="p-4 rounded-lg border border-card-border bg-card">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Location</p>
-            <p className="text-sm font-medium text-foreground">{inst?.city ?? "—"}</p>
-          </div>
-          <div className="p-4 rounded-lg border border-card-border bg-card" data-testid="stat-active-listings">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Active Listings</p>
-            {isLoading ? (
-              <Skeleton className="h-8 w-12" />
-            ) : activeCount !== null && activeCount > 0 ? (
-              <p className="text-2xl font-bold text-primary">{activeCount}</p>
-            ) : (
-              <p className="text-2xl font-bold text-muted-foreground">—</p>
-            )}
-          </div>
-        </div>
 
-        <ResearchDnaPanel profile={profile ?? null} loading={profileLoading} />
+        {/* Research DNA — first, every bar and indication is clickable */}
+        <ResearchDnaPanel
+          profile={profile ?? null}
+          loading={profileLoading}
+          onBiologyClick={(label) => setDrawerFilter({ type: "biology", label })}
+          onStageClick={(stage) => setDrawerFilter({ type: "stage", stage })}
+          onIndicationClick={(indication) => setDrawerFilter({ type: "indication", indication })}
+        />
 
-        {inst?.specialties && inst.specialties.length > 0 && (
-          <div>
-            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Specialty Areas</h2>
-            <div className="flex flex-wrap gap-2">
-              {inst.specialties.map((s) => (
-                <Badge key={s} variant="secondary" className="text-sm font-medium bg-primary/10 text-primary border-0 px-3 py-1">
-                  {s}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
-
+        {/* Active Listings */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-3">
@@ -562,10 +776,16 @@ export default function InstitutionDetail() {
               <ShieldOff className="w-8 h-8 text-amber-500/60" />
               <p className="text-sm font-medium text-foreground">Access Restricted</p>
               <p className="text-xs text-muted-foreground/70 max-w-sm">
-                This institution&apos;s website blocks automated access from cloud hosting providers. Listings cannot be indexed automatically.
+                This institution&apos;s website blocks automated access from cloud hosting providers.
+                Listings cannot be indexed automatically.
               </p>
               {inst?.website && (
-                <a href={inst.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                <a
+                  href={inst.website}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
                   Visit TTO website directly →
                 </a>
               )}
@@ -574,7 +794,9 @@ export default function InstitutionDetail() {
             <div className="flex flex-col items-center gap-3 py-12 text-center">
               <RefreshCw className="w-8 h-8 text-muted-foreground/40" />
               <p className="text-sm font-medium text-muted-foreground">No listings indexed yet</p>
-              <p className="text-xs text-muted-foreground/70">Run a scan from the Scout page to pull real listings from this TTO.</p>
+              <p className="text-xs text-muted-foreground/70">
+                Run a scan from the Scout page to pull real listings from this TTO.
+              </p>
             </div>
           ) : sorted.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
@@ -589,6 +811,15 @@ export default function InstitutionDetail() {
           )}
         </div>
       </div>
+
+      {/* ── Category Drawer ── */}
+      {drawerFilter && (
+        <CategoryDrawer
+          filter={drawerFilter}
+          assets={drawerAssets}
+          onClose={() => setDrawerFilter(null)}
+        />
+      )}
     </div>
   );
 }

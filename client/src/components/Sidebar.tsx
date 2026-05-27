@@ -13,12 +13,20 @@ import {
   LogOut,
   Menu,
   X,
+  User,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SavedAsset } from "@shared/schema";
 import { useState } from "react";
+
+const PLAN_BADGE: Record<string, string> = {
+  individual: "Individual",
+  team5: "Team · 5",
+  team10: "Team · 10",
+  enterprise: "Enterprise",
+};
 
 type SavedAssetsResponse = { assets: SavedAsset[] };
 
@@ -31,9 +39,11 @@ const NAV_ITEMS = [
   { href: "/sources", label: "Sources", icon: Database },
 ];
 
+type PlanResponse = { plan: string | null; orgName: string | null };
+
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, user, session } = useAuth();
   const [location] = useLocation();
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({
@@ -46,8 +56,23 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     refetchInterval: 5 * 60 * 1000,
   });
 
+  const { data: planData } = useQuery<PlanResponse>({
+    queryKey: ["/api/me/plan", user?.id ?? null],
+    staleTime: 5 * 60 * 1000,
+    enabled: !!session?.access_token,
+    queryFn: async () => {
+      const res = await fetch("/api/me/plan", {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error("plan fetch failed");
+      return res.json();
+    },
+  });
+
   const savedCount = savedData?.assets?.length ?? 0;
   const alertCount = unreadData?.count ?? 0;
+  const email = user?.email ?? "";
+  const planLabel = planData?.plan ? (PLAN_BADGE[planData.plan] ?? planData.plan) : null;
 
   async function handleSignOut() {
     await signOut();
@@ -116,6 +141,25 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </nav>
 
       <div className="px-3 pb-4 pt-2 border-t border-border space-y-0.5 shrink-0">
+        {email && (
+          <Link href="/settings">
+            <div
+              className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-accent/60 cursor-pointer transition-colors mb-1"
+              data-testid="sidebar-user-identity"
+              onClick={onClose}
+            >
+              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <User className="w-3.5 h-3.5 text-primary" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground truncate leading-tight">{email}</p>
+                {planLabel && (
+                  <p className="text-[10px] text-primary font-semibold leading-tight">{planLabel}</p>
+                )}
+              </div>
+            </div>
+          </Link>
+        )}
         <Button
           variant="ghost"
           size="sm"

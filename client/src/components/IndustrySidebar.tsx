@@ -2,7 +2,7 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Search, Lightbulb, FlaskConical, Building2, Bell,
+  Search, Building2, Bell,
   Layers, User, Moon, Sun, LogOut, Menu, X, Radar,
   LayoutDashboard, Settings, Newspaper, ShoppingBag, BarChart2, Sparkles, Code2,
 } from "lucide-react";
@@ -41,30 +41,29 @@ type NavGroup = {
   items: NavItem[];
 };
 
+const DASHBOARD_NAV: NavItem = { href: "/industry/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true };
+
 const NAV_GROUPS: NavGroup[] = [
   {
-    groupLabel: "Overview",
-    items: [
-      { href: "/industry/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
-      { href: "/industry/new-arrivals", label: "New Arrivals", icon: Newspaper, exact: true },
-    ],
-  },
-  {
-    groupLabel: "Intelligence",
+    groupLabel: "Discover",
     items: [
       { href: "/scout", label: "Scout", icon: Search, exact: true },
-      { href: "/intelligence", label: "Landscape", icon: BarChart2, exact: true },
       { href: "/industry/eden", label: "EDEN", icon: Sparkles, exact: true },
-      { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },
       { href: "/institutions", label: "Institutions", icon: Building2 },
     ],
   },
   {
-    groupLabel: "Workspace",
+    groupLabel: "Track",
+    items: [
+      { href: "/industry/new-arrivals", label: "New Arrivals", icon: Newspaper, exact: true },
+      { href: "/intelligence", label: "Intelligence", icon: BarChart2, exact: true },
+      { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },
+    ],
+  },
+  {
+    groupLabel: "Build",
     items: [
       { href: "/assets", label: "Pipelines", icon: Layers },
-      { href: "/industry/concepts", label: "Discovery", icon: Lightbulb },
-      { href: "/industry/projects", label: "Lab", icon: FlaskConical },
     ],
   },
   {
@@ -229,6 +228,16 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
 
       {/* Nav groups — primary workflow → workspace → cross-portal */}
       <nav className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">
+        {/* Dashboard — home-base, no group header */}
+        <SidebarNavButton
+          label={DASHBOARD_NAV.label}
+          icon={DASHBOARD_NAV.icon}
+          isActive={location === DASHBOARD_NAV.href}
+          onClick={() => navigate(DASHBOARD_NAV.href)}
+          accent={ACCENT}
+          testId="industry-sidebar-link-dashboard"
+        />
+
         {NAV_GROUPS.map(({ groupLabel, items }) => (
           <div key={groupLabel}>
             <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>

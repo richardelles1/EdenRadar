@@ -10,6 +10,7 @@ import MarketListingDetail from "@/pages/MarketListingDetail";
 import MarketCreateListing from "@/pages/MarketCreateListing";
 import MarketEditListing from "@/pages/MarketEditListing";
 import MarketSellerDashboard from "@/pages/MarketSellerDashboard";
+import MarketSellerAnalytics from "@/pages/MarketSellerAnalytics";
 import MarketMyEOIs from "@/pages/MarketMyEOIs";
 import MarketDeals from "@/pages/MarketDeals";
 import MarketDealRoom from "@/pages/MarketDealRoom";
@@ -358,6 +359,13 @@ function Router() {
         <MarketLayout>
           <MarketGate>
             <MarketEditListing />
+          </MarketGate>
+        </MarketLayout>
+      </Route>
+      <Route path="/market/seller/analytics">
+        <MarketLayout>
+          <MarketGate>
+            <MarketSellerAnalytics />
           </MarketGate>
         </MarketLayout>
       </Route>

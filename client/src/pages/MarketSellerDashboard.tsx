@@ -4,8 +4,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Pause, Play, Trash2, Eye, EyeOff, FileText, ShoppingBag, ChevronDown, ChevronRight, CheckCircle2, XCircle, Shield } from "lucide-react";
+import { Plus, Edit, Pause, Play, Trash2, Eye, EyeOff, FileText, ShoppingBag, ChevronDown, ChevronRight, CheckCircle2, XCircle, Shield, BarChart3, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketListing } from "@shared/schema";
 
@@ -58,6 +59,7 @@ export default function MarketSellerDashboard() {
   const qc = useQueryClient();
   const [expandedEois, setExpandedEois] = useState<Record<number, boolean>>({});
   const [acceptingId, setAcceptingId] = useState<number | null>(null);
+  const [buyerIntelEoiId, setBuyerIntelEoiId] = useState<number | null>(null);
 
   const authHeaders = {
     Authorization: `Bearer ${session!.access_token}`,
@@ -152,6 +154,27 @@ export default function MarketSellerDashboard() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
+  // Buyer intel fetch (lazy — only when modal opened)
+  const { data: buyerIntel, isLoading: intelLoading } = useQuery({
+    queryKey: ["/api/market/seller/eois", buyerIntelEoiId, "buyer-intel"],
+    queryFn: async () => {
+      const res = await fetch(`/api/market/seller/eois/${buyerIntelEoiId}/buyer-intel`, { headers: authHeaders });
+      if (!res.ok) return null;
+      return res.json() as Promise<{
+        buyerCompany: string;
+        buyerRole: string;
+        buyerOrgName: string | null;
+        buyerOrgType: string | null;
+        buyerTherapeuticAreas: string[];
+        buyerModalities: string[];
+        buyerDealStages: string[];
+        pipelineSignals: { total: number; relevantTa: number };
+        eoi: { rationale: string; budgetRange: string | null; timeline: string | null; status: string };
+      }>;
+    },
+    enabled: buyerIntelEoiId !== null,
+  });
+
   const active = listings.filter(l => l.status === "active");
   const pending = listings.filter(l => l.status === "pending");
 
@@ -166,15 +189,81 @@ export default function MarketSellerDashboard() {
           <h1 className="text-xl font-bold text-foreground">Seller Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Manage your listings and track buyer interest</p>
         </div>
-        <Button
-          className="gap-2 text-white shrink-0"
-          style={{ background: ACCENT }}
-          onClick={() => navigate("/market/create-listing")}
-          data-testid="seller-dashboard-new-listing"
-        >
-          <Plus className="w-4 h-4" /> New Listing
-        </Button>
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" className="gap-1.5 h-8 text-xs" onClick={() => navigate("/market/seller/analytics")}>
+            <BarChart3 className="w-3.5 h-3.5" /> Analytics
+          </Button>
+          <Button
+            className="gap-2 text-white"
+            style={{ background: ACCENT }}
+            onClick={() => navigate("/market/create-listing")}
+            data-testid="seller-dashboard-new-listing"
+          >
+            <Plus className="w-4 h-4" /> New Listing
+          </Button>
+        </div>
       </div>
+
+      {/* Buyer Intel Modal */}
+      <Dialog open={buyerIntelEoiId !== null} onOpenChange={(o) => { if (!o) setBuyerIntelEoiId(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Buyer Intelligence</DialogTitle>
+          </DialogHeader>
+          {intelLoading ? (
+            <div className="flex items-center justify-center py-8"><div className="w-5 h-5 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" /></div>
+          ) : buyerIntel ? (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-lg border border-border p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Company Profile</p>
+                <p><span className="text-muted-foreground">Company:</span> <span className="font-medium">{buyerIntel.buyerCompany}</span></p>
+                {buyerIntel.buyerOrgName && buyerIntel.buyerOrgName !== buyerIntel.buyerCompany && (
+                  <p><span className="text-muted-foreground">Org name:</span> {buyerIntel.buyerOrgName}</p>
+                )}
+                {buyerIntel.buyerOrgType && <p><span className="text-muted-foreground">Type:</span> {buyerIntel.buyerOrgType}</p>}
+                <p><span className="text-muted-foreground">Role:</span> {buyerIntel.buyerRole}</p>
+              </div>
+              {buyerIntel.buyerTherapeuticAreas.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Therapeutic Focus</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {buyerIntel.buyerTherapeuticAreas.map(ta => (
+                      <Badge key={ta} variant="outline" className="text-[10px]">{ta}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {buyerIntel.buyerModalities.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Modality Preferences</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {buyerIntel.buyerModalities.map(m => (
+                      <Badge key={m} variant="outline" className="text-[10px]">{m}</Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(buyerIntel.pipelineSignals.total > 0) && (
+                <div className="rounded-lg bg-indigo-500/5 border border-indigo-500/15 p-3">
+                  <p className="text-xs font-semibold text-indigo-700 dark:text-indigo-400 mb-1">Pipeline Signals</p>
+                  <p className="text-xs text-muted-foreground">{buyerIntel.pipelineSignals.total} assets saved in Scout pipeline</p>
+                  {buyerIntel.pipelineSignals.relevantTa > 0 && (
+                    <p className="text-xs text-indigo-700 dark:text-indigo-400 font-medium">{buyerIntel.pipelineSignals.relevantTa} in matching therapeutic area</p>
+                  )}
+                </div>
+              )}
+              <div className="rounded-lg border border-border p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">EOI Rationale</p>
+                <p className="text-xs text-foreground">{buyerIntel.eoi.rationale}</p>
+                {buyerIntel.eoi.budgetRange && <p className="text-xs"><span className="text-muted-foreground">Budget:</span> {buyerIntel.eoi.budgetRange}</p>}
+                {buyerIntel.eoi.timeline && <p className="text-xs"><span className="text-muted-foreground">Timeline:</span> {buyerIntel.eoi.timeline}</p>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground text-center py-6">No buyer intelligence available.</p>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
@@ -358,6 +447,15 @@ export default function MarketSellerDashboard() {
                             {/* Accept / Decline — only for submitted/viewed EOIs */}
                             {(eoi.status === "submitted" || eoi.status === "viewed") && (
                               <div className="flex gap-2 pt-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-[10px] gap-1 px-2"
+                                  onClick={() => setBuyerIntelEoiId(eoi.id)}
+                                  data-testid={`seller-eoi-intel-${eoi.id}`}
+                                >
+                                  <Info className="w-3 h-3" /> Buyer Intel
+                                </Button>
                                 <Button
                                   size="sm"
                                   className="h-6 text-[10px] gap-1 text-white px-2"

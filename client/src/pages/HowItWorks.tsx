@@ -5,11 +5,9 @@ import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
-import { Spotlight } from "@/components/ui/spotlight";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { WordRotate } from "@/components/ui/word-rotate";
 import { AnimatedTabs } from "@/components/ui/animated-tabs";
-import { CardTilt } from "@/components/ui/card-tilt";
 import {
   ArrowRight,
   Lightbulb,
@@ -208,7 +206,7 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
           <p className="text-sm font-semibold text-foreground leading-tight">EDEN</p>
           <p className="text-[10px] text-primary">Research Intelligence</p>
         </div>
-        <div className="ml-auto flex gap-1">
+        <div className="ml-auto flex gap-1" aria-hidden="true">
           {["bg-red-500/50", "bg-amber-500/50", "bg-green-500/50"].map((c, i) => (
             <div key={i} className={`w-2.5 h-2.5 rounded-full ${c}`} />
           ))}
@@ -366,7 +364,7 @@ export default function HowItWorks() {
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             <span className="block">The intelligence engine</span>
-            <span className="gradient-text block">
+            <span className="text-primary block">
               for <WordRotate words={["BD teams.", "TTOs.", "researchers.", "deal flow."]} />
             </span>
           </h1>
@@ -387,7 +385,7 @@ export default function HowItWorks() {
           <div className="mt-16 grid grid-cols-3 gap-6 sm:gap-10 max-w-lg mx-auto">
             {STATS.map((s) => (
               <div key={s.label} className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
+                <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">
                   <NumberTicker value={s.value} />
                 </div>
                 <div className="text-xs tracking-wide font-semibold text-foreground/70">{s.label}</div>
@@ -410,34 +408,29 @@ export default function HowItWorks() {
               Four distinct channels — each designed so the right asset finds you, whether you're actively searching or not.
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="divide-y divide-border/60">
             {INTEL_CHANNELS.map((ch, i) => (
-              <CardTilt key={i} className="rounded-xl">
-                <div
-                  className="flex flex-col gap-5 p-7 rounded-xl h-full"
-                  style={{
-                    background: "linear-gradient(150deg, hsl(var(--card)) 0%, hsl(var(--primary) / 0.04) 100%)",
-                    border: "1px solid hsl(var(--border))",
-                    borderTop: "2px solid hsl(var(--primary) / 0.40)",
-                  }}
-                >
-                  <div className="flex items-center justify-between">
-                    <div
-                      className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0"
-                      style={{ background: "hsl(var(--primary) / 0.10)" }}
-                    >
-                      <ch.icon className="w-5 h-5 text-primary" />
-                    </div>
-                    <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-primary/50">
-                      {ch.tag}
-                    </span>
+              <div
+                key={i}
+                className="stagger-item grid grid-cols-[4rem_1fr] sm:grid-cols-[8rem_1fr] gap-6 sm:gap-10 py-8 items-start"
+                style={{ animationDelay: `${i * 80}ms` }}
+              >
+                <div className="flex flex-col items-start gap-3 pt-0.5">
+                  <div
+                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    style={{ background: "hsl(var(--primary) / 0.10)" }}
+                  >
+                    <ch.icon className="w-5 h-5 text-primary" />
                   </div>
-                  <div>
-                    <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
-                  </div>
+                  <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/50 leading-tight">
+                    {ch.tag}
+                  </span>
                 </div>
-              </CardTilt>
+                <div>
+                  <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
+                </div>
+              </div>
             ))}
           </div>
         </section>
@@ -497,11 +490,11 @@ export default function HowItWorks() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-            {TIER_OVERVIEW.map((tier) => (
+            {TIER_OVERVIEW.map((tier, i) => (
               <div
                 key={tier.name}
-                className="flex flex-col rounded-xl overflow-hidden"
-                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+                className="flex flex-col rounded-xl overflow-hidden stagger-item"
+                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}`, animationDelay: `${i * 80}ms` }}
               >
                 <div className="px-5 py-4 bg-card border-b border-border">
                   <div className="flex items-center gap-3 mb-3">
@@ -549,7 +542,7 @@ export default function HowItWorks() {
               border: "1px solid hsl(var(--primary) / 0.2)",
             }}
           >
-            <Spotlight className="-top-24 left-1/2 -translate-x-1/2" fill="hsl(142, 65%, 55%)" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 55% / 0.15) 0%, transparent 60%)" }} aria-hidden />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
               Ready to find your next licensing opportunity?
             </h2>

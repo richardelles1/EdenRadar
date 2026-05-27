@@ -67,7 +67,7 @@ type SectionMeta = { id: string; num: number | null; short: string };
 type PhaseGroup = {
   id: string;
   label: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   color: string;
   sections: SectionMeta[];
 };

@@ -57,7 +57,7 @@ function SectionLabel({
   action,
   onAction,
 }: {
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   label: string;
   accent: string;
   action?: string;
@@ -86,7 +86,7 @@ type PipelineStage = {
   key: string;
   label: string;
   sublabel: string;
-  icon: React.ComponentType<{ className?: string }>;
+  icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
   accentColor: string;
   value: string | number;
   href: string;

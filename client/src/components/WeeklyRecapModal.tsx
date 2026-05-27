@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -126,6 +126,15 @@ function actionVerb(action: string, isSolo: boolean): string {
   }
 }
 
+function previousWeekKey(): string {
+  const d = new Date();
+  const day = d.getUTCDay();
+  const offset = day === 0 ? 6 : day - 1;
+  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  out.setUTCDate(out.getUTCDate() - offset - 7);
+  return out.toISOString().slice(0, 10);
+}
+
 export function WeeklyRecapModal({
   open,
   onOpenChange,
@@ -133,8 +142,13 @@ export function WeeklyRecapModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  // null = current week (live preview); otherwise a Monday ISO string.
-  const [weekKey, setWeekKey] = useState<string | null>(null);
+  // null = current week (live preview); string = a Monday ISO date.
+  // Default to last completed week; user can navigate forward to live preview.
+  const [weekKey, setWeekKey] = useState<string | null>(previousWeekKey);
+
+  useEffect(() => {
+    if (open) setWeekKey(previousWeekKey());
+  }, [open]);
 
   // Default queryFn (queryClient.ts) attaches Supabase auth headers and uses
   // queryKey[0] as the URL, so we encode the full path there.
