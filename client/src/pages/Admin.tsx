@@ -39,6 +39,7 @@ const SubscriptionData    = React.lazy(() => import("./admin/Misc").then(m => ({
 const PlatformInfo        = React.lazy(() => import("./admin/Misc").then(m => ({ default: m.PlatformInfo })));
 const DocumentsTab        = React.lazy(() => import("./admin/Documents").then(m => ({ default: m.DocumentsTab })));
 const JarvisTab           = React.lazy(() => import("./admin/Jarvis").then(m => ({ default: m.JarvisTab })));
+const TtoContactsTab      = React.lazy(() => import("./admin/TtoContacts").then(m => ({ default: m.TtoContactsTab })));
 
 function TabFallback() {
   return (
@@ -289,6 +290,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
                 >
                   <Send className="h-4 w-4" />
                   Dispatch
+                </button>
+                <button
+                  onClick={() => setActiveTab("tto-contacts")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "tto-contacts" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-tto-contacts"
+                >
+                  <Users className="h-4 w-4" />
+                  TTO Contacts
                 </button>
               </>
             )}
@@ -726,6 +737,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
             {activeTab === "documents" && <DocumentsTab pw={pw} />}
 
             {activeTab === "jarvis" && <JarvisTab pw={pw} />}
+
+            {activeTab === "tto-contacts" && <TtoContactsTab pw={pw} />}
 
             {activeTab === "api-management" && (
               <ApiManagementTab pw={pw} />
