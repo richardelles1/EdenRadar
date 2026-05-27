@@ -5,11 +5,9 @@ import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
-import { Spotlight } from "@/components/ui/spotlight";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { WordRotate } from "@/components/ui/word-rotate";
 import { AnimatedTabs } from "@/components/ui/animated-tabs";
-import { CardTilt } from "@/components/ui/card-tilt";
 import {
   ArrowRight,
   Lightbulb,
@@ -208,7 +206,7 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
           <p className="text-sm font-semibold text-foreground leading-tight">EDEN</p>
           <p className="text-[10px] text-primary">Research Intelligence</p>
         </div>
-        <div className="ml-auto flex gap-1">
+        <div className="ml-auto flex gap-1" aria-hidden="true">
           {["bg-red-500/50", "bg-amber-500/50", "bg-green-500/50"].map((c, i) => (
             <div key={i} className={`w-2.5 h-2.5 rounded-full ${c}`} />
           ))}
@@ -366,7 +364,7 @@ export default function HowItWorks() {
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             <span className="block">The intelligence engine</span>
-            <span className="gradient-text block">
+            <span className="text-primary block">
               for <WordRotate words={["BD teams.", "TTOs.", "researchers.", "deal flow."]} />
             </span>
           </h1>
@@ -387,7 +385,7 @@ export default function HowItWorks() {
           <div className="mt-16 grid grid-cols-3 gap-6 sm:gap-10 max-w-lg mx-auto">
             {STATS.map((s) => (
               <div key={s.label} className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
+                <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">
                   <NumberTicker value={s.value} />
                 </div>
                 <div className="text-xs tracking-wide font-semibold text-foreground/70">{s.label}</div>
@@ -549,7 +547,7 @@ export default function HowItWorks() {
               border: "1px solid hsl(var(--primary) / 0.2)",
             }}
           >
-            <Spotlight className="-top-24 left-1/2 -translate-x-1/2" fill="hsl(142, 65%, 55%)" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 55% / 0.15) 0%, transparent 60%)" }} aria-hidden />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
               Ready to find your next licensing opportunity?
             </h2>

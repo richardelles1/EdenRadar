@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -202,10 +203,10 @@ const WHO_ITS_FOR = [
 ];
 
 const STATS = [
-  { value: "10,000+", label: "Biotech Assets Covered" },
-  { value: "300+", label: "TTO Sources Monitored" },
-  { value: "0–100", label: "EDEN Score" },
-  { value: "Real-Time", label: "Continuous Data Refresh" },
+  { value: "33K+", label: "Scored Assets", ticker: true },
+  { value: "300+", label: "TTO Sources Monitored", ticker: true },
+  { value: "0–100", label: "EDEN Score", ticker: false },
+  { value: "Real-Time", label: "Continuous Data Refresh", ticker: false },
 ];
 
 export default function WhatWeDo() {
@@ -240,7 +241,7 @@ export default function WhatWeDo() {
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             We connect university science{" "}
-            <span className="gradient-text">to the industry ready to build it.</span>
+            <span className="text-primary">to the industry ready to build it.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
             EdenRadar is a multi-portal intelligence platform that monitors tech transfer offices, EDEN-enriches every asset, and delivers them directly to the business development teams that need them.
@@ -264,7 +265,9 @@ export default function WhatWeDo() {
           >
             {STATS.map((stat, i) => (
               <div key={i} className="flex flex-col items-center py-8 px-4 text-center">
-                <span className="text-2xl sm:text-3xl font-bold text-primary mb-1">{stat.value}</span>
+                <span className="text-2xl sm:text-3xl font-bold text-primary mb-1">
+                  {stat.ticker ? <NumberTicker value={stat.value} /> : stat.value}
+                </span>
                 <span className="text-xs text-muted-foreground font-medium">{stat.label}</span>
               </div>
             ))}
@@ -337,8 +340,8 @@ export default function WhatWeDo() {
             {PORTALS.map((portal, i) => (
               <div
                 key={i}
-                className="rounded-2xl overflow-hidden"
-                style={{ border: `1px solid ${portal.borderColor}`, borderTop: `3px solid ${portal.color}` }}
+                className="rounded-2xl overflow-hidden stagger-item"
+                style={{ border: `1px solid ${portal.borderColor}`, borderTop: `3px solid ${portal.color}`, animationDelay: `${i * 100}ms` }}
               >
                 <div className="p-7 sm:p-9">
                   <div className="flex flex-col sm:flex-row sm:items-start gap-6">
@@ -396,7 +399,8 @@ export default function WhatWeDo() {
             {WHO_ITS_FOR.map((w, i) => (
               <div
                 key={i}
-                className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200"
+                className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200 stagger-item"
+                style={{ animationDelay: `${i * 80}ms` }}
               >
                 <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <w.icon className="w-5 h-5 text-primary" />

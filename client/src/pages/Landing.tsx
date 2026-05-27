@@ -5,10 +5,8 @@ import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { useAuth } from "@/hooks/use-auth";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
-import { Spotlight } from "@/components/ui/spotlight";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { MovingBorder } from "@/components/ui/moving-border";
-import { BackgroundBeams } from "@/components/ui/background-beams";
 import {
   Building2,
   FlaskConical,
@@ -50,6 +48,25 @@ function useReveal(threshold = 0.18) {
 
 /* ─────────────────────────── RadarBackground ─────────────────── */
 
+const BLIPS: { ring: number; a: number; label: string | null }[] = [
+  { ring: 2, a: 0.40, label: "MIT TTO" },
+  { ring: 4, a: 1.10, label: "Stanford OTL" },
+  { ring: 1, a: 2.30, label: null },
+  { ring: 5, a: 3.00, label: "Max Planck" },
+  { ring: 3, a: 3.80, label: "UCSF QB3" },
+  { ring: 6, a: 4.50, label: null },
+  { ring: 2, a: 5.10, label: "Oxford TT" },
+  { ring: 4, a: 5.80, label: null },
+  { ring: 1, a: 0.90, label: null },
+  { ring: 5, a: 2.00, label: "Harvard OTD" },
+  { ring: 3, a: 2.90, label: null },
+  { ring: 6, a: 1.70, label: "Broad Inst." },
+  { ring: 2, a: 4.10, label: null },
+  { ring: 4, a: 3.30, label: "CNRS TTT" },
+  { ring: 1, a: 5.50, label: null },
+];
+const BLIP_LIFETIME = 4800;
+
 function RadarBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -62,6 +79,8 @@ function RadarBackground() {
     let animId: number;
     let angle = 0;
     let lastTime = performance.now();
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const blipTimes = new Array(BLIPS.length).fill(-BLIP_LIFETIME);
     let isDark = document.documentElement.classList.contains("dark");
 
     const mo = new MutationObserver(() => {
@@ -90,19 +109,34 @@ function RadarBackground() {
       const sweepPeak = isDark ? 0.15 : 0.05;
       const sweepAngle = Math.PI / 2;
       const sweepSteps = 24;
+      const TWO_PI = Math.PI * 2;
+      const delta = TWO_PI * (dt / 25000);
 
       ctx.fillStyle = isDark ? "#060a06" : "#f3fef6";
       ctx.fillRect(0, 0, W, H);
 
+      // rings
       ctx.strokeStyle = "#065f46";
       ctx.lineWidth = 1;
       for (let i = 1; i <= ringCount; i++) {
         ctx.beginPath();
-        ctx.arc(cx, cy, ringSpacing * i, 0, Math.PI * 2);
+        ctx.arc(cx, cy, ringSpacing * i, 0, TWO_PI);
         ctx.globalAlpha = ringAlpha;
         ctx.stroke();
       }
 
+      // crosshairs
+      ctx.globalAlpha = isDark ? 0.045 : 0.022;
+      ctx.strokeStyle = "#065f46";
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(0, cy);
+      ctx.lineTo(W, cy);
+      ctx.moveTo(cx, 0);
+      ctx.lineTo(cx, H);
+      ctx.stroke();
+
+      // sweep
       for (let i = 0; i < sweepSteps; i++) {
         const t = (i + 1) / sweepSteps;
         const startA = angle - sweepAngle + (i / sweepSteps) * sweepAngle;
@@ -116,9 +150,77 @@ function RadarBackground() {
         ctx.fill();
       }
 
+      // leading edge sweep arm
+      ctx.globalAlpha = isDark ? 0.55 : 0.22;
+      ctx.strokeStyle = "#34d399";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + maxR * Math.cos(angle), cy + maxR * Math.sin(angle));
+      ctx.stroke();
+
+      // detect sweep crossings then advance angle
+      for (let i = 0; i < BLIPS.length; i++) {
+        const ba = ((BLIPS[i].a % TWO_PI) + TWO_PI) % TWO_PI;
+        const normCur = ((angle % TWO_PI) + TWO_PI) % TWO_PI;
+        const normNext = (((angle + delta) % TWO_PI) + TWO_PI) % TWO_PI;
+        const crosses =
+          normNext >= normCur
+            ? ba >= normCur && ba < normNext
+            : ba >= normCur || ba < normNext;
+        if (crosses) blipTimes[i] = now;
+      }
+      angle += delta;
+
+      // blips
+      for (let i = 0; i < BLIPS.length; i++) {
+        const age = now - blipTimes[i];
+        if (age >= BLIP_LIFETIME) continue;
+
+        let alpha: number;
+        const fadeIn = 300;
+        const fadeOut = 700;
+        if (age < fadeIn) {
+          alpha = age / fadeIn;
+        } else if (age < BLIP_LIFETIME - fadeOut) {
+          alpha = 0.82 + 0.18 * Math.sin((age - fadeIn) / 380);
+        } else {
+          alpha = Math.max(0, 1 - (age - (BLIP_LIFETIME - fadeOut)) / fadeOut);
+        }
+
+        const r = ringSpacing * BLIPS[i].ring;
+        const bx = cx + r * Math.cos(BLIPS[i].a);
+        const by = cy + r * Math.sin(BLIPS[i].a);
+
+        // glow halo
+        const grd = ctx.createRadialGradient(bx, by, 0, bx, by, 11);
+        grd.addColorStop(0, "rgba(52,211,153,0.55)");
+        grd.addColorStop(1, "rgba(52,211,153,0)");
+        ctx.globalAlpha = alpha * (isDark ? 0.75 : 0.45);
+        ctx.fillStyle = grd;
+        ctx.beginPath();
+        ctx.arc(bx, by, 11, 0, TWO_PI);
+        ctx.fill();
+
+        // core dot
+        ctx.globalAlpha = alpha * (isDark ? 0.95 : 0.65);
+        ctx.fillStyle = "#34d399";
+        ctx.beginPath();
+        ctx.arc(bx, by, 2.5, 0, TWO_PI);
+        ctx.fill();
+
+        // institution label
+        if (BLIPS[i].label && alpha > 0.35) {
+          ctx.globalAlpha = alpha * 0.65 * (isDark ? 1 : 0.65);
+          ctx.fillStyle = "#34d399";
+          ctx.font = "9px ui-monospace, 'SF Mono', monospace";
+          ctx.textAlign = "left";
+          ctx.fillText(BLIPS[i].label!, bx + 7, by + 3);
+        }
+      }
+
       ctx.globalAlpha = 1;
-      angle += (Math.PI * 2) * (dt / 25000);
-      animId = requestAnimationFrame(draw);
+      if (!prefersReducedMotion) animId = requestAnimationFrame(draw);
     }
 
     resize();
@@ -264,13 +366,17 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
           Whether you're sourcing pipeline or building science, EdenRadar is engineered for you.
         </p>
 
-        <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm">
+        <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm" role="tablist" aria-label="Portal">
           {(["discovery", "research", "industry"] as const).map((tab) => {
             const label = tab === "discovery" ? "Discovery" : tab === "research" ? "Research" : "Industry";
             const style = TAB_STYLE[tab];
             return (
               <button
                 key={tab}
+                id={`portal-tab-${tab}`}
+                role="tab"
+                aria-selected={active === tab}
+                aria-controls={`portal-panel-${tab}`}
                 onClick={() => setActive(tab)}
                 data-testid={`toggle-${tab}`}
                 className="relative px-4 sm:px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 min-h-[44px]"
@@ -284,18 +390,18 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
       </div>
 
       {active === "industry" ? (
-        <div className="space-y-6" key="industry">
+        <div className="space-y-6" key="industry" id="portal-panel-industry" role="tabpanel" aria-labelledby="portal-tab-industry">
           {/* EdenScout sub-section */}
           <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-primary/60 pl-3 border-l-2 border-l-primary/40">
+            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-primary/60">
               EdenScout: Pipeline Intelligence
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {INDUSTRY_TILES.map((tile, i) => (
                 <div
                   key={tile.title}
-                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md hover:border-primary/40"
-                  style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-colors duration-200 hover:shadow-md hover:border-primary/40 stagger-item"
+                  style={{ animationDelay: `${i * 80}ms` }}
                   data-testid={`tile-industry-scout-${i}`}
                 >
                   <div className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 bg-primary/10 group-hover:bg-primary/20">
@@ -312,8 +418,8 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
 
           {/* EdenMarket sub-section */}
           <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] pl-3 border-l-2"
-              style={{ color: "hsl(var(--portal-market) / 0.7)", borderLeftColor: "hsl(var(--portal-market) / 0.4)" }}
+            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
+              style={{ color: "hsl(var(--portal-market) / 0.7)" }}
             >
               EdenMarket: Blind Asset Marketplace
             </p>
@@ -321,8 +427,8 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
               {EDENMARKET_TILES.map((tile, i) => (
                 <div
                   key={tile.title}
-                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md"
-                  style={{ borderColor: "hsl(var(--portal-market) / 0.15)", animationDelay: `${(i + 4) * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-colors duration-200 hover:shadow-md stagger-item"
+                  style={{ borderColor: "hsl(var(--portal-market) / 0.15)", animationDelay: `${(i + 4) * 80}ms` }}
                   data-testid={`tile-industry-market-${i}`}
                 >
                   <div
@@ -350,7 +456,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
               Explore EdenScout
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
-            <span className="hidden sm:block text-border">|</span>
+            <span className="hidden sm:block text-border" aria-hidden="true">|</span>
             <Link href="/market">
               <span
                 className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 cursor-pointer"
@@ -364,13 +470,13 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
           </div>
         </div>
       ) : (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6" key={active}>
+        <div id={`portal-panel-${active}`} role="tabpanel" aria-labelledby={`portal-tab-${active}`} key={active}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
             {tiles.map((tile, i) => (
               <div
                 key={tile.title}
-                className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md ${accent.hover}`}
-                style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+                className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-colors duration-200 hover:shadow-md stagger-item ${accent.hover}`}
+                style={{ animationDelay: `${i * 80}ms` }}
                 data-testid={`tile-${active}-${i}`}
               >
                 <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${accent.iconBg} ${accent.iconBgHover}`}>
@@ -406,7 +512,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
               </button>
             )}
           </div>
-        </>
+        </div>
       )}
     </section>
   );
@@ -424,8 +530,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
         background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 10%) 60%, hsl(155 40% 12%) 100%)",
       }}
     >
-      <Spotlight className="-top-40 left-0 md:left-60 md:-top-20" fill="hsl(142, 65%, 55%)" />
-      <BackgroundBeams className="opacity-30" />
+      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 30% 0%, hsl(142 65% 55% / 0.12) 0%, transparent 55%)" }} aria-hidden />
 
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
         <p className="text-xs font-mono font-semibold uppercase tracking-[0.15em] mb-6" style={{ color: "hsl(142 65% 55%)" }}>
@@ -434,12 +539,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-5 leading-tight text-white">
           Get started with{" "}
-          <span style={{
-            background: "linear-gradient(135deg, hsl(142 70% 62%) 0%, hsl(155 65% 58%) 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}>
+          <span style={{ color: "hsl(142 65% 62%)" }}>
             EdenRadar
           </span>{" "}
           today.
@@ -598,7 +698,7 @@ export default function Landing() {
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl text-foreground dark:text-white">
               Where Biotech Research
               <br />
-              <span className="gradient-text">
+              <span className="text-primary">
                 Meets Industry Intelligence.
               </span>
             </h1>
@@ -647,7 +747,7 @@ export default function Landing() {
             >
               {STATS.map((s) => (
                 <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
-                  <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
+                  <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">
                     <NumberTicker value={s.value} />
                   </div>
                   <div className="text-xs tracking-wide font-semibold text-foreground/70 dark:text-white/75">{s.label}</div>

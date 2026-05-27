@@ -5,8 +5,6 @@ import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Award, Sprout, Globe, Users } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
-import { Spotlight } from "@/components/ui/spotlight";
-import { CardTilt } from "@/components/ui/card-tilt";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 
@@ -130,7 +128,7 @@ export default function About() {
         <section className="relative overflow-hidden pt-24 pb-20 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
             Built by industry insiders,{" "}
-            <span className="gradient-text">for the industry.</span>
+            <span className="text-primary">for the industry.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
             EdenRadar was founded on a single conviction: the world's most important biotech assets are locked inside university technology transfer offices, and the industry teams that need them have no efficient way to find them.
@@ -158,7 +156,7 @@ export default function About() {
               border: "1px solid hsl(var(--portal-scout) / 0.2)",
             }}
           >
-            <Spotlight className="-top-24 left-1/2 -translate-x-1/2" fill="hsl(142, 65%, 55%)" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 55% / 0.15) 0%, transparent 60%)" }} aria-hidden />
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">Our Mission</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 leading-tight max-w-3xl mx-auto">
               Accelerate science to patient impact by eliminating the discovery gap between university research and industry development.
@@ -206,7 +204,7 @@ export default function About() {
                     >
                       <img
                         src={founder.photo}
-                        alt={founder.name}
+                        alt={`${founder.name}, ${founder.title}`}
                         style={{
                           width: "100%",
                           height: "100%",
@@ -236,9 +234,8 @@ export default function About() {
                 <div
                   className="rounded-xl px-7 py-5"
                   style={{
-                    background: "hsl(var(--portal-scout) / 0.06)",
+                    background: "hsl(var(--portal-scout) / 0.08)",
                     border: "1px solid hsl(var(--portal-scout) / 0.18)",
-                    borderLeft: "3px solid hsl(var(--portal-scout))",
                   }}
                 >
                   <p className="text-sm italic text-foreground leading-relaxed">
@@ -264,17 +261,19 @@ export default function About() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {VALUES.map((v, i) => (
-              <CardTilt key={i} className="rounded-xl">
-                <div className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
-                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <v.icon className="w-5 h-5 text-primary" />
+              <div key={i} className="stagger-item" style={{ animationDelay: `${i * 80}ms` }}>
+                <CardTilt className="rounded-xl">
+                  <div className="flex gap-4 p-6 rounded-xl border border-border bg-card hover:border-primary/30 transition-colors duration-200">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <v.icon className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground mb-1.5">{v.title}</h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground mb-1.5">{v.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{v.desc}</p>
-                  </div>
-                </div>
-              </CardTilt>
+                </CardTilt>
+              </div>
             ))}
           </div>
         </section>
