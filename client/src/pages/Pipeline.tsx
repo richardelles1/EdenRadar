@@ -1120,7 +1120,7 @@ export default function Pipeline() {
   const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
     refetchInterval: 30000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   });
 
   const { data: pipelinesData } = useQuery<PipelinesResponse>({

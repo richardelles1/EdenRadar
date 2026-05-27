@@ -501,7 +501,7 @@ STRATEGIC ASSESSMENT
       }
 
       const statusOrg = await storage.getOrgForUser(userId ?? "").catch(() => null);
-      if (statusOrg) broadcastToOrg(statusOrg.id, "status_changed", { savedAssetId: id });
+      if (statusOrg) broadcastToOrg(statusOrg.id, "status_changed", { savedAssetId: id }).catch(() => {});
       res.json({ asset });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to update status" });
@@ -578,7 +578,7 @@ STRATEGIC ASSESSMENT
       });
       logTeamActivity(userId ?? null, "added_note", asset.ingestedAssetId ?? null, null, asset.assetName).catch(() => {});
       const noteOrg = await storage.getOrgForUser(userId ?? "").catch(() => null);
-      if (noteOrg) broadcastToOrg(noteOrg.id, "note_added", { savedAssetId: id });
+      if (noteOrg) broadcastToOrg(noteOrg.id, "note_added", { savedAssetId: id }).catch(() => {});
       res.status(201).json({ note });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to create note" });
@@ -596,7 +596,7 @@ STRATEGIC ASSESSMENT
       const updated = await storage.updateAssetNote(noteId, content, userId);
       if (!updated) return res.status(404).json({ error: "Note not found or not owned by you" });
       const noteOrg = await storage.getOrgForUser(userId).catch(() => null);
-      if (noteOrg) broadcastToOrg(noteOrg.id, "note_updated", { savedAssetId: id });
+      if (noteOrg) broadcastToOrg(noteOrg.id, "note_updated", { savedAssetId: id }).catch(() => {});
       res.json({ note: updated });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to update note" });
@@ -613,7 +613,7 @@ STRATEGIC ASSESSMENT
       const deleted = await storage.deleteAssetNote(noteId, userId);
       if (!deleted) return res.status(404).json({ error: "Note not found or not owned by you" });
       const noteOrg = await storage.getOrgForUser(userId).catch(() => null);
-      if (noteOrg) broadcastToOrg(noteOrg.id, "note_deleted", { savedAssetId: id });
+      if (noteOrg) broadcastToOrg(noteOrg.id, "note_deleted", { savedAssetId: id }).catch(() => {});
       res.status(204).end();
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to delete note" });
