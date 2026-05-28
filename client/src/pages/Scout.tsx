@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, useSearch } from "wouter";
@@ -21,6 +21,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FileBarChart2, Loader2, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity, Sparkles, Info, Bookmark, BookmarkCheck } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -318,6 +319,42 @@ function SourcesDropdown({
         )}
       </PopoverContent>
     </Popover>
+  );
+}
+
+function TabLoadingSkeleton({ accentColor, cancelButton }: { accentColor: string; cancelButton?: ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div
+            key={i}
+            className="relative w-full h-[260px] rounded-[17px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+            style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
+          >
+            <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: accentColor + "80" }} />
+            <div
+              className="absolute top-0 left-0 right-0"
+              style={{ height: "56px", background: accentColor + "0d", borderBottom: `1px solid ${accentColor}26` }}
+            />
+            <div className="relative flex flex-col h-full pl-4 pr-3 pt-[62px] pb-3 gap-3">
+              <Skeleton className="h-3.5 w-full bg-muted/50 dark:bg-zinc-700" />
+              <Skeleton className="h-3.5 w-4/5 bg-muted/50 dark:bg-zinc-700" />
+              <Skeleton className="h-3.5 w-3/5 bg-muted/50 dark:bg-zinc-700" />
+              <Skeleton className="h-3 w-2/5 bg-muted/35 dark:bg-zinc-800" />
+              <div className="flex gap-1">
+                <Skeleton className="h-4 w-14 rounded-full bg-muted/40 dark:bg-zinc-700/70" />
+                <Skeleton className="h-4 w-10 rounded-full bg-muted/40 dark:bg-zinc-700/70" />
+              </div>
+              <div className="mt-auto">
+                <Skeleton className="h-7 w-full rounded-md bg-muted/30 dark:bg-zinc-800/60" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {cancelButton && <div className="flex justify-center pt-1">{cancelButton}</div>}
+    </div>
   );
 }
 
@@ -1838,15 +1875,15 @@ export default function Scout() {
 
             {/* Patents tab — loading state */}
             {hasSearched && resultTab === "patents" && !searchMutation.isPending && patentMutation.isPending && (
-              <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="patents-loading-state">
-                <Loader2 className="w-8 h-8 animate-spin text-amber-500 opacity-70" />
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-1">Searching patent databases...</p>
-                  <p className="text-xs text-muted-foreground">Querying USPTO PatentsView for "{currentQuery}"</p>
-                </div>
-                <button onClick={handleCancelPatents} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors" data-testid="button-cancel-patents-full">
-                  Cancel
-                </button>
+              <div data-testid="patents-loading-state">
+                <TabLoadingSkeleton
+                  accentColor="#d97706"
+                  cancelButton={
+                    <button onClick={handleCancelPatents} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors" data-testid="button-cancel-patents-full">
+                      Cancel patent search
+                    </button>
+                  }
+                />
               </div>
             )}
 
@@ -2011,7 +2048,7 @@ export default function Scout() {
                       </div>
                     ) : (
                       <>
-                        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
                           {filteredPatentResults.slice(0, shownPatentCount).map((asset) => {
                             const patentId = (asset.signals?.[0]?.metadata?.patent_id as string) ?? null;
                             const patentKey = patentId ?? asset.id;
@@ -2047,12 +2084,8 @@ export default function Scout() {
 
             {/* Clinical Trials tab — loading state */}
             {hasSearched && resultTab === "trials" && !searchMutation.isPending && trialMutation.isPending && (
-              <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="trials-loading-state">
-                <Loader2 className="w-8 h-8 animate-spin text-teal-500 opacity-70" />
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-1">Searching ClinicalTrials.gov...</p>
-                  <p className="text-xs text-muted-foreground">Querying active and completed trials for "{currentQuery}"</p>
-                </div>
+              <div data-testid="trials-loading-state">
+                <TabLoadingSkeleton accentColor="#0d9488" />
               </div>
             )}
 
@@ -2263,7 +2296,7 @@ export default function Scout() {
                       </div>
                     ) : (
                       <>
-                        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                        <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
                           {filteredTrialResults.slice(0, shownTrialCount).map((asset) => {
                             const nctId = (asset.signals?.[0]?.metadata?.nct_id as string) ?? null;
                             const trialKey = nctId ?? asset.id;
@@ -2308,15 +2341,15 @@ export default function Scout() {
 
             {/* Research Signals tab — loading state while compiling */}
             {hasSearched && resultTab === "research" && researchSources.length > 0 && !searchMutation.isPending && researchMutation.isPending && (
-              <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="research-loading-state">
-                <Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" />
-                <div>
-                  <p className="text-sm font-medium text-foreground mb-1">Compiling research signals...</p>
-                  <p className="text-xs text-muted-foreground">Searching {researchSources.length} academic source{researchSources.length !== 1 ? "s" : ""}.</p>
-                </div>
-                <button onClick={handleCancelResearch} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors" data-testid="button-cancel-research-full">
-                  Cancel
-                </button>
+              <div data-testid="research-loading-state">
+                <TabLoadingSkeleton
+                  accentColor="#059669"
+                  cancelButton={
+                    <button onClick={handleCancelResearch} className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors" data-testid="button-cancel-research-full">
+                      Cancel research search
+                    </button>
+                  }
+                />
               </div>
             )}
 
@@ -2453,7 +2486,7 @@ export default function Scout() {
                         </button>
                       </div>
                     )}
-                    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                    <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
                       {sortedResearchResults.slice(0, shownResearchCount).map((asset) => (
                         <ResearchCard
                           key={asset.id + "-research"}
