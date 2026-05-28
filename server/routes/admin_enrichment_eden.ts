@@ -4,21 +4,19 @@ import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { deepEnrichBatch } from "../lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "../lib/pipeline/embedAssets";
+import { Job, registerJob } from "../lib/jobState";
 
 // ── EDEN state ────────────────────────────────────────────────────────────────
 let edenJobId: number | null = null;
-let edenRunning = false;
-let edenProcessed = 0;
-let edenTotal = 0;
+const edenJob = new Job();
+registerJob("enrichment:eden", edenJob);
 let edenImproved = 0;
 let edenFailed = 0;
 let edenSkipped = 0;
-let edenShouldStop = false;
 const _rawCap = parseInt(process.env.ENRICH_MAX_PER_CYCLE ?? "500", 10);
 const ENRICH_MAX_PER_CYCLE = Number.isFinite(_rawCap) && _rawCap > 0 ? _rawCap : 500;
 let edenLastCycleCount = 0;
 let edenLastCycleDeferred = 0;
-let edenStartMs = 0;
 let edenSnapshotBefore: Record<number, string> = {};
 let edenLastSummary: {
   succeeded: number; failed: number; skipped: number; total: number; deferred: number;
@@ -26,9 +24,8 @@ let edenLastSummary: {
 } | null = null;
 
 // ── Embed state ───────────────────────────────────────────────────────────────
-let embedRunning = false;
-let embedProcessed = 0;
-let embedTotal = 0;
+const embedJob = new Job();
+registerJob("enrichment:embed", embedJob);
 let embedSucceeded = 0;
 let embedFailed = 0;
 
@@ -57,7 +54,7 @@ export const computeBandMovements = (
   return movements;
 };
 
-export function isEdenRunning(): boolean { return edenRunning; }
+export function isEdenRunning(): boolean { return edenJob.running; }
 
 export function registerEdenRoutes(app: Express): void {
 
@@ -77,7 +74,7 @@ export function registerEdenRoutes(app: Express): void {
         latestJob: latest ?? null,
         needingDeepEnrich: breakdown.total,
         breakdown,
-        live: edenRunning ? { processed: edenProcessed, total: edenTotal } : null,
+        live: edenJob.running ? { processed: edenJob.processed, total: edenJob.total } : null,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -134,7 +131,7 @@ export function registerEdenRoutes(app: Express): void {
   });
 
   app.post("/api/admin/eden/enrich", async (req, res) => {
-    if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
+    if (edenJob.running) return res.status(409).json({ error: "Deep enrichment already running" });
     try {
       const [assets, breakdown] = await Promise.all([
         storage.getAssetsNeedingDeepEnrich(),
@@ -148,14 +145,10 @@ export function registerEdenRoutes(app: Express): void {
         console.log(`[EDEN] Per-cycle cap hit: processing ${capped.length} assets, deferring ${deferred} to next run (cap=${ENRICH_MAX_PER_CYCLE})`);
       }
 
-      edenTotal = capped.length;
-      edenProcessed = 0;
-      edenRunning = true;
-      edenShouldStop = false;
+      edenJob.start(capped.length);
       edenImproved = 0;
       edenFailed = 0;
       edenSkipped = 0;
-      edenStartMs = Date.now();
 
       // Snapshot band distribution of the assets we are about to process so we
       // can report band movements (e.g. bare→very_sparse) after the run.
@@ -194,7 +187,7 @@ export function registerEdenRoutes(app: Express): void {
           return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
         },
         (processed, _total, succeeded, failed, skipped) => {
-          edenProcessed = processed;
+          edenJob.tick(processed);
           edenImproved = succeeded;
           edenFailed = failed;
           edenSkipped = skipped;
@@ -202,9 +195,8 @@ export function registerEdenRoutes(app: Express): void {
             storage.updateEnrichmentJob(edenJobId, { processed: succeeded + failed, improved: succeeded }).catch(() => {});
           }
         },
-        () => edenShouldStop,
+        () => edenJob.shouldStop,
       ).then(async (batchResult) => {
-        edenRunning = false;
         edenImproved = batchResult.succeeded;
         edenFailed = batchResult.failed;
         edenSkipped = batchResult.skipped;
@@ -212,13 +204,13 @@ export function registerEdenRoutes(app: Express): void {
         edenLastCycleDeferred = deferred;
         if (edenJobId !== null) {
           await storage.updateEnrichmentJob(edenJobId, {
-            status: edenShouldStop ? "stopped" : "done",
+            status: edenJob.shouldStop ? "stopped" : "done",
             completedAt: new Date(),
             processed: batchResult.succeeded + batchResult.failed,
             improved: batchResult.succeeded,
           }).catch(() => {});
         }
-        const edenDurationMs = Date.now() - edenStartMs;
+        const edenDurationMs = edenJob.status().elapsedMs ?? 0;
         // Compute band movements by re-querying the same asset IDs post-run
         let edenBandMovements: Record<string, number> = {};
         try {
@@ -230,33 +222,35 @@ export function registerEdenRoutes(app: Express): void {
             edenBandMovements = computeBandMovements(edenSnapshotBefore, postRows.rows);
           }
         } catch { /* non-fatal */ }
+        const wasStopped = edenJob.shouldStop;
+        edenJob.finish({});
         edenLastSummary = {
           succeeded: batchResult.succeeded,
           failed: batchResult.failed,
           skipped: batchResult.skipped,
-          total: edenTotal,
+          total: edenJob.total,
           deferred,
           durationMs: edenDurationMs,
           bandMovements: edenBandMovements,
           completedAt: new Date().toISOString(),
         };
         storage.saveEnrichmentRun("eden", edenLastSummary as unknown as Record<string, unknown>).catch(() => {});
-        console.log(`[EDEN] Deep enrichment ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} enriched, ${batchResult.failed} failed, ${batchResult.skipped} skipped (thin content)`);
+        console.log(`[EDEN] Deep enrichment ${wasStopped ? "stopped" : "complete"}: ${batchResult.succeeded} enriched, ${batchResult.failed} failed, ${batchResult.skipped} skipped (thin content)`);
         // Automatically trigger near-duplicate detection after enrichment completes
-        if (!edenShouldStop) {
+        if (!wasStopped) {
           storage.runNearDuplicateDetection((msg) => console.log(`[dedup/post-enrich] ${msg}`))
             .then((r) => console.log(`[dedup/post-enrich] Done: ${r.flagged} flagged, ${r.embedded} embedded`))
             .catch((e: any) => console.error("[dedup/post-enrich] Failed:", e?.message));
         }
       }).catch(async (e) => {
-        edenRunning = false;
+        edenJob.fail(e?.message ?? "Unknown error");
         if (edenJobId !== null) {
-          await storage.updateEnrichmentJob(edenJobId, { status: "failed", completedAt: new Date(), processed: edenProcessed, improved: edenImproved }).catch(() => {});
+          await storage.updateEnrichmentJob(edenJobId, { status: "failed", completedAt: new Date(), processed: edenJob.processed, improved: edenImproved }).catch(() => {});
         }
         console.error("[EDEN] Deep enrichment failed:", e);
       });
     } catch (err: any) {
-      edenRunning = false;
+      edenJob.fail(err.message);
       res.status(500).json({ error: err.message });
     }
   });
@@ -266,7 +260,7 @@ export function registerEdenRoutes(app: Express): void {
       const latest = await storage.getLatestDeepEnrichmentJob();
       // staleJobDetected: a job was in-progress when the server last restarted and
       // has not been resumed or completed. The admin must explicitly resume it.
-      const staleJob = !edenRunning ? await storage.getRunningDeepEnrichmentJob() : null;
+      const staleJob = !edenJob.running ? await storage.getRunningDeepEnrichmentJob() : null;
       const staleJobDetected = staleJob !== null && staleJob !== undefined;
       // Lazy-load from DB if in-memory summary was cleared by a server restart
       if (edenLastSummary === null) {
@@ -275,11 +269,12 @@ export function registerEdenRoutes(app: Express): void {
           if (stored) edenLastSummary = stored as unknown as typeof edenLastSummary;
         } catch { /* non-fatal */ }
       }
+      const edenStatus = edenJob.status();
       res.json({
-        running: edenRunning,
+        running: edenStatus.running,
         capPerCycle: ENRICH_MAX_PER_CYCLE,
-        processed: edenProcessed,
-        total: edenTotal,
+        processed: edenStatus.processed,
+        total: edenStatus.total,
         succeeded: edenImproved,
         failed: edenFailed,
         skipped: edenSkipped,
@@ -296,15 +291,15 @@ export function registerEdenRoutes(app: Express): void {
   });
 
   app.post("/api/admin/eden/enrich/stop", async (req, res) => {
-    if (!edenRunning) return res.json({ message: "No EDEN enrichment running" });
-    edenShouldStop = true;
+    if (!edenJob.running) return res.json({ message: "No EDEN enrichment running" });
+    edenJob.requestStop();
     res.json({ message: "Stop signal sent – finishing in-flight batch then halting" });
   });
 
   // ── EDEN embedding routes ─────────────────────────────────────────────────
 
   app.post("/api/admin/eden/embed", async (req, res) => {
-    if (embedRunning) return res.status(409).json({ error: "Embedding already running" });
+    if (embedJob.running) return res.status(409).json({ error: "Embedding already running" });
     try {
       const mode = req.body?.mode === "biology" ? "biology" : "missing";
       const assets = mode === "biology"
@@ -312,38 +307,37 @@ export function registerEdenRoutes(app: Express): void {
         : await storage.getAssetsNeedingEmbedding();
       if (assets.length === 0) return res.json({ message: mode === "biology" ? "No assets with biology/categories found to re-embed" : "All relevant assets already embedded", total: 0 });
 
-      embedTotal = assets.length;
-      embedProcessed = 0;
       embedSucceeded = 0;
       embedFailed = 0;
-      embedRunning = true;
+      embedJob.start(assets.length);
 
       res.json({ message: "Embedding started", total: assets.length });
 
       embedAssets(assets, (processed, _total, succeeded, failed) => {
-        embedProcessed = processed;
+        embedJob.tick(processed);
         embedSucceeded = succeeded;
         embedFailed = failed;
       }).then((result) => {
-        embedRunning = false;
         embedSucceeded = result.succeeded;
         embedFailed = result.failed;
+        embedJob.finish({});
         console.log(`[EDEN] Embedding complete: ${result.succeeded} succeeded, ${result.failed} failed`);
       }).catch((e) => {
-        embedRunning = false;
+        embedJob.fail(e?.message ?? "Unknown error");
         console.error("[EDEN] Embedding failed:", e);
       });
     } catch (err: any) {
-      embedRunning = false;
+      embedJob.fail(err.message);
       res.status(500).json({ error: err.message });
     }
   });
 
   app.get("/api/admin/eden/embed/status", async (req, res) => {
+    const s = embedJob.status();
     res.json({
-      running: embedRunning,
-      processed: embedProcessed,
-      total: embedTotal,
+      running: s.running,
+      processed: s.processed,
+      total: s.total,
       succeeded: embedSucceeded,
       failed: embedFailed,
     });
