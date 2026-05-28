@@ -20,7 +20,9 @@ function saveRefetchState(key: string, value: unknown): void {
     _refetchState[key] = value;
     fs.mkdirSync(path.dirname(REFETCH_STATE_FILE), { recursive: true });
     fs.writeFileSync(REFETCH_STATE_FILE, JSON.stringify(_refetchState, null, 2));
-  } catch {}
+  } catch (e) {
+    console.warn("[refetch-state] Failed to persist state to disk:", e);
+  }
 }
 
 export function registerEnrichmentRoutes(app: Express): void {
@@ -2405,8 +2407,8 @@ Do not respond with anything else.`;
                   const matched = STAGE_ENUM_VALS.find((s) => s.toLowerCase() === raw);
                   // Any response not in enum (including "unknown") is not written
                   if (matched) llmResults.set(row.id, matched);
-                } catch {
-                  // swallow individual errors
+                } catch (e: any) {
+                  console.warn(`[stage-fill] Asset ${row.id} LLM error:`, e?.message);
                 }
                 stageFillProcessed++;
               }
