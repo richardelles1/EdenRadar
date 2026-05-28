@@ -14,6 +14,7 @@ import type { ScoredAsset, ScoreBreakdown } from "@/lib/types";
 import type { SavedAsset } from "@shared/schema";
 import { useLocation } from "wouter";
 import { SCOUT_CARD_TINTS } from "@/lib/scoutCardTints";
+import type { ScoutCardCategory } from "@/lib/scoutCardTints";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 type TierKey = "high" | "mid" | "low" | "none";
@@ -129,10 +130,39 @@ function stagePillClass(stage: string): string {
   if (s.includes("phase 1") || s.includes("phase i") || s.includes("phase i/ii")) {
     return `bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 border-l-sky-400/90 dark:border-l-sky-500/60 ${PILL_MUTED_TEXT}`;
   }
-  return `bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 border-l-zinc-400/70 dark:border-l-zinc-500/50 ${PILL_MUTED_TEXT}`;
+  return `bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-700/30 border-l-emerald-400/80 dark:border-l-emerald-500/50 text-emerald-700 dark:text-emerald-400`;
 }
 
-const MODALITY_PILL_CLASS = "bg-transparent border border-zinc-300/50 dark:border-zinc-600/40 text-zinc-500 dark:text-zinc-400";
+const MODALITY_PILL_CLASS = "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/70 dark:border-emerald-700/40 text-emerald-700 dark:text-emerald-400";
+
+function getCardCategory(sourceTypes?: string[]): ScoutCardCategory {
+  if (!sourceTypes?.length) return "research";
+  if (sourceTypes.includes("tech_transfer")) return "tto";
+  if (sourceTypes.includes("clinical_trial")) return "trial";
+  if (sourceTypes.includes("patent")) return "patent";
+  return "research";
+}
+
+const CATEGORY_BLOOM: Record<ScoutCardCategory, string> = {
+  tto:      "rgba(16, 185, 129, 0.55)",
+  trial:    "rgba(13, 148, 136, 0.55)",
+  patent:   "rgba(217, 119, 6, 0.55)",
+  research: "rgba(14, 165, 233, 0.55)",
+};
+
+const CATEGORY_LABEL: Record<ScoutCardCategory, string> = {
+  tto:      "TTO Asset",
+  trial:    "Clinical Trial",
+  patent:   "Patent",
+  research: "Research Paper",
+};
+
+const CATEGORY_LABEL_COLOR: Record<ScoutCardCategory, string> = {
+  tto:      "text-emerald-600 dark:text-emerald-400",
+  trial:    "text-teal-600 dark:text-teal-400",
+  patent:   "text-amber-600 dark:text-amber-400",
+  research: "text-sky-600 dark:text-sky-400",
+};
 
 type AssetCardProps = {
   asset: ScoredAsset;
@@ -152,6 +182,8 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
   const isUnscored = asset.score === 0 || (asset.score_breakdown?.signal_coverage ?? 0) === 0;
   const isResearcherPublished = asset.source_types?.includes("researcher");
+  const cardCategory = getCardCategory(asset.source_types);
+  const tint = SCOUT_CARD_TINTS[cardCategory];
   const tier = scoreTier(asset.score, isUnscored);
   const isLimitedData = asset.dataSparse === true ||
     (asset.completeness_score !== null && asset.completeness_score !== undefined && asset.completeness_score <= 40);
@@ -205,7 +237,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
     >
       <div
         ref={cardRef}
-        className={`relative w-full h-full rounded-[17px] overflow-hidden ${SCOUT_CARD_TINTS.tto.containerBg} border border-white/90 dark:border-white/10`}
+        className={`relative w-full h-full rounded-[17px] overflow-hidden ${tint.containerBg} border border-white/90 dark:border-white/10`}
         style={{
           willChange: "transform",
           transformStyle: "preserve-3d",
@@ -237,7 +269,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             width: "56px",
             height: "56px",
             borderRadius: "50%",
-            background: "rgba(38, 122, 70, 0.55)",
+            background: CATEGORY_BLOOM[cardCategory],
             top: "-28px",
             left: "-28px",
             transform: hovered ? "scale(26)" : "scale(1)",
@@ -251,8 +283,15 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         {/* Left accent strip — z-[3], sibling of badge at z-[5] */}
         <div
           className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]"
-          style={{ background: SCOUT_CARD_TINTS.tto.stripColor }}
+          style={{ background: tint.stripColor }}
         />
+
+        {/* Source type label — centered in top strip between score badge and bookmark */}
+        <div className="absolute top-0 left-[52px] right-10 z-[4] h-[52px] flex items-center justify-center pointer-events-none">
+          <span className={`text-[11px] font-bold uppercase tracking-[0.08em] ${CATEGORY_LABEL_COLOR[cardCategory]}`}>
+            {CATEGORY_LABEL[cardCategory]}{isResearcherPublished ? " · Researcher" : ""}
+          </span>
+        </div>
 
         {/* Score badge — flush top-left. Click/hover → breakdown popover (desktop) or bottom sheet (mobile). */}
         {isMobile ? (
@@ -353,15 +392,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         {/* Main content — below badge */}
         <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[56px] pb-3">
 
-          {/* Researcher label */}
-          {isResearcherPublished && (
-            <div className="flex items-center gap-1 mb-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
-              <span className="text-[8px] text-amber-600 dark:text-amber-400 font-semibold uppercase tracking-wide leading-none">
-                Researcher
-              </span>
-            </div>
-          )}
 
           {/* Title — natural height, mt-2 for breathing room below badge */}
           <h3
@@ -625,7 +655,7 @@ export function SavedAssetCard({
             width: "56px",
             height: "56px",
             borderRadius: "50%",
-            background: "rgba(38, 122, 70, 0.55)",
+            background: CATEGORY_BLOOM[cardCategory],
             top: "-28px",
             left: "-28px",
             transform: hovered ? "scale(26)" : "scale(1)",

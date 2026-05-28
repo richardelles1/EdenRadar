@@ -10,7 +10,7 @@ import { registerImportRoutes } from "./admin_import";
 import { registerImpersonationRoutes } from "./admin_impersonation";
 import { registerRelevanceRoutes } from "./admin_relevance";
 import { registerDispatchRoutes } from "./admin_dispatch";
-import { registerMiscRoutes } from "./admin_misc";
+import { registerPlatformRoutes } from "./admin_platform";
 
 export async function registerAdminRoutes(app: Express): Promise<void> {
   app.use("/api/admin", requireAdmin);
@@ -24,5 +24,5 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
   await registerImpersonationRoutes(app);
   registerRelevanceRoutes(app);
   registerDispatchRoutes(app);
-  registerMiscRoutes(app);
+  registerPlatformRoutes(app);
 }

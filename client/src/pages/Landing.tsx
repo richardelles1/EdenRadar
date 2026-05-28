@@ -107,8 +107,8 @@ function RadarBackground() {
       const maxR = Math.sqrt(cx * cx + cy * cy) * 1.05;
       const ringCount = 7;
       const ringSpacing = maxR / ringCount;
-      const ringAlpha = isDark ? 0.08 : 0.03;
-      const sweepPeak = isDark ? 0.15 : 0.05;
+      const ringAlpha = isDark ? 0.10 : 0.06;
+      const sweepPeak = isDark ? 0.18 : 0.10;
       const sweepAngle = Math.PI / 2;
       const sweepSteps = 24;
       const TWO_PI = Math.PI * 2;
@@ -147,14 +147,14 @@ function RadarBackground() {
         ctx.moveTo(cx, cy);
         ctx.arc(cx, cy, maxR, startA, endA);
         ctx.closePath();
-        ctx.fillStyle = "#065f46";
+        ctx.fillStyle = "#c47d1a";
         ctx.globalAlpha = t * sweepPeak;
         ctx.fill();
       }
 
       // leading edge sweep arm
-      ctx.globalAlpha = isDark ? 0.55 : 0.22;
-      ctx.strokeStyle = "#34d399";
+      ctx.globalAlpha = isDark ? 0.60 : 0.45;
+      ctx.strokeStyle = "#c47d1a";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
@@ -662,6 +662,7 @@ const HERO_CARDS: Array<{
   score: number;
   name: string;
   indication: string;
+  summary: string;
   stage: string;
   modality: string;
   rising: boolean;
@@ -671,46 +672,50 @@ const HERO_CARDS: Array<{
   {
     type: "tto",
     score: 9,
-    name: "ADC platform targeting solid tumors via HER2 × TROP2 bispecific conjugate",
-    indication: "Solid tumor oncology · NSCLC",
+    name: "GLP-1/GIP dual receptor agonist with enhanced CNS penetration for obesity and metabolic syndrome",
+    indication: "Obesity · Metabolic syndrome",
+    summary: "Dual agonism achieves 40% greater weight reduction than semaglutide in HFD mouse models. CNS penetration confirmed by PET imaging. Exclusive licensing available; Phase 1 IND submission in preparation.",
     stage: "Pre-clinical",
-    modality: "ADC",
+    modality: "Peptide",
     rising: true,
     sources: 3,
-    institution: "MIT Technology Licensing Office",
+    institution: "UT Southwestern Medical Center",
   },
   {
     type: "trial",
-    score: 8,
-    name: "Phase I dose-escalation of HER2-targeted radioligand in metastatic breast cancer",
-    indication: "Metastatic breast cancer · HER2+",
+    score: 0,
+    name: "Phase I safety and dose-finding study of dual GLP-1/GIP receptor agonist in adults with obesity",
+    indication: "Obesity · BMI ≥ 30 · NCT05891432",
+    summary: "Open-label, dose-escalation study across 6 cohorts (n=48). Primary endpoint: MTD and 12-week PK profile. Secondary endpoints include neuroinflammatory biomarkers and HOMA-IR.",
     stage: "Phase 1",
-    modality: "Radioligand",
+    modality: "Peptide",
     rising: false,
     sources: 2,
-    institution: "Mass General Hospital",
+    institution: "UT Southwestern Medical Center",
   },
   {
     type: "patent",
-    score: 7,
-    name: "Anti-EGFR antibody-drug conjugate composition and methods of treatment",
-    indication: "NSCLC · Colorectal · US20230145678A1",
+    score: 0,
+    name: "Modified GLP-1/GIP co-agonist peptides with improved metabolic half-life and CNS bioavailability",
+    indication: "Obesity · Type 2 diabetes",
+    summary: "PCT/US2024/038291 covers 23 fatty acid-modified variants with 96h plasma half-life. National phase entry across 42 jurisdictions in Q1 2025. Sub-licensing discussions open.",
     stage: "Pre-clinical",
-    modality: "ADC",
+    modality: "Peptide",
     rising: false,
     sources: 1,
-    institution: "Regents of the University of California",
+    institution: "UT Southwestern Medical Center",
   },
   {
     type: "research",
-    score: 6,
-    name: "CAR-T targeting IL-13Rα2 overcomes solid tumor microenvironment in glioblastoma",
-    indication: "Glioblastoma · CNS tumors",
+    score: 0,
+    name: "CNS-penetrant GLP-1/GIP co-agonism drives weight loss and reduces neuroinflammation in diet-induced obese mice",
+    indication: "Obesity · Neuroinflammation",
+    summary: "Hypothalamic co-stimulation cut body weight 28% and NLRP3 inflammasome activation 67% in HFD mice (n=24, p<0.001). Open access. Nature Metabolism, March 2024.",
     stage: "Pre-clinical",
-    modality: "CAR-T",
+    modality: "Peptide",
     rising: true,
     sources: 2,
-    institution: "City of Hope National Medical Center",
+    institution: "PubMed · Nature Metabolism",
   },
 ];
 
@@ -726,22 +731,23 @@ const DECK_TINTS: Record<"tto" | "trial" | "patent" | "research", {
 
 const DECK_STACK = [
   { tx: 0,  ty: 0,  scale: 1.00, opacity: 1.00 },
-  { tx: 12, ty: 12, scale: 0.97, opacity: 0.88 },
-  { tx: 24, ty: 24, scale: 0.94, opacity: 0.72 },
-  { tx: 36, ty: 36, scale: 0.91, opacity: 0.55 },
+  { tx: 18, ty: 18, scale: 0.97, opacity: 0.88 },
+  { tx: 36, ty: 36, scale: 0.94, opacity: 0.72 },
+  { tx: 54, ty: 54, scale: 0.91, opacity: 0.55 },
 ];
 
 function deckStagePillClass(stage: string): string {
   const s = stage.toLowerCase();
-  if (s.includes("phase 1") || s.includes("phase i/ii")) return "bg-sky-50 border border-sky-200/70 border-l-sky-400/90 text-zinc-500";
-  if (s.includes("phase 2") || s.includes("phase ii")) return "bg-violet-50 border border-violet-200/70 border-l-violet-400/90 text-zinc-500";
-  if (s.includes("phase 3") || s.includes("approved")) return "bg-emerald-50 border border-emerald-200/70 border-l-emerald-400/90 text-zinc-500";
-  return "bg-zinc-100 border border-zinc-200/80 border-l-zinc-400/70 text-zinc-500";
+  if (s.includes("phase 1") || s.includes("phase i/ii")) return "bg-sky-50 border border-sky-200/70 border-l-sky-400/90 text-sky-700";
+  if (s.includes("phase 2") || s.includes("phase ii")) return "bg-violet-50 border border-violet-200/70 border-l-violet-400/90 text-violet-700";
+  if (s.includes("phase 3") || s.includes("approved")) return "bg-emerald-50 border border-emerald-300/70 border-l-emerald-600 text-emerald-700";
+  return "bg-emerald-50 border border-emerald-200/60 border-l-emerald-400/80 text-emerald-700";
 }
 
 function HeroCardDeck() {
   const [activeIdx, setActiveIdx] = useState(0);
   const [bookmarked, setBookmarked] = useState<Set<number>>(new Set());
+  const [frontHovered, setFrontHovered] = useState(false);
   const paused = useRef(false);
 
   useEffect(() => {
@@ -754,7 +760,7 @@ function HeroCardDeck() {
   return (
     <div
       className="hidden lg:block select-none"
-      style={{ position: "relative", width: "336px", height: "296px" }}
+      style={{ position: "relative", width: "500px", height: "480px", margin: "0 auto" }}
       onMouseEnter={() => { paused.current = true; }}
       onMouseLeave={() => { paused.current = false; }}
     >
@@ -771,45 +777,77 @@ function HeroCardDeck() {
             className="absolute rounded-[17px] overflow-hidden"
             style={{
               top: 0, left: 0,
-              width: "300px", height: "260px",
-              transform: `translate(${sp.tx}px, ${sp.ty}px) scale(${sp.scale})`,
+              width: "480px", height: "445px",
+              transform: `translate(${sp.tx}px, ${sp.ty + (isFront && frontHovered ? -7 : 0)}px) scale(${isFront && frontHovered ? 1.015 : sp.scale})`,
               transformOrigin: "top left",
               zIndex: 4 - pos,
               opacity: sp.opacity,
               background: tint.bg,
               border: `1px solid ${tint.border}`,
               boxShadow: isFront
-                ? "0 20px 48px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08)"
+                ? frontHovered
+                  ? "0 28px 60px rgba(0,0,0,0.22), 0 8px 24px rgba(0,0,0,0.10)"
+                  : "0 20px 48px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08)"
                 : "0 4px 12px rgba(0,0,0,0.06)",
               transition: "transform 0.38s cubic-bezier(0.23,1,0.32,1), opacity 0.35s ease, box-shadow 0.35s ease",
               cursor: isFront ? "pointer" : "default",
             }}
+            onMouseEnter={() => { if (isFront) setFrontHovered(true); }}
+            onMouseLeave={() => { if (isFront) setFrontHovered(false); }}
             onClick={isFront ? () => setActiveIdx(i => (i + 1) % HERO_CARDS.length) : undefined}
           >
             {/* Left strip */}
             <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.strip }} />
 
-            {/* Score badge */}
+            {/* Tinted header zone */}
             <div
-              className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
+              className="absolute top-0 left-0 right-0 z-[3]"
               style={{
-                borderRadius: "17px 0 10px 0",
-                minWidth: "52px",
-                background: tint.badgeBg,
-                borderBottom: `1px solid ${tint.badgeBorderColor}`,
-                borderRight: `1px solid ${tint.badgeBorderColor}`,
+                height: "80px",
+                background: `${tint.strip}0d`,
+                borderBottom: `1px solid ${tint.strip}26`,
+              }}
+            />
+
+            {/* Score badge — TTO only */}
+            {card.type === "tto" && (
+              <div
+                className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
+                style={{
+                  borderRadius: "17px 0 10px 0",
+                  minWidth: "80px",
+                  background: tint.badgeBg,
+                  borderBottom: `1px solid ${tint.badgeBorderColor}`,
+                  borderRight: `1px solid ${tint.badgeBorderColor}`,
+                  boxShadow: isFront ? `0 4px 20px ${tint.strip}40` : "none",
+                }}
+              >
+                <span className="text-[11px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
+                <span className="font-mono text-[40px] font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
+                  {card.score}
+                </span>
+              </div>
+            )}
+
+            {/* Type label — centered in top strip between score badge and bookmark */}
+            <div
+              className="absolute z-[4] flex items-center justify-center pointer-events-none"
+              style={{
+                top: 0,
+                left: card.type === "tto" ? "80px" : 0,
+                right: "68px",
+                height: "80px",
               }}
             >
-              <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
-              <span className="font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
-                {card.score}
+              <span className="text-[22px] font-bold uppercase tracking-[0.06em]" style={{ color: tint.strip }}>
+                {card.type === "tto" ? "TTO Asset" : card.type === "trial" ? "Clinical Trial" : card.type === "patent" ? "Patent" : "Research"}
               </span>
             </div>
 
             {/* Bookmark — front card only */}
             {isFront && (
               <div
-                className="absolute top-1.5 right-1.5 z-[5]"
+                className="absolute top-2 right-2 z-[5]"
                 onClick={(e) => {
                   e.stopPropagation();
                   setBookmarked(prev => {
@@ -820,60 +858,63 @@ function HeroCardDeck() {
                 }}
               >
                 <button
-                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                  className={`w-14 h-14 rounded-lg flex items-center justify-center transition-all duration-200 ${
                     isBookmarked
                       ? "text-emerald-600 bg-emerald-500/10"
                       : "text-zinc-400 hover:text-emerald-600 hover:bg-emerald-500/10"
                   }`}
                 >
                   {isBookmarked
-                    ? <BookmarkCheck className="w-4 h-4" />
-                    : <Bookmark className="w-4 h-4" />
+                    ? <BookmarkCheck className="w-8 h-8" />
+                    : <Bookmark className="w-8 h-8" />
                   }
                 </button>
               </div>
             )}
 
             {/* Content */}
-            <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[56px] pb-3">
-              <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
+            <div className="absolute inset-0 z-[4] flex flex-col pl-6 pr-5 pt-[84px] pb-5">
+              <h3 className="text-[20px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
                 {card.name}
               </h3>
-              <p className="text-[11px] text-zinc-500 leading-snug mt-1.5 line-clamp-1">
+              <p className="text-[15px] text-zinc-500 leading-snug mt-3 line-clamp-1">
                 {card.indication}
               </p>
-              <div className="flex flex-wrap gap-1.5 mt-2.5">
-                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-sm border-l-2 ${deckStagePillClass(card.stage)}`}>
+              <p className="text-[14px] text-zinc-600 leading-relaxed mt-3 line-clamp-3">
+                {card.summary}
+              </p>
+              <div className="flex flex-wrap gap-2.5 mt-4">
+                <span className={`text-[13px] font-medium px-3 py-1.5 rounded border-l-2 ${deckStagePillClass(card.stage)}`}>
                   {card.stage}
                 </span>
-                <span className="text-[10px] font-medium px-2 py-0.5 rounded-sm text-zinc-500 bg-transparent border border-zinc-300/50">
+                <span className="text-[13px] font-medium px-3 py-1.5 rounded text-emerald-700 bg-emerald-50 border border-emerald-200/70">
                   {card.modality}
                 </span>
                 {card.rising && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-emerald-50 border border-emerald-200/70 text-emerald-600">
-                    <TrendingUp className="w-2.5 h-2.5" /> Rising
+                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded bg-emerald-50 border border-emerald-200/70 text-emerald-600">
+                    <TrendingUp className="w-3.5 h-3.5" /> Rising
                   </span>
                 )}
                 {card.sources >= 2 && (
-                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-sky-50 border border-sky-200/70 text-sky-600">
+                  <span className="text-[13px] font-semibold px-3 py-1.5 rounded bg-sky-50 border border-sky-200/70 text-sky-600">
                     {card.sources} sources
                   </span>
                 )}
               </div>
               <div className="flex-1" />
-              <p className="flex items-center gap-1.5 text-[11px] text-zinc-700 font-medium leading-snug mb-2 line-clamp-1">
-                <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
+              <p className="flex items-center gap-2 text-[14px] text-zinc-700 font-medium leading-snug mb-4 line-clamp-1">
+                <Building2 className="w-3.5 h-3.5 shrink-0 opacity-50" />
                 {card.institution}
               </p>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-2">
                 <button
-                  className="flex-1 h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 text-white"
+                  className="flex-1 h-11 rounded-md text-[14px] font-semibold tracking-wide bg-emerald-600 text-white"
                   onClick={(e) => e.stopPropagation()}
                 >
                   Asset Dossier
                 </button>
                 <button
-                  className="h-7 px-2 rounded-md text-[10px] font-medium text-zinc-400"
+                  className="h-11 px-4 rounded-md text-[12px] font-medium text-zinc-400"
                   onClick={(e) => e.stopPropagation()}
                 >
                   ✕
@@ -932,8 +973,8 @@ export default function Landing() {
           <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6"
             style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem", display: "flex", flexDirection: "column", justifyContent: "center" }}>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center mb-16 sm:mb-20">
-              {/* Left: copy */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+              {/* Left: copy + stats */}
               <div className="flex flex-col items-start text-left">
                 <h1 className="mb-6 font-black tracking-tight leading-[1.0] text-primary"
                   style={{ fontSize: "clamp(2.25rem, 5vw, 4.5rem)", textWrap: "balance" } as React.CSSProperties}>
@@ -947,28 +988,25 @@ export default function Landing() {
                   onClick={handleGetStarted}
                   data-testid="button-cta-get-started"
                   className="h-11 px-8 font-semibold gap-2"
+                  style={{ background: "hsl(33 85% 44%)", border: "none", color: "white" }}
                 >
                   Get started
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
+                <div ref={statsRef} className="reveal-section grid grid-cols-2 gap-x-10 gap-y-5 mt-12 w-full max-w-sm">
+                  {STATS.map((s) => (
+                    <div key={s.label} data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
+                      <div className="text-2xl font-bold mb-0.5" style={{ color: s.value === "350+" ? "hsl(33 85% 42%)" : "hsl(var(--primary))" }}>
+                        {(s as { raw?: boolean }).raw ? s.value : <NumberTicker value={s.value} />}
+                      </div>
+                      <div className="text-[11px] tracking-wide font-semibold text-foreground/60 dark:text-white/60">{s.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               {/* Right: interactive card deck */}
               <HeroCardDeck />
-            </div>
-
-            <div
-              ref={statsRef}
-              className="reveal-section grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10"
-            >
-              {STATS.map((s) => (
-                <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
-                  <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">
-                    {(s as { raw?: boolean }).raw ? s.value : <NumberTicker value={s.value} />}
-                  </div>
-                  <div className="text-xs tracking-wide font-semibold text-foreground/70 dark:text-white/75">{s.label}</div>
-                </div>
-              ))}
             </div>
           </div>
 
