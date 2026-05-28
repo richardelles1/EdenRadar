@@ -204,6 +204,10 @@ export function registerInstitutionRoutes(app: Express): void {
       // The display name is the metadata overlay if present, else the first
       // scraper/ingested name, else a titleized slug.
       const slug = req.params.slug;
+      const rawLimit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "200"), 10) || 200));
+      const rawPage = Math.max(0, parseInt(String(req.query.page ?? "0"), 10) || 0);
+      const offset = rawPage * rawLimit;
+
       const [meta, counts] = await Promise.all([
         db
           .select({ name: institutionMetadata.name })
@@ -232,9 +236,9 @@ export function registerInstitutionRoutes(app: Express): void {
         slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
       const assets = aliasNames.size
-        ? await storage.getIngestedAssetsByInstitutionNames(Array.from(aliasNames))
-        : await storage.getIngestedAssetsByInstitution(displayName);
-      res.json({ assets, institution: displayName });
+        ? await storage.getIngestedAssetsByInstitutionNames(Array.from(aliasNames), rawLimit, offset)
+        : await storage.getIngestedAssetsByInstitution(displayName, rawLimit, offset);
+      res.json({ assets, institution: displayName, page: rawPage, limit: rawLimit, hasMore: assets.length === rawLimit });
     } catch (err: any) {
       console.error("[institutions/assets]", err);
       res.status(500).json({ error: "Failed to fetch assets" });
