@@ -21,7 +21,7 @@ type NavProps = {
   onOpenSaved?: () => void;
 };
 
-const PUBLIC_PATHS = ["/", "/about", "/what-we-do", "/how-it-works", "/pricing", "/market/preview", "/market/list"];
+const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list"];
 
 function normalizePath(path: string) {
   const stripped = path.split("?")[0].split("#")[0];
@@ -70,7 +70,7 @@ const RESEARCHER_PORTALS: PortalEntry[] = [
 const INDUSTRY_PORTALS: PortalEntry[] = [
   {
     name: "EdenScout",
-    blurb: "Licensable signals from 300+ TTOs, patents, and papers.",
+    blurb: "Licensable signals from 350+ TTOs, patents, and papers.",
     href: "/scout",
     Icon: Radar,
     accent: "142 52% 36%",

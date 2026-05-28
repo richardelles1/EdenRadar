@@ -26,7 +26,7 @@ const SCOUT_PLANS = [
     tagline: "For solo BD professionals and licensing executives.",
     teamCallout: null as string | null,
     features: [
-      "Market intelligence feed from 300+ TTOs",
+      "Market intelligence feed from 350+ TTOs",
       "EDEN semantic search across full asset catalog",
       "Asset dossiers with full AI enrichment",
       "Pipeline tracking and saved asset lists",
@@ -707,7 +707,7 @@ export default function Pricing() {
               Two ways to source your next deal
             </h1>
             <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
-              EdenScout surfaces licensable signals from 300+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
+              EdenScout surfaces licensable signals from 350+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
             </p>
           </div>
 
