@@ -242,7 +242,7 @@ export type FieldMatchResult = { score: number; basis: string };
 /** Unwrap a raw DB field to a plain comparable string.
  *  Handles JSONB-serialised arrays (categories: '["gene_therapy","oncology"]')
  *  and underscore-joined values so substring matching works correctly. */
-function toText(raw: string | null | undefined): string {
+export function toText(raw: string | null | undefined): string {
   if (!raw) return "";
   if (raw.trimStart().startsWith("[")) {
     try {
