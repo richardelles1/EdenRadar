@@ -13,6 +13,7 @@ describe("computeCompletenessScore", () => {
     expect(computeCompletenessScore({})).toBe(0);
   });
 
+  // Individual field awards
   it("awards 25 pts for indication", () => {
     expect(computeCompletenessScore({ indication: "NSCLC" })).toBe(25);
   });
@@ -23,29 +24,6 @@ describe("computeCompletenessScore", () => {
 
   it("awards 20 pts for developmentStage when not 'unknown'", () => {
     expect(computeCompletenessScore({ developmentStage: "phase 2" })).toBe(20);
-  });
-
-  it("does not award stage pts when developmentStage is 'unknown'", () => {
-    expect(computeCompletenessScore({ developmentStage: "unknown" })).toBe(0);
-  });
-
-  it("awards 15 pts for summary >= 300 chars", () => {
-    const summary = "a".repeat(300);
-    expect(computeCompletenessScore({ summary })).toBe(15);
-  });
-
-  it("awards 10 pts for summary >= 150 chars", () => {
-    const summary = "a".repeat(150);
-    expect(computeCompletenessScore({ summary })).toBe(10);
-  });
-
-  it("awards 5 pts for summary >= 50 chars", () => {
-    const summary = "a".repeat(50);
-    expect(computeCompletenessScore({ summary })).toBe(5);
-  });
-
-  it("awards 0 pts for summary < 50 chars", () => {
-    expect(computeCompletenessScore({ summary: "short" })).toBe(0);
   });
 
   it("awards 15 pts for mechanismOfAction", () => {
@@ -60,14 +38,72 @@ describe("computeCompletenessScore", () => {
     expect(computeCompletenessScore({ patentStatus: "patent pending" })).toBe(5);
   });
 
-  it("does not award IP pts when patentStatus is 'unknown'", () => {
-    expect(computeCompletenessScore({ patentStatus: "unknown" })).toBe(0);
-  });
-
   it("awards 5 pts for TTO listing even without explicit IP fields", () => {
     expect(computeCompletenessScore({ sourceType: "tech_transfer" })).toBe(5);
   });
 
+  // Summary tiers — boundary values AND one-below-boundary
+  it("awards 15 pts for summary >= 300 chars", () => {
+    expect(computeCompletenessScore({ summary: "a".repeat(300) })).toBe(15);
+  });
+
+  it("awards 10 pts for summary at exactly 299 chars (one below 300 tier)", () => {
+    expect(computeCompletenessScore({ summary: "a".repeat(299) })).toBe(10);
+  });
+
+  it("awards 10 pts for summary >= 150 chars", () => {
+    expect(computeCompletenessScore({ summary: "a".repeat(150) })).toBe(10);
+  });
+
+  it("awards 5 pts for summary at exactly 149 chars (one below 150 tier)", () => {
+    expect(computeCompletenessScore({ summary: "a".repeat(149) })).toBe(5);
+  });
+
+  it("awards 5 pts for summary >= 50 chars", () => {
+    expect(computeCompletenessScore({ summary: "a".repeat(50) })).toBe(5);
+  });
+
+  it("awards 0 pts for summary < 50 chars", () => {
+    expect(computeCompletenessScore({ summary: "short" })).toBe(0);
+  });
+
+  // 'unknown' and empty string rejection
+  it("does not award pts when developmentStage is 'unknown'", () => {
+    expect(computeCompletenessScore({ developmentStage: "unknown" })).toBe(0);
+  });
+
+  it("does not award pts when indication is 'unknown'", () => {
+    expect(computeCompletenessScore({ indication: "unknown" })).toBe(0);
+  });
+
+  it("does not award pts when modality is 'unknown'", () => {
+    expect(computeCompletenessScore({ modality: "unknown" })).toBe(0);
+  });
+
+  it("does not award pts when mechanismOfAction is 'unknown'", () => {
+    expect(computeCompletenessScore({ mechanismOfAction: "unknown" })).toBe(0);
+  });
+
+  it("does not award pts when patentStatus is 'unknown'", () => {
+    expect(computeCompletenessScore({ patentStatus: "unknown" })).toBe(0);
+  });
+
+  it("does not award pts for strings shorter than 3 chars", () => {
+    expect(computeCompletenessScore({ indication: "AB" })).toBe(0);
+    expect(computeCompletenessScore({ modality: "AB" })).toBe(0);
+  });
+
+  it("does not award pts for empty string fields", () => {
+    expect(computeCompletenessScore({ indication: "" })).toBe(0);
+    expect(computeCompletenessScore({ developmentStage: "" })).toBe(0);
+  });
+
+  it("treats null and undefined field values identically (both score 0)", () => {
+    expect(computeCompletenessScore({ indication: null })).toBe(0);
+    expect(computeCompletenessScore({ indication: undefined })).toBe(0);
+  });
+
+  // Biology bonus
   it("awards 5 pt biology bonus on top of base score", () => {
     // indication (25) + biology bonus (5) = 30
     expect(computeCompletenessScore({ indication: "NSCLC", biology: "oncogenic signaling" })).toBe(30);
@@ -81,7 +117,13 @@ describe("computeCompletenessScore", () => {
     expect(computeCompletenessScore({ indication: "NSCLC", biology: "other" })).toBe(25);
   });
 
-  it("a fully-populated asset hits 100", () => {
+  it("does not award biology bonus for 'not applicable'", () => {
+    expect(computeCompletenessScore({ indication: "NSCLC", biology: "not applicable" })).toBe(25);
+  });
+
+  // Full-score and cap
+  it("a fully-populated asset scores 100", () => {
+    // 25 + 20 + 20 + 15 + 15 + 5 = 100
     const asset = {
       indication: "NSCLC",
       modality: "small molecule",
@@ -106,28 +148,21 @@ describe("computeCompletenessScore", () => {
     expect(computeCompletenessScore(asset)).toBe(100);
   });
 
-  it("ignores fields that do not contribute to scoring (target, inventors, etc.)", () => {
-    const score = computeCompletenessScore({
+  it("always returns a number (never null), despite the declared return type", () => {
+    // The function signature says `number | null` but the implementation
+    // always returns Math.min(100, score). This test documents actual behavior.
+    const result = computeCompletenessScore({});
+    expect(typeof result).toBe("number");
+  });
+
+  // Non-scored fields
+  it("ignores target, inventors, licensingReadiness, innovationClaim — all score 0", () => {
+    expect(computeCompletenessScore({
       target: "EGFR",
       innovationClaim: "first-in-class",
       inventors: ["Dr Smith"],
       licensingReadiness: "available",
-    });
-    expect(score).toBe(0);
-  });
-
-  it("treats null and undefined field values identically", () => {
-    expect(computeCompletenessScore({ indication: null })).toBe(
-      computeCompletenessScore({ indication: undefined })
-    );
-  });
-
-  it("does not award indication pts for 'unknown'", () => {
-    expect(computeCompletenessScore({ indication: "unknown" })).toBe(0);
-  });
-
-  it("does not award indication pts for strings shorter than 3 chars", () => {
-    expect(computeCompletenessScore({ indication: "AB" })).toBe(0);
+    })).toBe(0);
   });
 });
 
@@ -135,8 +170,7 @@ describe("computeCompletenessScore", () => {
 
 describe("computeContentHash", () => {
   it("returns a 32-char hex string", () => {
-    const hash = computeContentHash("Title", "Description");
-    expect(hash).toMatch(/^[0-9a-f]{32}$/);
+    expect(computeContentHash("Title", "Description")).toMatch(/^[0-9a-f]{32}$/);
   });
 
   it("is deterministic", () => {
@@ -145,14 +179,25 @@ describe("computeContentHash", () => {
     expect(a).toBe(b);
   });
 
-  it("is case-insensitive", () => {
-    expect(computeContentHash("TITLE", "DESC")).toBe(computeContentHash("title", "desc"));
+  it("is case-insensitive across title, description, and abstract", () => {
+    expect(computeContentHash("TITLE", "DESC", "ABSTRACT")).toBe(
+      computeContentHash("title", "desc", "abstract")
+    );
   });
 
-  it("differs when any field changes", () => {
+  it("produces different hashes when title changes", () => {
+    const base = computeContentHash("Title", "Desc");
+    expect(computeContentHash("Title2", "Desc")).not.toBe(base);
+  });
+
+  it("produces different hashes when description changes", () => {
     const base = computeContentHash("Title", "Desc");
     expect(computeContentHash("Title", "Desc2")).not.toBe(base);
-    expect(computeContentHash("Title2", "Desc")).not.toBe(base);
+  });
+
+  it("produces different hashes when abstract changes", () => {
+    const base = computeContentHash("Title", "Desc", "Abstract");
+    expect(computeContentHash("Title", "Desc", "Abstract2")).not.toBe(base);
   });
 
   it("treats missing abstract as empty string", () => {
@@ -165,17 +210,20 @@ describe("computeContentHash", () => {
 // ── normalizeLicensingStatus ──────────────────────────────────────────────────
 
 describe("normalizeLicensingStatus", () => {
-  it("returns 'unknown' for empty input", () => {
+  it("returns 'unknown' for empty string", () => {
     expect(normalizeLicensingStatus("")).toBe("unknown");
-    expect(normalizeLicensingStatus(undefined)).toBe("unknown");
   });
 
-  it("normalizes 'available for license'", () => {
-    expect(normalizeLicensingStatus("Available for License")).toBe("available");
+  it("returns 'unknown' for undefined", () => {
+    expect(normalizeLicensingStatus(undefined)).toBe("unknown");
   });
 
   it("normalizes 'available'", () => {
     expect(normalizeLicensingStatus("available")).toBe("available");
+  });
+
+  it("normalizes 'available for license'", () => {
+    expect(normalizeLicensingStatus("Available for License")).toBe("available");
   });
 
   it("normalizes non-exclusive licensing", () => {
@@ -185,6 +233,11 @@ describe("normalizeLicensingStatus", () => {
 
   it("normalizes exclusive licensing", () => {
     expect(normalizeLicensingStatus("Exclusively Licensed")).toBe("exclusively licensed");
+  });
+
+  it("non-exclusive is checked before exclusive (order matters)", () => {
+    // "non-exclusively" contains "exclusive" — must not fall through to exclusive branch
+    expect(normalizeLicensingStatus("non-exclusively licensed")).toBe("non-exclusively licensed");
   });
 
   it("normalizes optioned", () => {
@@ -204,8 +257,11 @@ describe("normalizeLicensingStatus", () => {
 // ── normalizePatentStatus ─────────────────────────────────────────────────────
 
 describe("normalizePatentStatus", () => {
-  it("returns 'unknown' for empty input", () => {
+  it("returns 'unknown' for empty string", () => {
     expect(normalizePatentStatus("")).toBe("unknown");
+  });
+
+  it("returns 'unknown' for undefined", () => {
     expect(normalizePatentStatus(undefined)).toBe("unknown");
   });
 
@@ -213,7 +269,7 @@ describe("normalizePatentStatus", () => {
     expect(normalizePatentStatus("Patent Granted")).toBe("patented");
   });
 
-  it("normalizes 'patented'", () => {
+  it("normalizes exact string 'patented'", () => {
     expect(normalizePatentStatus("patented")).toBe("patented");
   });
 
