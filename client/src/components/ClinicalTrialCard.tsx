@@ -163,10 +163,25 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
             style={{ background: stripColor }}
           />
 
+          {/* Tinted header zone */}
+          <div
+            className="absolute top-0 left-0 right-0 z-[2]"
+            style={{ height: "56px", background: `${stripColor}0d`, borderBottom: `1px solid ${stripColor}26` }}
+          />
+
+          {/* Type label in header */}
+          <div className="absolute top-0 left-[10px] right-10 z-[4] h-[56px] flex items-center gap-1.5 pointer-events-none">
+            <FlaskConical className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+            <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-teal-600 dark:text-teal-400">Clinical Trial</span>
+            <span className={`inline-flex items-center px-1.5 py-0 rounded-sm text-[9px] font-bold uppercase tracking-[0.1em] border ${phaseStyle.className}`}>
+              {phaseStyle.label}
+            </span>
+          </div>
+
           {/* PipelinePicker — top-right */}
           {!hidePicker && (
             <div
-              className="absolute top-1.5 right-1.5 z-[5]"
+              className="absolute top-2.5 right-2.5 z-[5]"
               onClick={(e) => e.stopPropagation()}
             >
               <PipelinePicker
@@ -185,34 +200,17 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
                   pmid: nctId ?? asset.id,
                 }}
                 alreadySaved={isSaved}
-                bare
+                iconClassName="w-8 h-8 rounded-lg"
               />
             </div>
           )}
 
           {/* Content */}
-          <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-8 pt-3 pb-3">
-
-            {/* Top row: Trial badge + phase badge */}
-            <div className="flex items-center gap-1 mb-1.5">
-              <span
-                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.12em] border text-teal-600 dark:text-teal-400 bg-teal-500/10 border-teal-500/30 shrink-0"
-                data-testid={`trial-badge-${asset.id}`}
-              >
-                <FlaskConical className="w-2.5 h-2.5" />
-                Trial
-              </span>
-              <span
-                className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-[0.1em] border shrink-0 ${phaseStyle.className}`}
-                data-testid={`trial-phase-badge-${asset.id}`}
-              >
-                {phaseStyle.label}
-              </span>
-            </div>
+          <div className="absolute inset-0 z-[4] flex flex-col gap-2 pl-4 pr-8 pt-[62px] pb-3">
 
             {/* NCT number */}
             {nctId && (
-              <p className="text-[9px] font-mono font-semibold text-teal-600/80 dark:text-teal-400/80 mb-0.5 tracking-wide"
+              <p className="text-[10px] font-mono font-semibold text-teal-600/80 dark:text-teal-400/80 tracking-wide"
                 data-testid={`trial-nct-id-${asset.id}`}
               >
                 {nctId}
@@ -221,7 +219,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
 
             {/* Title */}
             <h3
-              className="text-[12px] font-semibold leading-snug line-clamp-2 mb-1 text-foreground"
+              className="text-[13px] font-semibold leading-snug line-clamp-2 text-foreground"
               data-testid={`text-trial-title-${asset.id}`}
             >
               {displayTitle}
@@ -229,7 +227,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
 
             {/* Drug/intervention name */}
             {drugName && (
-              <p className="text-[10px] font-medium text-teal-700 dark:text-teal-300 truncate mb-1"
+              <p className="text-[11px] font-medium text-teal-700 dark:text-teal-300 truncate"
                 data-testid={`trial-drug-name-${asset.id}`}
               >
                 {drugName}
@@ -238,16 +236,16 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
 
             {/* Sponsor */}
             {sponsor && (
-              <div className="flex items-center gap-1 mb-1">
+              <div className="flex items-center gap-1">
                 {ownerType === "university" ? (
-                  <GraduationCap className="w-2.5 h-2.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                  <GraduationCap className="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 ) : ownerType === "company" ? (
-                  <Building2 className="w-2.5 h-2.5 shrink-0 text-sky-600 dark:text-sky-400" />
+                  <Building2 className="w-3 h-3 shrink-0 text-sky-600 dark:text-sky-400" />
                 ) : (
-                  <Activity className="w-2.5 h-2.5 shrink-0 text-zinc-500" />
+                  <Activity className="w-3 h-3 shrink-0 text-zinc-500" />
                 )}
                 <p
-                  className="text-[10px] truncate text-zinc-700 dark:text-zinc-200 font-medium"
+                  className="text-[11px] truncate text-zinc-700 dark:text-zinc-200 font-medium"
                   data-testid={`text-trial-sponsor-${asset.id}`}
                 >
                   {sponsor}
@@ -256,17 +254,17 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
             )}
 
             {/* Status + conditions */}
-            <div className="flex items-center gap-1.5 flex-wrap mb-1">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {rawStatus && (
                 <span
-                  className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[8px] font-bold uppercase tracking-[0.1em] border ${statusStyle.className}`}
+                  className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[9px] font-bold uppercase tracking-[0.1em] border ${statusStyle.className}`}
                   data-testid={`trial-status-badge-${asset.id}`}
                 >
                   {statusStyle.label}
                 </span>
               )}
               {conditionsDisplay && (
-                <span className="text-[9px] text-zinc-500 dark:text-zinc-400 truncate"
+                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate"
                   data-testid={`trial-conditions-${asset.id}`}
                 >
                   {conditionsDisplay}
@@ -275,17 +273,15 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
             </div>
 
             {/* Summary excerpt */}
-            {excerpt && (
-              <p className="text-[10px] leading-relaxed line-clamp-2 flex-1 text-zinc-500 dark:text-zinc-400">
-                {excerpt}
-              </p>
-            )}
+            <p className="text-[11px] leading-relaxed line-clamp-2 text-zinc-500 dark:text-zinc-400" style={{ minHeight: "40px" }}>
+              {excerpt ?? ""}
+            </p>
 
             {/* Footer */}
-            <div className="mt-auto pt-1.5 flex items-center justify-between gap-1">
+            <div className="mt-auto pt-1 flex items-center justify-between gap-1">
               {startDateStr && (
-                <span className="flex items-center gap-0.5 text-[9px] text-zinc-400 dark:text-zinc-500">
-                  <Calendar className="w-2.5 h-2.5" />
+                <span className="flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  <Calendar className="w-3 h-3" />
                   {startDateStr}
                 </span>
               )}
@@ -294,12 +290,12 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
                   href={trialUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="ml-auto flex items-center gap-0.5 text-[10px] font-semibold text-teal-600 hover:text-teal-500 dark:text-teal-400 dark:hover:text-teal-300 transition-colors shrink-0"
+                  className="ml-auto flex items-center gap-0.5 text-[11px] font-semibold text-teal-600 hover:text-teal-500 dark:text-teal-400 dark:hover:text-teal-300 transition-colors shrink-0"
                   data-testid={`link-view-trial-${asset.id}`}
                   onClick={(e) => e.stopPropagation()}
                 >
                   View Trial
-                  <ExternalLink className="w-2.5 h-2.5 ml-0.5" />
+                  <ExternalLink className="w-3 h-3 ml-0.5" />
                 </a>
               )}
             </div>
