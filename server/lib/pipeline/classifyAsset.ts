@@ -1,11 +1,13 @@
 import OpenAI from "openai";
 import { sanitizeToVocab } from "./vocab";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-  timeout: 30000,
-  maxRetries: 1,
-});
+let _openai: OpenAI | undefined;
+function getOpenAI(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30000, maxRetries: 1 });
+  }
+  return _openai;
+}
 
 export type AssetClass = "drug_biologic" | "medical_device" | "research_tool" | "software" | "other";
 
@@ -30,22 +32,22 @@ export interface AssetClassification {
   licensingReadiness: string;
 }
 
-const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"]);
-const MODALITY_VALUES = new Set([
+export const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"]);
+export const MODALITY_VALUES = new Set([
   "small molecule", "antibody", "bispecific antibody", "car-t", "gene therapy", "gene editing",
   "mrna therapy", "cell therapy", "peptide", "sirna", "adc", "protac", "vaccine", "nanoparticle",
   "diagnostic", "platform technology", "unknown",
 ]);
-const IP_TYPES = new Set(["patent pending", "patented", "provisional", "copyright", "trade secret", "none", "unknown"]);
-const LICENSING_READINESS = new Set(["available", "exclusively licensed", "non-exclusively licensed", "optioned", "startup formed", "unknown"]);
+export const IP_TYPES = new Set(["patent pending", "patented", "provisional", "copyright", "trade secret", "none", "unknown"]);
+export const LICENSING_READINESS = new Set(["available", "exclusively licensed", "non-exclusively licensed", "optioned", "startup formed", "unknown"]);
 const ASSET_CLASSES: Set<AssetClass> = new Set(["drug_biologic", "medical_device", "research_tool", "software", "other"]);
 
-function sanitize(val: string, allowed: Set<string>, fallback: string): string {
+export function sanitize(val: string, allowed: Set<string>, fallback: string): string {
   const v = (val ?? "").toLowerCase().trim();
   return allowed.has(v) ? v : fallback;
 }
 
-function nullIfUnknown(val: unknown): string | null {
+export function nullIfUnknown(val: unknown): string | null {
   if (!val || String(val).toLowerCase().trim() === "unknown" || String(val).trim() === "") return null;
   return String(val).trim();
 }
@@ -236,7 +238,7 @@ export async function classifyAsset(
     : { type: "json_object" as const };
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
       model,
       temperature: 0,
       // Gap-fill: up to 8 short string fields (4 primary + 4 secondary) — 500 tokens is sufficient.

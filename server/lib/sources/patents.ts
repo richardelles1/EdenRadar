@@ -83,7 +83,7 @@ const PATENT_SYNONYMS: Record<string, string[]> = {
   "hfpef":          ["heart failure with preserved ejection fraction", "HFpEF"],
 };
 
-function expandPatentQuery(rawQuery: string): string {
+function expandPatentQuery(rawQuery: string): string[] {
   const tokens = rawQuery.trim().toLowerCase().split(/\s+/);
   const expansions: string[] = [];
 

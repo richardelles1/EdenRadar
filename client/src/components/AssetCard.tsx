@@ -554,7 +554,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           )}
 
           {/* CTA */}
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-1 mt-auto">
             <button
               className="flex-1 h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-200 active:scale-95 hover:shadow-md hover:shadow-emerald-500/20"
               onClick={(e) => {
