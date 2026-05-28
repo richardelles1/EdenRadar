@@ -94,14 +94,18 @@ app.use(express.urlencoded({ extended: false }));
 // Explicitly rejects all other origins rather than reflecting them.
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
-// Stamp every response with a unique request ID for log correlation.
+// Stamp every request with a unique ID for log correlation.
 app.use(pinoHttp({
   logger,
   genReqId: () => randomUUID(),
-  customResponseHeaders: (req, _res, _payload, _err) => ({ "X-Request-Id": String(req.id) }),
-  customLogLevel: (_req, res, _err) => res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
-  serializers: { req: (req) => ({ method: req.method, url: req.url, id: req.id }) },
+  customLogLevel: (_req: any, res: any, _err: any) => res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
+  serializers: { req: (req: any) => ({ method: req.method, url: req.url, id: req.id }) },
 }));
+// Mirror the request ID into the response so clients can correlate with server logs.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.id) res.setHeader("X-Request-Id", String(req.id));
+  next();
+});
 
 app.use(
   cors({
