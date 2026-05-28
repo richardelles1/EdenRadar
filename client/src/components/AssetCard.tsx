@@ -231,7 +231,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   return (
     <div
       style={{ perspective: "1000px" }}
-      className="cursor-pointer w-full h-[260px] shrink-0"
+      className="cursor-pointer w-full h-[320px] shrink-0"
       onClick={handleViewDossier}
       data-testid={`asset-card-wrapper-${asset.id}`}
     >
@@ -278,6 +278,12 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
             zIndex: 1,
           }}
+        />
+
+        {/* Tinted header zone */}
+        <div
+          className="absolute top-0 left-0 right-0 z-[2]"
+          style={{ height: "56px", background: `${tint.stripColor}0d`, borderBottom: `1px solid ${tint.stripColor}26` }}
         />
 
         {/* Left accent strip — z-[3], sibling of badge at z-[5] */}
@@ -390,7 +396,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         </div>
 
         {/* Main content — below badge */}
-        <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[56px] pb-3">
+        <div className="absolute inset-0 z-[4] flex flex-col gap-3 pl-4 pr-3 pt-[56px] pb-3">
 
 
           {/* Title — natural height, mt-2 for breathing room below badge */}
@@ -404,16 +410,25 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {/* Indication — what disease this targets; content-level info, sits below title as text not a pill */}
           {indicationLabel && (
             <p
-              className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mt-1.5 line-clamp-1"
+              className="text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-1"
               data-testid={`text-indication-${asset.id}`}
             >
               {indicationLabel}
             </p>
           )}
 
+          {/* Description — 2 lines always; cascade summary → why_it_matters → fallback */}
+          <p className="text-[12px] text-zinc-500 dark:text-zinc-400 leading-snug line-clamp-3" style={{ minHeight: "52px" }}>
+            {(asset.summary?.length ?? 0) > 80
+              ? asset.summary
+              : (asset.why_it_matters?.length ?? 0) > 50
+              ? asset.why_it_matters
+              : "Full detail on mechanism, IP status, and licensing readiness is available in the dossier."}
+          </p>
+
           {/* Metadata pill row — stage + modality + status signals */}
           {hasPills && (
-            <div className="flex flex-wrap gap-1.5 mt-2.5">
+            <div className="flex flex-wrap gap-1.5">
               {stageLabel && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -514,12 +529,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             </div>
           )}
 
-          {/* Spacer — shorter now that pills fill center */}
-          <div className="flex-1" />
 
-          {/* Institution — bottom-aligned, legible secondary */}
+          {/* Institution — pushed to bottom, legible secondary */}
           {institutionDisplay && (
-            <p className="flex items-center gap-1.5 text-[11px] text-zinc-700 dark:text-zinc-200 font-medium leading-snug mb-2 line-clamp-1">
+            <p className="flex items-center gap-1.5 text-[11px] text-zinc-700 dark:text-zinc-200 font-medium leading-snug line-clamp-1">
               <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
               <span data-testid={`text-institution-${asset.id}`}>{institutionDisplay}</span>
               {(asset.institutions?.length ?? 0) > 1 && (
