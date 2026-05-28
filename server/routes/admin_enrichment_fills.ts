@@ -4,6 +4,7 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { computeCompletenessScore } from "../lib/pipeline/contentHash";
+import { Job, registerJob } from "../lib/jobState";
 
 // ── Rule-fill state: backed by /tmp/rule-fill-progress.json so it survives
 // server restarts. The actual work runs as a detached child process
@@ -32,36 +33,37 @@ function isProcessAlive(pid: number): boolean {
   try { process.kill(pid, 0); return true; } catch { return false; }
 }
 
-let rescoreRunning = false;
-let rescoreProcessed = 0;
-let rescoreTotal = 0;
+const rescoreJob = new Job();
+registerJob("enrichment:rescore", rescoreJob);
 let rescoreUpdated = 0;
-let rescoreElapsedMs = 0;
-let rescoreStartedAt = 0;
 let rescoreLastSummary: { updated: number; total: number; durationMs: number; completedAt: string } | null = null;
 
-let modalityFillRunning = false;
+const modalityFillJob = new Job();
+registerJob("enrichment:modalityFill", modalityFillJob);
 let modalityFillResult: import("../lib/pipeline/modalityFill").ModalityFillSummary | null = null;
 let modalityFillAbortController: AbortController | null = null;
 
-let dealCompsIngestRunning = false;
+const dealCompsIngestJob = new Job();
+registerJob("enrichment:dealCompsIngest", dealCompsIngestJob);
 let dealCompsIngestLastLine = "";
 let dealCompsIngestChild: ReturnType<typeof spawn> | null = null;
 
-let biologyFillRunning = false;
+const biologyFillJob = new Job();
+registerJob("enrichment:biologyFill", biologyFillJob);
 let biologyFillResult: import("../lib/pipeline/biologyFill").BiologyFillSummary | null = null;
 let biologyFillProgress: import("../lib/pipeline/biologyFill").BiologyFillProgress | null = null;
 let biologyFillAbortController: AbortController | null = null;
 
-let moaFillRunning = false;
+const moaFillJob = new Job();
+registerJob("enrichment:moaFill", moaFillJob);
 let moaFillResult: import("../lib/pipeline/moaFill").MoaFillSummary | null = null;
 let moaFillProgress: import("../lib/pipeline/moaFill").MoaFillProgress | null = null;
 let moaFillAbortController: AbortController | null = null;
 
-let usptoRunning = false;
+const usptoJob = new Job();
+registerJob("enrichment:uspto", usptoJob);
 let usptoProgress: { processed: number; total: number; matched: number; unmatched: number; skipped: number } | null = null;
 let usptoResult: { processed: number; matched: number; unmatched: number; skipped: number; missingIpTypeCount: number } | null = null;
-let usptoShouldStop = false;
 let usptoSpotCheckValidation: { results: Array<{ institution: string; assigneeName: string; count: number; hasTitle: boolean; hasValidDate: boolean; sample: Array<{ number: string; title: string; date: string | null }>; error?: string; valid: boolean }>; validCount: number; passed: boolean; reason?: string } | null = null;
 
 export function registerFillRoutes(app: Express): void {
@@ -195,37 +197,35 @@ export function registerFillRoutes(app: Express): void {
   // updates (MOA fill, biology fill, etc.) to apply the new weights.
 
   app.get("/api/admin/enrichment/rescore/status", async (_req, res) => {
+    const rs = rescoreJob.status();
     res.json({
-      running: rescoreRunning,
-      processed: rescoreProcessed,
-      total: rescoreTotal,
+      running: rs.running,
+      processed: rs.processed,
+      total: rs.total,
       updated: rescoreUpdated,
-      elapsedMs: rescoreRunning ? Date.now() - rescoreStartedAt : rescoreElapsedMs,
+      elapsedMs: rs.elapsedMs ?? 0,
       lastSummary: rescoreLastSummary,
     });
   });
 
   app.post("/api/admin/enrichment/rescore", async (req, res) => {
-    if (rescoreRunning) {
+    if (rescoreJob.running) {
       return res.status(409).json({ error: "Rescore already running" });
     }
-    rescoreRunning = true;
-    rescoreProcessed = 0;
-    rescoreTotal = 0;
     rescoreUpdated = 0;
-    rescoreStartedAt = Date.now();
+
+    const countResult = await db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE relevant = true`);
+    const rescoreTotal = Number((countResult.rows[0] as any)?.n ?? 0);
+    rescoreJob.start(rescoreTotal);
     res.json({ started: true });
 
     (async () => {
       try {
-        const countResult = await db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE relevant = true`);
-        rescoreTotal = Number((countResult.rows[0] as any)?.n ?? 0);
-
         const BATCH = 100;
         let offset = 0;
         let updated = 0;
 
-        while (rescoreRunning) {
+        while (!rescoreJob.shouldStop) {
           const rows = await db.execute(sql`
             SELECT id, indication, modality, development_stage, summary,
                    mechanism_of_action, ip_type, patent_status, source_type, biology
@@ -252,47 +252,46 @@ export function registerFillRoutes(app: Express): void {
               await db.execute(sql`UPDATE ingested_assets SET completeness_score = ${newScore} WHERE id = ${Number(row.id)}`);
               updated++;
             }
-            rescoreProcessed++;
+            rescoreJob.tick(rescoreJob.processed + 1);
           }
 
           offset += BATCH;
           if (rows.rows.length < BATCH) break;
         }
 
-        const durationMs = Date.now() - rescoreStartedAt;
-        rescoreElapsedMs = durationMs;
+        const durationMs = rescoreJob.status().elapsedMs ?? 0;
         rescoreUpdated = updated;
-        rescoreLastSummary = { updated, total: rescoreProcessed, durationMs, completedAt: new Date().toISOString() };
-        console.log(`[rescore] Done – ${updated}/${rescoreProcessed} updated in ${Math.round(durationMs / 1000)}s`);
+        rescoreLastSummary = { updated, total: rescoreJob.processed, durationMs, completedAt: new Date().toISOString() };
+        console.log(`[rescore] Done – ${updated}/${rescoreJob.processed} updated in ${Math.round(durationMs / 1000)}s`);
       } catch (err: any) {
         console.error("[rescore] Error:", err.message);
       } finally {
-        rescoreRunning = false;
+        rescoreJob.finish({});
       }
     })();
   });
 
   app.post("/api/admin/enrichment/rescore/stop", async (_req, res) => {
-    if (!rescoreRunning) {
+    if (!rescoreJob.running) {
       return res.json({ stopped: false, reason: "No rescore running" });
     }
-    rescoreRunning = false;
+    rescoreJob.requestStop();
     res.json({ stopped: true });
   });
 
   // ── Modality Rule-Fill ────────────────────────────────────────────────────
 
   app.get("/api/admin/enrich/modality-fill/status", (_req, res) => {
-    res.json({ running: modalityFillRunning, result: modalityFillResult });
+    res.json({ running: modalityFillJob.running, result: modalityFillResult });
   });
 
   app.post("/api/admin/enrich/modality-fill", async (req, res) => {
     try {
-      if (modalityFillRunning) {
+      if (modalityFillJob.running) {
         return res.status(409).json({ error: "Modality fill already running" });
       }
-      modalityFillRunning = true;
       modalityFillResult = null;
+      modalityFillJob.start(0);
       res.json({ started: true });
 
       // Run async without blocking the response
@@ -309,17 +308,17 @@ export function registerFillRoutes(app: Express): void {
             ` (T1:${summary.tierCounts.t1} T2:${summary.tierCounts.t2} T3:${summary.tierCounts.t3}` +
             ` GPT-sent:${summary.gptSent} GPT-resolved:${summary.gptResolved})`,
           );
+          modalityFillJob.finish({});
+        } catch (err: any) {
+          console.error("[modality-fill] Async error:", err);
+          modalityFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client.release();
-          await dbPool.end();
-          modalityFillRunning = false;
+          await dbPool.end().catch(() => {});
         }
-      })().catch(err => {
-        console.error("[modality-fill] Async error:", err);
-        modalityFillRunning = false;
-      });
+      })();
     } catch (err: any) {
-      modalityFillRunning = false;
+      modalityFillJob.fail(err.message);
       res.status(500).json({ error: err.message ?? "Failed to start modality fill" });
     }
   });
@@ -327,14 +326,14 @@ export function registerFillRoutes(app: Express): void {
   // ── Deal Comparables Ingest (SEC EDGAR) ──────────────────────────────────────
 
   app.get("/api/admin/deal-comparables/status", (_req, res) => {
-    res.json({ running: dealCompsIngestRunning, lastLine: dealCompsIngestLastLine });
+    res.json({ running: dealCompsIngestJob.running, lastLine: dealCompsIngestLastLine });
   });
 
   app.post("/api/admin/deal-comparables/ingest", (_req, res) => {
-    if (dealCompsIngestRunning) {
+    if (dealCompsIngestJob.running) {
       return res.status(409).json({ error: "Deal comparables ingest already running" });
     }
-    dealCompsIngestRunning = true;
+    dealCompsIngestJob.start(0);
     dealCompsIngestLastLine = "Starting…";
 
     const child = spawn("tsx", ["scripts/ingest-deal-comparables.ts"], {
@@ -350,33 +349,34 @@ export function registerFillRoutes(app: Express): void {
     child.stdout?.on("data", (c: Buffer) => handleLine(c));
     child.stderr?.on("data", (c: Buffer) => handleLine(c, "[err] "));
     child.on("close", (code: number | null) => {
-      dealCompsIngestRunning = false;
       dealCompsIngestLastLine = code === 0 ? "Completed successfully" : `Exited with code ${code ?? "?"}`;
       dealCompsIngestChild = null;
+      if (code === 0) dealCompsIngestJob.finish({});
+      else dealCompsIngestJob.fail(`Exited with code ${code ?? "?"}`);
     });
 
     res.json({ started: true });
   });
 
   app.post("/api/admin/deal-comparables/ingest/stop", (_req, res) => {
-    if (!dealCompsIngestRunning || !dealCompsIngestChild) {
+    if (!dealCompsIngestJob.running || !dealCompsIngestChild) {
       return res.status(409).json({ error: "No ingest is currently running" });
     }
     dealCompsIngestChild.kill("SIGTERM");
-    dealCompsIngestRunning = false;
     dealCompsIngestLastLine = "Stopped by admin";
     dealCompsIngestChild = null;
+    dealCompsIngestJob.finish({});
     res.json({ stopped: true });
   });
 
   // ── Biology Fill ──────────────────────────────────────────────────────────────
 
   app.get("/api/admin/enrich/biology-fill/status", (_req, res) => {
-    res.json({ running: biologyFillRunning, result: biologyFillResult, progress: biologyFillProgress });
+    res.json({ running: biologyFillJob.running, result: biologyFillResult, progress: biologyFillProgress });
   });
 
   app.post("/api/admin/enrich/biology-fill/stop", (_req, res) => {
-    if (!biologyFillRunning || !biologyFillAbortController) {
+    if (!biologyFillJob.running || !biologyFillAbortController) {
       return res.status(409).json({ error: "Biology fill is not running" });
     }
     biologyFillAbortController.abort();
@@ -414,13 +414,13 @@ export function registerFillRoutes(app: Express): void {
 
   app.post("/api/admin/enrich/biology-fill", async (req, res) => {
     try {
-      if (biologyFillRunning) {
+      if (biologyFillJob.running) {
         return res.status(409).json({ error: "Biology fill already running" });
       }
-      biologyFillRunning = true;
       biologyFillResult = null;
       biologyFillProgress = null;
       biologyFillAbortController = new AbortController();
+      biologyFillJob.start(0);
       res.json({ started: true });
 
       const cap = typeof req.body?.cap === "number" && req.body.cap > 0 ? req.body.cap : undefined;
@@ -435,9 +435,7 @@ export function registerFillRoutes(app: Express): void {
           const summary = await runBiologyFill(client, {
             cap,
             signal: biologyFillAbortController!.signal,
-            onProgress: (p) => {
-              biologyFillProgress = p;
-            },
+            onProgress: (p) => { biologyFillProgress = p; },
           });
           biologyFillResult = summary;
           console.log(
@@ -446,19 +444,18 @@ export function registerFillRoutes(app: Express): void {
             ` gpt_sent:${summary.gptSent} gpt_resolved:${summary.gptResolved}` +
             ` unresolved:${summary.unresolved})`,
           );
+          biologyFillJob.finish({});
+        } catch (err: any) {
+          console.error("[biology-fill] Async error:", err);
+          biologyFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client.release();
-          await dbPool.end();
-          biologyFillRunning = false;
           biologyFillAbortController = null;
+          await dbPool.end().catch(() => {});
         }
-      })().catch(err => {
-        console.error("[biology-fill] Async error:", err);
-        biologyFillRunning = false;
-        biologyFillAbortController = null;
-      });
+      })();
     } catch (err: any) {
-      biologyFillRunning = false;
+      biologyFillJob.fail(err.message);
       biologyFillAbortController = null;
       res.status(500).json({ error: err.message ?? "Failed to start biology fill" });
     }
@@ -467,11 +464,11 @@ export function registerFillRoutes(app: Express): void {
   // ── MOA Fill ─────────────────────────────────────────────────────────────────
 
   app.get("/api/admin/enrich/moa-fill/status", (_req, res) => {
-    res.json({ running: moaFillRunning, result: moaFillResult, progress: moaFillProgress });
+    res.json({ running: moaFillJob.running, result: moaFillResult, progress: moaFillProgress });
   });
 
   app.post("/api/admin/enrich/moa-fill/stop", (_req, res) => {
-    if (!moaFillRunning || !moaFillAbortController) {
+    if (!moaFillJob.running || !moaFillAbortController) {
       return res.status(409).json({ error: "MOA fill is not running" });
     }
     moaFillAbortController.abort();
@@ -511,13 +508,13 @@ export function registerFillRoutes(app: Express): void {
 
   app.post("/api/admin/enrich/moa-fill", async (req, res) => {
     try {
-      if (moaFillRunning) {
+      if (moaFillJob.running) {
         return res.status(409).json({ error: "MOA fill already running" });
       }
-      moaFillRunning = true;
       moaFillResult = null;
       moaFillProgress = null;
       moaFillAbortController = new AbortController();
+      moaFillJob.start(0);
 
       const cap = typeof req.body?.cap === "number" && req.body.cap > 0 ? req.body.cap : undefined;
       console.log(`[moa-fill] Starting${cap ? ` (cap=${cap})` : " (full run)"}`);
@@ -565,20 +562,18 @@ export function registerFillRoutes(app: Express): void {
             ` pass2:${aiFilled}/${pass2Total} AI` +
             ` total written:${summary.totalWritten} failed:${failed}`,
           );
+          moaFillJob.finish({});
+        } catch (err: any) {
+          console.error("[moa-fill] Pass 2 async error:", err);
+          moaFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client2.release();
-          await dbPool.end();
-          moaFillRunning = false;
           moaFillAbortController = null;
+          await dbPool.end().catch(() => {});
         }
-      })().catch(err => {
-        console.error("[moa-fill] Pass 2 async error:", err);
-        moaFillRunning = false;
-        moaFillAbortController = null;
-        dbPool.end().catch(() => {});
-      });
+      })();
     } catch (err: any) {
-      moaFillRunning = false;
+      moaFillJob.fail(err.message);
       moaFillAbortController = null;
       if (!res.headersSent) {
         res.status(500).json({ error: err.message ?? "Failed to start MOA fill" });
@@ -603,7 +598,7 @@ export function registerFillRoutes(app: Express): void {
   app.get("/api/admin/enrichment/uspto/status", async (req, res) => {
     try {
       res.json({
-        running: usptoRunning,
+        running: usptoJob.running,
         progress: usptoProgress,
         result: usptoResult,
         spotCheck: usptoSpotCheckValidation,
@@ -644,13 +639,12 @@ export function registerFillRoutes(app: Express): void {
 
   app.post("/api/admin/enrichment/uspto/run", async (req, res) => {
     try {
-      if (usptoRunning) return res.status(409).json({ error: "USPTO cross-reference already running" });
+      if (usptoJob.running) return res.status(409).json({ error: "USPTO cross-reference already running" });
 
       const apiKey = process.env.USPTO_ODP_API_KEY ?? "";
-      usptoRunning = true;
       usptoProgress = { processed: 0, total: 0, matched: 0, unmatched: 0, skipped: 0 };
       usptoResult = null;
-      usptoShouldStop = false;
+      usptoJob.start(0);
 
       res.json({ started: true });
 
@@ -658,25 +652,25 @@ export function registerFillRoutes(app: Express): void {
         runUsptoPatentCrossRef({
           apiKey,
           onProgress: (p) => { usptoProgress = p; },
-          shouldStop: () => usptoShouldStop,
+          shouldStop: () => usptoJob.shouldStop,
         }).then((summary) => {
           usptoResult = summary;
+          usptoJob.finish({});
           console.log(`[uspto-xref] Done: matched=${summary.matched} unmatched=${summary.unmatched} skipped=${summary.skipped}`);
         }).catch((err) => {
+          usptoJob.fail(err?.message ?? "Unknown error");
           console.error("[uspto-xref] Failed:", err);
-        }).finally(() => {
-          usptoRunning = false;
         });
       });
     } catch (err: any) {
-      usptoRunning = false;
+      usptoJob.fail(err.message);
       res.status(500).json({ error: err.message ?? "Failed to start USPTO cross-reference" });
     }
   });
 
   app.post("/api/admin/enrichment/uspto/stop", async (req, res) => {
     try {
-      usptoShouldStop = true;
+      usptoJob.requestStop();
       res.json({ stopped: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed" });
