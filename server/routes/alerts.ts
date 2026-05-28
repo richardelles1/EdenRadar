@@ -183,7 +183,11 @@ export function registerAlertsRoutes(app: Express): void {
 
       for (const alert of alerts) {
         const sinceCondition = gt(ingestedAssets.firstSeenAt, since);
-        const rows = await db
+        const where = buildAlertWhere(alert, [sinceCondition]);
+        const [countRow] = await db.select({ n: drizzleCount() }).from(ingestedAssets).where(where);
+        const matchCount = Number(countRow?.n ?? 0);
+        if (matchCount === 0) continue;
+        const samples = await db
           .select({
             id: ingestedAssets.id,
             assetName: ingestedAssets.assetName,
@@ -192,15 +196,14 @@ export function registerAlertsRoutes(app: Express): void {
             developmentStage: ingestedAssets.developmentStage,
           })
           .from(ingestedAssets)
-          .where(buildAlertWhere(alert, [sinceCondition]))
-          .orderBy(desc(ingestedAssets.firstSeenAt));
-
-        if (rows.length === 0) continue;
+          .where(where)
+          .orderBy(desc(ingestedAssets.firstSeenAt))
+          .limit(5);
         byAlert.push({
           alertId: alert.id,
           alertName: alert.name ?? alert.query ?? "Untitled alert",
-          matchCount: rows.length,
-          samples: rows.slice(0, 5).map((r) => ({
+          matchCount,
+          samples: samples.map((r) => ({
             id: r.id,
             assetName: r.assetName,
             institution: r.institution ?? "",
@@ -218,7 +221,8 @@ export function registerAlertsRoutes(app: Express): void {
         const ids = await db
           .select({ id: ingestedAssets.id })
           .from(ingestedAssets)
-          .where(buildAlertWhere(alert, [sinceCondition]));
+          .where(buildAlertWhere(alert, [sinceCondition]))
+          .limit(1001);
         for (const row of ids) distinctIds.add(row.id);
       }
       const distinctTotal = distinctIds.size;
