@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { storage, type EnrichFilter } from "../storage";
 import { computeCompletenessScore } from "../lib/pipeline/contentHash";
 import { classifyAsset } from "../lib/pipeline/classifyAsset";
+import { captureException } from "../lib/sentry";
+import { didEnrichImprove } from "../lib/pipeline/didEnrichImprove";
 
 const enrichJob = new Job();
 registerJob("enrichment:assets", enrichJob);
@@ -101,15 +103,7 @@ async function runEnrichmentWorker(
         const outTok = classification.tokenUsage?.outputTokens ?? 0;
         enrichTokenCost += (inTok * MINI_INPUT_PER_M + outTok * MINI_OUTPUT_PER_M) / 1_000_000;
 
-        const isKnown = (v: string | null | undefined) =>
-          v != null && v !== "" && v !== "unknown";
-        const improved =
-          ((!asset.target || asset.target === "unknown") && isKnown(classification.target)) ||
-          ((!asset.modality || asset.modality === "unknown") && isKnown(classification.modality)) ||
-          ((!asset.indication || asset.indication === "unknown") && isKnown(classification.indication)) ||
-          (asset.developmentStage === "unknown" && isKnown(classification.developmentStage));
-
-        if (improved) enrichImproved++;
+        if (didEnrichImprove(asset, classification)) enrichImproved++;
       } catch (e) {
         console.error(`[enrichment] failed for asset ${asset.id}:`, e);
         // Hard GPT failure: still count toward the attempt cap so the asset is not retried
@@ -167,6 +161,7 @@ async function runEnrichmentWorker(
   } catch (e: any) {
     await storage.updateEnrichmentJob(jobId, { status: "error", processed: enrichJob.processed, improved: enrichImproved, completedAt: new Date() });
     console.error("[enrichment] Job failed:", e);
+    captureException(e);
   } finally {
     enrichJob.finish({});
   }

@@ -20,6 +20,7 @@ import { sendTrialEndingEmail } from "./email";
 import { checkAndSendAlerts } from "./lib/alertMailer";
 import { syncRegulatoryDesignations, getRegulatoryDesignationCount } from "./lib/regulatorySync";
 import pg from "pg";
+import rateLimit from "express-rate-limit";
 
 const app = express();
 const httpServer = createServer(app);
@@ -29,9 +30,11 @@ const httpServer = createServer(app);
 // this kills the process. We log and continue — the pool recovers automatically.
 process.on("uncaughtException", (err: Error) => {
   console.error(`[fatal] Uncaught exception (process kept alive): ${err.message}`);
+  if (process.env.SENTRY_DSN) Sentry.captureException(err);
 });
 process.on("unhandledRejection", (reason: unknown) => {
   console.error(`[fatal] Unhandled rejection (process kept alive):`, reason);
+  if (process.env.SENTRY_DSN) Sentry.captureException(reason);
 });
 
 // On shutdown (deploy or SIGINT), always write schedulerRunning=false to DB so
@@ -1893,6 +1896,8 @@ async function migrateAssetStatusValues() {
   }
 
   // ── Register API routes ───────────────────────────────────────────────────
+  app.use("/api/", rateLimit({ windowMs: 60_000, max: 200, standardHeaders: true, legacyHeaders: false, skip: (req) => req.path.startsWith("/api/admin"), message: { error: "Too many requests." } }));
+  app.use("/api/tto-contacts/bulk", rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests to this endpoint." } }));
   await registerRoutes(httpServer, app);
 
   // ── Federated search source health summary ───────────────────────────────
