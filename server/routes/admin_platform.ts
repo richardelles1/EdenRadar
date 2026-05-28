@@ -3,7 +3,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { storage } from "../storage";
 import { ingestedAssets } from "@shared/schema";
-import { verifyAnyAuth, requireAdmin } from "../lib/supabaseAuth";
+import { verifyAnyAuth } from "../lib/supabaseAuth";
 import { sendWelcomeEmail } from "../email";
 
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -298,7 +298,7 @@ export function registerPlatformRoutes(app: Express): void {
       return res.status(500).json({ error: err.message ?? "Dispatch failed" });
     }
   });
-  app.post("/api/admin/invites/purge-expired", requireAdmin, async (req, res) => {
+  app.post("/api/admin/invites/purge-expired", async (req, res) => {
     try {
       const removed = await storage.purgeExpiredPendingInvites(48);
       res.json({ ok: true, removed });

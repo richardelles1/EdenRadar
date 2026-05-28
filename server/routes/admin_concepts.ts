@@ -5,7 +5,7 @@ import { db } from "../db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, ingestedAssets } from "@shared/schema";
 import { logAppEvent } from "../lib/routeHelpers";
-import { verifyAnyAuth, verifyConceptAuth, tryGetUserId, requireAdmin } from "../lib/supabaseAuth";
+import { verifyAnyAuth, verifyConceptAuth, tryGetUserId } from "../lib/supabaseAuth";
 import { cacheGet, cacheSet } from "../lib/responseCache";
 
 export function registerConceptRoutes(app: Express): void {
@@ -513,7 +513,7 @@ export function registerConceptRoutes(app: Express): void {
   });
 
   // GET /api/admin/concept-escalations â€” admin escalation queue
-  app.get("/api/admin/concept-escalations", requireAdmin, async (req, res) => {
+  app.get("/api/admin/concept-escalations", async (req, res) => {
     try {
       const concepts = await db
         .select()
@@ -527,7 +527,7 @@ export function registerConceptRoutes(app: Express): void {
   });
 
   // POST /api/admin/concept-escalations/:id/approve â€” approve and create research project
-  app.post("/api/admin/concept-escalations/:id/approve", requireAdmin, async (req, res) => {
+  app.post("/api/admin/concept-escalations/:id/approve", async (req, res) => {
     try {
       const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
@@ -558,7 +558,7 @@ export function registerConceptRoutes(app: Express): void {
   });
 
   // POST /api/admin/concept-escalations/:id/reject â€” reject with optional note
-  app.post("/api/admin/concept-escalations/:id/reject", requireAdmin, async (req, res) => {
+  app.post("/api/admin/concept-escalations/:id/reject", async (req, res) => {
     try {
       const id = parseInt(String(req.params.id));
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });

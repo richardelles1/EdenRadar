@@ -655,7 +655,7 @@ export function SavedAssetCard({
             width: "56px",
             height: "56px",
             borderRadius: "50%",
-            background: CATEGORY_BLOOM[cardCategory],
+            background: CATEGORY_BLOOM[getCardCategory()],
             top: "-28px",
             left: "-28px",
             transform: hovered ? "scale(26)" : "scale(1)",

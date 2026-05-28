@@ -9,7 +9,6 @@ import { computeCompletenessScore } from "../lib/pipeline/contentHash";
 import { classifyAsset } from "../lib/pipeline/classifyAsset";
 import { deepEnrichBatch } from "../lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "../lib/pipeline/embedAssets";
-import { requireAdmin } from "../lib/supabaseAuth";
 // Re-fetch state persistence
 const REFETCH_STATE_FILE = path.join(process.cwd(), ".local", "refetch-state.json");
 let _refetchState: Record<string, unknown> = {};
@@ -201,7 +200,7 @@ export function registerEnrichmentRoutes(app: Express): void {
 
   // Institution-level enrichment queue breakdown â€” used by the enrichment
   // filter combobox to show only institutions with pending work + their counts.
-  app.get("/api/admin/enrichment/institution-queues", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/institution-queues", async (req, res) => {
     try {
       const institutions = await storage.getEnrichmentInstitutionQueues();
       res.json({ institutions });
@@ -211,7 +210,7 @@ export function registerEnrichmentRoutes(app: Express): void {
   });
 
   // Per-institution quality snapshot history.
-  app.get("/api/admin/enrichment/institution-quality/history", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/institution-quality/history", async (req, res) => {
     const institution = String(req.query.institution ?? "").trim();
     if (!institution) return res.status(400).json({ error: "institution query param required" });
     try {
@@ -223,7 +222,7 @@ export function registerEnrichmentRoutes(app: Express): void {
   });
 
   // On-demand snapshot â€” lets the admin manually bookmark current quality state.
-  app.post("/api/admin/enrichment/institution-quality/snapshot", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/institution-quality/snapshot", async (req, res) => {
     const institution = String(req.query.institution ?? "").trim();
     if (!institution) return res.status(400).json({ error: "institution query param required" });
     try {
@@ -235,7 +234,7 @@ export function registerEnrichmentRoutes(app: Express): void {
   });
 
   // Per-institution enrichment quality snapshot used by the ExpandedSyncPanel.
-  app.get("/api/admin/enrichment/institution-quality", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/institution-quality", async (req, res) => {
     const institution = String(req.query.institution ?? "").trim();
     if (!institution) return res.status(400).json({ error: "institution query param required" });
     try {
@@ -443,11 +442,11 @@ export function registerEnrichmentRoutes(app: Express): void {
   let modalityFillRunning = false;
   let modalityFillResult: import("../lib/pipeline/modalityFill").ModalityFillSummary | null = null;
 
-  app.get("/api/admin/enrich/modality-fill/status", requireAdmin, (_req, res) => {
+  app.get("/api/admin/enrich/modality-fill/status", (_req, res) => {
     res.json({ running: modalityFillRunning, result: modalityFillResult });
   });
 
-  app.post("/api/admin/enrich/modality-fill", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrich/modality-fill", async (req, res) => {
     try {
       if (modalityFillRunning) {
         return res.status(409).json({ error: "Modality fill already running" });
@@ -491,11 +490,11 @@ export function registerEnrichmentRoutes(app: Express): void {
   let dealCompsIngestLastLine = "";
   let dealCompsIngestChild: ReturnType<typeof spawn> | null = null;
 
-  app.get("/api/admin/deal-comparables/status", requireAdmin, (_req, res) => {
+  app.get("/api/admin/deal-comparables/status", (_req, res) => {
     res.json({ running: dealCompsIngestRunning, lastLine: dealCompsIngestLastLine });
   });
 
-  app.post("/api/admin/deal-comparables/ingest", requireAdmin, (_req, res) => {
+  app.post("/api/admin/deal-comparables/ingest", (_req, res) => {
     if (dealCompsIngestRunning) {
       return res.status(409).json({ error: "Deal comparables ingest already running" });
     }
@@ -523,7 +522,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     res.json({ started: true });
   });
 
-  app.post("/api/admin/deal-comparables/ingest/stop", requireAdmin, (_req, res) => {
+  app.post("/api/admin/deal-comparables/ingest/stop", (_req, res) => {
     if (!dealCompsIngestRunning || !dealCompsIngestChild) {
       return res.status(409).json({ error: "No ingest is currently running" });
     }
@@ -541,11 +540,11 @@ export function registerEnrichmentRoutes(app: Express): void {
   let biologyFillProgress: import("../lib/pipeline/biologyFill").BiologyFillProgress | null = null;
   let biologyFillAbortController: AbortController | null = null;
 
-  app.get("/api/admin/enrich/biology-fill/status", requireAdmin, (_req, res) => {
+  app.get("/api/admin/enrich/biology-fill/status", (_req, res) => {
     res.json({ running: biologyFillRunning, result: biologyFillResult, progress: biologyFillProgress });
   });
 
-  app.post("/api/admin/enrich/biology-fill/stop", requireAdmin, (_req, res) => {
+  app.post("/api/admin/enrich/biology-fill/stop", (_req, res) => {
     if (!biologyFillRunning || !biologyFillAbortController) {
       return res.status(409).json({ error: "Biology fill is not running" });
     }
@@ -553,7 +552,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     res.json({ stopped: true });
   });
 
-  app.get("/api/admin/enrich/biology-fill/count", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrich/biology-fill/count", async (req, res) => {
     try {
       const { Pool } = await import("pg");
       const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
@@ -573,7 +572,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/deal-comparables/stats", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/deal-comparables/stats", async (_req, res) => {
     try {
       const stats = await storage.getDealComparablesStats();
       res.json(stats);
@@ -582,7 +581,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/admin/enrich/biology-fill", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrich/biology-fill", async (req, res) => {
     try {
       if (biologyFillRunning) {
         return res.status(409).json({ error: "Biology fill already running" });
@@ -641,11 +640,11 @@ export function registerEnrichmentRoutes(app: Express): void {
   let moaFillProgress: import("../lib/pipeline/moaFill").MoaFillProgress | null = null;
   let moaFillAbortController: AbortController | null = null;
 
-  app.get("/api/admin/enrich/moa-fill/status", requireAdmin, (_req, res) => {
+  app.get("/api/admin/enrich/moa-fill/status", (_req, res) => {
     res.json({ running: moaFillRunning, result: moaFillResult, progress: moaFillProgress });
   });
 
-  app.post("/api/admin/enrich/moa-fill/stop", requireAdmin, (_req, res) => {
+  app.post("/api/admin/enrich/moa-fill/stop", (_req, res) => {
     if (!moaFillRunning || !moaFillAbortController) {
       return res.status(409).json({ error: "MOA fill is not running" });
     }
@@ -653,7 +652,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     res.json({ stopped: true });
   });
 
-  app.get("/api/admin/enrich/moa-fill/count", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/enrich/moa-fill/count", async (_req, res) => {
     try {
       const { Pool } = await import("pg");
       const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
@@ -684,7 +683,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/admin/enrich/moa-fill", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrich/moa-fill", async (req, res) => {
     try {
       if (moaFillRunning) {
         return res.status(409).json({ error: "MOA fill already running" });
@@ -894,7 +893,7 @@ export function registerEnrichmentRoutes(app: Express): void {
   // processed (enriched_at IS NOT NULL) but still have 3+ unknowns. Prevents the new
   // attempt cap from immediately giving them a fresh 3-attempt slate when the new column
   // defaults to 0 â€” they still get 2 more attempts (1 â†’ 3) with the improved prompts.
-  app.post("/api/admin/enrichment/mini-backfill", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/mini-backfill", async (req, res) => {
     try {
       const updated = await storage.backfillMiniEnrichAttempts();
       console.log(`[enrichment] mini-backfill: seeded mini_enrich_attempts=1 for ${updated} assets`);
@@ -1485,7 +1484,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/enrichment/health", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/health", async (req, res) => {
     try {
       // readyCount uses getFilteredEnrichCount({}) so it always matches the
       // /count endpoint and the run-button label â€” same buildEnrichWhere criteria.
@@ -1522,7 +1521,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/enrichment/count", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/count", async (req, res) => {
     try {
       const filters: EnrichFilter = {};
       if (req.query.institution) filters.institution = String(req.query.institution);
@@ -1538,7 +1537,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/enrichment/jobs", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/jobs", async (req, res) => {
     try {
       const institution = req.query.institution ? String(req.query.institution) : undefined;
       if (!institution) return res.status(400).json({ error: "institution query param required" });
@@ -1921,7 +1920,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; completedAt: string;
   } | null = (_refetchState.classify as typeof classifyLastSummary) ?? null;
 
-  app.get("/api/admin/enrichment/classify-unclassified/count", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/classify-unclassified/count", async (req, res) => {
     try {
       const rows = await db.execute<{
         thick_count: string; thin_count: string; too_thin_count: string; total_processable: string; exhausted_count: string;
@@ -1953,7 +1952,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/enrichment/classify-unclassified/status", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/classify-unclassified/status", async (req, res) => {
     const GPT4O_INPUT_PER_M = 2.50;
     const GPT4O_OUTPUT_PER_M = 10.0;
     const liveCostUsd = (classifyInputTokens * GPT4O_INPUT_PER_M + classifyOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
@@ -1969,13 +1968,13 @@ export function registerEnrichmentRoutes(app: Express): void {
     });
   });
 
-  app.post("/api/admin/enrichment/classify-unclassified/stop", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/classify-unclassified/stop", async (req, res) => {
     if (!classifyRunning) return res.json({ message: "No classify run in progress" });
     classifyShouldStop = true;
     res.json({ message: "Stop signal sent" });
   });
 
-  app.post("/api/admin/enrichment/classify-unclassified", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/classify-unclassified", async (req, res) => {
     if (classifyRunning) return res.status(409).json({ error: "Classify run already in progress" });
     if (bandRunning) return res.status(409).json({ error: "Band enrichment is running â€” stop it first" });
     if (edenRunning) return res.status(409).json({ error: "Eden deep enrichment is running â€” stop it first" });
@@ -2081,7 +2080,7 @@ export function registerEnrichmentRoutes(app: Express): void {
 
   // â”€â”€ TTO Licensing Fill (zero API cost â€” source_type structural rule) â”€â”€â”€â”€â”€â”€â”€â”€
 
-  app.get("/api/admin/enrichment/tto-licensing-fill/count", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/tto-licensing-fill/count", async (req, res) => {
     try {
       const result = await db.execute<{ total: number }>(sql`
         SELECT COUNT(*)::int AS total
@@ -2096,7 +2095,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/admin/enrichment/tto-licensing-fill", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/tto-licensing-fill", async (req, res) => {
     try {
       const before = await db.execute<{ n: number }>(sql`
         SELECT COUNT(*)::int AS n FROM ingested_assets
@@ -2125,7 +2124,7 @@ export function registerEnrichmentRoutes(app: Express): void {
 
   // â”€â”€ Modality Fill (Step 2c â€” rule-based keyword matching, zero API cost) â”€â”€
 
-  app.get("/api/admin/enrichment/modality-fill/count", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/modality-fill/count", async (req, res) => {
     try {
       const result = await db.execute<{ total: string }>(sql`
         SELECT COUNT(*)::int AS total
@@ -2143,7 +2142,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/admin/enrichment/modality-fill", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/modality-fill", async (req, res) => {
     try {
       // Run as a single SQL CTE: detect modality from title+summary, write only
       // where the pattern actually matches (new_modality IS NOT NULL).
@@ -2203,7 +2202,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     costUsd: number; durationMs: number; completedAt: string;
   } | null = null;
 
-  app.get("/api/admin/enrichment/fill-stage/count", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/enrichment/fill-stage/count", async (_req, res) => {
     try {
       const result = await db.execute<{ total: string; llm_eligible: string }>(sql`
         SELECT
@@ -2231,7 +2230,7 @@ export function registerEnrichmentRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/enrichment/fill-stage/status", requireAdmin, (_req, res) => {
+  app.get("/api/admin/enrichment/fill-stage/status", (_req, res) => {
     res.json({
       running: stageFillRunning,
       processed: stageFillProcessed,
@@ -2242,13 +2241,13 @@ export function registerEnrichmentRoutes(app: Express): void {
     });
   });
 
-  app.post("/api/admin/enrichment/fill-stage/stop", requireAdmin, (_req, res) => {
+  app.post("/api/admin/enrichment/fill-stage/stop", (_req, res) => {
     if (!stageFillRunning) return res.status(409).json({ error: "Not running" });
     stageFillShouldStop = true;
     res.json({ stopped: true });
   });
 
-  app.post("/api/admin/enrichment/fill-stage", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/fill-stage", async (req, res) => {
     if (stageFillRunning) return res.status(409).json({ error: "Stage fill already running" });
 
     const { cap: rawCap = 5000, phase: rawPhase } = req.body as { cap?: number; phase?: number };
@@ -2517,7 +2516,7 @@ Do not respond with anything else.`;
     return movements;
   };
 
-  app.get("/api/admin/enrichment/bands", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/bands", async (req, res) => {
     try {
       const rows = await db.execute<{
         band: string; total: string; gap_fill_count: string;
@@ -2623,7 +2622,7 @@ Do not respond with anything else.`;
     }
   });
 
-  app.get("/api/admin/enrichment/band/status", requireAdmin, async (req, res) => {
+  app.get("/api/admin/enrichment/band/status", async (req, res) => {
     const GPT4O_INPUT_PER_M = 2.50;
     const GPT4O_OUTPUT_PER_M = 10.0;
     const liveCostUsd = (bandInputTokens * GPT4O_INPUT_PER_M + bandOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
@@ -2655,13 +2654,13 @@ Do not respond with anything else.`;
     });
   });
 
-  app.post("/api/admin/enrichment/band/stop", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/band/stop", async (req, res) => {
     if (!bandRunning) return res.json({ message: "No band enrichment running" });
     bandShouldStop = true;
     res.json({ message: "Stop signal sent" });
   });
 
-  app.post("/api/admin/enrichment/run-band", requireAdmin, async (req, res) => {
+  app.post("/api/admin/enrichment/run-band", async (req, res) => {
     if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
     if (edenRunning) return res.status(409).json({ error: "EDEN deep enrichment is already running â€” stop it first" });
 
