@@ -5,19 +5,12 @@ import { eq, sql, inArray } from "drizzle-orm";
 import { storage } from "../storage";
 import { ingestedAssets, emailUnsubscribes } from "@shared/schema";
 import { sendEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "../email";
+import { resolveSubjectTokens } from "../lib/resolveSubjectTokens";
+
+export { resolveSubjectTokens };
 
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
-
-function resolveSubjectTokens(subject: string, assets: Array<{ institution?: string | null }>): string {
-  const count = assets.length;
-  const institutionCount = new Set(assets.map((a) => a.institution ?? "")).size;
-  const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-  return subject
-    .replace(/\{count\}/g, String(count))
-    .replace(/\{institution_count\}/g, String(institutionCount))
-    .replace(/\{date\}/g, date);
-}
 
 export function registerDispatchRoutes(app: Express): void {
   app.get("/api/admin/alerts/latency", async (_req, res) => {
