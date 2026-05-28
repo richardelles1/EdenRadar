@@ -362,9 +362,11 @@ export default function HowItWorks() {
 
         {/* Hero + Stats */}
         <section className="relative overflow-hidden pt-24 pb-16 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-            <span className="block">The intelligence engine</span>
-            <span className="text-primary block">
+          <h1 className="mb-6">
+            <span className="block text-3xl sm:text-4xl lg:text-5xl font-medium leading-tight text-foreground/55 dark:text-white/50">
+              The intelligence engine
+            </span>
+            <span className="block text-4xl sm:text-5xl lg:text-6xl font-black leading-tight text-primary">
               for <WordRotate words={["BD teams.", "TTOs.", "researchers.", "deal flow."]} />
             </span>
           </h1>
@@ -489,35 +491,67 @@ export default function HowItWorks() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-            {TIER_OVERVIEW.map((tier, i) => (
-              <div
-                key={tier.name}
-                className="flex flex-col rounded-xl overflow-hidden stagger-item"
-                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}`, animationDelay: `${i * 80}ms` }}
-              >
-                <div className="px-5 py-4 bg-card border-b border-border">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
-                      <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+            {/* Free tiers */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Free forever</p>
+              {TIER_OVERVIEW.filter((t) => t.price === "Free").map((tier, i) => (
+                <div
+                  key={tier.name}
+                  className="flex gap-4 p-4 rounded-xl bg-card stagger-item"
+                  style={{ border: `1px solid ${tier.borderColor}`, animationDelay: `${i * 80}ms` }}
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
+                    <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
+                      <span className="text-xs font-bold" style={{ color: tier.color }}>{tier.price}</span>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-bold text-foreground text-sm leading-tight">{tier.name}</h3>
-                      <span className="text-sm font-bold" style={{ color: tier.color }}>{tier.price}</span>
+                    <p className="text-[11px] text-muted-foreground leading-snug mb-2">{tier.tagline}</p>
+                    <div className="space-y-1">
+                      {tier.features.map((f) => (
+                        <div key={f} className="flex items-center gap-1.5">
+                          <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
+                          <span className="text-[11px] text-foreground">{f}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                  <p className="text-[11px] text-muted-foreground leading-snug">{tier.tagline}</p>
                 </div>
-                <div className="flex-1 px-5 py-4 bg-card space-y-2">
-                  {tier.features.map((f) => (
-                    <div key={f} className="flex items-start gap-2">
-                      <Check className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: tier.color }} />
-                      <span className="text-[11px] text-foreground leading-snug">{f}</span>
+              ))}
+            </div>
+            {/* Paid tiers */}
+            <div className="space-y-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Subscription</p>
+              {TIER_OVERVIEW.filter((t) => t.price === "Paid").map((tier, i) => (
+                <div
+                  key={tier.name}
+                  className="flex gap-4 p-4 rounded-xl bg-card stagger-item"
+                  style={{ border: `1px solid ${tier.borderColor}`, animationDelay: `${(i + 2) * 80}ms` }}
+                >
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
+                    <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
+                      <span className="text-xs font-semibold" style={{ color: tier.color }}>{tier.price}</span>
                     </div>
-                  ))}
+                    <p className="text-[11px] text-muted-foreground leading-snug mb-2">{tier.tagline}</p>
+                    <div className="space-y-1">
+                      {tier.features.map((f) => (
+                        <div key={f} className="flex items-center gap-1.5">
+                          <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
+                          <span className="text-[11px] text-foreground">{f}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
 
           <div className="text-center">
