@@ -1926,6 +1926,7 @@ async function migrateAssetStatusValues() {
 
   app.use("/api/", rateLimit({ windowMs: 60_000, max: 200, standardHeaders: true, legacyHeaders: false, skip: (req) => req.path.startsWith("/api/admin"), message: { error: "Too many requests." } }));
   app.use("/api/tto-contacts/bulk", rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests to this endpoint." } }));
+  app.use("/api/auth", rateLimit({ windowMs: 15 * 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests to this endpoint." } }));
   await registerRoutes(httpServer, app);
 
   // ── Federated search source health summary ───────────────────────────────

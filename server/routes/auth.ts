@@ -152,13 +152,13 @@ export function registerAuthRoutes(app: Express): void {
       if (record.expiresAt < new Date()) return res.status(410).json({ error: "expired" });
 
       if (!supabaseServiceRoleKey || !supabaseUrl) {
-        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+        return res.status(500).json({ error: "Server configuration error" });
       }
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
       const { error: updateError } = await adminSupabase.auth.admin.updateUserById(record.userId, { password });
-      if (updateError) return res.status(500).json({ error: updateError.message });
+      if (updateError) return res.status(500).json({ error: "Failed to set password" });
 
       await storage.markInviteTokenUsed(token);
       res.json({ email: record.email });
@@ -206,7 +206,7 @@ export function registerAuthRoutes(app: Express): void {
       const { org } = ctx;
 
       if (!supabaseServiceRoleKey || !supabaseUrl) {
-        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+        return res.status(500).json({ error: "Server configuration error" });
       }
 
       const memberSchema = z.object({

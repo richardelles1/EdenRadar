@@ -1323,7 +1323,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReviewQueue(): Promise<any[]> {
-    return db.select().from(reviewQueue).where(eq(reviewQueue.status, "pending")).orderBy(desc(reviewQueue.createdAt));
+    return db.select().from(reviewQueue).where(eq(reviewQueue.status, "pending")).orderBy(desc(reviewQueue.createdAt)).limit(500);
   }
 
   async resolveReviewItem(id: number, note: string): Promise<void> {
@@ -1531,7 +1531,7 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .groupBy(ingestedAssets.institution);
 
-    const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
+    const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt)).limit(200);
 
     return { institutions: instRows, syncSessions: sessions };
   }
