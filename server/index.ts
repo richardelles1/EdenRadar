@@ -21,6 +21,8 @@ import { checkAndSendAlerts } from "./lib/alertMailer";
 import { syncRegulatoryDesignations, getRegulatoryDesignationCount } from "./lib/regulatorySync";
 import pg from "pg";
 import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import { randomUUID } from "crypto";
 
 const app = express();
 const httpServer = createServer(app);
@@ -88,6 +90,11 @@ app.use(express.urlencoded({ extended: false }));
 // Allow: any *.replit.app subdomain, localhost/127.0.0.1 for dev, and an
 // optional ALLOWED_ORIGIN env var for a custom production domain.
 // Explicitly rejects all other origins rather than reflecting them.
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// Stamp every response with a unique request ID for log correlation.
+app.use((_req, res, next) => { res.setHeader("X-Request-Id", randomUUID()); next(); });
+
 app.use(
   cors({
     origin(origin, callback) {

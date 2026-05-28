@@ -78,6 +78,7 @@
     "fast-xml-parser": "^5.4.2",
     "framer-motion": "^10.18.0",
     "googleapis": "^148.0.0",
+    "helmet": "^8.2.0",
     "input-otp": "^1.4.2",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.453.0",
