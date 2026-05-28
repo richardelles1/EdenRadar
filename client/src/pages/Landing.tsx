@@ -789,22 +789,43 @@ function HeroCardDeck() {
             {/* Left strip */}
             <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.strip }} />
 
-            {/* Score badge */}
-            <div
-              className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
-              style={{
-                borderRadius: "17px 0 10px 0",
-                minWidth: "52px",
-                background: tint.badgeBg,
-                borderBottom: `1px solid ${tint.badgeBorderColor}`,
-                borderRight: `1px solid ${tint.badgeBorderColor}`,
-              }}
-            >
-              <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
-              <span className="font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
-                {card.score}
-              </span>
-            </div>
+            {/* Badge: score for TTO, type label for all other cards */}
+            {card.type === "tto" ? (
+              <div
+                className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
+                style={{
+                  borderRadius: "17px 0 10px 0",
+                  minWidth: "52px",
+                  background: tint.badgeBg,
+                  borderBottom: `1px solid ${tint.badgeBorderColor}`,
+                  borderRight: `1px solid ${tint.badgeBorderColor}`,
+                }}
+              >
+                <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
+                <span className="font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
+                  {card.score}
+                </span>
+              </div>
+            ) : (
+              <div
+                className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2.5 py-2"
+                style={{
+                  borderRadius: "17px 0 10px 0",
+                  minWidth: "60px",
+                  maxWidth: "80px",
+                  background: tint.badgeBg,
+                  borderBottom: `1px solid ${tint.badgeBorderColor}`,
+                  borderRight: `1px solid ${tint.badgeBorderColor}`,
+                }}
+              >
+                <span
+                  className="text-[8px] font-bold tracking-[0.08em] uppercase leading-tight text-center"
+                  style={{ color: tint.strip }}
+                >
+                  {card.type === "trial" ? "Clinical Trial" : card.type === "patent" ? "Patent" : "Research Paper"}
+                </span>
+              </div>
+            )}
 
             {/* Bookmark — front card only */}
             {isFront && (
@@ -836,7 +857,15 @@ function HeroCardDeck() {
 
             {/* Content */}
             <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[56px] pb-3">
-              <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
+              {card.type === "tto" && (
+                <div className="flex items-center gap-1 mb-1 mt-1">
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: tint.strip }} />
+                  <span className="text-[8px] font-bold uppercase tracking-wide leading-none" style={{ color: tint.strip }}>
+                    TTO Asset
+                  </span>
+                </div>
+              )}
+              <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-1">
                 {card.name}
               </h3>
               <p className="text-[11px] text-zinc-500 leading-snug mt-1.5 line-clamp-1">
