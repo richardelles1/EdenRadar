@@ -922,6 +922,17 @@ export default function Pricing() {
         </div>
 
       </main>
+
+      <footer className="border-t border-border py-8 px-6 text-xs text-muted-foreground">
+        <div className="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p>© {new Date().getFullYear()} EdenRadar. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <Link href="/how-it-works" className="hover:text-foreground transition-colors">How It Works</Link>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
+            <Link href="/tos" className="hover:text-foreground transition-colors">Terms of Service</Link>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
