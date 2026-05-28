@@ -24,3 +24,23 @@ export const logger = pino({
         },
       }),
 });
+
+// In production, bridge Node's console.* to pino so any remaining console calls
+// in route code emit structured JSON rather than plain text mixed into the log stream.
+if (!isDev) {
+  console.error = (...args: unknown[]) => {
+    const first = args[0];
+    if (first instanceof Error) {
+      logger.error({ err: first }, args.slice(1).join(" ") || "error");
+    } else {
+      const msg = args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" ");
+      logger.error(msg);
+    }
+  };
+  console.warn = (...args: unknown[]) => {
+    logger.warn(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+  };
+  console.log = (...args: unknown[]) => {
+    logger.info(args.map((a) => (typeof a === "string" ? a : JSON.stringify(a))).join(" "));
+  };
+}
