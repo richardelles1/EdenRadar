@@ -24,11 +24,11 @@ const SUGGESTION_CHIPS = [
 
 function LoadingSkeleton() {
   return (
-    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-      {Array.from({ length: 8 }).map((_, i) => (
+    <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
+      {Array.from({ length: 6 }).map((_, i) => (
         <div
           key={i}
-          className="relative w-full h-[260px] rounded-[17px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+          className="relative w-full h-[320px] rounded-[17px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
           style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
         >
           <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-400/50 dark:bg-emerald-500/30" />
@@ -146,7 +146,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
           </p>
         )}
       </div>
-      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+      <div className="grid gap-4 grid-cols-[repeat(auto-fill,minmax(300px,1fr))]">
         {assets.map((asset, index) => (
           <div
             key={asset.id}
