@@ -93,7 +93,7 @@ app.use(express.urlencoded({ extended: false }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
 // Stamp every response with a unique request ID for log correlation.
-app.use((_req, res, next) => { res.setHeader("X-Request-Id", randomUUID()); next(); });
+app.use((req, res, next) => { const rid = randomUUID(); res.setHeader("X-Request-Id", rid); res.on("finish", () => { if (res.statusCode >= 500) console.error("[500] " + req.method + " " + req.path + " rid=" + rid); }); next(); });
 
 app.use(
   cors({
