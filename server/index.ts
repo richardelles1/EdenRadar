@@ -1907,8 +1907,13 @@ async function migrateAssetStatusValues() {
   }
 
   // ── Register API routes ───────────────────────────────────────────────────
-  app.get("/api/health", (_req, res) => {
-    res.json({ status: "ok", uptime: Math.floor(process.uptime()) });
+  app.get("/api/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
+      res.json({ status: "ok", db: "ok", uptime: Math.floor(process.uptime()) });
+    } catch {
+      res.status(503).json({ status: "degraded", db: "error", uptime: Math.floor(process.uptime()) });
+    }
   });
 
   app.use("/api/", rateLimit({ windowMs: 60_000, max: 200, standardHeaders: true, legacyHeaders: false, skip: (req) => req.path.startsWith("/api/admin"), message: { error: "Too many requests." } }));
