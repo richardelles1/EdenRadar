@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { z } from "zod";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { verifyAnyAuth, tryGetUserId, requireAdmin } from "../lib/supabaseAuth";
@@ -24,18 +25,17 @@ export function registerContactRoutes(app: Express): void {
       `);
       return res.json({ contacts: result.rows });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
   // ── Public: bulk contacts for multiple institutions ───────────────────────
   app.post("/api/tto-contacts/bulk", verifyAnyAuth, async (req, res) => {
     try {
-      const { institutions } = req.body as { institutions?: string[] };
-      if (!Array.isArray(institutions) || institutions.length === 0) {
-        return res.status(400).json({ error: "institutions array required" });
-      }
-      const capped = institutions.slice(0, 50);
+      const bulkParsed = z.object({ institutions: z.array(z.string().min(1).max(500)).min(1).max(50) }).safeParse(req.body);
+      if (!bulkParsed.success) return res.status(400).json({ error: "institutions must be a non-empty array of strings (max 50)" });
+      const { institutions } = bulkParsed.data;
+      const capped = institutions;
       const result = await db.execute(sql`
         SELECT id, institution, name, title, email, phone, linkedin_url, tto_url, verified_at
         FROM tto_contacts
@@ -50,7 +50,7 @@ export function registerContactRoutes(app: Express): void {
       }
       return res.json({ contacts: byInst });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -133,7 +133,7 @@ export function registerContactRoutes(app: Express): void {
         },
       });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -152,7 +152,7 @@ export function registerContactRoutes(app: Express): void {
       `);
       return res.json({ gaps: result.rows.map((r: any) => r.institution) });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -178,7 +178,7 @@ export function registerContactRoutes(app: Express): void {
       }
       return res.json({ ok: true });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -190,7 +190,7 @@ export function registerContactRoutes(app: Express): void {
       await db.execute(sql`DELETE FROM tto_contacts WHERE id = ${id}`);
       return res.json({ ok: true });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 }

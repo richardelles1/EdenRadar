@@ -4,7 +4,24 @@ import { eq, and, sql, desc, or, ilike, inArray, gt, count as drizzleCount } fro
 import { storage } from "../storage";
 import { ingestedAssets, userAlerts, industryProfiles } from "@shared/schema";
 import { tryGetUserId } from "../lib/supabaseAuth";
+import { z } from "zod";
 
+const alertBodySchema = z.object({
+  name: z.string().min(1).max(200),
+  query: z.string().max(500).nullable().optional(),
+  modalities: z.array(z.string().max(100)).max(20).nullable().optional(),
+  stages: z.array(z.string().max(100)).max(20).nullable().optional(),
+  institutions: z.array(z.string().max(200)).max(100).nullable().optional(),
+  criteriaType: z.enum(["all_new", "custom"]).optional(),
+  enabled: z.boolean().optional(),
+});
+
+const alertPreviewSchema = z.object({
+  query: z.string().max(500).nullable().optional(),
+  modalities: z.array(z.string().max(100)).max(20).nullable().optional(),
+  stages: z.array(z.string().max(100)).max(20).nullable().optional(),
+  institutions: z.array(z.string().max(200)).max(100).nullable().optional(),
+});
 export function registerAlertsRoutes(app: Express): void {
   app.get("/api/alerts", async (req, res) => {
     try {
@@ -12,14 +29,16 @@ export function registerAlertsRoutes(app: Express): void {
       const alerts = await storage.listUserAlerts(userId);
       res.json(alerts);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
   app.post("/api/alerts", async (req, res) => {
     try {
-      const { query, modalities, stages, institutions, name, criteriaType, enabled } = req.body ?? {};
-      const trimmedName = (name as string | undefined)?.trim();
+      const parsed = alertBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request" });
+      const { query, modalities, stages, institutions, name, criteriaType, enabled } = parsed.data;
+      const trimmedName = name.trim();
       if (!trimmedName) {
         return res.status(400).json({ error: "Alert name is required" });
       }
@@ -39,7 +58,7 @@ export function registerAlertsRoutes(app: Express): void {
       }, userId);
       res.status(201).json(alert);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -52,7 +71,7 @@ export function registerAlertsRoutes(app: Express): void {
       await storage.deleteUserAlert(id, userId);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -68,7 +87,7 @@ export function registerAlertsRoutes(app: Express): void {
       if (!updated) return res.status(404).json({ error: "Alert not found or access denied" });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -78,8 +97,10 @@ export function registerAlertsRoutes(app: Express): void {
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const userId = await tryGetUserId(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      const { query, modalities, stages, institutions, name, criteriaType, enabled } = req.body ?? {};
-      const trimmedName = (name as string | undefined)?.trim();
+      const parsed = alertBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request" });
+      const { query, modalities, stages, institutions, name, criteriaType, enabled } = parsed.data;
+      const trimmedName = name.trim();
       if (!trimmedName) {
         return res.status(400).json({ error: "Alert name is required" });
       }
@@ -99,7 +120,7 @@ export function registerAlertsRoutes(app: Express): void {
       if (!updated) return res.status(404).json({ error: "Alert not found or access denied" });
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -203,7 +224,7 @@ export function registerAlertsRoutes(app: Express): void {
       const total = byAlert.reduce((s, b) => s + b.matchCount, 0);
       return res.json({ byAlert, total, distinctTotal, since: since.toISOString() });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -213,8 +234,10 @@ export function registerAlertsRoutes(app: Express): void {
     try {
       const userId = await tryGetUserId(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      const { query, modalities, stages, institutions } = req.body ?? {};
-      const trimmedQuery = (query as string | undefined)?.trim();
+      const previewParsed = alertPreviewSchema.safeParse(req.body ?? {});
+      if (!previewParsed.success) return res.status(400).json({ error: previewParsed.error.errors[0]?.message ?? "Invalid request" });
+      const { query, modalities, stages, institutions } = previewParsed.data;
+      const trimmedQuery = query?.trim();
       const hasAnyFilter =
         !!trimmedQuery ||
         (modalities?.length ?? 0) > 0 ||
@@ -254,7 +277,7 @@ export function registerAlertsRoutes(app: Express): void {
         samples,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -297,7 +320,7 @@ export function registerAlertsRoutes(app: Express): void {
 
       res.json({ count: seenIds.size });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -316,7 +339,7 @@ export function registerAlertsRoutes(app: Express): void {
 
       res.json({ since: profileRow?.lastViewedAlertsAt?.toISOString() ?? null });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -337,7 +360,7 @@ export function registerAlertsRoutes(app: Express): void {
 
       res.json({ ok: true, lastViewedAt: now.toISOString() });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 }
