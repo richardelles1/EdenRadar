@@ -1524,6 +1524,19 @@ async function ensureAlertMatchIndex() {
   }
 }
 
+// ── Ensure org_members auth-path indexes exist ────────────────────────────────
+// org_members is hit on every authenticated request (user_id → org lookup and
+// org_id → member list). Without these indexes each lookup is a sequential scan.
+async function ensureOrgMemberIndexes() {
+  try {
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS org_members_user_id_idx ON org_members (user_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS org_members_org_id_idx ON org_members (org_id)`);
+    log("[startup] org_members auth-path indexes ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] org_members index check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure organizations.trial_reminder_sent_at column exists ─────────────────
 async function addTrialReminderSentAtColumn() {
   try {
@@ -2012,6 +2025,8 @@ async function migrateAssetStatusValues() {
       scheduleRelevanceMetricsAggregation();
       // ── Index for alertMailer's matchAssetsForAlert query ──────────────
       ensureAlertMatchIndex().catch(() => {});
+      // ── org_members auth-path indexes ─────────────────────────────────────
+      ensureOrgMemberIndexes().catch(() => {});
       // ── Scout FTS + trigram indexes (Task #760) ─────────────────────────
       ensureScoutSearchIndexes().catch(() => {});
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
