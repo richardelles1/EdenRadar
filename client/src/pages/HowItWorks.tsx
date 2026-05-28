@@ -230,8 +230,7 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
             {msg.role === "eden" && <EdenAvatar size={26} isThinking={false} />}
             <div className="flex flex-col gap-2 max-w-[85%]">
               <div
-                className="px-3.5 py-2.5 rounded-xl text-xs leading-relaxed"
-                className={msg.role === "eden" ? "bg-primary/[0.07]" : ""}
+                className={`px-3.5 py-2.5 rounded-xl text-xs leading-relaxed${msg.role === "eden" ? " bg-primary/[0.07]" : ""}`}
                 style={msg.role === "user"
                   ? { background: "hsl(33 85% 44%)", color: "white", borderRadius: "14px 14px 4px 14px", boxShadow: "0 3px 10px hsl(33 85% 44% / 0.25)" }
                   : { color: "hsl(var(--foreground))", borderRadius: "4px 14px 14px 14px" }}
