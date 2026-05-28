@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { getAdminEvents } from "../storage";
-import { requireAdmin } from "../lib/supabaseAuth";
 
 export function registerAnalyticsRoutes(app: Express): void {
   app.get("/api/admin/analytics/overview", async (req, res) => {
@@ -156,7 +155,7 @@ export function registerAnalyticsRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/events", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/events", async (_req, res) => {
     try {
       const events = await getAdminEvents(200);
       res.json({ events });
@@ -168,7 +167,7 @@ export function registerAnalyticsRoutes(app: Express): void {
   // â”€â”€ JARVIS SQL Pad â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   // Read-only SQL execution for admin operator use. Blocks anything that isn't
   // a SELECT statement to prevent accidental writes via the UI.
-  app.post("/api/admin/jarvis/sql", requireAdmin, async (req, res) => {
+  app.post("/api/admin/jarvis/sql", async (req, res) => {
     const { query } = req.body as { query?: string };
     if (!query || typeof query !== "string") {
       return res.status(400).json({ error: "query is required" });

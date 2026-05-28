@@ -4,23 +4,23 @@ import { db } from "../db";
 import { eq, sql, inArray } from "drizzle-orm";
 import { storage } from "../storage";
 import { ingestedAssets, emailUnsubscribes } from "@shared/schema";
-import { requireAdmin } from "../lib/supabaseAuth";
 import { sendEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "../email";
 
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
 
+function resolveSubjectTokens(subject: string, assets: Array<{ institution?: string | null }>): string {
+  const count = assets.length;
+  const institutionCount = new Set(assets.map((a) => a.institution ?? "")).size;
+  const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return subject
+    .replace(/\{count\}/g, String(count))
+    .replace(/\{institution_count\}/g, String(institutionCount))
+    .replace(/\{date\}/g, date);
+}
+
 export function registerDispatchRoutes(app: Express): void {
-  function resolveSubjectTokens(subject: string, assets: Array<{ institution?: string | null }>): string {
-    const count = assets.length;
-    const institutionCount = new Set(assets.map((a) => a.institution ?? "")).size;
-    const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-    return subject
-      .replace(/\{count\}/g, String(count))
-      .replace(/\{institution_count\}/g, String(institutionCount))
-      .replace(/\{date\}/g, date);
-  }
-  app.get("/api/admin/alerts/latency", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/alerts/latency", async (_req, res) => {
     try {
       const result: any = await db.execute(sql`
         SELECT
