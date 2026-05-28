@@ -613,6 +613,13 @@ export function registerSearchRoutes(app: Express): void {
       const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : undefined;
       const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
+      // Response cache — keyed on query + all filters + user so different users
+      // or filter states never share results. 2-min TTL covers the typical
+      // search-refine loop while keeping results fresh for active sessions.
+      const scoutCacheKey = `scout:${query.trim().toLowerCase()}:${modality ?? ""}:${stage ?? ""}:${indication ?? ""}:${institution ?? ""}:${biology ?? ""}:${since ?? ""}:${before ?? ""}:${(biologies ?? []).join(",")}:${(modalities ?? []).join(",")}:${(stages ?? []).join(",")}:${(institutions ?? []).join(",")}:${scoutUserId ?? ""}`;
+      const cachedScout = cacheGet<object>(scoutCacheKey);
+      if (cachedScout) return res.json(cachedScout);
+
       let results: import("../storage").RetrievedAsset[] = [];
 
       const searchOpts = {
@@ -677,10 +684,14 @@ export function registerSearchRoutes(app: Express): void {
               return [];
             }
             try {
-              return await storage.scoutVectorSearch(embed.vec, {
-                ...hybridSearchOpts,
-                minSimilarity: VECTOR_MIN_SIMILARITY,
-              });
+              return await withHardTimeout(
+                storage.scoutVectorSearch(embed.vec, {
+                  ...hybridSearchOpts,
+                  minSimilarity: VECTOR_MIN_SIMILARITY,
+                }),
+                2000,
+                "scoutVectorSearch",
+              );
             } catch (e) {
               embedFallbackReason = "vector_search_error:" + (e instanceof Error ? e.message : String(e));
               return [];
@@ -1110,14 +1121,16 @@ export function registerSearchRoutes(app: Express): void {
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length, userId: scoutUserId ?? null }).catch(() => {});
 
-      return res.json({
+      const scoutResponse = {
         assets,
         query,
         assetsFound: assets.length,
         sources: ["tech_transfer"],
         fallback: false,
         ...(searchDebug ? { debug: searchDebug } : {}),
-      });
+      };
+      cacheSet(scoutCacheKey, scoutResponse, 2 * 60 * 1000);
+      return res.json(scoutResponse);
     } catch (err: unknown) {
       console.error("[scout/search] Error:", err);
       const message = err instanceof Error ? err.message : "Search failed";
