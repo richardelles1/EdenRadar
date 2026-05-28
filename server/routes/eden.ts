@@ -20,6 +20,7 @@ import { searchLens } from "../lib/sources/lens";
 import { searchHarvardDataverse } from "../lib/sources/harvard_dataverse";
 import { searchHarvardLibraryCloud } from "../lib/sources/harvard_librarycloud";
 import rateLimit from "express-rate-limit";
+import { z } from "zod";
 
 const aiRateLimit = rateLimit({
   windowMs: 60 * 1000,
@@ -30,12 +31,23 @@ const aiRateLimit = rateLimit({
 });
 
 export function registerEdenRoutes(app: Express): void {
+  const chatBodySchema = z.object({
+    message: z.string().min(1).max(4000),
+    sessionId: z.string().max(100).optional(),
+    userContext: z.object({
+      companyName: z.string().max(200).optional(),
+      companyType: z.string().max(100).optional(),
+      therapeuticAreas: z.array(z.string().max(100)).max(20).optional(),
+      modalities: z.array(z.string().max(100)).max(20).optional(),
+      dealStages: z.array(z.string().max(100)).max(20).optional(),
+    }).optional(),
+  });
+
   app.post("/api/eden/chat", verifyAnyAuth, aiRateLimit, async (req, res) => {
 
-    const { message, sessionId, userContext } = req.body ?? {};
-    if (!message || typeof message !== "string" || !message.trim()) {
-      return res.status(400).json({ error: "message is required" });
-    }
+    const parsed = chatBodySchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request body" });
+    const { message, sessionId, userContext } = parsed.data;
 
     const sid = (typeof sessionId === "string" && sessionId) || crypto.randomUUID();
     const requestUserId = req.headers["x-user-id"] as string | undefined;
@@ -707,10 +719,15 @@ export function registerEdenRoutes(app: Express): void {
   });
 
   app.post("/api/eden/feedback", verifyAnyAuth, async (req, res) => {
-    const { sessionId, messageIndex, sentiment } = req.body ?? {};
-    if (!sessionId || typeof messageIndex !== "number" || !["up", "down"].includes(sentiment)) {
+    const feedbackParsed = z.object({
+      sessionId: z.string().min(1).max(100),
+      messageIndex: z.number().int().min(0).max(9999),
+      sentiment: z.enum(["up", "down"]),
+    }).safeParse(req.body);
+    if (!feedbackParsed.success) {
       return res.status(400).json({ error: "sessionId, messageIndex, and sentiment (up|down) required" });
     }
+    const { sessionId, messageIndex, sentiment } = feedbackParsed.data;
     try {
       const userId = (req as any).userId ?? null;
       let assetIds: number[] | undefined;
@@ -732,11 +749,17 @@ export function registerEdenRoutes(app: Express): void {
   });
 
   app.post("/api/eden/bookmark", verifyAnyAuth, async (req, res) => {
-    const { source, externalId, title, url, snapshotJson } = req.body ?? {};
-    const validSources = ["clinicaltrials", "patents", "harvard"];
-    if (!source || !validSources.includes(source) || !externalId || !title || !url) {
+    const bookmarkParsed = z.object({
+      source: z.enum(["clinicaltrials", "patents", "harvard"]),
+      externalId: z.string().min(1).max(200),
+      title: z.string().min(1).max(500),
+      url: z.string().url().max(2000),
+      snapshotJson: z.record(z.unknown()).optional(),
+    }).safeParse(req.body);
+    if (!bookmarkParsed.success) {
       return res.status(400).json({ error: "source, externalId, title, and url are required" });
     }
+    const { source, externalId, title, url, snapshotJson } = bookmarkParsed.data;
     try {
       const userId = (req as any).userId ?? (req as any).user?.id ?? null;
       if (!userId) return res.status(401).json({ error: "User ID required to bookmark" });
