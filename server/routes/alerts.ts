@@ -6,7 +6,7 @@ import { ingestedAssets, userAlerts, industryProfiles } from "@shared/schema";
 import { tryGetUserId } from "../lib/supabaseAuth";
 import { z } from "zod";
 
-const alertBodySchema = z.object({
+export const alertBodySchema = z.object({
   name: z.string().min(1).max(200),
   query: z.string().max(500).nullable().optional(),
   modalities: z.array(z.string().max(100)).max(20).nullable().optional(),
@@ -16,7 +16,7 @@ const alertBodySchema = z.object({
   enabled: z.boolean().optional(),
 });
 
-const alertPreviewSchema = z.object({
+export const alertPreviewSchema = z.object({
   query: z.string().max(500).nullable().optional(),
   modalities: z.array(z.string().max(100)).max(20).nullable().optional(),
   stages: z.array(z.string().max(100)).max(20).nullable().optional(),
