@@ -403,7 +403,7 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
         >
           {/* Face layers — each face is the full card visual */}
           {(() => {
-            const ttoBottomPad = hasMultipleFaces && !!pipelineName ? "pb-[58px]" : undefined;
+            const ttoBottomPad = hasMultipleFaces ? "pb-[38px]" : undefined;
             return faces.map((face, idx) => (
               <div
                 key={face.id}
@@ -446,12 +446,6 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
             </button>
           )}
 
-          {/* Pipeline name badge — shown when viewing All Assets */}
-          {pipelineName && (
-            <div className={`absolute ${hasMultipleFaces ? "bottom-[38px]" : "bottom-2"} left-3 z-[20] max-w-[calc(100%-1.5rem)]`}>
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-black/50 backdrop-blur-sm text-white font-medium truncate inline-block max-w-[6rem]">{pipelineName}</span>
-            </div>
-          )}
 
           {/* Nav buttons — no gradient, solid pill buttons so they're always readable */}
           {hasMultipleFaces && (
@@ -493,6 +487,14 @@ function PipelineCard({ asset, signals = [], onDelete, onClick, onDetachSignal, 
               }} />
             );
           })}
+        </div>
+      )}
+
+      {/* Pipeline footer badge — non-overlaying label shown in All Assets view */}
+      {pipelineName && (
+        <div className="mt-1.5 px-1 flex items-center gap-1 min-w-0">
+          <Layers className="w-3 h-3 text-zinc-400 dark:text-zinc-500 shrink-0" />
+          <span className="text-[10px] text-zinc-500 dark:text-zinc-400 font-medium truncate">{pipelineName}</span>
         </div>
       )}
     </div>
