@@ -22,6 +22,8 @@ import { syncRegulatoryDesignations, getRegulatoryDesignationCount } from "./lib
 import pg from "pg";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+import pinoHttp from "pino-http";
+import { logger } from "./lib/logger";
 import { randomUUID } from "crypto";
 
 const app = express();
@@ -31,11 +33,11 @@ const httpServer = createServer(app);
 // pg's connection pool emits 'error' on terminated connections. Without a handler
 // this kills the process. We log and continue — the pool recovers automatically.
 process.on("uncaughtException", (err: Error) => {
-  console.error(`[fatal] Uncaught exception (process kept alive): ${err.message}`);
+  logger.fatal({ err }, "Uncaught exception (process kept alive)");
   if (process.env.SENTRY_DSN) Sentry.captureException(err);
 });
 process.on("unhandledRejection", (reason: unknown) => {
-  console.error(`[fatal] Unhandled rejection (process kept alive):`, reason);
+  logger.fatal({ reason }, "Unhandled rejection (process kept alive)");
   if (process.env.SENTRY_DSN) Sentry.captureException(reason);
 });
 
@@ -93,7 +95,13 @@ app.use(express.urlencoded({ extended: false }));
 app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
 
 // Stamp every response with a unique request ID for log correlation.
-app.use((req, res, next) => { const rid = randomUUID(); res.setHeader("X-Request-Id", rid); res.on("finish", () => { if (res.statusCode >= 500) console.error("[500] " + req.method + " " + req.path + " rid=" + rid); }); next(); });
+app.use(pinoHttp({
+  logger,
+  genReqId: () => randomUUID(),
+  customResponseHeaders: (req, _res, _payload, _err) => ({ "X-Request-Id": String(req.id) }),
+  customLogLevel: (_req, res, _err) => res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
+  serializers: { req: (req) => ({ method: req.method, url: req.url, id: req.id }) },
+}));
 
 app.use(
   cors({
@@ -1936,9 +1944,9 @@ async function migrateAssetStatusValues() {
   // ── Error handler middleware ──────────────────────────────────────────────
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message = status < 500 ? (err.message || "Bad Request") : "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    logger.error({ err, status }, "Express error handler");
 
     if (process.env.SENTRY_DSN && status >= 500) {
       Sentry.captureException(err);
