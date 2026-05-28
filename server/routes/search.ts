@@ -391,11 +391,11 @@ export function registerSearchRoutes(app: Express): void {
       // signals that come first in the concat order. Reserve PATENT_RESERVE/TRIAL_RESERVE
       // slots out of TOTAL_CAP for them; the rest goes to the other sources; any
       // unused reservation is redistributed below.
-      // TOTAL_CAP is sized to fit normalize/score within the per-step hard budgets;
-      // raising it past ~80 starts to push normalizeSignals beyond its 2s window.
-      const TOTAL_CAP = 80;
-      const PATENT_RESERVE = 20;
-      const TRIAL_RESERVE = 20;
+      // Patents and clinical trials skip LLM normalization (pure buildFallback), so
+      // they don't pressure the normalizeSignals timeout — cap raised to 100 safely.
+      const TOTAL_CAP = 100;
+      const PATENT_RESERVE = 25;
+      const TRIAL_RESERVE = 25;
       const patentsKept = filteredPatents.slice(0, PATENT_RESERVE);
       const trialsKept = filteredTrials.slice(0, TRIAL_RESERVE);
       const otherBudget = TOTAL_CAP - patentsKept.length - trialsKept.length;
@@ -427,7 +427,7 @@ export function registerSearchRoutes(app: Express): void {
 
       let normalized: Partial<import("../lib/types").ScoredAsset>[];
       try {
-        normalized = await withHardTimeout(normalizeSignals(combinedSignals), 2000, "normalizeSignals");
+        normalized = await withHardTimeout(normalizeSignals(combinedSignals), 6000, "normalizeSignals");
       } catch (normErr) {
         console.error("normalizeSignals failed/timed out, falling back to raw signals:", normErr instanceof Error ? normErr.message : normErr);
         normalized = combinedSignals.map((s) => ({
@@ -613,6 +613,13 @@ export function registerSearchRoutes(app: Express): void {
       const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : undefined;
       const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
+      // Response cache — keyed on query + all filters + user so different users
+      // or filter states never share results. 2-min TTL covers the typical
+      // search-refine loop while keeping results fresh for active sessions.
+      const scoutCacheKey = `scout:${query.trim().toLowerCase()}:${modality ?? ""}:${stage ?? ""}:${indication ?? ""}:${institution ?? ""}:${biology ?? ""}:${since ?? ""}:${before ?? ""}:${(biologies ?? []).join(",")}:${(modalities ?? []).join(",")}:${(stages ?? []).join(",")}:${(institutions ?? []).join(",")}:${scoutUserId ?? ""}`;
+      const cachedScout = cacheGet<object>(scoutCacheKey);
+      if (cachedScout) return res.json(cachedScout);
+
       let results: import("../storage").RetrievedAsset[] = [];
 
       const searchOpts = {
@@ -677,10 +684,14 @@ export function registerSearchRoutes(app: Express): void {
               return [];
             }
             try {
-              return await storage.scoutVectorSearch(embed.vec, {
-                ...hybridSearchOpts,
-                minSimilarity: VECTOR_MIN_SIMILARITY,
-              });
+              return await withHardTimeout(
+                storage.scoutVectorSearch(embed.vec, {
+                  ...hybridSearchOpts,
+                  minSimilarity: VECTOR_MIN_SIMILARITY,
+                }),
+                2000,
+                "scoutVectorSearch",
+              );
             } catch (e) {
               embedFallbackReason = "vector_search_error:" + (e instanceof Error ? e.message : String(e));
               return [];
@@ -1110,14 +1121,16 @@ export function registerSearchRoutes(app: Express): void {
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length, userId: scoutUserId ?? null }).catch(() => {});
 
-      return res.json({
+      const scoutResponse = {
         assets,
         query,
         assetsFound: assets.length,
         sources: ["tech_transfer"],
         fallback: false,
         ...(searchDebug ? { debug: searchDebug } : {}),
-      });
+      };
+      cacheSet(scoutCacheKey, scoutResponse, 2 * 60 * 1000);
+      return res.json(scoutResponse);
     } catch (err: unknown) {
       console.error("[scout/search] Error:", err);
       const message = err instanceof Error ? err.message : "Search failed";

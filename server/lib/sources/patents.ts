@@ -23,30 +23,119 @@ function inferOwnerType(assignee: string): "university" | "company" | "unknown" 
   return "unknown";
 }
 
+// Biotech abbreviations and brand names that USPTO filings use in expanded or
+// alternate form. Each entry maps a normalized token to 1–3 alternative phrases
+// that should be OR'd into the query so both styles match.
+const PATENT_SYNONYMS: Record<string, string[]> = {
+  "glp-1":          ["glucagon-like peptide-1", "glucagon-like peptide 1", "GLP-1"],
+  "glp1":           ["glucagon-like peptide-1", "glucagon-like peptide 1", "GLP-1"],
+  "glp-2":          ["glucagon-like peptide-2", "glucagon-like peptide 2", "GLP-2"],
+  "gip":            ["glucose-dependent insulinotropic polypeptide", "GIP"],
+  "car-t":          ["chimeric antigen receptor T cell", "CAR-T", "CAR T cell"],
+  "cart":           ["chimeric antigen receptor T cell", "CAR-T"],
+  "crispr":         ["CRISPR-Cas9", "CRISPR", "gene editing"],
+  "aav":            ["adeno-associated virus", "AAV", "gene therapy vector"],
+  "pd-1":           ["programmed death-1", "programmed cell death protein 1", "PD-1"],
+  "pd-l1":          ["programmed death-ligand 1", "PD-L1"],
+  "ctla-4":         ["cytotoxic T-lymphocyte-associated protein 4", "CTLA-4"],
+  "kras":           ["KRAS", "Kirsten rat sarcoma"],
+  "egfr":           ["epidermal growth factor receptor", "EGFR"],
+  "her2":           ["human epidermal growth factor receptor 2", "HER2", "ERBB2"],
+  "vegf":           ["vascular endothelial growth factor", "VEGF"],
+  "tnf":            ["tumor necrosis factor", "TNF-alpha"],
+  "il-6":           ["interleukin-6", "interleukin 6", "IL-6"],
+  "il-17":          ["interleukin-17", "interleukin 17", "IL-17"],
+  "il-23":          ["interleukin-23", "interleukin 23", "IL-23"],
+  "btk":            ["Bruton's tyrosine kinase", "BTK"],
+  "jak":            ["Janus kinase", "JAK inhibitor"],
+  "jak1":           ["JAK1", "Janus kinase 1"],
+  "jak2":           ["JAK2", "Janus kinase 2"],
+  "mtor":           ["mechanistic target of rapamycin", "mTOR"],
+  "pi3k":           ["phosphoinositide 3-kinase", "PI3K"],
+  "alk":            ["anaplastic lymphoma kinase", "ALK"],
+  "braf":           ["BRAF", "v-Raf murine sarcoma viral oncogene"],
+  "bcr-abl":        ["BCR-ABL", "Philadelphia chromosome"],
+  "mrna":           ["messenger RNA", "mRNA vaccine", "mRNA therapy"],
+  "sirna":          ["small interfering RNA", "siRNA", "RNA interference"],
+  "antisense":      ["antisense oligonucleotide", "ASO", "antisense therapy"],
+  "adc":            ["antibody-drug conjugate", "ADC"],
+  "bispecific":     ["bispecific antibody", "bispecific T-cell engager", "BiTE"],
+  "nanobody":       ["single-domain antibody", "nanobody", "VHH antibody"],
+  "obesity":        ["obesity", "weight loss", "anti-obesity", "adiposity"],
+  "alzheimer":      ["Alzheimer's disease", "Alzheimer disease", "amyloid beta"],
+  "parkinson":      ["Parkinson's disease", "Parkinson disease", "alpha-synuclein"],
+  "nash":           ["nonalcoholic steatohepatitis", "NASH", "metabolic-associated steatohepatitis"],
+  "nafld":          ["nonalcoholic fatty liver disease", "NAFLD"],
+  "aml":            ["acute myeloid leukemia", "AML"],
+  "cll":            ["chronic lymphocytic leukemia", "CLL"],
+  "dlbcl":          ["diffuse large B-cell lymphoma", "DLBCL"],
+  "nsclc":          ["non-small cell lung cancer", "NSCLC"],
+  "sclc":           ["small cell lung cancer", "SCLC"],
+  "hcc":            ["hepatocellular carcinoma", "HCC", "liver cancer"],
+  "crc":            ["colorectal cancer", "CRC", "colon cancer"],
+  "tnbc":           ["triple-negative breast cancer", "TNBC"],
+  "t2d":            ["type 2 diabetes", "type II diabetes", "T2DM"],
+  "t1d":            ["type 1 diabetes", "type I diabetes", "T1DM"],
+  "ra":             ["rheumatoid arthritis", "RA"],
+  "ibd":            ["inflammatory bowel disease", "IBD", "Crohn's disease"],
+  "copd":           ["chronic obstructive pulmonary disease", "COPD"],
+  "lvef":           ["left ventricular ejection fraction", "LVEF"],
+  "hfpef":          ["heart failure with preserved ejection fraction", "HFpEF"],
+};
+
+function expandPatentQuery(rawQuery: string): string {
+  const tokens = rawQuery.trim().toLowerCase().split(/\s+/);
+  const expansions: string[] = [];
+
+  for (const token of tokens) {
+    const syns = PATENT_SYNONYMS[token];
+    if (syns) {
+      expansions.push(...syns);
+    }
+  }
+
+  // Also try the full phrase as a key (handles "car-t" as a single lookup token)
+  const fullKey = rawQuery.trim().toLowerCase();
+  const fullSyns = PATENT_SYNONYMS[fullKey];
+  if (fullSyns) {
+    for (const s of fullSyns) {
+      if (!expansions.includes(s)) expansions.push(s);
+    }
+  }
+
+  return expansions.length > 0 ? [...new Set(expansions)] : [];
+}
+
 function buildSearchQuery(rawQuery: string): string {
   const trimmed = rawQuery.trim();
   if (!trimmed) return "*";
 
+  const synonyms = expandPatentQuery(trimmed);
   const tokens = trimmed.split(/\s+/);
-  const isSingleShortToken = tokens.length === 1 && trimmed.length <= 8;
 
+  // Build the canonical form of the original query
+  let canonical: string;
+  const isSingleShortToken = tokens.length === 1 && trimmed.length <= 8;
   if (isSingleShortToken && trimmed.includes("-")) {
+    // Hyphenated short token: search both hyphenated and spaced forms
     const upper = trimmed.toUpperCase();
     const spaced = trimmed.replace(/-/g, " ");
-    return `"${upper}" OR "${spaced}"`;
+    canonical = `"${upper}" OR "${spaced}"`;
+  } else if (tokens.length === 1) {
+    canonical = trimmed;
+  } else if (tokens.length <= 3) {
+    canonical = `"${trimmed}"`;
+  } else {
+    canonical = trimmed;
   }
 
-  // Single words don't need quotes — unquoted gives full-text match across all fields
-  if (tokens.length === 1) {
-    return trimmed;
-  }
+  if (synonyms.length === 0) return canonical;
 
-  // Multi-word short phrases: keep as quoted phrase match
-  if (tokens.length <= 3) {
-    return `"${trimmed}"`;
-  }
-
-  return trimmed;
+  // OR the canonical form with each synonym phrase (quoted for multi-word synonyms)
+  const synClauses = synonyms.map((s) =>
+    s.split(/\s+/).length > 1 ? `"${s}"` : s
+  );
+  return [canonical, ...synClauses].join(" OR ");
 }
 
 async function fetchPatentAbstract(appNum: string, apiKey: string): Promise<string> {

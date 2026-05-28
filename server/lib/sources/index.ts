@@ -387,7 +387,7 @@ export function getSource(key: string): DataSource {
   return dataSources.pubmed;
 }
 
-const SOURCE_TIMEOUT_MS = 4000;
+const SOURCE_TIMEOUT_MS = 7000;
 
 export function withHardTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;

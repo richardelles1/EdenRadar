@@ -178,7 +178,8 @@ export async function extractAssetFromSignal(
           summary: fp.summary ?? "",
           matching_tags: Array.isArray(fp.matching_tags) ? fp.matching_tags : [],
         };
-      } catch {
+      } catch (fallbackErr: any) {
+        console.warn("[llm] gpt-4o-mini fallback failed:", fallbackErr?.message);
         return null;
       }
     }
