@@ -62,6 +62,10 @@ async function onShutdownSignal(signal: string) {
 }
 process.on("SIGTERM", async () => { await onShutdownSignal("SIGTERM"); });
 process.on("SIGINT", async () => { await onShutdownSignal("SIGINT"); });
+// Warn loudly at startup if auth env vars are absent.
+for (const v of ["VITE_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
+  if (!process.env[v]) console.warn(`[startup] WARNING: ${v} is not set -- auth and admin operations will fail`);
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -1896,6 +1900,10 @@ async function migrateAssetStatusValues() {
   }
 
   // ── Register API routes ───────────────────────────────────────────────────
+  app.get("/api/health", (_req, res) => {
+    res.json({ status: "ok", uptime: Math.floor(process.uptime()) });
+  });
+
   app.use("/api/", rateLimit({ windowMs: 60_000, max: 200, standardHeaders: true, legacyHeaders: false, skip: (req) => req.path.startsWith("/api/admin"), message: { error: "Too many requests." } }));
   app.use("/api/tto-contacts/bulk", rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests to this endpoint." } }));
   await registerRoutes(httpServer, app);
