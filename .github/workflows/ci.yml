@@ -24,7 +24,6 @@ jobs:
 
       - name: Type-check
         run: node --max-old-space-size=4096 node_modules/typescript/bin/tsc --noEmit
-        continue-on-error: true  # pre-existing errors in patents.ts — remove once clean
 
       - name: Unit tests
         run: npm test
