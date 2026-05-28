@@ -3,6 +3,7 @@ import { storage } from "../storage";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { appEvents } from "@shared/schema";
+import { tryGetUserId } from "./supabaseAuth";
 
 export async function resolveAuthorName(userId: string | null): Promise<string> {
   if (!userId) return "Team Member";
@@ -121,9 +122,11 @@ export async function requireOrgAdminOrOwner(
   return { org, userId };
 }
 
-// Returns false and sends 403 if the calling user is a viewer (read-only org role)
+// Returns false and sends 403 if the calling user is a viewer (read-only org role).
+// Uses the verified JWT identity (tryGetUserId) — not the client-supplied x-user-id header —
+// so a viewer cannot spoof a non-viewer identity to bypass this guard.
 export async function requireNotViewer(req: Request, res: Response): Promise<boolean> {
-  const userId = req.headers["x-user-id"] as string | undefined;
+  const userId = await tryGetUserId(req);
   if (!userId) return true; // unauthenticated — let downstream handle
   const org = await storage.getOrgForUser(userId);
   if (!org) return true; // solo user, no viewer concept

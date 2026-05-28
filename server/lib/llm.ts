@@ -33,8 +33,7 @@ export function friendlyOpenAIError(err: unknown): string {
       return "OpenAI quota exceeded or rate limited. Please check your OpenAI account billing.";
     }
   }
-  if (err instanceof Error) return err.message;
-  return "Search failed. Please try again.";
+  return "AI service error. Please try again.";
 }
 
 function buildExtractionPrompt(signal: RawSignal, text: string): string {
