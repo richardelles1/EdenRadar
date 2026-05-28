@@ -1531,7 +1531,12 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .groupBy(ingestedAssets.institution);
 
-    const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt)).limit(200);
+    const sessionRows = await db.execute(sql`
+      SELECT DISTINCT ON (institution) *
+      FROM sync_sessions
+      ORDER BY institution, created_at DESC
+    `);
+    const sessions = sessionRows.rows as unknown as SyncSession[];
 
     return { institutions: instRows, syncSessions: sessions };
   }
