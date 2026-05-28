@@ -678,7 +678,7 @@ export function registerEdenRoutes(app: Express): void {
 
       sendEvent("done", { sessionId: sid });
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? err.message : "Chat failed";
+      const errMsg = "Chat failed";
       console.error("[EDEN chat] Error:", err);
       sendEvent("error", { message: errMsg });
     } finally {
@@ -758,7 +758,7 @@ export function registerEdenRoutes(app: Express): void {
       const sessions = await storage.listEdenSessions(limit);
       res.json(sessions);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed";
+      const msg = "Failed";
       res.status(500).json({ error: msg });
     }
   });
@@ -769,7 +769,7 @@ export function registerEdenRoutes(app: Express): void {
       if (!session) return res.status(404).json({ error: "Session not found" });
       res.json(session);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed";
+      const msg = "Failed";
       res.status(500).json({ error: msg });
     }
   });
@@ -795,7 +795,7 @@ export function registerEdenRoutes(app: Express): void {
         .limit(20);
       res.json({ results: rows });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+      res.status(500).json({ error: "Query failed" });
     }
   });
 
@@ -818,7 +818,7 @@ export function registerEdenRoutes(app: Express): void {
         .limit(10);
       res.json({ area, results: rows });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+      res.status(500).json({ error: "Query failed" });
     }
   });
 
@@ -836,7 +836,7 @@ export function registerEdenRoutes(app: Express): void {
         .limit(20);
       res.json({ results: rows });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+      res.status(500).json({ error: "Query failed" });
     }
   });
 
@@ -854,7 +854,7 @@ export function registerEdenRoutes(app: Express): void {
         .limit(15);
       res.json({ results: rows });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+      res.status(500).json({ error: "Query failed" });
     }
   });
 
@@ -877,7 +877,7 @@ export function registerEdenRoutes(app: Express): void {
         .limit(10);
       res.json({ institution, results: rows });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+      res.status(500).json({ error: "Query failed" });
     }
   });
 
@@ -890,7 +890,7 @@ export function registerEdenRoutes(app: Express): void {
         .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.embedding} IS NOT NULL`);
       res.json({ total: rows[0]?.total ?? 0 });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+      res.status(500).json({ error: "Query failed" });
     }
   });
 }

@@ -32,7 +32,7 @@ export function registerAuthRoutes(app: Express): void {
         stripeCurrentPeriodEnd: membership.stripeCurrentPeriodEnd ?? null,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -57,7 +57,7 @@ export function registerAuthRoutes(app: Express): void {
       };
       return res.json(bp);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -72,7 +72,7 @@ export function registerAuthRoutes(app: Express): void {
       await storage.saveBuyerProfile(userId, profile as Record<string, unknown>);
       return res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -91,7 +91,7 @@ export function registerAuthRoutes(app: Express): void {
       }
       res.json({ ...org, members });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -113,7 +113,7 @@ export function registerAuthRoutes(app: Express): void {
       res.json(updated);
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -132,7 +132,7 @@ export function registerAuthRoutes(app: Express): void {
       }
       return res.json({ ok: true });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -164,7 +164,7 @@ export function registerAuthRoutes(app: Express): void {
       res.json({ email: record.email });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -192,7 +192,7 @@ export function registerAuthRoutes(app: Express): void {
       res.json({ ok: true });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Valid email required" });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -247,7 +247,7 @@ export function registerAuthRoutes(app: Express): void {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
       console.error("[org/members]", err?.message);
       sentryCaptureException(err);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -287,7 +287,7 @@ export function registerAuthRoutes(app: Express): void {
       `);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -314,7 +314,7 @@ export function registerAuthRoutes(app: Express): void {
 
       res.json({ ok: true, email: member.email });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -353,7 +353,7 @@ export function registerAuthRoutes(app: Express): void {
       res.json({ ok: true });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

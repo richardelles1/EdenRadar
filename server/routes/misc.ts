@@ -184,12 +184,12 @@ export function registerMiscRoutes(app: Express): void {
       const { data, error } = await admin.auth.admin.updateUserById(userId, {
         user_metadata: { ...existing.user.user_metadata, subscribedToDigest },
       });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       await storage.setIndustryProfileSubscription(userId, subscribedToDigest).catch(() => {});
       return res.json({ subscribedToDigest: data.user.user_metadata?.subscribedToDigest ?? false });
     } catch (err: any) {
       console.error("[users/subscribe]", err);
-      return res.status(500).json({ error: err.message ?? "Failed to update subscription" });
+      return res.status(500).json({ error: "Failed to update subscription" });
     }
   });
 
@@ -217,7 +217,7 @@ export function registerMiscRoutes(app: Express): void {
       return res.json({ notificationPrefs: updated.notificationPrefs });
     } catch (err: any) {
       console.error("[users/notification-prefs]", err);
-      return res.status(500).json({ error: err.message ?? "Failed to save prefs" });
+      return res.status(500).json({ error: "Failed to save prefs" });
     }
   });
 
@@ -268,7 +268,7 @@ export function registerMiscRoutes(app: Express): void {
       res.json({ token: link.token, expiresAt: link.expiresAt, url });
     } catch (err: any) {
       console.error("[share/create]", err?.message);
-      res.status(500).json({ error: err.message ?? "Failed to create shared link" });
+      res.status(500).json({ error: "Failed to create shared link" });
     }
   });
 
@@ -302,7 +302,7 @@ export function registerMiscRoutes(app: Express): void {
       res.json(result.data);
     } catch (err: any) {
       console.error("[share/get]", err?.message);
-      res.status(500).json({ error: err.message ?? "Failed to retrieve shared link" });
+      res.status(500).json({ error: "Failed to retrieve shared link" });
     }
   });
 
@@ -314,7 +314,7 @@ export function registerMiscRoutes(app: Express): void {
       res.json(result.data);
     } catch (err: any) {
       console.error("[share/resolve]", err?.message);
-      res.status(500).json({ error: err.message ?? "Failed to retrieve shared link" });
+      res.status(500).json({ error: "Failed to retrieve shared link" });
     }
   });
 
@@ -440,7 +440,7 @@ export function registerMiscRoutes(app: Express): void {
       const exports = await storage.getRecentExports(limit);
       res.json({ exports });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
