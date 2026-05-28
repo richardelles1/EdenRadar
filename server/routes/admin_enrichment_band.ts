@@ -1,4 +1,5 @@
 import fs from "fs";
+import { captureException } from "../lib/sentry";
 import path from "path";
 import type { Express } from "express";
 import { z } from "zod";
@@ -1027,7 +1028,8 @@ Do not respond with anything else.`;
         console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, score ${bandAvgScoreBefore} → ${avgScoreAfter}, movements: ${JSON.stringify(bandMovements)}`);
       }).catch((e) => {
         bandJob.fail(e?.message ?? "Unknown error");
-        console.error("[band-enrich] failed:", e);
+        captureException(e);
+      console.error("[band-enrich] failed:", e);
       });
     } catch (err: any) {
       bandJob.fail(err.message);

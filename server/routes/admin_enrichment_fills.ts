@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { captureException } from "../lib/sentry";
 import { spawn } from "child_process";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
@@ -264,7 +265,8 @@ export function registerFillRoutes(app: Express): void {
         rescoreLastSummary = { updated, total: rescoreJob.processed, durationMs, completedAt: new Date().toISOString() };
         console.log(`[rescore] Done – ${updated}/${rescoreJob.processed} updated in ${Math.round(durationMs / 1000)}s`);
       } catch (err: any) {
-        console.error("[rescore] Error:", err.message);
+        captureException(err);
+      console.error("[rescore] Error:", err.message);
       } finally {
         rescoreJob.finish({});
       }
@@ -310,7 +312,8 @@ export function registerFillRoutes(app: Express): void {
           );
           modalityFillJob.finish({});
         } catch (err: any) {
-          console.error("[modality-fill] Async error:", err);
+          captureException(err);
+      console.error("[modality-fill] Async error:", err);
           modalityFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client.release();
@@ -446,7 +449,8 @@ export function registerFillRoutes(app: Express): void {
           );
           biologyFillJob.finish({});
         } catch (err: any) {
-          console.error("[biology-fill] Async error:", err);
+          captureException(err);
+      console.error("[biology-fill] Async error:", err);
           biologyFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client.release();
@@ -564,7 +568,8 @@ export function registerFillRoutes(app: Express): void {
           );
           moaFillJob.finish({});
         } catch (err: any) {
-          console.error("[moa-fill] Pass 2 async error:", err);
+          captureException(err);
+      console.error("[moa-fill] Pass 2 async error:", err);
           moaFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client2.release();
@@ -659,7 +664,8 @@ export function registerFillRoutes(app: Express): void {
           console.log(`[uspto-xref] Done: matched=${summary.matched} unmatched=${summary.unmatched} skipped=${summary.skipped}`);
         }).catch((err) => {
           usptoJob.fail(err?.message ?? "Unknown error");
-          console.error("[uspto-xref] Failed:", err);
+          captureException(err);
+      console.error("[uspto-xref] Failed:", err);
         });
       });
     } catch (err: any) {

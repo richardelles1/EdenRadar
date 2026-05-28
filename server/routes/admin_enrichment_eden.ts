@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { captureException } from "../lib/sentry";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
@@ -247,7 +248,8 @@ export function registerEdenRoutes(app: Express): void {
         if (edenJobId !== null) {
           await storage.updateEnrichmentJob(edenJobId, { status: "failed", completedAt: new Date(), processed: edenJob.processed, improved: edenImproved }).catch(() => {});
         }
-        console.error("[EDEN] Deep enrichment failed:", e);
+        captureException(e);
+      console.error("[EDEN] Deep enrichment failed:", e);
       });
     } catch (err: any) {
       edenJob.fail(err.message);
@@ -324,7 +326,8 @@ export function registerEdenRoutes(app: Express): void {
         console.log(`[EDEN] Embedding complete: ${result.succeeded} succeeded, ${result.failed} failed`);
       }).catch((e) => {
         embedJob.fail(e?.message ?? "Unknown error");
-        console.error("[EDEN] Embedding failed:", e);
+        captureException(e);
+      console.error("[EDEN] Embedding failed:", e);
       });
     } catch (err: any) {
       embedJob.fail(err.message);
