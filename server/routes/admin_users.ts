@@ -11,9 +11,10 @@ import { ALL_PORTAL_ROLES } from "@shared/portals";
 import { sendTeamInviteEmail, sendAccountDeletionEmail, APP_URL } from "../email";
 import { createStripe } from "./billing";
 
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+
 export function registerUserRoutes(app: Express): void {
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
   app.get("/api/admin/users", async (req, res) => {
     try {
       if (!supabaseServiceRoleKey || !supabaseUrl) {

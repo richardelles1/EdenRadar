@@ -6,9 +6,10 @@ import { ingestedAssets } from "@shared/schema";
 import { verifyAnyAuth, requireAdmin } from "../lib/supabaseAuth";
 import { sendWelcomeEmail } from "../email";
 
-export function registerMiscRoutes(app: Express): void {
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+
+export function registerPlatformRoutes(app: Express): void {
   app.get("/api/admin/all-institutions", async (req, res) => {
     try {
       const institutions = await storage.getAllInstitutionNames();

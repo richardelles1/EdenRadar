@@ -7,9 +7,10 @@ import { ingestedAssets, emailUnsubscribes } from "@shared/schema";
 import { requireAdmin } from "../lib/supabaseAuth";
 import { sendEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "../email";
 
+const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+
 export function registerDispatchRoutes(app: Express): void {
-  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
   function resolveSubjectTokens(subject: string, assets: Array<{ institution?: string | null }>): string {
     const count = assets.length;
     const institutionCount = new Set(assets.map((a) => a.institution ?? "")).size;
