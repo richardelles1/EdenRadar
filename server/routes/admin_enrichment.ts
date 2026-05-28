@@ -1,45 +1,15 @@
-﻿import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import { spawn } from "child_process";
 import type { Express } from "express";
-import { z } from "zod";
 import { db, pool } from "../db";
-import { eq, ne, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
-import { storage, type EnrichFilter, insertAdminEvent, getAdminEvents, setIndustryProfileStatus, getPlanEntitlements, getOrgEntitlementOverrides, upsertOrgEntitlementOverride, deleteOrgEntitlementOverride, upgradeIndividualToOrg, assignUserToOrg } from "../storage";
-import { insertDiscoveryCardSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchNeeds, researchProjects, userAlerts, type UserAlert, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketDeals, marketDealTermSheets, marketDealObservers, marketDealFeedback, dealComparables, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, scoutSavedSearches, insertScoutSavedSearchSchema, institutionMetadata, emailUnsubscribes, apiKeys, apiUsageLogs, apiKeyAuditLog, API_TIER_CONFIG, apiRateLimitWindows, edenQueries } from "@shared/schema";
-import { slugifyInstitutionName } from "../lib/institutionSeed";
-import { resolveAuthorName, logTeamActivity, logAppEvent } from "../lib/routeHelpers";
-import { computeCompletenessScore, computeContentHash } from "../lib/pipeline/contentHash";
-import { fetchHtml, extractText } from "../lib/scrapers/utils";
-import { DESCRIPTION_SELECTORS } from "../lib/scrapers/detailFetcher";
-import { makeFingerprint } from "../lib/ingestion";
-import { classifyBatch, classifyAsset } from "../lib/pipeline/classifyAsset";
-import OpenAI from "openai";
-import Stripe from "stripe";
-import multer from "multer";
-import mammoth from "mammoth";
-import { dataSources, getSourceHealthEntries } from "../lib/sources/index";
-import { normalizeSignals } from "../lib/pipeline/normalizeSignals";
-import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, scoreCompleteness, scoreAvailability, computeTotal, TTO_WEIGHTS } from "../lib/pipeline/scoreAssets";
+import { sql } from "drizzle-orm";
+import { storage, type EnrichFilter } from "../storage";
+import { computeCompletenessScore } from "../lib/pipeline/contentHash";
+import { classifyAsset } from "../lib/pipeline/classifyAsset";
 import { deepEnrichBatch } from "../lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "../lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, detectInstitutionName, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, classifyIntent, type UserContext, type SessionFocusContext } from "../lib/eden/rag";
-import { verifyAnyAuth, verifyConceptAuth, tryGetUserId, requireAdmin, getAdminUser, getAdminEmails } from "../lib/supabaseAuth";
-import { hasMarketRead, getMarketAccessState } from "../lib/marketAccess";
-import { getEffectiveMarketAccess, getUserMarketEntitlement, setUserMarketEntitlement, syncOrgMembersMarketEntitlement, userHasMarketRead } from "../lib/marketEntitlement";
-import { broadcastToOrg, broadcastToUsers, registerUserClient, unregisterUserClient } from "../lib/orgBroadcast";
-import { ALL_SCRAPERS, getScraperTier } from "../lib/scrapers/index";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, startStalenessFirstScan, startDailySweep, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "../lib/scheduler";
-import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "../lib/scraperState";
-import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, runScrapedFieldRefresh } from "../lib/ingestion";
-import { isFatalOpenAIError, friendlyOpenAIError } from "../lib/llm";
-import { ALL_PORTAL_ROLES } from "@shared/portals";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, sendMarketEoiDeclinedEmail, sendMarketObserverInviteEmail, sendMarketFeedbackRequestEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, verifyUnsubscribeTokenForEmail, unsubscribeUrlForEmail, FROM_DIGEST } from "../email";
-import { captureException as sentryCaptureException } from "../lib/sentry";
-import { cacheGet, cacheSet } from "../lib/responseCache";
-import { requireApiKey } from "../lib/apiKeyAuth";
-import { createStripe } from "./billing";
+import { requireAdmin } from "../lib/supabaseAuth";
 // Re-fetch state persistence
 const REFETCH_STATE_FILE = path.join(process.cwd(), ".local", "refetch-state.json");
 let _refetchState: Record<string, unknown> = {};
@@ -1918,7 +1888,6 @@ export function registerEnrichmentRoutes(app: Express): void {
       res.status(500).json({ error: err.message });
     }
   });
-
 
   app.post("/api/admin/eden/enrich/stop", async (req, res) => {
     if (!edenRunning) return res.json({ message: "No EDEN enrichment running" });
