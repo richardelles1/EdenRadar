@@ -3,8 +3,10 @@ import { db } from "../db";
 import { sql } from "drizzle-orm";
 import { verifyAnyAuth, tryGetUserId, requireAdmin } from "../lib/supabaseAuth";
 import { runTtoContactScrape, getSeedsFromDB, upsertContacts, type TtoContact } from "../lib/ttoContactScraper";
+import { Job, registerJob } from "../lib/jobState";
 
-let scrapeRunning = false;
+const scrapeJob = new Job();
+registerJob("scrape:ttoContacts", scrapeJob);
 
 export function registerContactRoutes(app: Express): void {
   // ── Public: contacts for an institution (auth required) ──────────────────
@@ -54,14 +56,14 @@ export function registerContactRoutes(app: Express): void {
 
   // ── Admin: trigger scrape run ─────────────────────────────────────────────
   app.post("/api/admin/tto-contacts/scrape", requireAdmin, async (req, res) => {
-    if (scrapeRunning) return res.status(409).json({ error: "Scrape already running" });
+    if (scrapeJob.running) return res.status(409).json({ error: "Scrape already running" });
 
     const { institutions, skipExisting = true } = req.body as {
       institutions?: string[];
       skipExisting?: boolean;
     };
 
-    scrapeRunning = true;
+    scrapeJob.start(0);
     const ac = new AbortController();
 
     // Stream SSE progress
@@ -84,7 +86,7 @@ export function registerContactRoutes(app: Express): void {
       .then(seeds => {
         if (seeds.length === 0) {
           write({ done: true, error: "No matching institutions found" });
-          scrapeRunning = false;
+          if (scrapeJob.running) scrapeJob.finish({});
           res.end();
           return;
         }
@@ -96,16 +98,16 @@ export function registerContactRoutes(app: Express): void {
         const empty = results.filter(r => r.status === "empty").map(r => r.institution);
         const errors = results.filter(r => r.status === "error").map(r => r.institution);
         write({ done: true, total, inserted, empty, errors });
-        scrapeRunning = false;
+        if (scrapeJob.running) scrapeJob.finish({});
         res.end();
       })
       .catch((err) => {
         write({ done: true, error: err.message });
-        scrapeRunning = false;
+        if (scrapeJob.running) scrapeJob.finish({});
         res.end();
       });
 
-    req.on("close", () => { ac.abort(); scrapeRunning = false; });
+    req.on("close", () => { ac.abort(); if (scrapeJob.running) scrapeJob.finish({}); });
   });
 
   // ── Admin: list all contacts ──────────────────────────────────────────────
