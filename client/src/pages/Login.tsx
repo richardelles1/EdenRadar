@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/lib/supabase";
-import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2, Mail, X, Lock } from "lucide-react";
+import { Sprout, Loader2, Lightbulb, FlaskConical, ShoppingBag, ArrowLeft, CheckCircle2, Mail, X, Lock } from "lucide-react";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 
 function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string } {
@@ -23,6 +23,7 @@ const PORTAL_STYLES = {
   amber:   { iconBg: "bg-amber-500",   text: "text-amber-500 dark:text-amber-400"   },
   violet:  { iconBg: "bg-violet-500",  text: "text-violet-500 dark:text-violet-400"  },
   emerald: { iconBg: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
+  indigo:  { iconBg: "bg-indigo-500",  text: "text-indigo-500 dark:text-indigo-400"  },
 } as const;
 type PortalColor = keyof typeof PORTAL_STYLES;
 
@@ -30,6 +31,7 @@ const PORTALS: { icon: React.ElementType; color: PortalColor; label: string }[] 
   { icon: Lightbulb,    color: "amber",   label: "Discovery" },
   { icon: FlaskConical, color: "violet",  label: "Lab"       },
   { icon: Sprout,       color: "emerald", label: "Scout"     },
+  { icon: ShoppingBag,  color: "indigo",  label: "Market"    },
 ];
 
 function GoogleIcon() {
@@ -355,12 +357,21 @@ export default function Login() {
     <div className="flex min-h-screen" style={{ background: panelBg }}>
 
       {/* Left: photo panel */}
-      <div className="hidden md:block w-1/2 flex-shrink-0 relative">
+      <div className="hidden md:flex w-1/2 flex-shrink-0 relative flex-col">
         <img
           src={imgLabWork}
           alt="EdenNX lab"
           className="absolute inset-0 w-full h-full object-cover"
         />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(to top, rgba(5,12,5,0.82) 0%, rgba(5,12,5,0.30) 55%, rgba(5,12,5,0.08) 100%)" }} aria-hidden />
+        <div className="relative z-10 mt-auto px-10 pb-12">
+          <p className="text-2xl font-black text-white tracking-tight mb-2">
+            Eden<span style={{ color: "hsl(142 65% 58%)" }}>Radar</span>
+          </p>
+          <p className="text-sm leading-relaxed" style={{ color: "rgba(255,255,255,0.60)" }}>
+            AI-powered biotech asset discovery across 350+ tech transfer offices.
+          </p>
+        </div>
       </div>
 
       {/* Right: form panel */}
@@ -370,8 +381,15 @@ export default function Login() {
       >
         <div className="w-full max-w-sm space-y-6">
 
+          {/* Wordmark */}
+          <div className="text-center">
+            <p className={`text-xl font-black tracking-tight ${isDark ? "text-white" : "text-gray-900"}`}>
+              Eden<span className="text-emerald-600 dark:text-emerald-400">Radar</span>
+            </p>
+          </div>
+
           {/* Portal badges */}
-          <div className="flex items-center justify-center gap-4">
+          <div className="flex flex-wrap items-center justify-center gap-3">
             {PORTALS.map(({ icon: Icon, color, label }) => {
               const s = PORTAL_STYLES[color];
               return (
@@ -762,11 +780,12 @@ export default function Login() {
                   <div className="text-center">
                     <button
                       type="button"
-                      className={`text-xs transition-colors ${backLink}`}
+                      className={`inline-flex items-center gap-1.5 text-xs transition-colors ${backLink}`}
                       onClick={() => navigate("/")}
                       data-testid="link-gate-back-home"
                     >
-                      ← Back to home
+                      <ArrowLeft className="w-3 h-3" />
+                      Back to home
                     </button>
                   </div>
 

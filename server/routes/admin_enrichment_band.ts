@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { storage } from "../storage";
 import { deepEnrichBatch } from "../lib/pipeline/deepEnrichBatch";
 import { isEdenRunning, scoreToBand, computeBandMovements } from "./admin_enrichment_eden";
+import { Job, registerJob } from "../lib/jobState";
 
 // Re-fetch state persistence
 const REFETCH_STATE_FILE = path.join(process.cwd(), ".local", "refetch-state.json");
@@ -25,42 +26,35 @@ function saveRefetchState(key: string, value: unknown): void {
 }
 
 // ── Classify state ────────────────────────────────────────────────────────────
-let classifyRunning = false;
-let classifyProcessed = 0;
-let classifyTotal = 0;
+const classifyJob = new Job();
+registerJob("enrichment:classify", classifyJob);
 let classifySucceeded = 0;
 let classifyFailed = 0;
 let classifySkipped = 0;
-let classifyShouldStop = false;
 let classifyInputTokens = 0;
 let classifyOutputTokens = 0;
-let classifyStartMs = 0;
 let classifyLastSummary: {
   succeeded: number; failed: number; skipped: number; total: number;
   inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; completedAt: string;
 } | null = (_refetchState.classify as typeof classifyLastSummary) ?? null;
 
 // ── Stage fill state ──────────────────────────────────────────────────────────
-let stageFillRunning = false;
-let stageFillProcessed = 0;
-let stageFillTotal = 0;
+const stageFillJob = new Job();
+registerJob("enrichment:stageFill", stageFillJob);
 let stageFillRegexFilled = 0;
 let stageFillLlmFilled = 0;
-let stageFillShouldStop = false;
 let stageFillLastSummary: {
   regexFilled: number; llmFilled: number; rescored: number;
   costUsd: number; durationMs: number; completedAt: string;
 } | null = null;
 
 // ── Band enrichment state ─────────────────────────────────────────────────────
-let bandRunning = false;
+const bandJob = new Job();
+registerJob("enrichment:band", bandJob);
 let bandBand = "";
 let bandGapFill = false;
-let bandProcessed = 0;
-let bandTotal = 0;
 let bandSucceeded = 0;
 let bandFailed = 0;
-let bandShouldStop = false;
 let bandInputTokens = 0;
 let bandOutputTokens = 0;
 let bandFieldCounts: Record<string, number> = {};
@@ -130,10 +124,11 @@ export function registerBandRoutes(app: Express): void {
     const GPT4O_INPUT_PER_M = 2.50;
     const GPT4O_OUTPUT_PER_M = 10.0;
     const liveCostUsd = (classifyInputTokens * GPT4O_INPUT_PER_M + classifyOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
+    const cs = classifyJob.status();
     res.json({
-      running: classifyRunning,
-      processed: classifyProcessed,
-      total: classifyTotal,
+      running: cs.running,
+      processed: cs.processed,
+      total: cs.total,
       succeeded: classifySucceeded,
       failed: classifyFailed,
       skipped: classifySkipped,
@@ -143,14 +138,14 @@ export function registerBandRoutes(app: Express): void {
   });
 
   app.post("/api/admin/enrichment/classify-unclassified/stop", async (req, res) => {
-    if (!classifyRunning) return res.json({ message: "No classify run in progress" });
-    classifyShouldStop = true;
+    if (!classifyJob.running) return res.json({ message: "No classify run in progress" });
+    classifyJob.requestStop();
     res.json({ message: "Stop signal sent" });
   });
 
   app.post("/api/admin/enrichment/classify-unclassified", async (req, res) => {
-    if (classifyRunning) return res.status(409).json({ error: "Classify run already in progress" });
-    if (bandRunning) return res.status(409).json({ error: "Band enrichment is running – stop it first" });
+    if (classifyJob.running) return res.status(409).json({ error: "Classify run already in progress" });
+    if (bandJob.running) return res.status(409).json({ error: "Band enrichment is running – stop it first" });
     if (isEdenRunning()) return res.status(409).json({ error: "Eden deep enrichment is running – stop it first" });
 
     try {
@@ -195,16 +190,12 @@ export function registerBandRoutes(app: Express): void {
         return res.json({ message: "No unclassified assets to process", total: 0 });
       }
 
-      classifyRunning = true;
-      classifyProcessed = 0;
-      classifyTotal = assets.length;
+      classifyJob.start(assets.length);
       classifySucceeded = 0;
       classifyFailed = 0;
       classifySkipped = 0;
-      classifyShouldStop = false;
       classifyInputTokens = 0;
       classifyOutputTokens = 0;
-      classifyStartMs = Date.now();
 
       res.json({ message: "Classify unclassified started", total: assets.length });
 
@@ -213,19 +204,18 @@ export function registerBandRoutes(app: Express): void {
         20,
         async (batch) => storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "classify"),
         (processed, _total, succeeded, failed, skipped) => {
-          classifyProcessed = processed;
+          classifyJob.tick(processed);
           classifySucceeded = succeeded;
           classifyFailed = failed;
           classifySkipped = skipped;
         },
-        () => classifyShouldStop,
+        () => classifyJob.shouldStop,
         (inTok, outTok) => {
           classifyInputTokens += inTok;
           classifyOutputTokens += outTok;
         },
       ).then((result) => {
-        classifyRunning = false;
-        const durationMs = Date.now() - classifyStartMs;
+        const durationMs = classifyJob.status().elapsedMs ?? 0;
         const GPT4O_INPUT_PER_M = 2.50;
         const GPT4O_OUTPUT_PER_M = 10.0;
         const costUsd = (result.inputTokens * GPT4O_INPUT_PER_M + result.outputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
@@ -233,21 +223,22 @@ export function registerBandRoutes(app: Express): void {
           succeeded: result.succeeded,
           failed: result.failed,
           skipped: result.skipped,
-          total: classifyTotal,
+          total: classifyJob.total,
           inputTokens: result.inputTokens,
           outputTokens: result.outputTokens,
           costUsd: parseFloat(costUsd.toFixed(4)),
           durationMs,
           completedAt: new Date().toISOString(),
         };
+        classifyJob.finish({});
         saveRefetchState("classify", classifyLastSummary);
         console.log(`[classify] Complete: ${result.succeeded} classified, ${result.skipped} thin-skipped, ${result.failed} failed – $${costUsd.toFixed(4)}`);
       }).catch((e) => {
-        classifyRunning = false;
+        classifyJob.fail(e?.message ?? "Unknown error");
         console.error("[classify] Failed:", e);
       });
     } catch (err: any) {
-      classifyRunning = false;
+      classifyJob.fail(err.message);
       res.status(500).json({ error: err.message });
     }
   });
@@ -394,10 +385,11 @@ export function registerBandRoutes(app: Express): void {
   });
 
   app.get("/api/admin/enrichment/fill-stage/status", (_req, res) => {
+    const sfs = stageFillJob.status();
     res.json({
-      running: stageFillRunning,
-      processed: stageFillProcessed,
-      total: stageFillTotal,
+      running: sfs.running,
+      processed: sfs.processed,
+      total: sfs.total,
       regexFilled: stageFillRegexFilled,
       llmFilled: stageFillLlmFilled,
       lastSummary: stageFillLastSummary,
@@ -405,13 +397,13 @@ export function registerBandRoutes(app: Express): void {
   });
 
   app.post("/api/admin/enrichment/fill-stage/stop", (_req, res) => {
-    if (!stageFillRunning) return res.status(409).json({ error: "Not running" });
-    stageFillShouldStop = true;
+    if (!stageFillJob.running) return res.status(409).json({ error: "Not running" });
+    stageFillJob.requestStop();
     res.json({ stopped: true });
   });
 
   app.post("/api/admin/enrichment/fill-stage", async (req, res) => {
-    if (stageFillRunning) return res.status(409).json({ error: "Stage fill already running" });
+    if (stageFillJob.running) return res.status(409).json({ error: "Stage fill already running" });
 
     const { cap, phase: rawPhase } = z.object({
       cap: z.number().int().min(10).max(20000).default(5000),
@@ -419,11 +411,8 @@ export function registerBandRoutes(app: Express): void {
     }).parse(req.body ?? {});
     const onlyPhase: number | null = rawPhase ?? null;
 
-    stageFillRunning = true;
-    stageFillProcessed = 0;
     stageFillRegexFilled = 0;
     stageFillLlmFilled = 0;
-    stageFillShouldStop = false;
 
     // Count eligible (with asset_class exclusion matching actual fill queries)
     const countRes = await db.execute<{ total: string }>(sql`
@@ -433,7 +422,8 @@ export function registerBandRoutes(app: Express): void {
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) >= 50
         AND (asset_class IS NULL OR asset_class NOT IN ('medical_device', 'research_tool', 'software'))
     `);
-    stageFillTotal = Number((countRes.rows[0] as any)?.total ?? 0);
+    const stageFillTotal = Number((countRes.rows[0] as any)?.total ?? 0);
+    stageFillJob.start(stageFillTotal);
     res.json({ started: true, total: stageFillTotal });
 
     // ── Inline SQL score expression matching computeCompletenessScore() ──────
@@ -509,11 +499,11 @@ export function registerBandRoutes(app: Express): void {
             RETURNING ia.id
           `);
           stageFillRegexFilled = p1.rows.length;
-          stageFillProcessed += stageFillRegexFilled;
+          stageFillJob.tick(stageFillJob.processed + stageFillRegexFilled);
           console.log(`[fill-stage] Phase 1 regex: ${stageFillRegexFilled} filled (stage + score atomic)`);
         }
 
-        if (stageFillShouldStop) {
+        if (stageFillJob.shouldStop) {
           console.log("[fill-stage] Stop requested after Phase 1");
         } else if (!onlyPhase || onlyPhase === 2) {
           // ── Phase 2: LLM – collect results, then single atomic batch UPDATE ──
@@ -553,7 +543,7 @@ Do not respond with anything else.`;
             const queue = [...llmRows];
 
             const worker = async () => {
-              while (queue.length > 0 && !stageFillShouldStop) {
+              while (queue.length > 0 && !stageFillJob.shouldStop) {
                 const row = queue.shift()!;
                 const text = `${row.summary ?? ""} ${row.abstract ?? ""}`.slice(0, 1000);
                 try {
@@ -573,7 +563,7 @@ Do not respond with anything else.`;
                 } catch (e: any) {
                   console.warn(`[stage-fill] Asset ${row.id} LLM error:`, e?.message);
                 }
-                stageFillProcessed++;
+                stageFillJob.tick(stageFillJob.processed + 1);
               }
             };
 
@@ -615,7 +605,7 @@ Do not respond with anything else.`;
           durationMs: Date.now() - t0,
           completedAt: new Date().toISOString(),
         };
-        stageFillRunning = false;
+        stageFillJob.finish({});
         console.log(`[fill-stage] Done – regex=${stageFillRegexFilled} llm=${stageFillLlmFilled}`);
       }
     })();
@@ -735,7 +725,7 @@ Do not respond with anything else.`;
     const liveCostUsd = (bandInputTokens * GPT4O_INPUT_PER_M + bandOutputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
     const costPerAssetFull = (1500 * GPT4O_INPUT_PER_M + 700 * GPT4O_OUTPUT_PER_M) / 1_000_000;
     const costPerAssetGap = (1000 * GPT4O_INPUT_PER_M + 500 * GPT4O_OUTPUT_PER_M) / 1_000_000;
-    const liveProjectedTotalUsd = bandTotal * (bandGapFill ? costPerAssetGap : costPerAssetFull);
+    const liveProjectedTotalUsd = bandJob.total * (bandGapFill ? costPerAssetGap : costPerAssetFull);
     // Lazy-load from DB if in-memory summary was cleared by a server restart
     if (bandLastSummary === null) {
       try {
@@ -743,12 +733,13 @@ Do not respond with anything else.`;
         if (stored) bandLastSummary = stored as unknown as typeof bandLastSummary;
       } catch { /* non-fatal */ }
     }
+    const bs = bandJob.status();
     res.json({
-      running: bandRunning,
+      running: bs.running,
       band: bandBand || null,
       gapFill: bandGapFill,
-      processed: bandProcessed,
-      total: bandTotal,
+      processed: bs.processed,
+      total: bs.total,
       succeeded: bandSucceeded,
       failed: bandFailed,
       liveCostUsd: parseFloat(liveCostUsd.toFixed(4)),
@@ -762,13 +753,13 @@ Do not respond with anything else.`;
   });
 
   app.post("/api/admin/enrichment/band/stop", async (req, res) => {
-    if (!bandRunning) return res.json({ message: "No band enrichment running" });
-    bandShouldStop = true;
+    if (!bandJob.running) return res.json({ message: "No band enrichment running" });
+    bandJob.requestStop();
     res.json({ message: "Stop signal sent" });
   });
 
   app.post("/api/admin/enrichment/run-band", async (req, res) => {
-    if (bandRunning) return res.status(409).json({ error: "Band enrichment already running" });
+    if (bandJob.running) return res.status(409).json({ error: "Band enrichment already running" });
     if (isEdenRunning()) return res.status(409).json({ error: "EDEN deep enrichment is already running – stop it first" });
 
     const { band, gapFill, cap, newestFirst, fields } = z.object({
@@ -903,24 +894,19 @@ Do not respond with anything else.`;
       const GAP_FILL_FIELDS = (fields && fields.length > 0) ? fields : ALL_GAP_FILL_FIELDS;
       const FULL_PASS_FIELDS = ["target", "modality", "indication", "developmentStage", "mechanismOfAction", "innovationClaim", "unmetNeed", "comparableDrugs", "licensingReadiness"];
 
-      bandRunning = true;
       bandBand = band;
       bandGapFill = gapFill;
-      bandProcessed = 0;
-      bandTotal = assets.length;
       bandSucceeded = 0;
       bandFailed = 0;
-      bandShouldStop = false;
       bandInputTokens = 0;
       bandOutputTokens = 0;
       bandFieldCounts = {};
       bandTargetFields = GAP_FILL_FIELDS;
       bandAvgScoreBefore = avgScoreBefore;
       bandAssetIds = assetIdList;
+      bandJob.start(assets.length);
 
       res.json({ message: "Band enrichment started", band, gapFill, newestFirst, total: assets.length });
-
-      const startMs = Date.now();
 
       // Helper: compute per-asset missing fields – only include fields that are null/empty for THIS asset
       const isEmpty = (v: string | null | undefined) => !v || v.trim() === "" || v.trim().toLowerCase() === "unknown";
@@ -989,18 +975,18 @@ Do not respond with anything else.`;
           return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
         },
         (processed, _total, succeeded, failed) => {
-          bandProcessed = processed;
+          bandJob.tick(processed);
           bandSucceeded = succeeded;
           bandFailed = failed;
         },
-        () => bandShouldStop,
+        () => bandJob.shouldStop,
         (inTok, outTok) => {
           bandInputTokens += inTok;
           bandOutputTokens += outTok;
         },
       ).then(async (result) => {
-        bandRunning = false;
-        const durationMs = Date.now() - startMs;
+        const durationMs = bandJob.status().elapsedMs ?? 0;
+        bandJob.finish({});
         const GPT4O_INPUT_PER_M = 2.50;
         const GPT4O_OUTPUT_PER_M = 10.0;
         const costUsd = (result.inputTokens * GPT4O_INPUT_PER_M + result.outputTokens * GPT4O_OUTPUT_PER_M) / 1_000_000;
@@ -1040,11 +1026,11 @@ Do not respond with anything else.`;
         storage.saveEnrichmentRun("band", bandLastSummary as unknown as Record<string, unknown>).catch(() => {});
         console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, score ${bandAvgScoreBefore} → ${avgScoreAfter}, movements: ${JSON.stringify(bandMovements)}`);
       }).catch((e) => {
-        bandRunning = false;
+        bandJob.fail(e?.message ?? "Unknown error");
         console.error("[band-enrich] failed:", e);
       });
     } catch (err: any) {
-      bandRunning = false;
+      bandJob.fail(err.message);
       res.status(500).json({ error: err.message });
     }
   });

@@ -333,9 +333,9 @@ const INTEL_CHANNELS = [
 /* ─── Stats ──────────────────────────────────────────────────── */
 
 const STATS = [
-  { value: "350+", label: "Tech Transfer Offices" },
-  { value: "33K+", label: "Scored Assets" },
-  { value: "40+",  label: "Live Data Sources" },
+  { value: "350+", label: "Tech Transfer Offices", amber: true },
+  { value: "33K+", label: "Scored Assets", amber: false },
+  { value: "40+",  label: "Live Data Sources", amber: false },
 ];
 
 /* ─── Main Page ──────────────────────────────────────────────── */
@@ -374,7 +374,7 @@ export default function HowItWorks() {
             EDEN monitors 350+ tech transfer offices around the clock, classifies every asset it finds, scores it 0–100 for licensing readiness, and delivers structured intelligence to the teams that need it, in plain English.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" onClick={() => navigate("/login")} data-testid="howitworks-cta-hero" className="h-11 px-8 font-semibold text-base">
+            <Button size="lg" onClick={() => navigate("/login")} data-testid="howitworks-cta-hero" className="h-11 px-8 font-semibold text-base" style={{ background: "hsl(33 85% 44%)", border: "none", color: "white" }}>
               Get Started
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
@@ -387,7 +387,10 @@ export default function HowItWorks() {
           <div className="mt-16 grid grid-cols-3 gap-6 sm:gap-10 max-w-lg mx-auto">
             {STATS.map((s) => (
               <div key={s.label} className="text-center">
-                <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">
+                <div
+                  className="text-2xl sm:text-3xl font-bold mb-1"
+                  style={{ color: s.amber ? "hsl(33 85% 42%)" : "hsl(var(--primary))" }}
+                >
                   <NumberTicker value={s.value} />
                 </div>
                 <div className="text-xs tracking-wide font-semibold text-foreground/70">{s.label}</div>
@@ -443,7 +446,7 @@ export default function HowItWorks() {
           className="reveal-section chat-demo-wrapper max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
         >
           <div className="text-center mb-10">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">See Step 2 in Action</p>
+            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">EDEN in Action</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
               Three ways to search with EDEN
             </h2>

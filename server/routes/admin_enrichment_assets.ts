@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { Job, registerJob } from "../lib/jobState";
 import { z } from "zod";
 import { db, pool } from "../db";
 import { sql } from "drizzle-orm";
@@ -6,20 +7,17 @@ import { storage, type EnrichFilter } from "../storage";
 import { computeCompletenessScore } from "../lib/pipeline/contentHash";
 import { classifyAsset } from "../lib/pipeline/classifyAsset";
 
-let liveEnrichment: {
-  jobId: number;
-  processed: number;
-  improved: number;
-  total: number;
-  resumed: boolean;
-  drain: boolean;
-  tokenCost: number;
-  filters: EnrichFilter;
-} | null = null;
+const enrichJob = new Job();
+registerJob("enrichment:assets", enrichJob);
+let enrichJobId: number | null = null;
+let enrichImproved = 0;
+let enrichTokenCost = 0;
+let enrichTotal = 0;
+let enrichFilters: EnrichFilter = {};
+let enrichResumed = false;
 // Persists the final token cost of the last run so the "done" status response
-// can include it even after liveEnrichment is set to null on completion.
+// can include it even after the job finishes.
 let lastRunTokenCost = 0;
-let standardEnrichShouldStop = false;
 
 async function runEnrichmentWorker(
   jobId: number,
@@ -30,7 +28,13 @@ async function runEnrichmentWorker(
   drain: boolean = false,
   filters: EnrichFilter = {},
 ) {
-  liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain, tokenCost: 0, filters };
+  enrichJob.start(startProcessed + assets.length);
+  enrichJobId = jobId;
+  enrichImproved = startImproved;
+  enrichTokenCost = 0;
+  enrichTotal = startProcessed + assets.length;
+  enrichFilters = filters;
+  enrichResumed = resumed;
   const MINI_INPUT_PER_M = 0.15;   // gpt-4o-mini input $/1M tokens
   const MINI_OUTPUT_PER_M = 0.60;  // gpt-4o-mini output $/1M tokens
   const CONCURRENCY = 30;
@@ -38,7 +42,7 @@ async function runEnrichmentWorker(
 
   async function worker() {
     while (idx < assets.length) {
-      if (standardEnrichShouldStop) break;
+      if (enrichJob.shouldStop) break;
       const asset = assets[idx++];
       if (!asset) continue;
       try {
@@ -95,7 +99,7 @@ async function runEnrichmentWorker(
         // Accumulate real token cost from the API response
         const inTok = classification.tokenUsage?.inputTokens ?? 0;
         const outTok = classification.tokenUsage?.outputTokens ?? 0;
-        liveEnrichment!.tokenCost += (inTok * MINI_INPUT_PER_M + outTok * MINI_OUTPUT_PER_M) / 1_000_000;
+        enrichTokenCost += (inTok * MINI_INPUT_PER_M + outTok * MINI_OUTPUT_PER_M) / 1_000_000;
 
         const isKnown = (v: string | null | undefined) =>
           v != null && v !== "" && v !== "unknown";
@@ -105,7 +109,7 @@ async function runEnrichmentWorker(
           ((!asset.indication || asset.indication === "unknown") && isKnown(classification.indication)) ||
           (asset.developmentStage === "unknown" && isKnown(classification.developmentStage));
 
-        if (improved) liveEnrichment!.improved++;
+        if (improved) enrichImproved++;
       } catch (e) {
         console.error(`[enrichment] failed for asset ${asset.id}:`, e);
         // Hard GPT failure: still count toward the attempt cap so the asset is not retried
@@ -113,8 +117,8 @@ async function runEnrichmentWorker(
         await storage.incrementMiniEnrichAttempts(asset.id);
       }
       await storage.stampEnrichedAt(asset.id);
-      liveEnrichment!.processed++;
-      await storage.updateEnrichmentJob(jobId, { processed: liveEnrichment!.processed, improved: liveEnrichment!.improved });
+      enrichJob.tick();
+      await storage.updateEnrichmentJob(jobId, { processed: enrichJob.processed, improved: enrichImproved });
     }
   }
 
@@ -126,18 +130,18 @@ async function runEnrichmentWorker(
     // job until the queue is empty (or stop is requested). The mini-queue
     // criteria already exclude assets we've just scored, so we will not pay
     // twice for the same asset.
-    while (drain && !standardEnrichShouldStop) {
+    while (drain && !enrichJob.shouldStop) {
       const next = await storage.getMiniEnrichBatch(500, filters);
       if (next.length === 0) break;
       idx = 0;
       assets = next;
-      liveEnrichment!.total += next.length;
-      await storage.updateEnrichmentJob(jobId, { total: liveEnrichment!.total });
+      enrichTotal += next.length;
+      await storage.updateEnrichmentJob(jobId, { total: enrichTotal });
       console.log(`[enrichment] Drain: fetched next batch of ${next.length} assets for job ${jobId}`);
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
     }
 
-    lastRunTokenCost = liveEnrichment!.tokenCost;
+    lastRunTokenCost = enrichTokenCost;
 
     // Capture avg_completeness after the run for institution-scoped jobs.
     let completenessAfterRun: number | null = null;
@@ -150,21 +154,21 @@ async function runEnrichmentWorker(
 
     await storage.updateEnrichmentJob(jobId, {
       status: "done",
-      processed: liveEnrichment!.processed,
-      improved: liveEnrichment!.improved,
+      processed: enrichJob.processed,
+      improved: enrichImproved,
       completedAt: new Date(),
       ...(completenessAfterRun !== null ? { completenessAfterRun } : {}),
     });
-    console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed · $${lastRunTokenCost.toFixed(4)} spent`);
+    console.log(`[enrichment] Job ${jobId} completed: ${enrichImproved} improved out of ${enrichJob.processed} processed · $${lastRunTokenCost.toFixed(4)} spent`);
     // Fire-and-forget quality snapshot for institution-scoped runs.
     if (filters.institution) {
       storage.captureInstitutionQualitySnapshot(filters.institution).catch(() => {});
     }
   } catch (e: any) {
-    await storage.updateEnrichmentJob(jobId, { status: "error", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
+    await storage.updateEnrichmentJob(jobId, { status: "error", processed: enrichJob.processed, improved: enrichImproved, completedAt: new Date() });
     console.error("[enrichment] Job failed:", e);
   } finally {
-    liveEnrichment = null;
+    enrichJob.finish({});
   }
 }
 
@@ -749,16 +753,16 @@ export function registerAssetRoutes(app: Express): void {
 
     const lastJob = await storage.getLatestEnrichmentJob();
 
-    if (liveEnrichment && lastJob && liveEnrichment.jobId === lastJob.id) {
+    if (enrichJob.running && lastJob && enrichJobId === lastJob.id) {
       return res.json({
         status: "running",
         jobId: lastJob.id,
-        processed: liveEnrichment.processed,
-        total: liveEnrichment.total,
-        improved: liveEnrichment.improved,
-        resumed: liveEnrichment.resumed,
-        tokenCost: liveEnrichment.tokenCost,
-        filters: Object.keys(liveEnrichment.filters).length > 0 ? liveEnrichment.filters : undefined,
+        processed: enrichJob.processed,
+        total: enrichTotal,
+        improved: enrichImproved,
+        resumed: enrichResumed,
+        tokenCost: enrichTokenCost,
+        filters: Object.keys(enrichFilters).length > 0 ? enrichFilters : undefined,
       });
     }
 
@@ -784,7 +788,7 @@ export function registerAssetRoutes(app: Express): void {
 
   app.post("/api/admin/enrichment/reset", async (req, res) => {
     try {
-      if (liveEnrichment) {
+      if (enrichJob.running) {
         return res.status(409).json({ error: "Cannot reset while enrichment is running" });
       }
       await storage.resetLatestEnrichmentJob();
@@ -861,7 +865,7 @@ export function registerAssetRoutes(app: Express): void {
   app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
 
-      if (liveEnrichment) {
+      if (enrichJob.running) {
         return res.status(409).json({ error: "Enrichment job already running" });
       }
 
@@ -920,7 +924,6 @@ export function registerAssetRoutes(app: Express): void {
       );
       res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, deferred, jobId: job.id, drain: drainAll, filters });
 
-      standardEnrichShouldStop = false;
       runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll, filters);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
@@ -928,8 +931,8 @@ export function registerAssetRoutes(app: Express): void {
   });
 
   app.post("/api/admin/enrichment/stop", async (req, res) => {
-    if (!liveEnrichment) return res.json({ message: "No standard enrichment running" });
-    standardEnrichShouldStop = true;
+    if (!enrichJob.running) return res.json({ message: "No standard enrichment running" });
+    enrichJob.requestStop();
     res.json({ message: "Stop signal sent – finishing in-flight assets then halting" });
   });
 

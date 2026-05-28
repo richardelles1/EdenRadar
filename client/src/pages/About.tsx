@@ -3,7 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Award, Sprout, Globe, Users } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
@@ -85,22 +85,18 @@ const FOUNDERS = [
 
 const VALUES = [
   {
-    icon: Sprout,
     title: "Science First",
     desc: "Every decision at EdenRadar traces back to one question: does this advance the science that helps patients?",
   },
   {
-    icon: Globe,
     title: "Built to Scale",
-    desc: "From 300+ tech transfer offices to global research ecosystems, we architect platforms that grow with the industry.",
+    desc: "From 350+ tech transfer offices to global research ecosystems, we architect platforms that grow with the industry.",
   },
   {
-    icon: Users,
     title: "People Behind the Science",
     desc: "We believe the best deals start with relationships. EdenRadar connects the humans behind the discoveries with the teams that can bring them to market.",
   },
   {
-    icon: Award,
     title: "Uncompromising Quality",
     desc: "Grounded in pharmaceutical-grade operational discipline, our team brings rigorous standards to every layer of the platform.",
   },
@@ -138,6 +134,7 @@ export default function About() {
             onClick={() => navigate("/login")}
             data-testid="about-cta-main"
             className="h-11 px-8 font-semibold text-base"
+            style={{ background: "hsl(33 85% 44%)", border: "none", color: "white" }}
           >
             Get Started
             <ArrowRight className="w-4 h-4 ml-2" />
@@ -214,7 +211,7 @@ export default function About() {
                         }}
                       />
                     </div>
-                    </div>
+                  </div>
 
                   {/* Bio text */}
                   <div className="flex-1 min-w-0">

@@ -166,11 +166,11 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
           {/* Tinted header zone */}
           <div
             className="absolute top-0 left-0 right-0 z-[2]"
-            style={{ height: "56px", background: `${stripColor}0d`, borderBottom: `1px solid ${stripColor}26` }}
+            style={{ height: "50px", background: `${stripColor}0d`, borderBottom: `1px solid ${stripColor}26` }}
           />
 
           {/* Type label in header */}
-          <div className="absolute top-0 left-[10px] right-10 z-[4] h-[56px] flex items-center gap-1.5 pointer-events-none">
+          <div className="absolute top-0 left-[10px] right-10 z-[4] h-[50px] flex items-center gap-1.5 pointer-events-none">
             <FlaskConical className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-teal-600 dark:text-teal-400">Clinical Trial</span>
             <span className={`inline-flex items-center px-1.5 py-0 rounded-sm text-[9px] font-bold uppercase tracking-[0.1em] border ${phaseStyle.className}`}>
@@ -206,7 +206,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
           )}
 
           {/* Content */}
-          <div className="absolute inset-0 z-[4] flex flex-col gap-2 pl-4 pr-8 pt-[62px] pb-3">
+          <div className="absolute inset-0 z-[4] flex flex-col gap-1.5 pl-4 pr-8 pt-[56px] pb-3">
 
             {/* NCT number */}
             {nctId && (
@@ -264,7 +264,7 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
                 </span>
               )}
               {conditionsDisplay && (
-                <span className="text-[10px] text-zinc-500 dark:text-zinc-400 truncate"
+                <span className="text-[10px] text-zinc-600 dark:text-zinc-300 truncate"
                   data-testid={`trial-conditions-${asset.id}`}
                 >
                   {conditionsDisplay}
@@ -273,14 +273,14 @@ export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave, hidePicker
             </div>
 
             {/* Summary excerpt */}
-            <p className="text-[11px] leading-relaxed line-clamp-2 text-zinc-500 dark:text-zinc-400" style={{ minHeight: "40px" }}>
+            <p className="text-[11px] leading-relaxed line-clamp-2 text-zinc-600 dark:text-zinc-300" style={{ minHeight: "32px" }}>
               {excerpt ?? ""}
             </p>
 
             {/* Footer */}
             <div className="mt-auto pt-1 flex items-center justify-between gap-1">
               {startDateStr && (
-                <span className="flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+                <span className="flex items-center gap-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
                   <Calendar className="w-3 h-3" />
                   {startDateStr}
                 </span>

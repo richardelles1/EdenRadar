@@ -182,7 +182,10 @@ export async function searchPatents(
     const q = buildSearchQuery(query);
     const limit = Math.min(maxResults * 2, 100);
 
-    let fullQuery = q;
+    // Wrap OR-chained synonym clauses in parens so the AND date filter applies
+    // to the whole expression, not just the last OR term.
+    const qWrapped = q.includes(" OR ") ? `(${q})` : q;
+    let fullQuery = qWrapped;
     if (sinceDate && beforeDate) {
       fullQuery += ` AND applicationMetaData.filingDate:[${sinceDate.slice(0, 10)} TO ${beforeDate.slice(0, 10)}]`;
     } else if (sinceDate) {

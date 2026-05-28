@@ -142,11 +142,11 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave, hidePicker, pipel
           {/* Tinted header zone */}
           <div
             className="absolute top-0 left-0 right-0 z-[2]"
-            style={{ height: "56px", background: `${stripColor}0d`, borderBottom: `1px solid ${stripColor}26` }}
+            style={{ height: "50px", background: `${stripColor}0d`, borderBottom: `1px solid ${stripColor}26` }}
           />
 
           {/* Type label in header */}
-          <div className="absolute top-0 left-[10px] right-10 z-[4] h-[56px] flex items-center gap-1.5 pointer-events-none">
+          <div className="absolute top-0 left-[10px] right-10 z-[4] h-[50px] flex items-center gap-1.5 pointer-events-none">
             <ScrollText className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-amber-600 dark:text-amber-400">Patent</span>
           </div>
@@ -179,7 +179,7 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave, hidePicker, pipel
           )}
 
           {/* Content */}
-          <div className="absolute inset-0 z-[4] flex flex-col gap-2 pl-4 pr-8 pt-[62px] pb-3">
+          <div className="absolute inset-0 z-[4] flex flex-col gap-1.5 pl-4 pr-8 pt-[56px] pb-3">
 
             {/* Patent number */}
             {patentId && (
@@ -230,14 +230,14 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave, hidePicker, pipel
             )}
 
             {/* Abstract excerpt */}
-            <p className="text-[11px] leading-relaxed line-clamp-2 text-zinc-500 dark:text-zinc-400" style={{ minHeight: "40px" }}>
+            <p className="text-[11px] leading-relaxed line-clamp-2 text-zinc-600 dark:text-zinc-300" style={{ minHeight: "32px" }}>
               {excerpt ?? ""}
             </p>
 
             {/* Footer */}
             <div className="mt-auto pt-1 flex items-center justify-between gap-1">
               {grantDateStr && (
-                <span className="flex items-center gap-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+                <span className="flex items-center gap-0.5 text-[10px] text-zinc-500 dark:text-zinc-400">
                   <Calendar className="w-3 h-3" />
                   {grantDateStr}
                 </span>

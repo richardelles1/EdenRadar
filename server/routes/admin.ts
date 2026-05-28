@@ -11,6 +11,7 @@ import { registerImpersonationRoutes } from "./admin_impersonation";
 import { registerRelevanceRoutes } from "./admin_relevance";
 import { registerDispatchRoutes } from "./admin_dispatch";
 import { registerPlatformRoutes } from "./admin_platform";
+import { getAllJobStatuses } from "../lib/jobState";
 
 export async function registerAdminRoutes(app: Express): Promise<void> {
   app.use("/api/admin", requireAdmin);
@@ -25,4 +26,7 @@ export async function registerAdminRoutes(app: Express): Promise<void> {
   registerRelevanceRoutes(app);
   registerDispatchRoutes(app);
   registerPlatformRoutes(app);
+  app.get("/api/admin/jobs", (_req, res) => {
+    res.json(getAllJobStatuses());
+  });
 }
