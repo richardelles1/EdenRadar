@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { NumberTicker } from "@/components/ui/number-ticker";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -19,6 +20,8 @@ import {
   TrendingUp,
   Users,
   ShoppingBag,
+  Lock,
+  Handshake,
   CheckCircle,
 } from "lucide-react";
 
@@ -69,8 +72,8 @@ const PIPELINE_STEPS = [
     colorDim: "hsl(var(--portal-scout) / 0.1)",
     step: "01",
     title: "Continuous Monitoring",
-    desc: "EdenRadar's automated scrapers continuously crawl 350+ university tech transfer offices, government databases, and academic publication feeds. Every asset is collected, timestamped, and queued for analysis the moment it appears.",
-    bullets: ["350+ TTO portals monitored", "Daily refresh on all sources", "Patent filing alerts included"],
+    desc: "EdenRadar's automated scrapers continuously crawl 300+ university tech transfer offices, government databases, and academic publication feeds. Every asset is collected, timestamped, and queued for analysis the moment it appears.",
+    bullets: ["300+ TTO portals monitored", "Daily refresh on all sources", "Patent filing alerts included"],
   },
   {
     icon: Brain,
@@ -199,16 +202,23 @@ const WHO_ITS_FOR = [
   },
 ];
 
+const STATS = [
+  { value: "33K+", label: "Scored Assets", ticker: true },
+  { value: "300+", label: "TTO Sources Monitored", ticker: true },
+  { value: "0–100", label: "EDEN Score", ticker: false },
+  { value: "Real-Time", label: "Continuous Data Refresh", ticker: false },
+];
 
 export default function WhatWeDo() {
   useDocumentMeta({
     title: "What We Do — Biotech Asset Discovery & Marketplace | EdenRadar",
-    description: "EdenRadar surfaces licensable biotech assets from 350+ tech transfer offices, scores them with our EDEN signal stack, and connects industry, researchers, and entrepreneurs in a confidential deal marketplace.",
+    description: "EdenRadar surfaces licensable biotech assets from 300+ tech transfer offices, scores them with our EDEN signal stack, and connects industry, researchers, and entrepreneurs in a confidential deal marketplace.",
   });
   const [, navigate] = useLocation();
   const pipelineRef = useReveal();
   const portalsRef = useReveal();
   const whoRef = useReveal();
+  const statsRef = useReveal();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -230,20 +240,37 @@ export default function WhatWeDo() {
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-            The licensing deal worth closing{" "}
-            <span className="text-primary">is already in EdenRadar.</span>
+            We connect university science{" "}
+            <span className="text-primary">to the industry ready to build it.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
-            EdenRadar monitors 350+ tech transfer offices around the clock — scoring and enriching every asset so your BD team can search 33K+ opportunities in plain English, refreshed daily.
+            EdenRadar is a multi-portal intelligence platform that monitors tech transfer offices, EDEN-enriches every asset, and delivers them directly to the business development teams that need them.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button size="lg" onClick={() => navigate("/login")} data-testid="whatwedo-cta-top" className="h-11 px-8 font-semibold text-base" style={{ background: "hsl(33 85% 44%)", color: "white", border: "none" }}>
+            <Button size="lg" onClick={() => navigate("/login")} data-testid="whatwedo-cta-top" className="h-11 px-8 font-semibold text-base">
               Get Started
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
             <Button size="lg" variant="outline" onClick={() => navigate("/pricing")} data-testid="whatwedo-cta-pricing" className="h-11 px-8 font-semibold text-base">
               See Pricing
             </Button>
+          </div>
+        </section>
+
+        {/* Stats bar */}
+        <section ref={statsRef} className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 pb-8">
+          <div
+            className="rounded-2xl grid grid-cols-2 sm:grid-cols-4 divide-x divide-y sm:divide-y-0 divide-border"
+            style={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
+          >
+            {STATS.map((stat, i) => (
+              <div key={i} className="flex flex-col items-center py-8 px-4 text-center">
+                <span className="text-2xl sm:text-3xl font-bold text-primary mb-1">
+                  {stat.ticker ? <NumberTicker value={stat.value} /> : stat.value}
+                </span>
+                <span className="text-xs text-muted-foreground font-medium">{stat.label}</span>
+              </div>
+            ))}
           </div>
         </section>
 
@@ -392,28 +419,28 @@ export default function WhatWeDo() {
           <div
             className="rounded-2xl p-10 sm:p-14 text-center"
             style={{
-              background: "linear-gradient(135deg, hsl(25 80% 6%) 0%, hsl(33 75% 9%) 60%, hsl(38 70% 7%) 100%)",
-              border: "1px solid hsl(33 85% 44% / 0.25)",
+              background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
+              border: "1px solid hsl(var(--primary) / 0.2)",
             }}
           >
-            <Radar className="w-8 h-8 mx-auto mb-4 opacity-70" style={{ color: "hsl(33 85% 44%)" }} />
+            <Radar className="w-8 h-8 text-primary mx-auto mb-4 opacity-70" />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
-              Your next deal is already indexed.
+              Start discovering assets that move the needle.
             </h2>
-            <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(33 40% 68%)" }}>
-              Join the BD teams using EdenRadar to find, evaluate, and close licensing deals before the competition does.
+            <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+              Join the biotech teams using EdenRadar to find, evaluate, and close licensing deals faster than ever.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" onClick={() => navigate("/login")} data-testid="whatwedo-cta-bottom" className="h-11 px-7 font-semibold" style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}>
+              <Button size="lg" onClick={() => navigate("/login")} data-testid="whatwedo-cta-bottom" className="h-11 px-7 font-semibold">
                 Get Started
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <Button
                 size="lg"
+                variant="outline"
                 onClick={() => navigate("/pricing")}
                 data-testid="whatwedo-cta-how"
-                className="h-11 px-7 font-semibold"
-                style={{ background: "transparent", border: "1px solid hsl(33 85% 44% / 0.3)", color: "hsl(33 60% 68%)" }}
+                className="h-11 px-7 font-semibold border-white/20 text-white/80 hover:text-white hover:bg-white/10"
               >
                 See Pricing
               </Button>

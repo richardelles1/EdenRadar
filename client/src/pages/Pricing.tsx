@@ -26,7 +26,7 @@ const SCOUT_PLANS = [
     tagline: "For solo BD professionals and licensing executives.",
     teamCallout: null as string | null,
     features: [
-      "Market intelligence feed from 350+ TTOs",
+      "Market intelligence feed from 300+ TTOs",
       "EDEN semantic search across full asset catalog",
       "Asset dossiers with full AI enrichment",
       "Pipeline tracking and saved asset lists",
