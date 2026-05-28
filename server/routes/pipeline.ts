@@ -351,23 +351,22 @@ STRATEGIC ASSESSMENT
       }
       const assets = await storage.getSavedAssets(pipelineListId, userId);
       const assetIds = assets.map((a) => a.id);
-      const noteMeta = await storage.getAssetNoteMeta(assetIds);
-
       const ingestedIds = assets
         .map((a) => a.ingestedAssetId)
         .filter((id): id is number => id !== null);
+
+      const [noteMeta, fpResult] = await Promise.all([
+        storage.getAssetNoteMeta(assetIds),
+        ingestedIds.length > 0
+          ? db.execute(sql`SELECT id, fingerprint FROM ingested_assets WHERE id = ANY(${ingestedIds}::int[]) AND fingerprint IS NOT NULL`).catch((fpErr) => {
+              console.error("[saved-assets] Fingerprint batch resolution failed — dossier links will be broken:", fpErr);
+              return { rows: [] as unknown[] };
+            })
+          : Promise.resolve({ rows: [] as unknown[] }),
+      ]);
       const fingerprintMap: Record<number, string> = {};
-      if (ingestedIds.length > 0) {
-        try {
-          const fpRows = await db.execute(
-            sql`SELECT id, fingerprint FROM ingested_assets WHERE id = ANY(${ingestedIds}::int[]) AND fingerprint IS NOT NULL`
-          );
-          for (const row of fpRows.rows as { id: number; fingerprint: string }[]) {
-            fingerprintMap[row.id] = row.fingerprint;
-          }
-        } catch (fpErr) {
-          console.error("[saved-assets] Fingerprint batch resolution failed — dossier links will be broken:", fpErr);
-        }
+      for (const row of fpResult.rows as { id: number; fingerprint: string }[]) {
+        fingerprintMap[row.id] = row.fingerprint;
       }
 
       res.json({
