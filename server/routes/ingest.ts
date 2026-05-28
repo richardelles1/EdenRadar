@@ -17,17 +17,17 @@ export function registerIngestRoutes(app: Express): void {
   });
 
 
-  app.post("/api/ingest/run", async (_req, res) => {
+  app.post(“/api/ingest/run”, requireAdmin, async (_req, res) => {
     if (isIngestionRunning()) {
       const lastRun = await storage.getLastIngestionRun();
-      return res.json({ message: "Ingestion already in progress", status: "running", runId: lastRun?.id });
+      return res.json({ message: “Ingestion already in progress”, status: “running”, runId: lastRun?.id });
     }
     if (isSyncRunning()) {
-      return res.status(409).json({ error: `Institution sync is running for ${getSyncRunningFor()} â€” cannot start full ingestion` });
+      return res.status(409).json({ error: `Institution sync is running for ${getSyncRunningFor()} — cannot start full ingestion` });
     }
-    res.json({ message: "Ingestion started" });
+    res.json({ message: “Ingestion started” });
     runIngestionPipeline().catch((err) => {
-      console.error("[ingestion] Background run failed:", err);
+      console.error(“[ingestion] Background run failed:”, err);
     });
   });
 
