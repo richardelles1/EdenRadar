@@ -19,6 +19,8 @@ import {
   BookOpen,
   Award,
   ArrowRight,
+  Bookmark,
+  BookmarkCheck,
   Zap,
   Lightbulb,
   Sparkles,
@@ -653,13 +655,245 @@ function InstitutionMarquee() {
   );
 }
 
+/* ─────────────────────────── HeroCardDeck ────────────────────── */
+
+const HERO_CARDS: Array<{
+  type: "tto" | "trial" | "patent" | "research";
+  score: number;
+  name: string;
+  indication: string;
+  stage: string;
+  modality: string;
+  rising: boolean;
+  sources: number;
+  institution: string;
+}> = [
+  {
+    type: "tto",
+    score: 9,
+    name: "ADC platform targeting solid tumors via HER2 × TROP2 bispecific conjugate",
+    indication: "Solid tumor oncology · NSCLC",
+    stage: "Pre-clinical",
+    modality: "ADC",
+    rising: true,
+    sources: 3,
+    institution: "MIT Technology Licensing Office",
+  },
+  {
+    type: "trial",
+    score: 8,
+    name: "Phase I dose-escalation of HER2-targeted radioligand in metastatic breast cancer",
+    indication: "Metastatic breast cancer · HER2+",
+    stage: "Phase 1",
+    modality: "Radioligand",
+    rising: false,
+    sources: 2,
+    institution: "Mass General Hospital",
+  },
+  {
+    type: "patent",
+    score: 7,
+    name: "Anti-EGFR antibody-drug conjugate composition and methods of treatment",
+    indication: "NSCLC · Colorectal · US20230145678A1",
+    stage: "Pre-clinical",
+    modality: "ADC",
+    rising: false,
+    sources: 1,
+    institution: "Regents of the University of California",
+  },
+  {
+    type: "research",
+    score: 6,
+    name: "CAR-T targeting IL-13Rα2 overcomes solid tumor microenvironment in glioblastoma",
+    indication: "Glioblastoma · CNS tumors",
+    stage: "Pre-clinical",
+    modality: "CAR-T",
+    rising: true,
+    sources: 2,
+    institution: "City of Hope National Medical Center",
+  },
+];
+
+const DECK_TINTS: Record<"tto" | "trial" | "patent" | "research", {
+  bg: string; border: string; strip: string;
+  scoreColor: string; badgeBg: string; badgeBorderColor: string;
+}> = {
+  tto:      { bg: "#f0fdf4", border: "#a7f3d0", strip: "#10b981", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
+  trial:    { bg: "#f0fdfa", border: "#99f6e4", strip: "#0d9488", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
+  patent:   { bg: "#fffbeb", border: "#fde68a", strip: "#d97706", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
+  research: { bg: "#f0f9ff", border: "#bae6fd", strip: "#0ea5e9", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
+};
+
+const DECK_STACK = [
+  { tx: 0,  ty: 0,  scale: 1.00, opacity: 1.00 },
+  { tx: 12, ty: 12, scale: 0.97, opacity: 0.88 },
+  { tx: 24, ty: 24, scale: 0.94, opacity: 0.72 },
+  { tx: 36, ty: 36, scale: 0.91, opacity: 0.55 },
+];
+
+function deckStagePillClass(stage: string): string {
+  const s = stage.toLowerCase();
+  if (s.includes("phase 1") || s.includes("phase i/ii")) return "bg-sky-50 border border-sky-200/70 border-l-sky-400/90 text-zinc-500";
+  if (s.includes("phase 2") || s.includes("phase ii")) return "bg-violet-50 border border-violet-200/70 border-l-violet-400/90 text-zinc-500";
+  if (s.includes("phase 3") || s.includes("approved")) return "bg-emerald-50 border border-emerald-200/70 border-l-emerald-400/90 text-zinc-500";
+  return "bg-zinc-100 border border-zinc-200/80 border-l-zinc-400/70 text-zinc-500";
+}
+
+function HeroCardDeck() {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [bookmarked, setBookmarked] = useState<Set<number>>(new Set());
+  const paused = useRef(false);
+
+  useEffect(() => {
+    const iv = setInterval(() => {
+      if (!paused.current) setActiveIdx(i => (i + 1) % HERO_CARDS.length);
+    }, 4000);
+    return () => clearInterval(iv);
+  }, []);
+
+  return (
+    <div
+      className="hidden lg:block select-none"
+      style={{ position: "relative", width: "336px", height: "296px" }}
+      onMouseEnter={() => { paused.current = true; }}
+      onMouseLeave={() => { paused.current = false; }}
+    >
+      {HERO_CARDS.map((card, cardIdx) => {
+        const pos = (cardIdx - activeIdx + HERO_CARDS.length) % HERO_CARDS.length;
+        const isFront = pos === 0;
+        const tint = DECK_TINTS[card.type];
+        const sp = DECK_STACK[pos];
+        const isBookmarked = bookmarked.has(cardIdx);
+
+        return (
+          <div
+            key={cardIdx}
+            className="absolute rounded-[17px] overflow-hidden"
+            style={{
+              top: 0, left: 0,
+              width: "300px", height: "260px",
+              transform: `translate(${sp.tx}px, ${sp.ty}px) scale(${sp.scale})`,
+              transformOrigin: "top left",
+              zIndex: 4 - pos,
+              opacity: sp.opacity,
+              background: tint.bg,
+              border: `1px solid ${tint.border}`,
+              boxShadow: isFront
+                ? "0 20px 48px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08)"
+                : "0 4px 12px rgba(0,0,0,0.06)",
+              transition: "transform 0.38s cubic-bezier(0.23,1,0.32,1), opacity 0.35s ease, box-shadow 0.35s ease",
+              cursor: isFront ? "pointer" : "default",
+            }}
+            onClick={isFront ? () => setActiveIdx(i => (i + 1) % HERO_CARDS.length) : undefined}
+          >
+            {/* Left strip */}
+            <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.strip }} />
+
+            {/* Score badge */}
+            <div
+              className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
+              style={{
+                borderRadius: "17px 0 10px 0",
+                minWidth: "52px",
+                background: tint.badgeBg,
+                borderBottom: `1px solid ${tint.badgeBorderColor}`,
+                borderRight: `1px solid ${tint.badgeBorderColor}`,
+              }}
+            >
+              <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
+              <span className="font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
+                {card.score}
+              </span>
+            </div>
+
+            {/* Bookmark — front card only */}
+            {isFront && (
+              <div
+                className="absolute top-1.5 right-1.5 z-[5]"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setBookmarked(prev => {
+                    const next = new Set(prev);
+                    next.has(cardIdx) ? next.delete(cardIdx) : next.add(cardIdx);
+                    return next;
+                  });
+                }}
+              >
+                <button
+                  className={`w-9 h-9 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                    isBookmarked
+                      ? "text-emerald-600 bg-emerald-500/10"
+                      : "text-zinc-400 hover:text-emerald-600 hover:bg-emerald-500/10"
+                  }`}
+                >
+                  {isBookmarked
+                    ? <BookmarkCheck className="w-4 h-4" />
+                    : <Bookmark className="w-4 h-4" />
+                  }
+                </button>
+              </div>
+            )}
+
+            {/* Content */}
+            <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[56px] pb-3">
+              <h3 className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
+                {card.name}
+              </h3>
+              <p className="text-[11px] text-zinc-500 leading-snug mt-1.5 line-clamp-1">
+                {card.indication}
+              </p>
+              <div className="flex flex-wrap gap-1.5 mt-2.5">
+                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-sm border-l-2 ${deckStagePillClass(card.stage)}`}>
+                  {card.stage}
+                </span>
+                <span className="text-[10px] font-medium px-2 py-0.5 rounded-sm text-zinc-500 bg-transparent border border-zinc-300/50">
+                  {card.modality}
+                </span>
+                {card.rising && (
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-emerald-50 border border-emerald-200/70 text-emerald-600">
+                    <TrendingUp className="w-2.5 h-2.5" /> Rising
+                  </span>
+                )}
+                {card.sources >= 2 && (
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-sm bg-sky-50 border border-sky-200/70 text-sky-600">
+                    {card.sources} sources
+                  </span>
+                )}
+              </div>
+              <div className="flex-1" />
+              <p className="flex items-center gap-1.5 text-[11px] text-zinc-700 font-medium leading-snug mb-2 line-clamp-1">
+                <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
+                {card.institution}
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  className="flex-1 h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 text-white"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Asset Dossier
+                </button>
+                <button
+                  className="h-7 px-2 rounded-md text-[10px] font-medium text-zinc-400"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* ─────────────────────────── Main Landing ────────────────────── */
 
 const STATS = [
-  { value: "350+", label: "Tech Transfer Offices" },
-  { value: "33K+", label: "Scored Assets" },
-  { value: "40+",  label: "Live Data Sources" },
-  { value: "4",    label: "Integrated Portals" },
+  { value: "350+",  label: "Tech Transfer Offices" },
+  { value: "33K+",  label: "Scored Assets" },
+  { value: "40+",   label: "Live Data Sources" },
+  { value: "Daily", label: "Updates & Alerts", raw: true },
 ];
 
 export default function Landing() {
@@ -682,6 +916,9 @@ export default function Landing() {
   if (!loading && session && role) return null;
 
   function handleLogin() { navigate("/login"); }
+  function handleGetStarted() {
+    document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -692,63 +929,42 @@ export default function Landing() {
         <section className="relative overflow-hidden" style={{ minHeight: "92vh" }}>
           <RadarBackground />
 
-          <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center"
-            style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem" }}>
+          <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6"
+            style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem", display: "flex", flexDirection: "column", justifyContent: "center" }}>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl text-foreground dark:text-white">
-              Where Biotech Research
-              <br />
-              <span className="text-primary">
-                Meets Industry Intelligence.
-              </span>
-            </h1>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center mb-16 sm:mb-20">
+              {/* Left: copy */}
+              <div className="flex flex-col items-start text-left">
+                <h1 className="mb-6 font-black tracking-tight leading-[1.0] text-primary"
+                  style={{ fontSize: "clamp(2.25rem, 5vw, 4.5rem)", textWrap: "balance" } as React.CSSProperties}>
+                  The next biotech breakthrough is already published.
+                </h1>
+                <p className="text-base sm:text-lg max-w-lg leading-relaxed mb-10 text-foreground/65 dark:text-white/65">
+                  Published assets sit undiscovered for months. Being first isn't about searching harder. Real-time institutional monitoring means the right assets find you first.
+                </p>
+                <Button
+                  size="lg"
+                  onClick={handleGetStarted}
+                  data-testid="button-cta-get-started"
+                  className="h-11 px-8 font-semibold gap-2"
+                >
+                  Get started
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
 
-            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10 text-foreground/70 dark:text-white/75">
-              EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by EDEN, the intelligence engine that reads the science so you don't have to.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
-              <Button
-                size="lg"
-                onClick={handleLogin}
-                data-testid="button-cta-industry"
-                className="w-full sm:w-auto h-11 px-7 font-semibold gap-2"
-              >
-                <Building2 className="w-4 h-4" />
-                For Industry
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Button>
-              <MovingBorder
-                onClick={handleLogin}
-                data-testid="button-cta-research"
-                containerClassName="w-full sm:w-auto"
-                className="glass-btn-inner w-full sm:w-auto"
-              >
-                <FlaskConical className="w-4 h-4" />
-                For Researchers
-                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-              </MovingBorder>
-              <MovingBorder
-                onClick={handleLogin}
-                data-testid="button-cta-discovery"
-                containerClassName="w-full sm:w-auto"
-                className="glass-btn-inner w-full sm:w-auto"
-              >
-                <Lightbulb className="w-4 h-4" />
-                For Discovery
-                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-              </MovingBorder>
+              {/* Right: interactive card deck */}
+              <HeroCardDeck />
             </div>
-
 
             <div
               ref={statsRef}
-              className="reveal-section mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10"
+              className="reveal-section grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10"
             >
               {STATS.map((s) => (
                 <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
                   <div className="text-2xl sm:text-3xl font-bold text-primary mb-1">
-                    <NumberTicker value={s.value} />
+                    {(s as { raw?: boolean }).raw ? s.value : <NumberTicker value={s.value} />}
                   </div>
                   <div className="text-xs tracking-wide font-semibold text-foreground/70 dark:text-white/75">{s.label}</div>
                 </div>
@@ -806,15 +1022,17 @@ export default function Landing() {
         </section>
 
         {/* ── Toggle value section ── */}
-        <PortalToggle onLogin={handleLogin} />
+        <div id="explore">
+          <PortalToggle onLogin={handleLogin} />
+        </div>
 
         {/* ── EdenMarket section ── */}
         <section className="border-t border-border bg-background">
           <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
               <div className="space-y-5">
-                <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] pl-3 border-l-2"
-                  style={{ color: "hsl(var(--portal-market) / 0.7)", borderLeftColor: "hsl(var(--portal-market) / 0.4)" }}
+                <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
+                  style={{ color: "hsl(var(--portal-market) / 0.7)" }}
                 >
                   EdenMarket
                 </p>

@@ -428,7 +428,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
             <Handshake className="w-4 h-4" style={{ color: INDIGO }} />
             <p className="text-xs font-semibold uppercase tracking-widest text-foreground">Success fees: paid only when a deal closes</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="divide-y" style={{ borderColor: "hsl(var(--portal-market) / 0.15)" }}>
             {[
               { label: "Pre-clinical", desc: "On a closed pre-clinical license or option" },
               { label: "Clinical", desc: "On a closed Phase I–II asset transaction" },
@@ -436,12 +436,11 @@ function EdenMarketTier({ session }: { session: Session | null }) {
             ].map((t) => (
               <div
                 key={t.label}
-                className="rounded-lg p-4"
-                style={{ background: "hsl(var(--background))", border: "1px solid hsl(var(--portal-market) / 0.15)" }}
+                className="flex items-baseline justify-between gap-6 py-3"
                 data-testid={`edenmarket-fee-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
               >
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: INDIGO }}>{t.label}</p>
-                <p className="text-[11px] text-muted-foreground leading-snug">{t.desc}</p>
+                <span className="text-xs font-bold shrink-0" style={{ color: INDIGO }}>{t.label}</span>
+                <span className="text-[11px] text-muted-foreground text-right leading-snug">{t.desc}</span>
               </div>
             ))}
           </div>
@@ -818,7 +817,7 @@ export default function Pricing() {
             <div className="flex-1 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "hsl(var(--portal-scout) / 0.2)" }}>
-                  <Building2 className="w-4.5 h-4.5" style={{ color: "hsl(142 65% 60%)" }} />
+                  <Building2 className="w-[18px] h-[18px]" style={{ color: "hsl(142 65% 60%)" }} />
                 </div>
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "hsl(142 65% 60%)" }}>Enterprise</p>
@@ -864,52 +863,45 @@ export default function Pricing() {
           <p className="text-sm text-muted-foreground">
             EdenDiscovery and EdenLab are free for researchers, concept creators, and academic teams. No payment required.
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="divide-y divide-border">
             {FREE_TIERS.map((tier) => (
               <div
                 key={tier.id}
-                className="rounded-xl flex flex-col overflow-hidden"
-                style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+                className="flex items-start gap-5 py-5"
                 data-testid={`pricing-card-${tier.id}`}
               >
-                <div className="px-5 py-4 bg-card border-b border-border">
-                  <div className="flex items-center gap-3 mb-1">
-                    <div
-                      className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
-                      style={{ background: tier.colorDim }}
-                    >
-                      <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
-                      <span className="text-lg font-black" style={{ color: tier.color }}>Free</span>
-                    </div>
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                  style={{ background: tier.colorDim }}
+                >
+                  <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2.5 mb-1.5">
+                    <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
+                    <span className="text-sm font-black" style={{ color: tier.color }}>Free</span>
+                    <span className="text-xs text-muted-foreground">{tier.tagline}</span>
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">{tier.tagline}</p>
-                </div>
-                <div className="flex-1 px-5 py-4 bg-card space-y-2.5">
-                  {tier.features.map((f) => (
-                    <div key={f} className="flex items-start gap-2.5">
-                      <div
-                        className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                        style={{ background: tier.colorDim }}
-                      >
-                        <Check className="w-2.5 h-2.5" style={{ color: tier.color }} />
+                  <div className="flex flex-wrap gap-x-5 gap-y-1">
+                    {tier.features.map((f) => (
+                      <div key={f} className="flex items-center gap-1.5">
+                        <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
+                        <span className="text-xs text-foreground">{f}</span>
                       </div>
-                      <span className="text-xs text-foreground leading-relaxed">{f}</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-                <div className="px-5 py-4 bg-card border-t border-border">
+                <div className="flex-shrink-0 pt-0.5">
                   <Link href="/login">
                     <Button
-                      className="w-full font-semibold h-9 text-sm"
                       variant="outline"
-                      style={{ borderColor: tier.colorDim, color: tier.color }}
+                      size="sm"
+                      className="h-8 px-4 text-xs font-semibold gap-1.5 whitespace-nowrap"
+                      style={{ borderColor: tier.borderColor, color: tier.color }}
                       data-testid={`button-pricing-${tier.id}`}
                     >
-                      Get started free
-                      <ArrowRight className="w-3.5 h-3.5 ml-1" />
+                      Get started
+                      <ArrowRight className="w-3 h-3" />
                     </Button>
                   </Link>
                 </div>
