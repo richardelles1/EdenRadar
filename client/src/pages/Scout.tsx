@@ -432,9 +432,9 @@ export default function Scout() {
   const [trialStatusFilter, setTrialStatusFilter] = useState<"all" | "recruiting" | "active" | "completed">(() => ssGet("scout-trial-status", "all"));
   const [trialSponsorSearch, setTrialSponsorSearch] = useState<string>(() => ssGet("scout-trial-sponsor", ""));
 
-  const PATENT_PAGE_SIZE = 25;
-  const RESEARCH_PAGE_SIZE = 30;
-  const TRIAL_PAGE_SIZE = 25;
+  const PATENT_PAGE_SIZE = 40;
+  const RESEARCH_PAGE_SIZE = 50;
+  const TRIAL_PAGE_SIZE = 40;
   const [shownPatentCount, setShownPatentCount] = useState(PATENT_PAGE_SIZE);
   const [shownResearchCount, setShownResearchCount] = useState(RESEARCH_PAGE_SIZE);
   const [shownTrialCount, setShownTrialCount] = useState(TRIAL_PAGE_SIZE);
@@ -693,7 +693,7 @@ export default function Scout() {
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json", ...(await getAuthHeaders()) },
-          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 20, buyerProfile }),
+          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 50, buyerProfile }),
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
