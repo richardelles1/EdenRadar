@@ -52,7 +52,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ institutions, modalities });
     } catch (err: any) {
       console.error("[dispatch/filter-options] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load filter options" });
+      return res.status(500).json({ error: "Failed to load filter options" });
     }
   });
 
@@ -70,7 +70,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ assets, windowHours });
     } catch (err: any) {
       console.error("[new-discoveries] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load discoveries" });
+      return res.status(500).json({ error: "Failed to load discoveries" });
     }
   });
 
@@ -100,7 +100,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ html, resolvedSubject });
     } catch (err: any) {
       console.error("[dispatch/preview] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Preview failed" });
+      return res.status(500).json({ error: "Preview failed" });
     }
   });
 
@@ -210,7 +210,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ ok: true, sentTo: toList.length, isTest });
     } catch (err: any) {
       console.error("[dispatch/send] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Dispatch failed" });
+      return res.status(500).json({ error: "Dispatch failed" });
     }
   });
 
@@ -224,7 +224,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ ok: true, message: "Alert email evaluation started in background." });
     } catch (err: any) {
       console.error("[admin/alerts/trigger-emails] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to trigger alert emails" });
+      return res.status(500).json({ error: "Failed to trigger alert emails" });
     }
   });
 
@@ -236,7 +236,7 @@ export function registerDispatchRoutes(app: Express): void {
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       const subscribers = (data?.users ?? [])
         .filter((u) => u.user_metadata?.subscribedToDigest === true)
         .map((u) => ({
@@ -247,7 +247,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ subscribers });
     } catch (err: any) {
       console.error("[dispatch/subscribers] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load subscribers" });
+      return res.status(500).json({ error: "Failed to load subscribers" });
     }
   });
 
@@ -277,7 +277,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ subscribers, windowHours });
     } catch (err: any) {
       console.error("[dispatch/subscriber-matches]", err);
-      return res.status(500).json({ error: err.message ?? "Failed" });
+      return res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -290,7 +290,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ assets, windowHours });
     } catch (err: any) {
       console.error("[dispatch/suggestions]", err);
-      return res.status(500).json({ error: err.message ?? "Failed" });
+      return res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -300,7 +300,7 @@ export function registerDispatchRoutes(app: Express): void {
       return res.json({ history });
     } catch (err: any) {
       console.error("[dispatch/history] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load history" });
+      return res.status(500).json({ error: "Failed to load history" });
     }
   });
 

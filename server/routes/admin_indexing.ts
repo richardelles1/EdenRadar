@@ -14,7 +14,7 @@ export function registerIndexingRoutes(app: Express): void {
       const cards = await storage.getPublishedDiscoveryCards();
       res.json({ cards });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -23,7 +23,7 @@ export function registerIndexingRoutes(app: Express): void {
       await storage.wipeAllAssets();
       res.json({ ok: true, message: "All ingested assets wiped" });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -54,7 +54,7 @@ export function registerIndexingRoutes(app: Express): void {
         },
       });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -88,7 +88,7 @@ export function registerIndexingRoutes(app: Express): void {
       ]);
       return res.json({ ok: true, reassignedSavedAssets: savedAssetCount, reassignedPipelineLists: pipelineListCount, targetUserId, targetOrgId: targetOrgId ?? null });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -111,7 +111,7 @@ export function registerIndexingRoutes(app: Express): void {
       ]);
       return res.json({ ok: true, deletedSavedAssets: savedAssetCount, deletedPipelineLists: pipelineListCount });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -139,7 +139,7 @@ export function registerIndexingRoutes(app: Express): void {
       );
       res.json({ ok: true, institution, deleted });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -155,7 +155,7 @@ export function registerIndexingRoutes(app: Express): void {
       const quarantined = await storage.quarantineNewStagingRows(institution.trim());
       res.json({ ok: true, institution: institution.trim(), quarantined });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -166,7 +166,7 @@ export function registerIndexingRoutes(app: Express): void {
       const summary = await storage.getQuarantineSummary();
       res.json({ summary });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -179,7 +179,7 @@ export function registerIndexingRoutes(app: Express): void {
       const quarantined = await storage.quarantineNewStagingRows(institution.trim());
       res.json({ ok: true, institution: institution.trim(), quarantined });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -192,7 +192,7 @@ export function registerIndexingRoutes(app: Express): void {
       const released = await storage.releaseQuarantinedRows(institution.trim());
       res.json({ ok: true, institution: institution.trim(), released });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -205,7 +205,7 @@ export function registerIndexingRoutes(app: Express): void {
       const discarded = await storage.discardQuarantinedRows(institution.trim());
       res.json({ ok: true, institution: institution.trim(), discarded });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -214,7 +214,7 @@ export function registerIndexingRoutes(app: Express): void {
       const items = await storage.getReviewQueue();
       res.json({ items });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -226,7 +226,7 @@ export function registerIndexingRoutes(app: Express): void {
       await storage.resolveReviewItem(id, note ?? "");
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -236,7 +236,7 @@ export function registerIndexingRoutes(app: Express): void {
       const cards = await storage.getAllDiscoveryCardsForAdmin();
       res.json({ cards });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -253,7 +253,7 @@ export function registerIndexingRoutes(app: Express): void {
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -263,7 +263,7 @@ export function registerIndexingRoutes(app: Express): void {
       const areas = await getTherapyAreas();
       res.json({ areas });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -273,7 +273,7 @@ export function registerIndexingRoutes(app: Express): void {
       const signals = await getConvergenceSignals();
       res.json({ signals });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -284,7 +284,7 @@ export function registerIndexingRoutes(app: Express): void {
       await detectConvergenceSignals();
       res.json({ ok: true, message: "Taxonomy and convergence refreshed" });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -349,7 +349,7 @@ export function registerIndexingRoutes(app: Express): void {
 
       res.json({ assets, institutions, total, window: windowParam, hasMore: offset + assets.length < total });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -418,7 +418,7 @@ export function registerIndexingRoutes(app: Express): void {
 
       res.json({ assets: results, hasMore: results.length === limit });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -431,7 +431,7 @@ export function registerIndexingRoutes(app: Express): void {
         .limit(200);
       res.json({ concepts: results });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -464,7 +464,7 @@ export function registerIndexingRoutes(app: Express): void {
         );
       res.json({ projects: results });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -546,7 +546,7 @@ export function registerIndexingRoutes(app: Express): void {
 
       res.json({ ok: true, id: projectId, adminStatus, publishToIndustry });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -569,7 +569,7 @@ export function registerIndexingRoutes(app: Express): void {
       ]);
       res.json({ ...data, indexedCounts });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch scan matrix" });
+      res.status(500).json({ error: "Failed to fetch scan matrix" });
     }
   });
 
@@ -727,7 +727,7 @@ export function registerIndexingRoutes(app: Express): void {
         scheduler,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch collector health" });
+      res.status(500).json({ error: "Failed to fetch collector health" });
     }
   });
 
@@ -739,7 +739,7 @@ export function registerIndexingRoutes(app: Express): void {
       const totalInstitutions = groups.length;
       res.json({ totalUnindexed, totalPendingEnrichment, totalInstitutions, groups });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch indexing queue" });
+      res.status(500).json({ error: "Failed to fetch indexing queue" });
     }
   });
 
@@ -750,7 +750,7 @@ export function registerIndexingRoutes(app: Express): void {
       const result = await storage.pushNewArrivals(institution);
       res.json({ updated: result.updated, message: `Marked ${result.updated} asset${result.updated !== 1 ? "s" : ""} as enrichment done` });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Push failed" });
+      res.status(500).json({ error: "Push failed" });
     }
   });
 
@@ -762,7 +762,7 @@ export function registerIndexingRoutes(app: Express): void {
       if (!found) return res.status(404).json({ error: "Item not found" });
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Reject failed" });
+      res.status(500).json({ error: "Reject failed" });
     }
   });
 

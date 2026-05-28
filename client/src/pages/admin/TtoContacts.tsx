@@ -95,10 +95,6 @@ export function TtoContactsTab({ pw }: { pw: string }) {
     setProgress([]);
     setDone(null);
 
-    const es = new EventSource("/api/admin/tto-contacts/scrape-get");
-    // SSE not ideal for POST — use fetch streaming instead
-    es.close();
-
     const ctrl = new AbortController();
     abortRef.current = () => ctrl.abort();
 
@@ -254,12 +250,18 @@ export function TtoContactsTab({ pw }: { pw: string }) {
 
         {/* Done summary */}
         {done && !scraping && (
-          <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-700 dark:text-emerald-400">
-            Done — scanned {done.total} institutions, inserted {done.inserted} new contacts.
-            {(done.errors?.length ?? 0) > 0 && (
-              <span className="text-amber-600 dark:text-amber-400 ml-2">{done.errors!.length} errors.</span>
-            )}
-          </div>
+          done.error ? (
+            <div className="mt-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-xs text-red-700 dark:text-red-400">
+              Scrape failed: {done.error}
+            </div>
+          ) : (
+            <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-xs text-emerald-700 dark:text-emerald-400">
+              Done — scanned {done.total} institutions, inserted {done.inserted} new contacts.
+              {(done.errors?.length ?? 0) > 0 && (
+                <span className="text-amber-600 dark:text-amber-400 ml-2">{done.errors!.length} errors.</span>
+              )}
+            </div>
+          )
         )}
       </div>
 

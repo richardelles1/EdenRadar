@@ -106,7 +106,7 @@ export function registerPipelineRoutes(app: Express): void {
       return res.json({ lists: pipelineSummaryLists, totalPipelines, totalSavedAssets, institutionCount, typeCounts });
     } catch (err: any) {
       console.error("[pipeline-lists/summary] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load pipeline summary" });
+      return res.status(500).json({ error: "Failed to load pipeline summary" });
     }
   });
 
@@ -379,7 +379,7 @@ STRATEGIC ASSESSMENT
         })),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch saved assets" });
+      res.status(500).json({ error: "Failed to fetch saved assets" });
     }
   });
 
@@ -411,7 +411,7 @@ STRATEGIC ASSESSMENT
       }
       res.status(201).json({ asset });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to save asset" });
+      res.status(500).json({ error: "Failed to save asset" });
     }
   });
 
@@ -459,7 +459,7 @@ STRATEGIC ASSESSMENT
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       res.json({ asset });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to update pipeline" });
+      res.status(500).json({ error: "Failed to update pipeline" });
     }
   });
 
@@ -557,7 +557,7 @@ STRATEGIC ASSESSMENT
       const notes = await storage.getAssetNotes(id, limit, offset);
       res.json({ notes, limit, offset });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch notes" });
+      res.status(500).json({ error: "Failed to fetch notes" });
     }
   });
 
@@ -639,7 +639,7 @@ STRATEGIC ASSESSMENT
       }
       res.status(204).send();
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to delete asset" });
+      res.status(500).json({ error: "Failed to delete asset" });
     }
   });
 
@@ -659,7 +659,7 @@ STRATEGIC ASSESSMENT
       }
       res.json({ activities, memberCount });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch team activity" });
+      res.status(500).json({ error: "Failed to fetch team activity" });
     }
   });
 
@@ -688,7 +688,7 @@ STRATEGIC ASSESSMENT
       }
       res.json({ pipelines: lists.map((l) => ({ ...l, assetCount: counts[l.id] ?? 0 })), uncategorisedCount: uncategorised });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch pipelines" });
+      res.status(500).json({ error: "Failed to fetch pipelines" });
     }
   });
 
@@ -706,7 +706,7 @@ STRATEGIC ASSESSMENT
       res.status(201).json({ pipeline: { ...list, assetCount: 0 } });
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: err.message ?? "Invalid pipeline name" });
-      res.status(500).json({ error: err.message ?? "Failed to create pipeline" });
+      res.status(500).json({ error: "Failed to create pipeline" });
     }
   });
 
@@ -725,7 +725,7 @@ STRATEGIC ASSESSMENT
       res.json({ pipeline: list });
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: err.message ?? "Invalid pipeline name" });
-      res.status(500).json({ error: err.message ?? "Failed to update pipeline" });
+      res.status(500).json({ error: "Failed to update pipeline" });
     }
   });
 
@@ -741,7 +741,7 @@ STRATEGIC ASSESSMENT
       await storage.deletePipelineList(id);
       res.status(204).send();
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to delete pipeline" });
+      res.status(500).json({ error: "Failed to delete pipeline" });
     }
   });
 

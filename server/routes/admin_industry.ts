@@ -19,7 +19,7 @@ export function registerIndustryRoutes(app: Express): void {
         .orderBy(desc(researchProjects.lastEditedAt));
       res.json({ projects });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -33,7 +33,7 @@ export function registerIndustryRoutes(app: Express): void {
         .limit(500);
       res.json(rows.map((r) => r.institution).filter(Boolean));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -206,7 +206,7 @@ export function registerIndustryRoutes(app: Express): void {
         since: since.toISOString(),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

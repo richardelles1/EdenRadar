@@ -20,6 +20,11 @@ import { sendTrialEndingEmail } from "./email";
 import { checkAndSendAlerts } from "./lib/alertMailer";
 import { syncRegulatoryDesignations, getRegulatoryDesignationCount } from "./lib/regulatorySync";
 import pg from "pg";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
+import pinoHttp from "pino-http";
+import { logger } from "./lib/logger";
+import { randomUUID } from "crypto";
 
 const app = express();
 const httpServer = createServer(app);
@@ -28,10 +33,12 @@ const httpServer = createServer(app);
 // pg's connection pool emits 'error' on terminated connections. Without a handler
 // this kills the process. We log and continue — the pool recovers automatically.
 process.on("uncaughtException", (err: Error) => {
-  console.error(`[fatal] Uncaught exception (process kept alive): ${err.message}`);
+  logger.fatal({ err }, "Uncaught exception (process kept alive)");
+  if (process.env.SENTRY_DSN) Sentry.captureException(err);
 });
 process.on("unhandledRejection", (reason: unknown) => {
-  console.error(`[fatal] Unhandled rejection (process kept alive):`, reason);
+  logger.fatal({ reason }, "Unhandled rejection (process kept alive)");
+  if (process.env.SENTRY_DSN) Sentry.captureException(reason);
 });
 
 // On shutdown (deploy or SIGINT), always write schedulerRunning=false to DB so
@@ -59,6 +66,10 @@ async function onShutdownSignal(signal: string) {
 }
 process.on("SIGTERM", async () => { await onShutdownSignal("SIGTERM"); });
 process.on("SIGINT", async () => { await onShutdownSignal("SIGINT"); });
+// Warn loudly at startup if auth env vars are absent.
+for (const v of ["VITE_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"]) {
+  if (!process.env[v]) console.warn(`[startup] WARNING: ${v} is not set -- auth and admin operations will fail`);
+}
 
 declare module "http" {
   interface IncomingMessage {
@@ -81,6 +92,21 @@ app.use(express.urlencoded({ extended: false }));
 // Allow: any *.replit.app subdomain, localhost/127.0.0.1 for dev, and an
 // optional ALLOWED_ORIGIN env var for a custom production domain.
 // Explicitly rejects all other origins rather than reflecting them.
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+
+// Stamp every request with a unique ID for log correlation.
+app.use(pinoHttp({
+  logger,
+  genReqId: () => randomUUID(),
+  customLogLevel: (_req: any, res: any, _err: any) => res.statusCode >= 500 ? "error" : res.statusCode >= 400 ? "warn" : "info",
+  serializers: { req: (req: any) => ({ method: req.method, url: req.url, id: req.id }) },
+}));
+// Mirror the request ID into the response so clients can correlate with server logs.
+app.use((req: Request, res: Response, next: NextFunction) => {
+  if (req.id) res.setHeader("X-Request-Id", String(req.id));
+  next();
+});
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -113,31 +139,6 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
-
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
-
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
-
-      log(logLine);
-    }
-  });
-
-  next();
-});
 
 // ── Ensure sync_staging indexes exist ────────────────────────────────────────
 // CREATE INDEX IF NOT EXISTS is idempotent — no-op when the index already exists.
@@ -1502,6 +1503,19 @@ async function ensureAlertMatchIndex() {
   }
 }
 
+// ── Ensure org_members auth-path indexes exist ────────────────────────────────
+// org_members is hit on every authenticated request (user_id → org lookup and
+// org_id → member list). Without these indexes each lookup is a sequential scan.
+async function ensureOrgMemberIndexes() {
+  try {
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS org_members_user_id_idx ON org_members (user_id)`);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS org_members_org_id_idx ON org_members (org_id)`);
+    log("[startup] org_members auth-path indexes ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] org_members index check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure organizations.trial_reminder_sent_at column exists ─────────────────
 async function addTrialReminderSentAtColumn() {
   try {
@@ -1893,6 +1907,18 @@ async function migrateAssetStatusValues() {
   }
 
   // ── Register API routes ───────────────────────────────────────────────────
+  app.get("/api/health", async (_req, res) => {
+    try {
+      await pool.query("SELECT 1");
+      res.json({ status: "ok", db: "ok", uptime: Math.floor(process.uptime()) });
+    } catch {
+      res.status(503).json({ status: "degraded", db: "error", uptime: Math.floor(process.uptime()) });
+    }
+  });
+
+  app.use("/api/", rateLimit({ windowMs: 60_000, max: 200, standardHeaders: true, legacyHeaders: false, skip: (req) => req.path.startsWith("/api/admin"), message: { error: "Too many requests." } }));
+  app.use("/api/tto-contacts/bulk", rateLimit({ windowMs: 60_000, max: 10, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests to this endpoint." } }));
+  app.use("/api/auth", rateLimit({ windowMs: 15 * 60_000, max: 20, standardHeaders: true, legacyHeaders: false, message: { error: "Too many requests to this endpoint." } }));
   await registerRoutes(httpServer, app);
 
   // ── Federated search source health summary ───────────────────────────────
@@ -1911,9 +1937,9 @@ async function migrateAssetStatusValues() {
   // ── Error handler middleware ──────────────────────────────────────────────
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    const message = status < 500 ? (err.message || "Bad Request") : "Internal Server Error";
 
-    console.error("Internal Server Error:", err);
+    logger.error({ err, status }, "Express error handler");
 
     if (process.env.SENTRY_DSN && status >= 500) {
       Sentry.captureException(err);
@@ -1978,6 +2004,8 @@ async function migrateAssetStatusValues() {
       scheduleRelevanceMetricsAggregation();
       // ── Index for alertMailer's matchAssetsForAlert query ──────────────
       ensureAlertMatchIndex().catch(() => {});
+      // ── org_members auth-path indexes ─────────────────────────────────────
+      ensureOrgMemberIndexes().catch(() => {});
       // ── Scout FTS + trigram indexes (Task #760) ─────────────────────────
       ensureScoutSearchIndexes().catch(() => {});
       // ── Backfill industry_profiles for Supabase digest subscribers ───────

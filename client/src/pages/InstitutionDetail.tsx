@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
 import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
-import { TtoContactCard } from "@/components/TtoContactCard";
+
 import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
@@ -709,7 +709,6 @@ export default function InstitutionDetail() {
                   </Button>
                 </a>
               )}
-              <TtoContactCard institution={inst?.name ?? slugTitle} compact className="max-w-xs" />
             </div>
           </div>
         </div>

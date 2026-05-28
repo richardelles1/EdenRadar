@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import { captureException } from "../lib/sentry";
 import { spawn } from "child_process";
 import { db } from "../db";
 import { sql } from "drizzle-orm";
@@ -73,7 +74,7 @@ export function registerFillRoutes(app: Express): void {
       const stats = await storage.getEnrichmentStats();
       res.json(stats);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch enrichment stats" });
+      res.status(500).json({ error: "Failed to fetch enrichment stats" });
     }
   });
 
@@ -84,7 +85,7 @@ export function registerFillRoutes(app: Express): void {
       const institutions = await storage.getEnrichmentInstitutionQueues();
       res.json({ institutions });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institution queues" });
+      res.status(500).json({ error: "Failed to fetch institution queues" });
     }
   });
 
@@ -96,7 +97,7 @@ export function registerFillRoutes(app: Express): void {
       const history = await storage.getInstitutionQualityHistory(institution);
       res.json(history);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch quality history" });
+      res.status(500).json({ error: "Failed to fetch quality history" });
     }
   });
 
@@ -108,7 +109,7 @@ export function registerFillRoutes(app: Express): void {
       await storage.captureInstitutionQualitySnapshot(institution);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to capture snapshot" });
+      res.status(500).json({ error: "Failed to capture snapshot" });
     }
   });
 
@@ -120,7 +121,7 @@ export function registerFillRoutes(app: Express): void {
       const quality = await storage.getInstitutionEnrichmentQuality(institution);
       res.json(quality);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institution quality" });
+      res.status(500).json({ error: "Failed to fetch institution quality" });
     }
   });
 
@@ -132,7 +133,7 @@ export function registerFillRoutes(app: Express): void {
       const result = await estimateRuleBasedFill();
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to estimate" });
+      res.status(500).json({ error: "Failed to estimate" });
     }
   });
 
@@ -146,7 +147,7 @@ export function registerFillRoutes(app: Express): void {
         result: state.status === "done" ? state.result ?? null : null,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -172,7 +173,7 @@ export function registerFillRoutes(app: Express): void {
 
       res.json({ started: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to start rule-based fill" });
+      res.status(500).json({ error: "Failed to start rule-based fill" });
     }
   });
 
@@ -187,7 +188,7 @@ export function registerFillRoutes(app: Express): void {
         res.json({ stopped: false, reason: "No running process found" });
       }
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -264,7 +265,8 @@ export function registerFillRoutes(app: Express): void {
         rescoreLastSummary = { updated, total: rescoreJob.processed, durationMs, completedAt: new Date().toISOString() };
         console.log(`[rescore] Done – ${updated}/${rescoreJob.processed} updated in ${Math.round(durationMs / 1000)}s`);
       } catch (err: any) {
-        console.error("[rescore] Error:", err.message);
+        captureException(err);
+      console.error("[rescore] Error:", err.message);
       } finally {
         rescoreJob.finish({});
       }
@@ -310,7 +312,8 @@ export function registerFillRoutes(app: Express): void {
           );
           modalityFillJob.finish({});
         } catch (err: any) {
-          console.error("[modality-fill] Async error:", err);
+          captureException(err);
+      console.error("[modality-fill] Async error:", err);
           modalityFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client.release();
@@ -319,7 +322,7 @@ export function registerFillRoutes(app: Express): void {
       })();
     } catch (err: any) {
       modalityFillJob.fail(err.message);
-      res.status(500).json({ error: err.message ?? "Failed to start modality fill" });
+      res.status(500).json({ error: "Failed to start modality fill" });
     }
   });
 
@@ -399,7 +402,7 @@ export function registerFillRoutes(app: Express): void {
         await dbPool.end();
       }
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to count" });
+      res.status(500).json({ error: "Failed to count" });
     }
   });
 
@@ -408,7 +411,7 @@ export function registerFillRoutes(app: Express): void {
       const stats = await storage.getDealComparablesStats();
       res.json(stats);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch stats" });
+      res.status(500).json({ error: "Failed to fetch stats" });
     }
   });
 
@@ -446,7 +449,8 @@ export function registerFillRoutes(app: Express): void {
           );
           biologyFillJob.finish({});
         } catch (err: any) {
-          console.error("[biology-fill] Async error:", err);
+          captureException(err);
+      console.error("[biology-fill] Async error:", err);
           biologyFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client.release();
@@ -457,7 +461,7 @@ export function registerFillRoutes(app: Express): void {
     } catch (err: any) {
       biologyFillJob.fail(err.message);
       biologyFillAbortController = null;
-      res.status(500).json({ error: err.message ?? "Failed to start biology fill" });
+      res.status(500).json({ error: "Failed to start biology fill" });
     }
   });
 
@@ -502,7 +506,7 @@ export function registerFillRoutes(app: Express): void {
         await dbPool.end();
       }
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to count MOA fill queue" });
+      res.status(500).json({ error: "Failed to count MOA fill queue" });
     }
   });
 
@@ -564,7 +568,8 @@ export function registerFillRoutes(app: Express): void {
           );
           moaFillJob.finish({});
         } catch (err: any) {
-          console.error("[moa-fill] Pass 2 async error:", err);
+          captureException(err);
+      console.error("[moa-fill] Pass 2 async error:", err);
           moaFillJob.fail(err?.message ?? "Unknown error");
         } finally {
           client2.release();
@@ -576,7 +581,7 @@ export function registerFillRoutes(app: Express): void {
       moaFillJob.fail(err.message);
       moaFillAbortController = null;
       if (!res.headersSent) {
-        res.status(500).json({ error: err.message ?? "Failed to start MOA fill" });
+        res.status(500).json({ error: "Failed to start MOA fill" });
       }
     }
   });
@@ -589,7 +594,7 @@ export function registerFillRoutes(app: Express): void {
       const count = await resetDataSparseFlags();
       res.json({ cleared: count });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to clear sparse flags" });
+      res.status(500).json({ error: "Failed to clear sparse flags" });
     }
   });
 
@@ -605,7 +610,7 @@ export function registerFillRoutes(app: Express): void {
         noApiKey: !process.env.USPTO_ODP_API_KEY,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -615,7 +620,7 @@ export function registerFillRoutes(app: Express): void {
       const count = await countMissingIpType();
       res.json({ missingIpTypeCount: count });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to count" });
+      res.status(500).json({ error: "Failed to count" });
     }
   });
 
@@ -633,7 +638,7 @@ export function registerFillRoutes(app: Express): void {
       }
       res.json({ validation });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Spot check failed" });
+      res.status(500).json({ error: "Spot check failed" });
     }
   });
 
@@ -659,12 +664,13 @@ export function registerFillRoutes(app: Express): void {
           console.log(`[uspto-xref] Done: matched=${summary.matched} unmatched=${summary.unmatched} skipped=${summary.skipped}`);
         }).catch((err) => {
           usptoJob.fail(err?.message ?? "Unknown error");
-          console.error("[uspto-xref] Failed:", err);
+          captureException(err);
+      console.error("[uspto-xref] Failed:", err);
         });
       });
     } catch (err: any) {
       usptoJob.fail(err.message);
-      res.status(500).json({ error: err.message ?? "Failed to start USPTO cross-reference" });
+      res.status(500).json({ error: "Failed to start USPTO cross-reference" });
     }
   });
 
@@ -673,7 +679,7 @@ export function registerFillRoutes(app: Express): void {
       usptoJob.requestStop();
       res.json({ stopped: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 }

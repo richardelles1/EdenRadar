@@ -1133,7 +1133,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json(scoutResponse);
     } catch (err: unknown) {
       console.error("[scout/search] Error:", err);
-      const message = err instanceof Error ? err.message : "Search failed";
+      const message = "Search failed";
       return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: message });
     }
   });
@@ -1266,7 +1266,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json({ assets });
     } catch (err: any) {
       console.error("[scout/recently-added] Error:", err);
-      return res.status(500).json({ assets: [], error: err.message });
+      return res.status(500).json({ assets: [], error: "Internal server error" });
     }
   });
 
@@ -1280,7 +1280,7 @@ export function registerSearchRoutes(app: Express): void {
         .orderBy(desc(scoutSavedSearches.createdAt));
       res.json(rows);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1305,7 +1305,7 @@ export function registerSearchRoutes(app: Express): void {
       }
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: err.errors });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1321,7 +1321,7 @@ export function registerSearchRoutes(app: Express): void {
       if (!row) return res.status(404).json({ error: "Not found" });
       res.json(row);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1333,7 +1333,7 @@ export function registerSearchRoutes(app: Express): void {
         .where(and(eq(scoutSavedSearches.id, id), eq(scoutSavedSearches.userId, userId)));
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1358,7 +1358,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json({ institutions, total });
     } catch (err: any) {
       console.error("[scout/institutions] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load institutions" });
+      return res.status(500).json({ error: "Failed to load institutions" });
     }
   });
 
@@ -1378,7 +1378,7 @@ export function registerSearchRoutes(app: Express): void {
       });
     } catch (err: any) {
       console.error("[scout/stats] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load stats" });
+      return res.status(500).json({ error: "Failed to load stats" });
     }
   });
 
@@ -1410,7 +1410,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json({ stats, recentSearches, recentAssets, institutionCount, assetsInReview, weeklyNew });
     } catch (err: any) {
       console.error("[dashboard/stats] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load stats" });
+      return res.status(500).json({ error: "Failed to load stats" });
     }
   });
 
@@ -1436,7 +1436,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json({ areas });
     } catch (err: any) {
       console.error("[dashboard/top-therapy-areas] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load therapy areas" });
+      return res.status(500).json({ error: "Failed to load therapy areas" });
     }
   });
 
@@ -1668,7 +1668,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json(result);
     } catch (err: any) {
       console.error("[intelligence/market] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load market intelligence" });
+      return res.status(500).json({ error: "Failed to load market intelligence" });
     }
   });
 
@@ -1800,7 +1800,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json({ assets, total });
     } catch (err: any) {
       console.error("[intelligence/assets] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load assets" });
+      return res.status(500).json({ error: "Failed to load assets" });
     }
   });
 
@@ -2106,7 +2106,7 @@ export function registerSearchRoutes(app: Express): void {
       logAppEvent("intelligence_fetched", { institution: enrichedRecord?.institution ?? null });
     } catch (err: any) {
       console.error("[intelligence] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
+      return res.status(500).json({ error: "Failed to fetch intelligence" });
     }
   });
 
@@ -2221,7 +2221,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.end(pdf);
     } catch (err: any) {
       console.error("[export-pdf] Error:", err);
-      return res.status(500).json({ error: err.message ?? "PDF generation failed" });
+      return res.status(500).json({ error: "PDF generation failed" });
     }
   });
 
@@ -2301,7 +2301,7 @@ export function registerSearchRoutes(app: Express): void {
       return res.json(result);
     } catch (err: any) {
       console.error("[regulatory] Manual sync error:", err?.message);
-      return res.status(500).json({ error: err.message ?? "Sync failed" });
+      return res.status(500).json({ error: "Sync failed" });
     }
   });
 
@@ -2352,7 +2352,7 @@ export function registerSearchRoutes(app: Express): void {
         })),
       });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message ?? "Failed to fetch signal events" });
+      return res.status(500).json({ error: "Failed to fetch signal events" });
     }
   });
 
@@ -2395,7 +2395,7 @@ export function registerSearchRoutes(app: Express): void {
 
       res.json({ listing: listing ?? null });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2405,7 +2405,7 @@ export function registerSearchRoutes(app: Express): void {
       const history = await storage.getSearchHistory(30, userId ?? undefined);
       res.json({ history });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch history" });
+      res.status(500).json({ error: "Failed to fetch history" });
     }
   });
 

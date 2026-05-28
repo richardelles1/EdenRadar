@@ -16,7 +16,8 @@ export function registerInstitutionRoutes(app: Express): void {
       const counts = await storage.getInstitutionAssetCounts();
       res.json(counts);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch counts" });
+      console.error("[institutions/counts]", err);
+      res.status(500).json({ error: "Failed to fetch counts" });
     }
   });
 
@@ -104,7 +105,8 @@ export function registerInstitutionRoutes(app: Express): void {
       cacheSet(INSTITUTIONS_CACHE_KEY, payload, INSTITUTIONS_CACHE_TTL_MS);
       res.json(payload);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institutions" });
+      console.error("[institutions/list]", err);
+      res.status(500).json({ error: "Failed to fetch institutions" });
     }
   });
 
@@ -189,7 +191,8 @@ export function registerInstitutionRoutes(app: Express): void {
         totalAssets: totalRow[0]?.cnt ?? 0,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institution profile" });
+      console.error("[institutions/profile]", err);
+      res.status(500).json({ error: "Failed to fetch institution profile" });
     }
   });
 
@@ -201,6 +204,10 @@ export function registerInstitutionRoutes(app: Express): void {
       // The display name is the metadata overlay if present, else the first
       // scraper/ingested name, else a titleized slug.
       const slug = req.params.slug;
+      const rawLimit = Math.min(500, Math.max(1, parseInt(String(req.query.limit ?? "200"), 10) || 200));
+      const rawPage = Math.max(0, parseInt(String(req.query.page ?? "0"), 10) || 0);
+      const offset = rawPage * rawLimit;
+
       const [meta, counts] = await Promise.all([
         db
           .select({ name: institutionMetadata.name })
@@ -229,11 +236,12 @@ export function registerInstitutionRoutes(app: Express): void {
         slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
       const assets = aliasNames.size
-        ? await storage.getIngestedAssetsByInstitutionNames(Array.from(aliasNames))
-        : await storage.getIngestedAssetsByInstitution(displayName);
-      res.json({ assets, institution: displayName });
+        ? await storage.getIngestedAssetsByInstitutionNames(Array.from(aliasNames), rawLimit, offset)
+        : await storage.getIngestedAssetsByInstitution(displayName, rawLimit, offset);
+      res.json({ assets, institution: displayName, page: rawPage, limit: rawLimit, hasMore: assets.length === rawLimit });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch assets" });
+      console.error("[institutions/assets]", err);
+      res.status(500).json({ error: "Failed to fetch assets" });
     }
   });
 }

@@ -13,7 +13,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, ExternalLink, FileText, Key,
   Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
-  Beaker, Tag, FlaskConical, Lightbulb, Mail, Share2, Copy, Check,
+  Beaker, Tag, FlaskConical, Lightbulb, Share2, Copy, Check,
   Eye, EyeOff, Loader2, Lock, ShoppingBag, TrendingUp, Zap,
   ChevronDown, ChevronUp, RefreshCw, ArrowRight,
 } from "lucide-react";
@@ -31,7 +31,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { ScoredAsset, DossierPayload, SignalEvent } from "@/lib/types";
-import { TtoContactCard } from "@/components/TtoContactCard";
+
 
 const STAGE_COLORS: Record<string, string> = {
   discovery:  "bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30",
@@ -753,26 +753,6 @@ export default function AssetDossier() {
                 <InfoRow label="Inventors" value={enriched!.inventors!.join(", ")}
                   provenanceLabel={getProvenanceLabel("inventors", enriched?.enrichmentSources, enriched?.humanVerified)} />
               )}
-              {enriched?.contactEmail && (
-                <div className="flex flex-col gap-0.5">
-                  <span className="text-[11px] uppercase tracking-wide font-semibold text-foreground/50">Contact</span>
-                  <a
-                    href={`mailto:${enriched.contactEmail}`}
-                    className="text-sm font-medium text-primary hover:underline inline-flex items-center gap-1"
-                    data-testid="contact-email-link"
-                  >
-                    <Mail className="w-3 h-3" />
-                    {enriched.contactEmail}
-                  </a>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TTO Contacts */}
-          {asset.institution && (
-            <div className="mt-4 pt-3 border-t border-primary/10">
-              <TtoContactCard institution={asset.institution} />
             </div>
           )}
 

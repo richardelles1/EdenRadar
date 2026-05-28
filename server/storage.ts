@@ -205,8 +205,8 @@ export interface IStorage {
   addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
   markAsIrrelevant(id: number): Promise<void>;
-  getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
-  getIngestedAssetsByInstitutionNames(names: string[]): Promise<IngestedAsset[]>;
+  getIngestedAssetsByInstitution(institution: string, limit?: number, offset?: number): Promise<IngestedAsset[]>;
+  getIngestedAssetsByInstitutionNames(names: string[], limit?: number, offset?: number): Promise<IngestedAsset[]>;
   getIngestedAssetsByIds(ids: number[]): Promise<RetrievedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
   getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]>;
@@ -1323,7 +1323,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getReviewQueue(): Promise<any[]> {
-    return db.select().from(reviewQueue).where(eq(reviewQueue.status, "pending")).orderBy(desc(reviewQueue.createdAt));
+    return db.select().from(reviewQueue).where(eq(reviewQueue.status, "pending")).orderBy(desc(reviewQueue.createdAt)).limit(500);
   }
 
   async resolveReviewItem(id: number, note: string): Promise<void> {
@@ -1338,7 +1338,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(ingestedAssets).where(eq(ingestedAssets.id, id));
   }
 
-  async getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]> {
+  async getIngestedAssetsByInstitution(institution: string, limit = 500, offset = 0): Promise<IngestedAsset[]> {
     return db
       .select()
       .from(ingestedAssets)
@@ -1346,13 +1346,15 @@ export class DatabaseStorage implements IStorage {
         ilike(ingestedAssets.institution, `%${institution}%`),
         sql`(${ingestedAssets.sourceType} = 'tech_transfer' OR (${ingestedAssets.sourceType} = 'researcher' AND ${ingestedAssets.relevant} = true))`,
       ))
-      .orderBy(desc(ingestedAssets.lastSeenAt));
+      .orderBy(desc(ingestedAssets.lastSeenAt))
+      .limit(limit)
+      .offset(offset);
   }
 
   // Used by /api/institutions/:slug/assets so a slug that aggregates several
   // raw institution spellings (e.g. "MIT" + "Massachusetts Institute of
   // Technology") returns assets from every alias, not just the canonical name.
-  async getIngestedAssetsByInstitutionNames(names: string[]): Promise<IngestedAsset[]> {
+  async getIngestedAssetsByInstitutionNames(names: string[], limit = 500, offset = 0): Promise<IngestedAsset[]> {
     if (!names.length) return [];
     return db
       .select()
@@ -1361,7 +1363,9 @@ export class DatabaseStorage implements IStorage {
         inArray(ingestedAssets.institution, names),
         sql`(${ingestedAssets.sourceType} = 'tech_transfer' OR (${ingestedAssets.sourceType} = 'researcher' AND ${ingestedAssets.relevant} = true))`,
       ))
-      .orderBy(desc(ingestedAssets.lastSeenAt));
+      .orderBy(desc(ingestedAssets.lastSeenAt))
+      .limit(limit)
+      .offset(offset);
   }
 
   async getIngestedAssetsByIds(ids: number[]): Promise<RetrievedAsset[]> {
@@ -1527,7 +1531,7 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .groupBy(ingestedAssets.institution);
 
-    const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
+    const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt)).limit(200);
 
     return { institutions: instRows, syncSessions: sessions };
   }

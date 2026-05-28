@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { storage, type EnrichFilter } from "../storage";
 import { computeCompletenessScore } from "../lib/pipeline/contentHash";
 import { classifyAsset } from "../lib/pipeline/classifyAsset";
+import { captureException } from "../lib/sentry";
+import { didEnrichImprove } from "../lib/pipeline/didEnrichImprove";
 
 const enrichJob = new Job();
 registerJob("enrichment:assets", enrichJob);
@@ -101,15 +103,7 @@ async function runEnrichmentWorker(
         const outTok = classification.tokenUsage?.outputTokens ?? 0;
         enrichTokenCost += (inTok * MINI_INPUT_PER_M + outTok * MINI_OUTPUT_PER_M) / 1_000_000;
 
-        const isKnown = (v: string | null | undefined) =>
-          v != null && v !== "" && v !== "unknown";
-        const improved =
-          ((!asset.target || asset.target === "unknown") && isKnown(classification.target)) ||
-          ((!asset.modality || asset.modality === "unknown") && isKnown(classification.modality)) ||
-          ((!asset.indication || asset.indication === "unknown") && isKnown(classification.indication)) ||
-          (asset.developmentStage === "unknown" && isKnown(classification.developmentStage));
-
-        if (improved) enrichImproved++;
+        if (didEnrichImprove(asset, classification)) enrichImproved++;
       } catch (e) {
         console.error(`[enrichment] failed for asset ${asset.id}:`, e);
         // Hard GPT failure: still count toward the attempt cap so the asset is not retried
@@ -167,6 +161,7 @@ async function runEnrichmentWorker(
   } catch (e: any) {
     await storage.updateEnrichmentJob(jobId, { status: "error", processed: enrichJob.processed, improved: enrichImproved, completedAt: new Date() });
     console.error("[enrichment] Job failed:", e);
+    captureException(e);
   } finally {
     enrichJob.finish({});
   }
@@ -222,7 +217,7 @@ export function registerAssetRoutes(app: Express): void {
       await storage.setHumanVerified(assetId, field, verified);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -233,7 +228,7 @@ export function registerAssetRoutes(app: Express): void {
       const queue = await storage.getMiniEnrichQueue();
       res.json(queue);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -247,7 +242,7 @@ export function registerAssetRoutes(app: Express): void {
       console.log(`[enrichment] mini-backfill: seeded mini_enrich_attempts=1 for ${updated} assets`);
       res.json({ updated });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Backfill failed" });
+      res.status(500).json({ error: "Backfill failed" });
     }
   });
 
@@ -302,7 +297,7 @@ export function registerAssetRoutes(app: Express): void {
         institutions: institutionResult.rows,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch dataset quality" });
+      res.status(500).json({ error: "Failed to fetch dataset quality" });
     }
   });
 
@@ -329,7 +324,7 @@ export function registerAssetRoutes(app: Express): void {
 
       res.json(result.rows);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch class breakdown" });
+      res.status(500).json({ error: "Failed to fetch class breakdown" });
     }
   });
 
@@ -359,7 +354,7 @@ export function registerAssetRoutes(app: Express): void {
 
       res.json({ dim, rows: rows.rows });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch dimensions" });
+      res.status(500).json({ error: "Failed to fetch dimensions" });
     }
   });
 
@@ -398,7 +393,7 @@ export function registerAssetRoutes(app: Express): void {
       }
       res.end();
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Export failed" });
+      res.status(500).json({ error: "Export failed" });
     }
   });
 
@@ -473,7 +468,7 @@ export function registerAssetRoutes(app: Express): void {
         saveRate: saveRate.rows,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch confidence distribution" });
+      res.status(500).json({ error: "Failed to fetch confidence distribution" });
     }
   });
 
@@ -492,7 +487,7 @@ export function registerAssetRoutes(app: Express): void {
 
       res.json({ assets: rows.rows });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institution assets" });
+      res.status(500).json({ error: "Failed to fetch institution assets" });
     }
   });
 
@@ -523,7 +518,7 @@ export function registerAssetRoutes(app: Express): void {
       }
       res.end();
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Export failed" });
+      res.status(500).json({ error: "Export failed" });
     }
   });
 
@@ -560,7 +555,7 @@ export function registerAssetRoutes(app: Express): void {
       }
       res.end();
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Export failed" });
+      res.status(500).json({ error: "Export failed" });
     }
   });
 
@@ -587,7 +582,7 @@ export function registerAssetRoutes(app: Express): void {
         stages: (stageRows.rows as { value: string }[]).map(r => r.value),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed" });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
@@ -629,7 +624,7 @@ export function registerAssetRoutes(app: Express): void {
         assets: rowsRes.rows,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch assets" });
+      res.status(500).json({ error: "Failed to fetch assets" });
     }
   });
 
@@ -669,7 +664,7 @@ export function registerAssetRoutes(app: Express): void {
       }
       res.end();
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Export failed" });
+      res.status(500).json({ error: "Export failed" });
     }
   });
 
@@ -745,7 +740,7 @@ export function registerAssetRoutes(app: Express): void {
 
       res.json({ asset: updatedRes.rows[0] });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Patch failed" });
+      res.status(500).json({ error: "Patch failed" });
     }
   });
 
@@ -794,7 +789,7 @@ export function registerAssetRoutes(app: Express): void {
       await storage.resetLatestEnrichmentJob();
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to reset enrichment status" });
+      res.status(500).json({ error: "Failed to reset enrichment status" });
     }
   });
 
@@ -831,7 +826,7 @@ export function registerAssetRoutes(app: Express): void {
         enriched24hCount: row.enriched_24h_count ?? 0,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch enrichment health" });
+      res.status(500).json({ error: "Failed to fetch enrichment health" });
     }
   });
 
@@ -847,7 +842,7 @@ export function registerAssetRoutes(app: Express): void {
       const result = await storage.getFilteredEnrichCount(filters);
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to count enrichment queue" });
+      res.status(500).json({ error: "Failed to count enrichment queue" });
     }
   });
 
@@ -858,7 +853,7 @@ export function registerAssetRoutes(app: Express): void {
       const jobs = await storage.getEnrichmentJobsForInstitution(institution);
       res.json(jobs);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch enrichment jobs" });
+      res.status(500).json({ error: "Failed to fetch enrichment jobs" });
     }
   });
 
@@ -926,7 +921,7 @@ export function registerAssetRoutes(app: Express): void {
 
       runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll, filters);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
+      res.status(500).json({ error: "Failed to start enrichment" });
     }
   });
 

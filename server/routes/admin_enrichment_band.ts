@@ -1,4 +1,5 @@
 import fs from "fs";
+import { captureException } from "../lib/sentry";
 import path from "path";
 import type { Express } from "express";
 import { z } from "zod";
@@ -116,7 +117,7 @@ export function registerBandRoutes(app: Express): void {
       ).toFixed(2));
       res.json({ thick, thin, tooThin, total, estCost, exhausted });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -239,7 +240,7 @@ export function registerBandRoutes(app: Express): void {
       });
     } catch (err: any) {
       classifyJob.fail(err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -256,7 +257,7 @@ export function registerBandRoutes(app: Express): void {
       `);
       res.json({ total: result.rows[0].total ?? 0 });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -283,7 +284,7 @@ export function registerBandRoutes(app: Express): void {
       res.json({ filled, beforeCount });
     } catch (err: any) {
       console.error("[tto-licensing-fill] Error:", err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -303,7 +304,7 @@ export function registerBandRoutes(app: Express): void {
       `);
       res.json({ total: parseInt((result.rows[0] as any).total, 10) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -350,7 +351,7 @@ export function registerBandRoutes(app: Express): void {
       res.json({ filled });
     } catch (err: any) {
       console.error("[modality-fill] Error:", err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -380,7 +381,7 @@ export function registerBandRoutes(app: Express): void {
         llmEligible: Number(row?.llm_eligible ?? 0),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -715,7 +716,7 @@ Do not respond with anything else.`;
       });
       res.json({ bands });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1027,11 +1028,12 @@ Do not respond with anything else.`;
         console.log(`[band-enrich] ${band} ${gapFill ? "(gap-fill)" : "(full)"} complete: ${result.succeeded} succeeded, ${result.failed} failed, $${costUsd.toFixed(4)}, score ${bandAvgScoreBefore} → ${avgScoreAfter}, movements: ${JSON.stringify(bandMovements)}`);
       }).catch((e) => {
         bandJob.fail(e?.message ?? "Unknown error");
-        console.error("[band-enrich] failed:", e);
+        captureException(e);
+      console.error("[band-enrich] failed:", e);
       });
     } catch (err: any) {
       bandJob.fail(err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

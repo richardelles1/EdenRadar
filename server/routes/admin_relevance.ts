@@ -25,7 +25,7 @@ export function registerRelevanceRoutes(app: Express): void {
       invalidateRelevanceEvalCache();
       res.json({ ...result, stats });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to build holdout" });
+      res.status(500).json({ error: "Failed to build holdout" });
     }
   });
 
@@ -301,7 +301,7 @@ export function registerRelevanceRoutes(app: Express): void {
       const lastAt = await storage.getLastRelevanceMetricsAt();
       res.json({ rows, lastComputedAt: lastAt });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch metrics" });
+      res.status(500).json({ error: "Failed to fetch metrics" });
     }
   });
 
@@ -310,7 +310,7 @@ export function registerRelevanceRoutes(app: Express): void {
       const result = await storage.computeRelevanceMetrics(7);
       res.json({ inserted: result.inserted });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to refresh metrics" });
+      res.status(500).json({ error: "Failed to refresh metrics" });
     }
   });
 
