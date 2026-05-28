@@ -111,29 +111,32 @@ const DEMO_ASSETS_ADC: AssetCardData[] = [
 const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "institution",
-    label: "Institution Search",
+    label: "BD Team",
     messages: [
-      { role: "eden", text: "I'm EDEN, EdenRadar's intelligence engine. I monitor 350+ tech transfer offices in real time, enriching every asset with target, modality, stage, and readiness data. What are you looking for?", delay: 400 },
-      { role: "user", text: "Show me top-ranked oncology assets from Johns Hopkins.", delay: 1800 },
-      { role: "eden", text: "Johns Hopkins Technology Ventures has one of the strongest oncology portfolios in the index, spanning cell therapy, small molecule, antibody, and gene therapy modalities. Top 3 by EDEN readiness score:", assetCards: DEMO_ASSETS_JHU, delay: 3200 },
+      { role: "user", text: "We're building out our oncology pipeline. What's moving at Hopkins right now?", delay: 600 },
+      { role: "eden", text: "14 JHU programs indexed this week. Worth flagging: the HDAC inhibitor's target overlaps with Pfizer's Seagen territory, so deprioritize that one. The CAR-T scores 91, and the PI has two prior top-10 pharma licensings at this stage. I'd start there.", assetCards: DEMO_ASSETS_JHU, delay: 2200 },
+      { role: "user", text: "Has the PI published recently? We want a partner, not just a licensor.", delay: 5500 },
+      { role: "eden", text: "Three publications in the last 18 months, including Nature Medicine. Prior records show two industry co-development arrangements, not straight licenses. The TTO has flagged this program as partnership-preferred.", delay: 7800 },
     ],
   },
   {
     id: "cross-tto",
-    label: "Cross-TTO Query",
+    label: "Startup Founder",
     messages: [
-      { role: "eden", text: "EDEN can query across all 350+ indexed institutions simultaneously. I'll rank results by readiness score regardless of which institution they come from. What are you searching for?", delay: 400 },
-      { role: "user", text: "Find preclinical CNS assets with EDEN scores above 85 — any institution.", delay: 1800 },
-      { role: "eden", text: "Searching 350+ institutions for CNS and neurodegenerative disease assets at preclinical or IND-enabling stage, filtered by EDEN readiness above 85. Strong cluster across Mayo Clinic, Stanford, and Columbia. Top results:", assetCards: DEMO_ASSETS_CNS, delay: 3200 },
+      { role: "user", text: "Series A CNS startup here. What preclinical assets score above 85, any institution?", delay: 600 },
+      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo alpha-synuclein leads at 93, PI has two prior preclinical-stage licensings on record. Worth flagging: Columbia ALS scores 89 with an exclusivity window closing in 60 days and no LOIs on file. That one may be worth a call this week.", assetCards: DEMO_ASSETS_CNS, delay: 2200 },
+      { role: "user", text: "Columbia ALS, can you tell me more about the PI's openness to co-development?", delay: 5500 },
+      { role: "eden", text: "Four papers in 24 months, two prior industry arrangements, both structured as co-development rather than straight license. Described in TTO materials as partnership-open, not just for out-license.", delay: 7800 },
     ],
   },
   {
     id: "modality",
-    label: "Modality Filter",
+    label: "Pharma BD",
     messages: [
-      { role: "eden", text: "EDEN can filter by modality, stage, therapeutic area, institution type, or any combination across the full index. What modality or platform type are you focused on?", delay: 400 },
-      { role: "user", text: "What ADC platforms are available at IND-enabling or preclinical stage?", delay: 1800 },
-      { role: "eden", text: "Filtering for antibody-drug conjugate platforms at IND-enabling through preclinical stage. Prioritizing assets with validated linker-payload chemistry and preclinical proof-of-concept data. Top results by EDEN readiness:", assetCards: DEMO_ASSETS_ADC, delay: 3200 },
+      { role: "user", text: "ADC platforms available for exclusive license at IND-enabling stage.", delay: 600 },
+      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry carries a separate patent, but MIT OTT has structured both assets under a single exclusive term sheet. I've removed the three programs that only offered non-exclusive terms.", assetCards: DEMO_ASSETS_ADC, delay: 2200 },
+      { role: "user", text: "Is MIT OTT typically flexible on deal structure, or do they hold firm on terms?", delay: 5500 },
+      { role: "eden", text: "Track record shows milestone-based structures with room on the upfront. They bundle related patents when the same PI holds both, which applies here. Royalty range on comparable deals runs 2 to 4 percent net sales.", delay: 7800 },
     ],
   },
 ];
@@ -141,24 +144,29 @@ const DEMO_SCENARIOS: DemoScenario[] = [
 function DemoAssetCard({ asset }: { asset: AssetCardData }) {
   return (
     <div
-      className="rounded-lg p-3.5 flex flex-col gap-2"
+      className="flex items-center gap-3 rounded-xl px-3.5"
       style={{
+        height: 52,
         background: "hsl(var(--background))",
-        border: `1px solid ${asset.color.replace(")", " / 0.3)")}`,
-        borderTop: `2px solid ${asset.color}`,
+        border: "1px solid hsl(var(--border))",
+        boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
       }}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold text-foreground leading-snug flex-1">{asset.title}</p>
-        <span className="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: asset.color.replace(")", " / 0.15)"), color: asset.color }}>
-          {asset.score}
-        </span>
+      <div
+        className="flex-shrink-0 flex items-center justify-center rounded-lg font-bold tabular-nums"
+        style={{
+          width: 34, height: 34, fontSize: 12,
+          background: asset.color.replace(")", " / 0.12)"),
+          color: asset.color,
+        }}
+      >
+        {asset.score}
       </div>
-      <div className="flex flex-wrap gap-1.5 text-[10px]">
-        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{asset.institution}</span>
-        <span className="px-2 py-0.5 rounded-full font-medium" style={{ background: asset.color.replace(")", " / 0.12)"), color: asset.color }}>{asset.area}</span>
-        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{asset.stage}</span>
-        <span className="px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">{asset.modality}</span>
+      <div className="flex-1 min-w-0 text-left">
+        <p className="text-[11px] font-semibold text-foreground leading-snug truncate">{asset.title}</p>
+        <p className="text-[10px] text-muted-foreground mt-0.5">
+          {asset.institution} · {asset.stage} · {asset.modality}
+        </p>
       </div>
     </div>
   );
@@ -199,17 +207,21 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
 
   const visibleMessages = messages.slice(0, visibleCount);
   return (
-    <div className="flex flex-col rounded-2xl overflow-hidden border border-border" style={{ background: "hsl(var(--card))", height: 420 }}>
+    <div className="flex flex-col rounded-2xl overflow-hidden border border-border text-left" style={{ background: "hsl(var(--card))", height: 500, boxShadow: "0 8px 32px rgba(0,0,0,0.10), 0 2px 8px rgba(0,0,0,0.06)" }}>
       <div className="flex items-center gap-3 px-5 py-3.5 border-b border-border bg-primary/[0.06]">
         <EdenAvatar size={28} />
-        <div>
-          <p className="text-sm font-semibold text-foreground leading-tight">EDEN</p>
-          <p className="text-[10px] text-primary">Research Intelligence</p>
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-[11px] font-bold leading-tight text-foreground">
+            <span className="text-primary">E</span>ngine for{" "}
+            <span className="text-primary">D</span>iscovery &amp;{" "}
+            <span className="text-primary">E</span>merging{" "}
+            <span className="text-primary">N</span>etworks
+          </p>
+          <p className="text-[9px] mt-0.5 text-muted-foreground font-medium">350+ institutions · 14,847 assets indexed</p>
         </div>
-        <div className="ml-auto flex gap-1" aria-hidden="true">
-          {["bg-red-500/50", "bg-amber-500/50", "bg-green-500/50"].map((c, i) => (
-            <div key={i} className={`w-2.5 h-2.5 rounded-full ${c}`} />
-          ))}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <span className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: "eden-pulse 2s ease-in-out infinite" }} />
+          <span className="text-[10px] font-semibold text-primary">Active</span>
         </div>
       </div>
       <div ref={chatRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4" style={{ scrollBehavior: "smooth" }}>
@@ -219,9 +231,10 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
             <div className="flex flex-col gap-2 max-w-[85%]">
               <div
                 className="px-3.5 py-2.5 rounded-xl text-xs leading-relaxed"
+                className={msg.role === "eden" ? "bg-primary/[0.07]" : ""}
                 style={msg.role === "user"
-                  ? { background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", borderRadius: "14px 14px 4px 14px" }
-                  : { background: "hsl(var(--muted))", color: "hsl(var(--foreground))", borderRadius: "14px 14px 14px 4px" }}
+                  ? { background: "hsl(33 85% 44%)", color: "white", borderRadius: "14px 14px 4px 14px", boxShadow: "0 3px 10px hsl(33 85% 44% / 0.25)" }
+                  : { color: "hsl(var(--foreground))", borderRadius: "4px 14px 14px 14px" }}
               >
                 {msg.text}
               </div>
@@ -236,7 +249,7 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
         {visibleCount < messages.length && (
           <div className="flex gap-2.5">
             <EdenAvatar size={26} isThinking />
-            <div className="px-3.5 py-2.5 rounded-xl text-xs" style={{ background: "hsl(var(--muted))", color: "hsl(var(--muted-foreground))", borderRadius: "14px 14px 14px 4px" }}>
+            <div className="px-3.5 py-2.5 rounded-xl text-xs bg-primary/[0.07]" style={{ color: "hsl(var(--muted-foreground))", borderRadius: "14px 14px 14px 4px" }}>
               <span className="flex gap-1 items-center">
                 {[0, 0.25, 0.5].map((delay, i) => (
                   <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: `eden-pulse 1.2s ease-in-out ${delay}s infinite` }} />
@@ -245,12 +258,6 @@ function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
             </div>
           </div>
         )}
-      </div>
-      <div className="px-4 py-3 border-t border-border">
-        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-muted opacity-50">
-          <span className="text-xs text-muted-foreground flex-1">Ask EDEN anything about biotech assets...</span>
-          <ArrowRight className="w-3.5 h-3.5 text-muted-foreground" />
-        </div>
       </div>
     </div>
   );
@@ -308,13 +315,13 @@ const INTEL_CHANNELS = [
     icon: Search,
     tag: "Active",
     title: "Natural language search",
-    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
+    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography. EDEN returns ranked, enriched results in seconds.",
   },
   {
     icon: Sparkles,
     tag: "Conversational",
     title: "EDEN intelligence engine",
-    desc: "Go deeper with EDEN. Ask follow-up questions, request a full patent landscape, compare competing programs, or synthesize literature across 40+ live sources — all cited, all in plain English.",
+    desc: "Go deeper with EDEN. Ask follow-up questions, request a full patent landscape, compare competing programs, or synthesize literature across 40+ live sources. All cited, all in plain English.",
   },
   {
     icon: Bell,
@@ -410,7 +417,7 @@ export default function HowItWorks() {
               How intelligence reaches your team
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              Four distinct channels — each designed so the right asset finds you, whether you're actively searching or not.
+              Four distinct channels, each designed so the right asset finds you, whether you're actively searching or not.
             </p>
           </div>
           <div className="divide-y divide-border/60">
@@ -448,10 +455,10 @@ export default function HowItWorks() {
           <div className="text-center mb-10">
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">EDEN in Action</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-              Three ways to search with EDEN
+              EDEN doesn't return results. It answers.
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto mb-8">
-              Every query runs across all 350+ indexed institutions simultaneously. Select a scenario to watch EDEN respond in real time.
+              Ask about competitive conflicts, PI track records, deal structure, or exclusivity windows. EDEN has already done the reading. Select a persona to see it in conversation.
             </p>
 
             <AnimatedTabs
