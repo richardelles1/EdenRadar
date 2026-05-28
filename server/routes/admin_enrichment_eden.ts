@@ -78,7 +78,7 @@ export function registerEdenRoutes(app: Express): void {
         live: edenJob.running ? { processed: edenJob.processed, total: edenJob.total } : null,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -127,7 +127,7 @@ export function registerEdenRoutes(app: Express): void {
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -253,7 +253,7 @@ export function registerEdenRoutes(app: Express): void {
       });
     } catch (err: any) {
       edenJob.fail(err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -288,7 +288,7 @@ export function registerEdenRoutes(app: Express): void {
         lastSummary: edenLastSummary,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -331,7 +331,7 @@ export function registerEdenRoutes(app: Express): void {
       });
     } catch (err: any) {
       embedJob.fail(err.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

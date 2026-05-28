@@ -32,7 +32,7 @@ export function registerConceptRoutes(app: Express): void {
         .where(eq(conceptCards.status, "active"));
       res.json({ concepts: results.map(stripPrivateFields), page, limit, total: count, totalPages: Math.ceil(count / limit) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -46,7 +46,7 @@ export function registerConceptRoutes(app: Express): void {
         .orderBy(desc(conceptCards.createdAt));
       res.json({ concepts: results.map(stripPrivateFields) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -61,7 +61,7 @@ export function registerConceptRoutes(app: Express): void {
       if (!concept) return res.status(404).json({ error: "Concept not found" });
       res.json({ concept: stripPrivateFields(concept) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -177,7 +177,7 @@ export function registerConceptRoutes(app: Express): void {
 
       res.status(204).end();
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -250,7 +250,7 @@ export function registerConceptRoutes(app: Express): void {
       }
       res.json(responsePayload);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -271,7 +271,7 @@ export function registerConceptRoutes(app: Express): void {
         types: rows.map(r => r.type),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -295,7 +295,7 @@ export function registerConceptRoutes(app: Express): void {
       }
       res.json({ interests: rows, byType: grouped, total: rows.length });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -324,7 +324,7 @@ export function registerConceptRoutes(app: Express): void {
         submitterEmail: concept.submitterEmail,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -452,7 +452,7 @@ export function registerConceptRoutes(app: Express): void {
       cacheSet(landscapeCacheKey, landscapeResp, 2 * 60 * 60 * 1000);
       res.json(landscapeResp);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -485,7 +485,7 @@ export function registerConceptRoutes(app: Express): void {
       const [updated] = await db.update(conceptCards).set(updates).where(eq(conceptCards.id, id)).returning();
       res.json({ concept: stripPrivateFields(updated) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -508,7 +508,7 @@ export function registerConceptRoutes(app: Express): void {
         .returning();
       res.json({ concept: stripPrivateFields(updated) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -522,7 +522,7 @@ export function registerConceptRoutes(app: Express): void {
         .orderBy(conceptCards.escalationRequestedAt);
       res.json({ concepts });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -553,7 +553,7 @@ export function registerConceptRoutes(app: Express): void {
 
       res.json({ projectId: project.id });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -573,7 +573,7 @@ export function registerConceptRoutes(app: Express): void {
 
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -588,7 +588,7 @@ export function registerConceptRoutes(app: Express): void {
         .limit(50);
       res.json({ needs });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -605,7 +605,7 @@ export function registerConceptRoutes(app: Express): void {
         .returning();
       res.json({ need });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

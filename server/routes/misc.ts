@@ -518,7 +518,7 @@ export function registerMiscRoutes(app: Express): void {
       const result = await runWeeklyRecapJob({ force: true });
       res.json({ ok: true, ...result });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? "Regenerate failed" });
+      res.status(500).json({ error: "Regenerate failed" });
     }
   });
 
@@ -692,7 +692,7 @@ export function registerMiscRoutes(app: Express): void {
         payload: { reason },
       });
       res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: String(e) }); }
+    } catch (e) { res.status(500).json({ error: "Internal server error" }); }
   });
 
   app.post("/api/admin/api-management/keys/:id/restore", requireAdmin, async (req, res) => {
@@ -706,7 +706,7 @@ export function registerMiscRoutes(app: Express): void {
         action: "key_restored", keyId: id, actorType: "admin", actorId: adminEmail,
       });
       res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: String(e) }); }
+    } catch (e) { res.status(500).json({ error: "Internal server error" }); }
   });
 
   app.post("/api/admin/api-management/keys/:id/revoke", requireAdmin, async (req, res) => {
@@ -720,7 +720,7 @@ export function registerMiscRoutes(app: Express): void {
         action: "key_revoked", keyId: id, actorType: "admin", actorId: adminEmail,
       });
       res.json({ ok: true });
-    } catch (e) { res.status(500).json({ error: String(e) }); }
+    } catch (e) { res.status(500).json({ error: "Internal server error" }); }
   });
 
   app.get("/api/admin/api-management/orgs", requireAdmin, async (req, res) => {

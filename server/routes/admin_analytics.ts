@@ -135,7 +135,7 @@ export function registerAnalyticsRoutes(app: Express): void {
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -151,7 +151,7 @@ export function registerAnalyticsRoutes(app: Express): void {
       const rows = result.rows as { query: string; count: string }[];
       res.json({ searches: rows.map(r => ({ query: r.query, count: Number(r.count) })) });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -160,7 +160,7 @@ export function registerAnalyticsRoutes(app: Express): void {
       const events = await getAdminEvents(200);
       res.json({ events });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
