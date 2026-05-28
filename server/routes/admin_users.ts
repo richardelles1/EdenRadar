@@ -23,7 +23,7 @@ export function registerUserRoutes(app: Express): void {
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       const authUsers = data?.users ?? [];
       const userIds = authUsers.map((u) => u.id);
       const profileRows = userIds.length > 0
@@ -63,7 +63,7 @@ export function registerUserRoutes(app: Express): void {
       });
       res.json({ users });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -82,14 +82,14 @@ export function registerUserRoutes(app: Express): void {
       const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
         user_metadata: { ...existing.user.user_metadata, contactEmail: contactEmail || null },
       });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       res.json({
         id: data.user.id,
         contactEmail: data.user.user_metadata?.contactEmail ?? null,
       });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Invalid email" });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -108,7 +108,7 @@ export function registerUserRoutes(app: Express): void {
       const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
         user_metadata: { ...existing.user.user_metadata, subscribedToDigest },
       });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       // Sync to industry_profiles so alertMailer (which reads that table) sees the change
       await storage.setIndustryProfileSubscription(id, subscribedToDigest).catch((e: any) => {
         console.warn("[admin/subscribed] industry_profiles sync failed:", e?.message);
@@ -119,7 +119,7 @@ export function registerUserRoutes(app: Express): void {
       });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Invalid body" });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -136,7 +136,7 @@ export function registerUserRoutes(app: Express): void {
       const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
         user_metadata: { role },
       });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       const adminUser = await getAdminUser(req);
       if (adminUser) {
         await insertAdminEvent({
@@ -153,7 +153,7 @@ export function registerUserRoutes(app: Express): void {
       });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Invalid role" });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -174,7 +174,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ id, marketEntitlement: ent });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Invalid body" });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -197,7 +197,7 @@ export function registerUserRoutes(app: Express): void {
         email_confirm: true,
         user_metadata: { role },
       });
-      if (error) return res.status(500).json({ error: error.message });
+      if (error) return res.status(500).json({ error: "Internal server error" });
       res.json({
         id: data.user.id,
         email: data.user.email ?? "",
@@ -205,7 +205,7 @@ export function registerUserRoutes(app: Express): void {
       });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Invalid input: " + err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -233,7 +233,7 @@ export function registerUserRoutes(app: Express): void {
       );
       res.json(orgsWithCounts);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -244,7 +244,7 @@ export function registerUserRoutes(app: Express): void {
       const members = await storage.getOrgMembers(org.id);
       res.json({ ...org, members });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -259,7 +259,7 @@ export function registerUserRoutes(app: Express): void {
       res.json(org);
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -278,7 +278,7 @@ export function registerUserRoutes(app: Express): void {
       res.json(org);
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -293,7 +293,7 @@ export function registerUserRoutes(app: Express): void {
       }
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -305,7 +305,7 @@ export function registerUserRoutes(app: Express): void {
       const events = await storage.getBillingHistory(orgId);
       res.json(events);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -318,7 +318,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ logoUrl: org.logoUrl });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -381,7 +381,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ member, user: { id: userId, email: userData.user.email, fullName } });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -399,7 +399,7 @@ export function registerUserRoutes(app: Express): void {
       }
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -431,7 +431,7 @@ export function registerUserRoutes(app: Express): void {
 
       res.json({ ok: true, email: member.email });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -504,7 +504,7 @@ export function registerUserRoutes(app: Express): void {
 
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -524,7 +524,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ ok: true });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -567,7 +567,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ ok: true, status });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -583,7 +583,7 @@ export function registerUserRoutes(app: Express): void {
         statusNote: profile?.statusNote ?? null,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -595,7 +595,7 @@ export function registerUserRoutes(app: Express): void {
       const entitlements = await getPlanEntitlements(planTier);
       res.json({ entitlements });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -618,7 +618,7 @@ export function registerUserRoutes(app: Express): void {
       }));
       res.json({ planTier: org.planTier, entitlements: merged });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -648,7 +648,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ ok: true, override });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -680,7 +680,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ ok: true, org });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -716,7 +716,7 @@ export function registerUserRoutes(app: Express): void {
       res.json({ ok: true, orgId, orgName: org.name, role });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

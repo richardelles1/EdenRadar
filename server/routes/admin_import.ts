@@ -21,7 +21,7 @@ export function registerImportRoutes(app: Express): void {
       const merged = Array.from(new Set([...scraperNames, ...manualNames])).sort((a, b) => a.localeCompare(b));
       return res.json({ institutions: merged, manual: manual.map((m) => ({ name: m.name, ttoUrl: m.ttoUrl })) });
     } catch (err: any) {
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -35,7 +35,7 @@ export function registerImportRoutes(app: Express): void {
       if (err.message?.includes("unique") || err.message?.includes("duplicate")) {
         return res.status(409).json({ error: "Institution already exists" });
       }
-      return res.status(500).json({ error: err.message });
+      return res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -256,7 +256,7 @@ If multiple assets appear, return each as a separate array item.`;
       return res.json({ assets, institution, failedImages });
     } catch (err: any) {
       console.error("[manual-import/parse] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Parse failed" });
+      return res.status(500).json({ error: "Parse failed" });
     }
   });
 
@@ -375,7 +375,7 @@ If multiple assets appear, return each as a separate array item.`;
       return res.json({ imported, skipped });
     } catch (err: any) {
       console.error("[manual-import/commit] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Commit failed" });
+      return res.status(500).json({ error: "Commit failed" });
     }
   });
 

@@ -16,7 +16,7 @@ export function registerPlatformRoutes(app: Express): void {
       return res.json({ institutions });
     } catch (err: any) {
       console.error("[all-institutions] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Failed to load institutions" });
+      return res.status(500).json({ error: "Failed to load institutions" });
     }
   });
 
@@ -25,7 +25,7 @@ export function registerPlatformRoutes(app: Express): void {
       const stats = await storage.getPlatformStats();
       res.json(stats);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch platform stats" });
+      res.status(500).json({ error: "Failed to fetch platform stats" });
     }
   });
 
@@ -35,7 +35,7 @@ export function registerPlatformRoutes(app: Express): void {
       res.json({ candidates, total: candidates.length });
     } catch (err: any) {
       console.error("[duplicate-candidates] Error:", err);
-      res.status(500).json({ error: err.message ?? "Failed to load duplicate candidates" });
+      res.status(500).json({ error: "Failed to load duplicate candidates" });
     }
   });
 
@@ -47,7 +47,7 @@ export function registerPlatformRoutes(app: Express): void {
       res.json({ ok: true });
     } catch (err: any) {
       console.error("[duplicate-candidates/dismiss] Error:", err);
-      res.status(500).json({ error: err.message ?? "Failed to dismiss duplicate" });
+      res.status(500).json({ error: "Failed to dismiss duplicate" });
     }
   });
 
@@ -58,7 +58,7 @@ export function registerPlatformRoutes(app: Express): void {
       res.json({ ok: true, dismissed: count });
     } catch (err: any) {
       console.error("[duplicate-candidates/dismiss-all] Error:", err);
-      res.status(500).json({ error: err.message ?? "Failed to bulk-dismiss duplicates" });
+      res.status(500).json({ error: "Failed to bulk-dismiss duplicates" });
     }
   });
 
@@ -68,7 +68,7 @@ export function registerPlatformRoutes(app: Express): void {
       res.json(result);
     } catch (err: any) {
       console.error("[duplicate-detection/run] Error:", err);
-      res.status(500).json({ error: err.message ?? "Failed to run duplicate detection" });
+      res.status(500).json({ error: "Failed to run duplicate detection" });
     }
   });
 
@@ -140,7 +140,7 @@ export function registerPlatformRoutes(app: Express): void {
       res.end();
     } catch (err: any) {
       console.error("[export-csv] Error:", err);
-      if (!res.headersSent) res.status(500).json({ error: err.message ?? "Export failed" });
+      if (!res.headersSent) res.status(500).json({ error: "Export failed" });
       else res.end();
     }
   });
@@ -211,7 +211,7 @@ export function registerPlatformRoutes(app: Express): void {
       });
     } catch (err: any) {
       console.error("[bulk-update] Error:", err);
-      res.status(500).json({ error: err.message ?? "Bulk update failed" });
+      res.status(500).json({ error: "Bulk update failed" });
     }
   });
 
@@ -295,7 +295,7 @@ export function registerPlatformRoutes(app: Express): void {
       return res.json({ ok: true });
     } catch (err: any) {
       console.error("[admin/alerts/dispatch]", err);
-      return res.status(500).json({ error: err.message ?? "Dispatch failed" });
+      return res.status(500).json({ error: "Dispatch failed" });
     }
   });
   app.post("/api/admin/invites/purge-expired", async (req, res) => {
@@ -303,7 +303,7 @@ export function registerPlatformRoutes(app: Express): void {
       const removed = await storage.purgeExpiredPendingInvites(48);
       res.json({ ok: true, removed });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? "Purge failed" });
+      res.status(500).json({ error: "Purge failed" });
     }
   });
 }

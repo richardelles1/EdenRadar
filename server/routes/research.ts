@@ -28,7 +28,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const projects = await storage.getResearchProjects(researcherId);
       res.json({ projects });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -51,7 +51,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const project = await storage.createResearchProject({ ...parsed.data, adminStatus: "draft" });
       res.json({ project });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -65,7 +65,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       if (!project) return res.status(404).json({ error: "Project not found" });
       res.json({ project });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -316,7 +316,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       }
       res.json({ project });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -335,7 +335,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       await storage.updateResearchProject(id, researcherId, { description: updated });
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -348,7 +348,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       await storage.deleteResearchProject(id, researcherId);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -414,7 +414,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       res.json({ url: signedData.signedUrl });
     } catch (err: any) {
       console.error("[file-upload] Error:", err);
-      res.status(500).json({ error: err.message || "Upload failed" });
+      res.status(500).json({ error: "Upload failed" });
     }
   });
 
@@ -426,7 +426,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const cards = await storage.getDiscoveryCards(researcherId);
       res.json({ cards });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -439,7 +439,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const card = await storage.createDiscoveryCard(parsed.data);
       res.json({ card });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -453,7 +453,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -486,7 +486,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -500,7 +500,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -575,7 +575,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const updated = await storage.updateDiscoveryCard(id, researcherId, { attachmentUrls: updatedUrls });
       res.json({ card: updated, url: signedUrl });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -626,7 +626,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
 
       res.json({ url: signedData?.signedUrl ?? "" });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -643,7 +643,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const refs = await storage.getSavedReferences(researcherId, projectId);
       res.json({ references: refs });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -660,7 +660,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       const ref = await storage.createSavedReference(parsed.data);
       res.json({ reference: ref });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -673,7 +673,7 @@ export function registerResearchRoutes(app: Express): void {  // Research projec
       await storage.deleteSavedReference(id, researcherId);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -869,7 +869,7 @@ If a field cannot be determined, use "N/A".`
       res.json({ rows: sorted });
     } catch (err: any) {
       console.error("[evidence] extraction error:", err);
-      res.status(500).json({ error: err.message ?? "Evidence extraction failed" });
+      res.status(500).json({ error: "Evidence extraction failed" });
     }
   });
 
@@ -913,7 +913,7 @@ If a field cannot be determined, use "N/A".`
       await storage.updateResearchProject(projectId, researcherId, { evidenceTables: existing });
       res.json({ ok: true, tableId: newTable.id });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to save evidence table" });
+      res.status(500).json({ error: "Failed to save evidence table" });
     }
   });
 
@@ -925,7 +925,7 @@ If a field cannot be determined, use "N/A".`
       const grants = await storage.getSavedGrants(researcherId);
       res.json({ grants });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -942,7 +942,7 @@ If a field cannot be determined, use "N/A".`
       const grant = await storage.createSavedGrant(parsed.data);
       res.json({ grant });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -968,7 +968,7 @@ If a field cannot be determined, use "N/A".`
       const grant = await storage.updateSavedGrant(id, researcherId, parsed.data);
       res.json({ grant });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -981,6 +981,6 @@ If a field cannot be determined, use "N/A".`
       await storage.deleteSavedGrant(id, researcherId);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });}

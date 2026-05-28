@@ -47,7 +47,7 @@ export async function registerImpersonationRoutes(app: Express): Promise<void> {
         });
       } catch (err: any) {
         if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid input" });
-        res.status(500).json({ error: err?.message ?? "Failed to start impersonation" });
+        res.status(500).json({ error: "Failed to start impersonation" });
       }
     });
 
@@ -67,7 +67,7 @@ export async function registerImpersonationRoutes(app: Express): Promise<void> {
         res.json({ ended: true });
       } catch (err: any) {
         if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid input" });
-        res.status(500).json({ error: err?.message ?? "Failed to end impersonation" });
+        res.status(500).json({ error: "Failed to end impersonation" });
       }
     });
 
@@ -83,7 +83,7 @@ export async function registerImpersonationRoutes(app: Express): Promise<void> {
           : await imp.listSessionsForAdmin(adminId, 100);
         res.json({ sessions });
       } catch (err: any) {
-        res.status(500).json({ error: err?.message ?? "Failed to list sessions" });
+        res.status(500).json({ error: "Failed to list sessions" });
       }
     });
 
@@ -99,7 +99,7 @@ export async function registerImpersonationRoutes(app: Express): Promise<void> {
         const events = await imp.listSessionEvents(sessionId, 200);
         res.json({ events });
       } catch (err: any) {
-        res.status(500).json({ error: err?.message ?? "Failed to list events" });
+        res.status(500).json({ error: "Failed to list events" });
       }
     });
   }
@@ -132,7 +132,7 @@ export async function registerImpersonationRoutes(app: Express): Promise<void> {
         },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message ?? "Failed to load impersonation state" });
+      res.status(500).json({ error: "Failed to load impersonation state" });
     }
   });
 

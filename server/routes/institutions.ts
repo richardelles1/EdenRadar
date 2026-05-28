@@ -16,7 +16,7 @@ export function registerInstitutionRoutes(app: Express): void {
       const counts = await storage.getInstitutionAssetCounts();
       res.json(counts);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch counts" });
+      res.status(500).json({ error: "Failed to fetch counts" });
     }
   });
 
@@ -104,7 +104,7 @@ export function registerInstitutionRoutes(app: Express): void {
       cacheSet(INSTITUTIONS_CACHE_KEY, payload, INSTITUTIONS_CACHE_TTL_MS);
       res.json(payload);
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institutions" });
+      res.status(500).json({ error: "Failed to fetch institutions" });
     }
   });
 
@@ -189,7 +189,7 @@ export function registerInstitutionRoutes(app: Express): void {
         totalAssets: totalRow[0]?.cnt ?? 0,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch institution profile" });
+      res.status(500).json({ error: "Failed to fetch institution profile" });
     }
   });
 
@@ -233,7 +233,7 @@ export function registerInstitutionRoutes(app: Express): void {
         : await storage.getIngestedAssetsByInstitution(displayName);
       res.json({ assets, institution: displayName });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch assets" });
+      res.status(500).json({ error: "Failed to fetch assets" });
     }
   });
 }

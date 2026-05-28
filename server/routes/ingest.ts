@@ -48,7 +48,7 @@ export function registerIngestRoutes(app: Express): void {
         syncRunningFor: getSyncRunningFor(),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch status" });
+      res.status(500).json({ error: "Failed to fetch status" });
     }
   });
 
@@ -57,7 +57,7 @@ export function registerIngestRoutes(app: Express): void {
       const runs = await storage.getIngestionRunHistory(5);
       res.json(runs);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -71,7 +71,7 @@ export function registerIngestRoutes(app: Express): void {
       const totalNew = byInstitution.reduce((sum, row) => sum + row.count, 0);
       return res.json({ runId: lastRun.id, ranAt: lastRun.ranAt, totalNew, byInstitution });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch delta" });
+      res.status(500).json({ error: "Failed to fetch delta" });
     }
   });
 
@@ -81,7 +81,7 @@ export function registerIngestRoutes(app: Express): void {
       const sessions = await storage.getLatestSyncSessions();
       res.json({ sessions });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch sync sessions" });
+      res.status(500).json({ error: "Failed to fetch sync sessions" });
     }
   });
 
@@ -129,7 +129,7 @@ export function registerIngestRoutes(app: Express): void {
       const result = await startStalenessFirstScan();
       res.json({ ...result, status: getSchedulerStatus() });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to start staleness-first scan" });
+      res.status(500).json({ error: "Failed to start staleness-first scan" });
     }
   });
 
@@ -138,7 +138,7 @@ export function registerIngestRoutes(app: Express): void {
       const result = await startDailySweep();
       res.json({ ...result, status: getSchedulerStatus() });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to start daily sweep" });
+      res.status(500).json({ error: "Failed to start daily sweep" });
     }
   });
 
@@ -177,7 +177,7 @@ export function registerIngestRoutes(app: Express): void {
       }));
       res.json({ rows: enriched, total: enriched.length, inBackoff: enriched.filter((r) => r.inBackoff).length });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch scraper health" });
+      res.status(500).json({ error: "Failed to fetch scraper health" });
     }
   });
 
@@ -188,7 +188,7 @@ export function registerIngestRoutes(app: Express): void {
       invalidateHealthCacheEntry(institution);  // immediate effect on scheduling decisions
       res.json({ ok: true, message: `Backoff cleared for ${institution}` });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Clear backoff failed" });
+      res.status(500).json({ error: "Clear backoff failed" });
     }
   });
 
@@ -213,7 +213,7 @@ export function registerIngestRoutes(app: Express): void {
 
       res.json({ ok: true, message: `Sync for ${institution} cancelled` });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Cancel failed" });
+      res.status(500).json({ error: "Cancel failed" });
     }
   });
 
@@ -247,7 +247,7 @@ export function registerIngestRoutes(app: Express): void {
           }
         });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Sync failed" });
+      res.status(500).json({ error: "Sync failed" });
     }
   });
 
@@ -287,7 +287,7 @@ export function registerIngestRoutes(app: Express): void {
         syncRunningFor: getSyncRunningFor(),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch sync status" });
+      res.status(500).json({ error: "Failed to fetch sync status" });
     }
   });
 
@@ -297,7 +297,7 @@ export function registerIngestRoutes(app: Express): void {
       const sessions = await storage.getInstitutionSyncHistory(institution, 5);
       res.json({ sessions });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch sync history" });
+      res.status(500).json({ error: "Failed to fetch sync history" });
     }
   });
 
@@ -377,7 +377,7 @@ export function registerIngestRoutes(app: Express): void {
         message: `Pushed ${newAssets.length} new assets to index`,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Push failed" });
+      res.status(500).json({ error: "Push failed" });
     }
   });
 
@@ -408,7 +408,7 @@ export function registerIngestRoutes(app: Express): void {
       });
     } catch (err: any) {
       console.error(`[refresh-scraped-fields] ${institution}: ${err.message}`);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 }

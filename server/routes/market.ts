@@ -121,7 +121,7 @@ export function registerMarketRoutes(app: Express): void {
         entitlement: eff.entitlement,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -183,7 +183,7 @@ export function registerMarketRoutes(app: Express): void {
       res.json({ url: session.url });
     } catch (err: any) {
       console.error("[market/checkout]", err?.message);
-      res.status(500).json({ error: err.message ?? "Failed to create checkout session" });
+      res.status(500).json({ error: "Failed to create checkout session" });
     }
   });
 
@@ -250,7 +250,7 @@ export function registerMarketRoutes(app: Express): void {
       res.json({ access: true });
     } catch (err: any) {
       console.error("[market/verify-session]", err?.message);
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -402,7 +402,7 @@ export function registerMarketRoutes(app: Express): void {
 
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -540,7 +540,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         completenessScore: r.completenessScore,
       })));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -577,7 +577,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         sellerVerified: !!sellerOrg?.marketSellerVerifiedAt,
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -673,7 +673,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ relatedTtoAssets, activeTrials, relatedPatents, comparableDeals, edenEnrichment, blindFields: bf, linkedAssetId: listing.ingestedAssetId ?? null });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -758,7 +758,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       await storage.deleteMarketListing(id, userId);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -772,7 +772,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
       res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -851,7 +851,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const eois = await storage.getMarketEoisByBuyer(userId);
       res.json(eois);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -877,7 +877,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       );
       res.json(eoisByListing);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -950,7 +950,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const stats = await storage.getMarketAdminStats();
       res.json(stats);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -961,7 +961,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
       res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1050,7 +1050,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         .orderBy(desc(marketSavedSearches.createdAt));
       res.json(rows);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1135,7 +1135,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         .limit(20);
       res.json(rows);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1146,7 +1146,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       await db.execute(sql`UPDATE market_availability_notifications SET read_at = NOW() WHERE user_id = ${userId} AND read_at IS NULL`);
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1158,7 +1158,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       );
       res.json(result.filter(r => r.eois.length > 0));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1167,7 +1167,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const orgs = await storage.getMarketSubscriberOrgs();
       res.json(orgs);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1236,7 +1236,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       res.json(updated);
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid payload", details: err.errors });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1287,7 +1287,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       res.json(updated);
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid payload", details: err.errors });
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1357,7 +1357,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ deal, created: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1394,7 +1394,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1435,7 +1435,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const deals = await storage.getMarketDealsForUser(userId);
       res.json(deals);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1540,7 +1540,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ deal, listing: sanitizedListing, eoi, ndaDocumentUrl, sellerOrgName, buyerOrgName });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1900,7 +1900,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ comps, benchmarks: { avgUpfrontM: avgUpfront, avgTotalM: avgTotal, count: comps.length } });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -1921,7 +1921,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const [ts] = await db.select().from(marketDealTermSheets).where(eq(marketDealTermSheets.dealId, dealId)).limit(1);
       res.json(ts ?? null);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2029,7 +2029,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       broadcastToUsers([deal.sellerId, deal.buyerId], "deal_updated", { dealId, event: "term_sheet_agreed" });
       res.json({ ts: final, locked: !!final.lockedAt });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2092,7 +2092,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ suggestions, compsCount: comps.length });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2116,7 +2116,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json(observers.filter(o => !o.revokedAt));
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2186,7 +2186,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       await db.update(marketDealObservers).set({ revokedAt: new Date() }).where(eq(marketDealObservers.id, observerId));
       res.json({ ok: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2203,7 +2203,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       // Redirect to the deal room; the observer can view via a separate read-only session
       res.redirect(302, `${APP_URL}/market/deals/${obs.dealId}?observer=${token}`);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2225,7 +2225,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         .limit(1);
       res.json({ submitted: !!mine, feedback: mine ?? null });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2345,7 +2345,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         successFeeCollected: closedDeals.reduce((s, d) => s + (d.successFeeAmount ?? 0), 0),
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2396,7 +2396,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         eoi: { id: eoi.id, rationale: eoi.rationale, budgetRange: eoi.budgetRange, timeline: eoi.timeline, status: eoi.status, createdAt: eoi.createdAt },
       });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2434,7 +2434,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json(updated);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2548,7 +2548,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       }));
       res.json(enriched);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2579,7 +2579,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       broadcastToUsers([deal.sellerId, deal.buyerId], "deal_document", { dealId });
       res.json({ ok: true, viewedAt: view.viewedAt });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2667,7 +2667,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       );
       res.json(doc);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2728,7 +2728,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const messages = await storage.getMarketDealMessages(dealId);
       res.json(messages);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2807,7 +2807,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
 
       res.json({ deal, listing: listing ?? null, eoi: eoi ?? null, ndaDocumentUrl });
     } catch (err: unknown) {
-      res.status(500).json({ error: err instanceof Error ? err.message : "Server error" });
+      res.status(500).json({ error: "Server error" });
     }
   });
 
@@ -2821,7 +2821,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const messages = await storage.getMarketDealMessages(dealId);
       res.json(messages);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2876,7 +2876,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       }));
       res.json(enriched);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 
@@ -2902,7 +2902,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       }));
       res.json(enriched);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      res.status(500).json({ error: "Internal server error" });
     }
   });
 

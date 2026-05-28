@@ -210,7 +210,7 @@ export function registerBillingRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[stripe/checkout]", err?.message);
       sentryCaptureException(err);
-      res.status(500).json({ error: err.message ?? "Failed to create checkout session" });
+      res.status(500).json({ error: "Failed to create checkout session" });
     }
   });
 
@@ -341,7 +341,7 @@ export function registerBillingRoutes(app: Express): void {
     } catch (err: any) {
       console.error("[stripe/verify-session]", err?.message);
       sentryCaptureException(err);
-      res.status(500).json({ error: err.message ?? "Failed to verify session" });
+      res.status(500).json({ error: "Failed to verify session" });
     }
   });
 
@@ -410,7 +410,7 @@ export function registerBillingRoutes(app: Express): void {
       return res.json({ ok: true, planTier: PLAN_TIER_MAP[targetPlanId], seatLimit: PLAN_SEAT_MAP[targetPlanId] });
     } catch (err: any) {
       console.error("[stripe/upgrade-plan]", err?.message);
-      return res.status(500).json({ error: err.message ?? "Failed to change plan" });
+      return res.status(500).json({ error: "Failed to change plan" });
     }
   });
 
@@ -1004,7 +1004,7 @@ export function registerBillingRoutes(app: Express): void {
       res.json(events);
     } catch (err: any) {
       console.error("[billing/history]", err?.message);
-      res.status(500).json({ error: err.message ?? "Failed to fetch billing history" });
+      res.status(500).json({ error: "Failed to fetch billing history" });
     }
   });
 
@@ -1035,7 +1035,7 @@ export function registerBillingRoutes(app: Express): void {
       res.json({ url: portalSession.url });
     } catch (err: any) {
       console.error("[stripe/portal]", err?.message);
-      res.status(500).json({ error: err.message ?? "Failed to create portal session" });
+      res.status(500).json({ error: "Failed to create portal session" });
     }
   });
 }
