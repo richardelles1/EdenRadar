@@ -47,6 +47,7 @@ export function registerAlertsRoutes(app: Express): void {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
       const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
       const alert = await storage.createUserAlert({
         name: trimmedName,
         query: isAllNew ? null : (query ?? null),
