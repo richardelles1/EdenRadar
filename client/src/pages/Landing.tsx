@@ -252,7 +252,7 @@ const INDUSTRY_TILES = [
   {
     icon: TrendingUp,
     title: "Market Intelligence",
-    desc: "EDEN-enriched signals from 300+ TTOs, patent filings, and live academic publications, structured and scored.",
+    desc: "EDEN-enriched signals from 350+ TTOs, patent filings, and live academic publications, structured and scored.",
   },
   {
     icon: GitMerge,
@@ -1028,7 +1028,7 @@ export default function Landing() {
                 {
                   icon: TrendingUp,
                   title: "Discover before the crowd",
-                  desc: "Surface pre-clinical assets from 300+ tech transfer offices the moment they're published, EDEN-enriched with target, modality, and stage.",
+                  desc: "Surface pre-clinical assets from 350+ tech transfer offices the moment they're published, EDEN-enriched with target, modality, and stage.",
                 },
                 {
                   icon: Layers,

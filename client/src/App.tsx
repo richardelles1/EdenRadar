@@ -413,7 +413,7 @@ function Router() {
       <Route path="/pitch" component={PitchDeck} />
       <Route path="/one-pager" component={OnePager} />
       <Route path="/about" component={About} />
-      <Route path="/what-we-do" component={WhatWeDo} />
+      <Route path="/what-we-do"><Redirect to="/how-it-works" /></Route>
       <Route path="/how-it-works" component={HowItWorks} />
       <Route path="/tos" component={Tos} />
       <Route path="/privacy" component={Privacy} />

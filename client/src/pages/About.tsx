@@ -5,6 +5,7 @@ import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
 import { ArrowRight } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { RadarBackground } from "@/components/RadarBackground";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 
@@ -28,35 +29,6 @@ function useReveal(threshold = 0.15) {
   return ref;
 }
 
-function PageBackground() {
-  return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden" aria-hidden>
-      <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-        style={{
-          width: "min(80vw, 800px)",
-          height: "min(80vw, 800px)",
-          animation: "radar-bg-slow 28s linear infinite",
-          transformOrigin: "center center",
-          background:
-            "conic-gradient(from 0deg, transparent 260deg, hsl(var(--portal-scout) / 0.03) 310deg, hsl(var(--portal-scout) / 0.10) 360deg)",
-          borderRadius: "50%",
-        }}
-      />
-      {[280, 420, 560, 700].map((r, i) => (
-        <div
-          key={r}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
-          style={{
-            width: r,
-            height: r,
-            borderColor: `hsl(142 55% 45% / ${0.05 - i * 0.008})`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
 
 const FOUNDERS = [
   {
@@ -116,29 +88,38 @@ export default function About() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
-      <PageBackground />
 
       <main className="relative z-10 flex-1">
 
         {/* Hero */}
-        <section className="relative overflow-hidden pt-24 pb-20 px-4 sm:px-6 text-center max-w-screen-xl mx-auto">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight">
-            Built by industry insiders,{" "}
-            <span className="text-primary">for the industry.</span>
-          </h1>
-          <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
-            EdenRadar was founded on a single conviction: the world's most important biotech assets are locked inside university technology transfer offices, and the industry teams that need them have no efficient way to find them.
-          </p>
-          <Button
-            size="lg"
-            onClick={() => navigate("/login")}
-            data-testid="about-cta-main"
-            className="h-11 px-8 font-semibold text-base"
-            style={{ background: "hsl(33 85% 44%)", border: "none", color: "white" }}
+        <section className="relative overflow-hidden" style={{ minHeight: "52vh" }}>
+          <RadarBackground />
+          <div
+            className="relative z-10 flex flex-col items-center justify-center text-center px-4 sm:px-6"
+            style={{ minHeight: "52vh", paddingTop: "7rem", paddingBottom: "5rem" }}
           >
-            Get Started
-            <ArrowRight className="w-4 h-4 ml-2" />
-          </Button>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight max-w-3xl">
+              Built by industry insiders,{" "}
+              <span style={{ color: "hsl(33 85% 44%)" }}>for the industry.</span>
+            </h1>
+            <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
+              EdenRadar was founded on a single conviction: the world's most important biotech assets are locked inside university technology transfer offices, and the industry teams that need them have no efficient way to find them.
+            </p>
+            <Button
+              size="lg"
+              onClick={() => navigate("/login")}
+              data-testid="about-cta-main"
+              className="h-11 px-8 font-semibold text-base border-0"
+              style={{ background: "hsl(33 85% 44%)", color: "white" }}
+            >
+              Get Started
+              <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+          </div>
+          <div
+            className="absolute bottom-0 left-0 right-0 h-20 pointer-events-none"
+            style={{ background: "linear-gradient(to bottom, transparent, hsl(var(--background)))" }}
+          />
         </section>
 
         {/* Mission */}
@@ -279,32 +260,42 @@ export default function About() {
         </section>
 
         {/* Bottom CTA */}
-        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4">
-            The discovery gap is a solvable problem.
-          </h2>
-          <p className="text-muted-foreground mb-8 max-w-md mx-auto">
-            EdenRadar was built to close it — systematically, at scale, starting with the first search you run.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button
-              size="lg"
-              onClick={() => navigate("/login")}
-              data-testid="about-cta-bottom"
-              className="h-11 px-7 font-semibold"
-            >
-              Get Started
-              <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => navigate("/pricing")}
-              data-testid="about-cta-pricing"
-              className="h-11 px-7 font-semibold"
-            >
-              See Pricing
-            </Button>
+        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+          <div
+            className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
+            style={{
+              background: "linear-gradient(135deg, hsl(25 80% 6%) 0%, hsl(33 75% 9%) 60%, hsl(38 70% 7%) 100%)",
+              border: "1px solid hsl(33 85% 44% / 0.25)",
+            }}
+          >
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 44% / 0.12) 0%, transparent 60%)" }} aria-hidden />
+            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+              The discovery gap is a solvable problem.
+            </h2>
+            <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(33 40% 68%)" }}>
+              EdenRadar was built to close it — systematically, at scale, starting with the first search you run.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                size="lg"
+                onClick={() => navigate("/login")}
+                data-testid="about-cta-bottom"
+                className="h-11 px-7 font-semibold"
+                style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}
+              >
+                Get Started
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+              <Button
+                size="lg"
+                onClick={() => navigate("/pricing")}
+                data-testid="about-cta-pricing"
+                className="h-11 px-7 font-semibold"
+                style={{ background: "transparent", border: "1px solid hsl(33 85% 44% / 0.3)", color: "hsl(33 60% 68%)" }}
+              >
+                See Pricing
+              </Button>
+            </div>
           </div>
         </section>
 
