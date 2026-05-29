@@ -1153,7 +1153,7 @@ export function isConversational(query: string): boolean {
 export type LiveSource = "clinicaltrials" | "patents" | "harvard";
 
 export type IntentClassification = {
-  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational" | "pipeline";
+  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational" | "pipeline" | "synthesis" | "document";
   filters: QueryFilters;
   backRefPosition: number | null; // 0=first, 1=second, 2=third
   liveSource: LiveSource | null;  // non-null only when query explicitly targets external live data
@@ -1168,6 +1168,8 @@ INTENTS:
 - comparative: wants head-to-head comparison ("compare", "vs", "which is better")
 - definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
 - pipeline: user asks about their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio")
+- synthesis: user wants a cross-cutting analysis of their entire saved pipeline ("analyze my pipeline", "portfolio review", "summarize what I have", "what do I have in evaluation", "give me an overview", "what are my top assets", "pipeline assessment")
+- document: user wants a structured deliverable ("draft a diligence checklist", "generate a memo", "write a term sheet outline", "create a brief for", "give me a checklist", "write up a summary for")
 - conversational: greeting, thanks, out-of-scope chat with no biotech search intent
 
 FILTER EXTRACTION (null if not mentioned in the message):
@@ -1761,6 +1763,141 @@ After the table, write 3–4 sentences of direct professional opinion: which ass
     stream: true,
     temperature: 0.5,
     max_tokens: 1200,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
+// ── Pipeline synthesis query ────────────────────────────────────────────────
+// Cross-cutting analysis of a user's entire saved pipeline. Accepts SavedAsset-
+// shaped objects (no embedding needed — uses stored summaries + metadata).
+export type PipelineSavedAsset = {
+  assetName: string; modality: string; developmentStage: string;
+  diseaseIndication: string; status?: string | null; summary?: string;
+  pipelineListName?: string;
+};
+
+export async function* synthesisQuery(
+  question: string,
+  assets: PipelineSavedAsset[],
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext,
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
+): AsyncGenerator<string> {
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
+
+  const byStatus: Record<string, PipelineSavedAsset[]> = {};
+  for (const a of assets) {
+    const key = a.status ?? "unsorted";
+    (byStatus[key] = byStatus[key] ?? []).push(a);
+  }
+  const statusOrder = ["in_discussion", "evaluating", "watching", "on_hold", "passed", "unsorted"];
+  const statusLabel: Record<string, string> = {
+    in_discussion: "In Discussion", evaluating: "Evaluating",
+    watching: "Watching", on_hold: "On Hold", passed: "Passed", unsorted: "Unsorted",
+  };
+
+  const assetBlock = statusOrder
+    .filter((s) => byStatus[s]?.length)
+    .map((s) => {
+      const label = statusLabel[s] ?? s;
+      const items = byStatus[s].map((a) =>
+        `  • ${a.assetName} | ${a.modality} | ${a.developmentStage} | ${a.diseaseIndication}${a.pipelineListName ? ` | List: ${a.pipelineListName}` : ""}${a.summary ? `\n    ${a.summary.slice(0, 200)}` : ""}`
+      ).join("\n");
+      return `${label} (${byStatus[s].length}):\n${items}`;
+    })
+    .join("\n\n");
+
+  const synthesisPrompt = `You are reviewing the user's full saved pipeline for a BD intelligence briefing. These are all the assets they've bookmarked — not search results.
+
+SAVED PIPELINE (${assets.length} assets total):
+${assetBlock}
+
+USER QUESTION: ${question}
+
+Write a concise pipeline analysis covering:
+1. **Portfolio composition** — modality and indication concentration, stage distribution
+2. **Active deal opportunities** — what's in discussion or evaluation and why it stands out
+3. **Gaps and risks** — notable concentration risks, underrepresented areas, or coverage gaps
+4. **Recommended next actions** — 2–3 specific follow-up suggestions based on what you see
+
+Be direct and specific. Name real patterns. This is a briefing, not a description — give opinions where the data supports them. Under 350 words.`;
+
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.slice(-4),
+    { role: "user", content: synthesisPrompt },
+  ];
+
+  const stream = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages,
+    stream: true,
+    temperature: 0.4,
+    max_tokens: 800,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
+// ── Document generation query ────────────────────────────────────────────────
+// Produces a structured deliverable (diligence checklist, memo, term sheet
+// outline) for a specific asset. One gpt-4o call; higher token budget.
+export type DocumentType = "checklist" | "memo" | "term_sheet" | "brief";
+
+export async function* documentQuery(
+  docType: DocumentType,
+  asset: RetrievedAsset,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext,
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
+): AsyncGenerator<string> {
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
+
+  const assetBlock = [
+    `Asset: ${asset.assetName} (${asset.institution})`,
+    asset.modality ? `Modality: ${asset.modality}` : null,
+    asset.developmentStage ? `Stage: ${asset.developmentStage}` : null,
+    asset.indication ? `Indication: ${asset.indication}` : null,
+    asset.target ? `Target: ${asset.target}` : null,
+    asset.mechanismOfAction ? `MoA: ${asset.mechanismOfAction}` : null,
+    asset.ipType ? `IP type: ${asset.ipType}` : null,
+    asset.innovationClaim ? `Innovation claim: ${asset.innovationClaim}` : null,
+    asset.unmetNeed ? `Unmet need: ${asset.unmetNeed}` : null,
+    asset.comparableDrugs ? `Comparable drugs: ${asset.comparableDrugs}` : null,
+    asset.licensingReadiness ? `Licensing readiness: ${asset.licensingReadiness}` : null,
+    asset.summary ? `Summary: ${asset.summary.slice(0, 600)}` : null,
+  ].filter(Boolean).join("\n");
+
+  const docPrompts: Record<DocumentType, string> = {
+    checklist: `Generate a diligence checklist for this TTO asset. Produce a markdown checklist with sections: IP & Patent Review | Scientific Validity | Clinical Translatability | Regulatory Path | Commercial Opportunity | Deal Structure Considerations. For each item, note what to look for specific to this asset's profile. Be concrete — a generic checklist is useless.`,
+    memo: `Write a one-page investment/licensing memo for this TTO asset. Structure: Opportunity Overview | Scientific Rationale | Competitive Positioning | Risk Factors | Deal Thesis. Keep each section to 2–3 sentences. Write as a senior BD analyst would — direct opinion, not neutral description.`,
+    term_sheet: `Draft a term sheet outline for licensing this TTO asset. Include: License type (exclusive/non-exclusive/field-of-use), Upfront fee range, Milestone structure (IND, Phase 1, Phase 2, approval), Royalty rate range, Diligence obligations, Sublicensing rights, IP ownership. Base ranges on the asset's stage and modality using standard TTO benchmarks.`,
+    brief: `Write a 150-word executive brief for this asset suitable for a BD leadership team. Lead with the single most compelling thing about it. Include stage, modality, indication, what makes it differentiated, and why it's worth evaluating now. No bullet points — flowing prose.`,
+  };
+
+  const prompt = `ASSET DATA:\n${assetBlock}\n\nTASK: ${docPrompts[docType]}`;
+
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.slice(-2),
+    { role: "user", content: prompt },
+  ];
+
+  const stream = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages,
+    stream: true,
+    temperature: 0.3,
+    max_tokens: 1500,
   });
 
   for await (const chunk of stream) {

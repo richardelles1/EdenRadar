@@ -13,8 +13,9 @@ import {
   conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage,
   isComparativeQuery, compareQuery, summarizeSession, classifyIntent,
   extractBackRefPosition, extractBackRefInstitution,
+  synthesisQuery, documentQuery,
   type UserContext, type SessionFocusContext, type IntentClassification, type LiveSource,
-  type CrossSessionMemory, type RankedAsset, buildCrossSessionMemory,
+  type CrossSessionMemory, type RankedAsset, type PipelineSavedAsset, type DocumentType, buildCrossSessionMemory,
 } from "../lib/eden/rag";
 import { searchClinicalTrials } from "../lib/sources/clinicaltrials";
 import { searchLens } from "../lib/sources/lens";
@@ -302,6 +303,8 @@ export function registerEdenRoutes(app: Express): void {
     };
 
     try {
+      let newArrivalsHint: { count: number; label: string; query: string } | undefined;
+      const donePayload = () => ({ sessionId: sid, ...(newArrivalsHint ? { newArrivalsHint } : {}) });
       const [session, portfolioStats, userProfile] = await Promise.all([
         storage.getOrCreateEdenSession(sid),
         fetchPortfolioStats().catch((err) => {
@@ -366,6 +369,26 @@ export function registerEdenRoutes(app: Express): void {
           crossSessionMemory = buildCrossSessionMemory(recentSessions);
         } catch (e) {
           console.warn("[eden] cross-session memory load failed:", (e as Error)?.message ?? e);
+        }
+        // Fire-and-forget: check for new relevant assets matching user history (no AI cost)
+        if (crossSessionMemory) {
+          const topModality = crossSessionMemory.topModalities[0];
+          const topIndication = crossSessionMemory.topIndications[0];
+          const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+          try {
+            const newCount = await storage.filteredCount(undefined, topModality, undefined, topIndication, undefined, undefined, since30);
+            if (newCount > 0) {
+              const labelParts: string[] = [];
+              if (topModality) labelParts.push(topModality);
+              if (topIndication) labelParts.push(topIndication);
+              const label = labelParts.join(" / ") || "assets";
+              const queryParts: string[] = ["Show me new"];
+              if (topModality) queryParts.push(topModality);
+              if (topIndication) queryParts.push(topIndication);
+              queryParts.push("assets from the last 30 days");
+              newArrivalsHint = { count: newCount, label, query: queryParts.join(" ") };
+            }
+          } catch { /* non-fatal */ }
         }
       } else if (!isFirstTurn) {
         // On subsequent turns, preserve the memory already attached to focusContext
@@ -568,7 +591,7 @@ export function registerEdenRoutes(app: Express): void {
         });
         const backRefOffers = buildActionOffers(message.trim(), "back_ref", targeted.map((a) => ({ ...a, similarity: 1.0 })), filters);
         if (backRefOffers.length > 0) sendEvent("action_offer", { offers: backRefOffers });
-        sendEvent("done", { sessionId: sid });
+        sendEvent("done", donePayload());
         return;
       }
 
@@ -587,7 +610,7 @@ export function registerEdenRoutes(app: Express): void {
             sendEvent("token", { text: token });
           }
           await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
-          sendEvent("done", { sessionId: sid });
+          sendEvent("done", donePayload());
           return;
         }
 
@@ -608,7 +631,7 @@ export function registerEdenRoutes(app: Express): void {
             sendEvent("token", { text: token });
           }
           await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
-          sendEvent("done", { sessionId: sid });
+          sendEvent("done", donePayload());
           return;
         }
         // fall through to RAG if SQL cannot resolve
@@ -767,7 +790,7 @@ export function registerEdenRoutes(app: Express): void {
           sendEvent("context", { sessionId: sid, assets: [] });
           sendEvent("token", { text: terminalError });
           await storage.appendEdenMessage(sid, { role: "assistant", content: terminalError, assetIds: [], assets: [] });
-          sendEvent("done", { sessionId: sid });
+          sendEvent("done", donePayload());
           return;
         }
 
@@ -803,7 +826,7 @@ export function registerEdenRoutes(app: Express): void {
               filters,
             );
             if (compareOffers.length > 0) sendEvent("action_offer", { offers: compareOffers });
-            sendEvent("done", { sessionId: sid });
+            sendEvent("done", donePayload());
             return;
           }
         }
@@ -875,7 +898,7 @@ export function registerEdenRoutes(app: Express): void {
           await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
         }
 
-        sendEvent("done", { sessionId: sid });
+        sendEvent("done", donePayload());
         return;
       }
 
@@ -946,10 +969,84 @@ export function registerEdenRoutes(app: Express): void {
           assetIds: pipelineAssets.slice(0, 3).map((a) => a.id),
           assets: pipelineAssetPayload,
         });
-        sendEvent("done", { sessionId: sid });
+        sendEvent("done", donePayload());
         return;
       }
       // If pipeline intent but no user ID, fall through to standard RAG search
+
+      // ── Path 5.5: Pipeline synthesis ─────────────────────────────────────────
+      if (intentClass.intent === "synthesis" && requestUserId) {
+        const savedList = await storage.getSavedAssets(undefined, requestUserId).catch(() => []);
+        if (savedList.length === 0) {
+          sendEvent("context", { sessionId: sid, assets: [] });
+          const emptyMsg = "Your pipeline is empty — save some assets first, then I can analyze them for you.";
+          sendEvent("token", { text: emptyMsg });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: emptyMsg, assetIds: [], assets: [] });
+          sendEvent("done", donePayload());
+          return;
+        }
+
+        // Fetch pipeline list names for context
+        const lists = await storage.getPipelineLists(requestUserId).catch(() => []);
+        const listMap = new Map(lists.map((l) => [l.id, l.name]));
+
+        const synthAssets: PipelineSavedAsset[] = savedList.map((s) => ({
+          assetName: s.assetName, modality: s.modality, developmentStage: s.developmentStage,
+          diseaseIndication: s.diseaseIndication, status: s.status ?? undefined,
+          summary: s.summary, pipelineListName: s.pipelineListId ? (listMap.get(s.pipelineListId) ?? undefined) : undefined,
+        }));
+
+        sendEvent("context", { sessionId: sid, assets: [] });
+        let fullResponse = "";
+        for await (const token of synthesisQuery(message.trim(), synthAssets, history, resolvedCtx, portfolioStats, focusContext)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        sendEvent("done", donePayload());
+        return;
+      }
+
+      // ── Path 5.6: Document generation ─────────────────────────────────────────
+      if (intentClass.intent === "document") {
+        // Detect document type from message
+        const msgLower = message.trim().toLowerCase();
+        const docType: DocumentType =
+          /check.?list|due.?diligence|diligence/.test(msgLower) ? "checklist" :
+          /term.?sheet|term sheet|licensing.?terms/.test(msgLower) ? "term_sheet" :
+          /\bmemo\b|memorandum/.test(msgLower) ? "memo" : "brief";
+
+        // Resolve target asset: use back-ref if available, otherwise first semantic hit
+        let targetAsset: import("../storage").RetrievedAsset | undefined;
+        if (priorIds.length > 0) {
+          const fetched = await storage.getIngestedAssetsByIds(priorIds.slice(0, 1)).catch(() => []);
+          targetAsset = fetched[0];
+        }
+        if (!targetAsset && cachedEmbedding) {
+          const hits = await storage.filteredSemanticSearch(cachedEmbedding, undefined, undefined, undefined, undefined, undefined, 3, undefined, undefined, undefined, true).catch(() => []);
+          targetAsset = hits.find((h) => h.similarity >= 0.5);
+        }
+
+        if (!targetAsset) {
+          sendEvent("context", { sessionId: sid, assets: [] });
+          const noAssetMsg = "I need an asset to generate a document for. Try searching for one first, then ask me to draft a checklist or memo.";
+          sendEvent("token", { text: noAssetMsg });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: noAssetMsg, assetIds: [], assets: [] });
+          sendEvent("done", donePayload());
+          return;
+        }
+
+        const docPayload = [{ id: targetAsset.id, assetName: targetAsset.assetName, institution: targetAsset.institution, indication: targetAsset.indication ?? "unknown", modality: targetAsset.modality ?? "unknown", developmentStage: targetAsset.developmentStage, similarity: 1.0 }];
+        sendEvent("context", { sessionId: sid, assets: docPayload });
+        let fullResponse = "";
+        for await (const token of documentQuery(docType, targetAsset, history, resolvedCtx, portfolioStats, focusContext)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [targetAsset.id], assets: docPayload });
+        sendEvent("done", donePayload());
+        return;
+      }
 
       // ── Path 6: Conversational ─────────────────────────────────────────────────
       if (chat) {
@@ -960,7 +1057,7 @@ export function registerEdenRoutes(app: Express): void {
           sendEvent("token", { text: token });
         }
         await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
-        sendEvent("done", { sessionId: sid });
+        sendEvent("done", donePayload());
         return;
       }
 
@@ -1050,7 +1147,7 @@ export function registerEdenRoutes(app: Express): void {
 
       const searchOffers = buildActionOffers(message.trim(), "search", retrieved, filters);
       if (searchOffers.length > 0) sendEvent("action_offer", { offers: searchOffers });
-      sendEvent("done", { sessionId: sid });
+      sendEvent("done", donePayload());
     } catch (err: unknown) {
       const errMsg = "Chat failed";
       console.error("[EDEN chat] Error:", err);
