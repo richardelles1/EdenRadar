@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library, Bell, CheckCircle2, Loader2, X } from "lucide-react";
+import { useLocation } from "wouter";
+import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library, Bell, CheckCircle2, Loader2, X, Pencil } from "lucide-react";
 import { EdenAvatar, MarkdownContent, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
-import type { ChatAsset, ChatMessage, ExternalResult, ActionOffer, AlertOfferConfig } from "@/hooks/useEdenChat";
+import { getAuthHeaders } from "@/lib/queryClient";
+import type { ChatAsset, ChatMessage, ExternalResult, ActionOffer, AlertOfferConfig, WriteActionOffer } from "@/hooks/useEdenChat";
 
 function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
   if (!assets.length || !content) return assets;
@@ -187,12 +189,14 @@ function ExternalResultsPanel({
   );
 }
 
-function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
+function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = false }: {
   asset: ChatAsset;
   index: number;
   savedIngestedIds: Set<number>;
+  onAssetSaved?: (asset: { modality?: string | null; indication?: string | null }) => void;
   compact?: boolean;
 }) {
+  const [, setLocation] = useLocation();
   const { label, cls } = relevanceLabel(asset.similarity);
   const leftBorder = modalityLeftBorder(asset.modality);
   const isSaved = savedIngestedIds.has(asset.id);
@@ -241,11 +245,26 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
             {asset.ipType}
           </span>
         )}
+        {asset.rankNote && (
+          <span className="text-[9px] font-medium border rounded px-1.5 py-0.5 bg-emerald-500/8 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" title="Why this was ranked here">
+            ↑ {asset.rankNote}
+          </span>
+        )}
       </div>
 
       {/* Actions row */}
       <div className="flex items-center justify-between mt-0.5 pt-1.5 border-t border-border/50">
-        <PipelinePicker payload={payload} alreadySaved={isSaved} />
+        <div className="flex items-center gap-2">
+          <PipelinePicker payload={payload} alreadySaved={isSaved} onSaved={() => onAssetSaved?.({ modality: asset.modality, indication: asset.indication })} />
+          <button
+            onClick={() => setLocation(`/asset/${asset.id}`)}
+            className={`text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
+            data-testid={`citation-dossier-${index}`}
+          >
+            <FileSearch className="h-2.5 w-2.5 shrink-0" />
+            Dossier
+          </button>
+        </div>
         {asset.sourceUrl && (
           <a
             href={asset.sourceUrl}
@@ -255,7 +274,7 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
             data-testid={`citation-link-${index}`}
           >
             <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-            View source
+            Source
           </a>
         )}
       </div>
@@ -267,19 +286,24 @@ function ActionOffers({
   offers,
   savedIngestedIds,
   onCreateAlert,
+  onAssetSaved,
   compact = false,
 }: {
   offers: ActionOffer[];
   savedIngestedIds: Set<number>;
   onCreateAlert?: (config: AlertOfferConfig) => Promise<void>;
+  onAssetSaved?: (asset: { modality?: string | null; indication?: string | null }) => void;
   compact?: boolean;
 }) {
   const [alertStates, setAlertStates] = useState<Record<number, "idle" | "pending" | "creating" | "done" | "dismissed">>({});
+  const [cadences, setCadences] = useState<Record<number, "daily" | "weekly">>({});
+  const [writeStates, setWriteStates] = useState<Record<string, "idle" | "executing" | "done" | "error">>({});
 
   const saveOffers = offers.filter((o): o is Extract<ActionOffer, { type: "save" }> => o.type === "save");
   const alertOffers = offers.filter((o): o is Extract<ActionOffer, { type: "alert" }> => o.type === "alert");
+  const writeOffers = offers.filter((o): o is WriteActionOffer => o.type === "status_update" || o.type === "note_add" || o.type === "move_pipeline");
 
-  if (saveOffers.length === 0 && alertOffers.length === 0) return null;
+  if (saveOffers.length === 0 && alertOffers.length === 0 && writeOffers.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-1.5 mt-2 ml-0.5" data-testid="action-offers">
@@ -290,7 +314,7 @@ function ActionOffers({
           <div key={`save-${oi}`} className="flex flex-wrap items-center gap-1.5">
             <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
               <Bookmark className="h-3 w-3 shrink-0" />
-              Save to pipeline:
+              {offer.targetPipelineName ? `Save to "${offer.targetPipelineName}":` : "Save to pipeline:"}
             </span>
             {unsaved.map((a) => {
               const payload: PipelinePickerPayload = {
@@ -309,7 +333,7 @@ function ActionOffers({
                   data-testid={`save-offer-asset-${a.id}`}
                 >
                   <span className={`max-w-[130px] truncate text-foreground font-medium ${compact ? "text-[10px]" : "text-[11px]"}`}>{a.assetName}</span>
-                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} />
+                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} defaultPipelineName={offer.targetPipelineName} onSaved={() => onAssetSaved?.({ modality: a.modality, indication: a.indication })} />
                 </span>
               );
             })}
@@ -321,6 +345,7 @@ function ActionOffers({
         const state = alertStates[oi] ?? "idle";
         if (state === "dismissed") return null;
         const setOiState = (s: "idle" | "pending" | "creating" | "done" | "dismissed") => setAlertStates((prev) => ({ ...prev, [oi]: s }));
+        const cadence = cadences[oi] ?? offer.config.cadence ?? "weekly";
         return (
           <div key={`alert-${oi}`} className="flex flex-wrap items-center gap-1.5" data-testid={`alert-offer-${oi}`}>
             {state === "idle" && (
@@ -346,12 +371,24 @@ function ActionOffers({
                 {offer.config.stages?.map((s) => (
                   <span key={s} className={`bg-muted rounded px-1.5 py-0.5 text-muted-foreground ${compact ? "text-[9px]" : "text-[10px]"}`}>{s}</span>
                 ))}
+                <div className={`flex items-center gap-0.5 border border-amber-500/20 rounded-full overflow-hidden ${compact ? "text-[9px]" : "text-[10px]"}`}>
+                  {(["daily", "weekly"] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCadences((prev) => ({ ...prev, [oi]: c }))}
+                      className={`px-1.5 py-0.5 capitalize transition-colors ${cadence === c ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid={`alert-offer-cadence-${c}-${oi}`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
                 <button
                   className={`font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
                   onClick={async () => {
                     if (!onCreateAlert) return;
                     setOiState("creating");
-                    try { await onCreateAlert(offer.config); setOiState("done"); }
+                    try { await onCreateAlert({ ...offer.config, cadence }); setOiState("done"); }
                     catch { setOiState("pending"); }
                   }}
                   data-testid={`alert-offer-create-${oi}`}
@@ -382,6 +419,62 @@ function ActionOffers({
           </div>
         );
       })}
+
+      {writeOffers.map((offer, wi) => {
+        const key = `${offer.type}-${offer.ingestedAssetId}-${wi}`;
+        const wState = writeStates[key] ?? "idle";
+        const isSaved = savedIngestedIds.has(offer.ingestedAssetId);
+        if (!isSaved) return null; // only show for assets already in pipeline
+
+        const execute = async () => {
+          setWriteStates((prev) => ({ ...prev, [key]: "executing" }));
+          try {
+            const payload =
+              offer.type === "status_update" ? { status: offer.status } :
+              offer.type === "note_add" ? { content: offer.content } :
+              { pipelineName: offer.pipelineName };
+            const authHeaders = await getAuthHeaders();
+            const res = await fetch("/api/eden/write-action", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...authHeaders },
+              body: JSON.stringify({ type: offer.type, ingestedAssetId: offer.ingestedAssetId, payload }),
+            });
+            setWriteStates((prev) => ({ ...prev, [key]: res.ok ? "done" : "error" }));
+          } catch {
+            setWriteStates((prev) => ({ ...prev, [key]: "error" }));
+          }
+        };
+
+        return (
+          <div key={key} className="flex flex-wrap items-center gap-1.5">
+            <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
+              <Pencil className="h-3 w-3 shrink-0" />
+              {offer.type === "status_update" ? "Update status:" : offer.type === "note_add" ? "Add note:" : "Move to pipeline:"}
+            </span>
+            {wState === "idle" && (
+              <button
+                onClick={execute}
+                className={`rounded-full border border-blue-500/30 bg-blue-500/8 text-blue-700 dark:text-blue-400 px-2.5 py-0.5 font-medium hover:bg-blue-500/15 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
+              >
+                {offer.label}
+              </button>
+            )}
+            {wState === "executing" && (
+              <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                <Loader2 className="h-3 w-3 animate-spin" /> Working...
+              </span>
+            )}
+            {wState === "done" && (
+              <span className={`flex items-center gap-1 text-emerald-600 dark:text-emerald-400 ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                <CheckCircle2 className="h-3 w-3" /> Done
+              </span>
+            )}
+            {wState === "error" && (
+              <span className={`text-destructive ${compact ? "text-[10px]" : "text-[11px]"}`}>Failed — try again</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -398,6 +491,7 @@ export type EdenChatThreadProps = {
   onSend: (q: string) => void;
   onToggleCitations: (i: number, open: boolean) => void;
   onCreateAlert?: (config: AlertOfferConfig) => Promise<void>;
+  onAssetSaved?: (asset: { modality?: string | null; indication?: string | null }) => void;
   compact?: boolean;
   chatEndRef?: React.RefObject<HTMLDivElement>;
 };
@@ -414,6 +508,7 @@ export function EdenChatThread({
   onSend,
   onToggleCitations,
   onCreateAlert,
+  onAssetSaved,
   compact = false,
   chatEndRef,
 }: EdenChatThreadProps) {
@@ -514,6 +609,7 @@ export function EdenChatThread({
                   offers={msg.actionOffers}
                   savedIngestedIds={savedIngestedIds}
                   onCreateAlert={onCreateAlert}
+                  onAssetSaved={onAssetSaved}
                   compact={compact}
                 />
               )}
@@ -581,7 +677,7 @@ export function EdenChatThread({
                             key={a.id}
                             style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 50}ms` }}
                           >
-                            <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} compact={compact} />
+                            <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} onAssetSaved={onAssetSaved} compact={compact} />
                           </div>
                         ))}
                       </div>

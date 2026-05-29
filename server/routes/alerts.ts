@@ -13,6 +13,7 @@ export const alertBodySchema = z.object({
   stages: z.array(z.string().max(100)).max(20).nullable().optional(),
   institutions: z.array(z.string().max(200)).max(100).nullable().optional(),
   criteriaType: z.enum(["all_new", "custom"]).optional(),
+  cadence: z.enum(["daily", "weekly"]).optional(),
   enabled: z.boolean().optional(),
 });
 
@@ -37,7 +38,7 @@ export function registerAlertsRoutes(app: Express): void {
     try {
       const parsed = alertBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request" });
-      const { query, modalities, stages, institutions, name, criteriaType, enabled } = parsed.data;
+      const { query, modalities, stages, institutions, name, criteriaType, cadence, enabled } = parsed.data;
       const trimmedName = name.trim();
       if (!trimmedName) {
         return res.status(400).json({ error: "Alert name is required" });
@@ -55,6 +56,7 @@ export function registerAlertsRoutes(app: Express): void {
         stages: isAllNew ? null : (stages ?? null),
         institutions: isAllNew ? null : (institutions ?? null),
         criteriaType: criteriaType ?? "custom",
+        cadence: cadence ?? "weekly",
         enabled: enabled !== false,
       }, userId);
       res.status(201).json(alert);

@@ -180,6 +180,7 @@ export default function IndustryEden() {
     send,
     clearChat,
     loadSession,
+    recordSave,
   } = useEdenChat(pw, userContext);
 
   useEffect(() => {
@@ -554,6 +555,7 @@ export default function IndustryEden() {
                 onSend={handleSend}
                 onToggleCitations={(i, open) => setExpandedCitations((prev) => ({ ...prev, [i]: open }))}
                 onCreateAlert={handleCreateAlert}
+                onAssetSaved={recordSave}
                 compact={false}
                 chatEndRef={chatEndRef as React.RefObject<HTMLDivElement>}
               />

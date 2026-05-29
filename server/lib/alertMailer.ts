@@ -10,11 +10,13 @@ const SUPPORT_EMAIL = "support@edenradar.com";
 
 function frequencyWindowHours(matchAlerts: string): number {
   if (matchAlerts === "frequent") return 4;
+  if (matchAlerts === "weekly") return 168;
   return 24; // "daily"
 }
 
 function frequencyLabel(matchAlerts: string): string {
   if (matchAlerts === "frequent") return "Frequent";
+  if (matchAlerts === "weekly") return "Weekly";
   return "Daily";
 }
 
@@ -271,7 +273,10 @@ async function evaluateAlerts(): Promise<void> {
       continue;
     }
 
-    const windowHours = frequencyWindowHours(matchAlerts);
+    const alertCadence = (alert as { cadence?: string }).cadence;
+    const windowHours = alertCadence === "daily" || alertCadence === "weekly"
+      ? frequencyWindowHours(alertCadence)
+      : frequencyWindowHours(matchAlerts);
     const elapsed = alert.lastAlertSentAt
       ? ((Date.now() - alert.lastAlertSentAt.getTime()) / (1000 * 60 * 60)).toFixed(1)
       : "never sent";

@@ -60,7 +60,7 @@ export function EdenWidget() {
   const totalIndexed = embedData?.embeddingCoverage?.totalEmbedded ?? 0;
 
   const {
-    messages, input, setInput, streaming, sessionId, send, clearChat, loadSession,
+    messages, input, setInput, streaming, sessionId, send, clearChat, loadSession, recordSave,
   } = useEdenChat(pw, userContext);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -316,6 +316,7 @@ export function EdenWidget() {
                   onSend={handleSend}
                   onToggleCitations={(i, open) => setExpandedCitations((prev) => ({ ...prev, [i]: open }))}
                   onCreateAlert={handleCreateAlert}
+                  onAssetSaved={recordSave}
                   compact
                   chatEndRef={chatEndRef as React.RefObject<HTMLDivElement>}
                 />

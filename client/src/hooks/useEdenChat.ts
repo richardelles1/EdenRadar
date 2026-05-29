@@ -11,6 +11,7 @@ export type ChatAsset = {
   sourceName?: string | null;
   sourceUrl?: string | null;
   similarity: number;
+  rankNote?: string;
 };
 
 export type ExternalResult = {
@@ -43,11 +44,18 @@ export type AlertOfferConfig = {
   modalities?: string[] | null;
   stages?: string[] | null;
   institutions?: string[] | null;
+  cadence?: "daily" | "weekly";
 };
 
+export type WriteActionOffer =
+  | { type: "status_update"; ingestedAssetId: number; assetName: string; status: string; label: string }
+  | { type: "note_add"; ingestedAssetId: number; assetName: string; content: string; label: string }
+  | { type: "move_pipeline"; ingestedAssetId: number; assetName: string; pipelineName: string; label: string };
+
 export type ActionOffer =
-  | { type: "save"; assets: Array<{ id: number; assetName: string; institution: string; modality?: string | null; developmentStage?: string | null; indication?: string | null; sourceUrl?: string | null }> }
-  | { type: "alert"; label: string; config: AlertOfferConfig };
+  | { type: "save"; assets: Array<{ id: number; assetName: string; institution: string; modality?: string | null; developmentStage?: string | null; indication?: string | null; sourceUrl?: string | null }>; targetPipelineName?: string }
+  | { type: "alert"; label: string; config: AlertOfferConfig }
+  | WriteActionOffer;
 
 export type EdenSessionSummary = {
   id: number;
@@ -92,6 +100,10 @@ export type EdenUserContext = {
   therapeuticAreas?: string[];
   dealStages?: string[];
   modalities?: string[];
+  engagementBoosts?: {
+    modalities?: Record<string, number>;
+    indications?: Record<string, number>;
+  };
 };
 
 export function useEdenChat(pw: string, userContext?: EdenUserContext) {
@@ -100,6 +112,20 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
   const [streaming, setStreaming] = useState(false);
   const [streamingStage, setStreamingStage] = useState<StreamingStage>("idle");
   const [sessionId, setSessionId] = useState("");
+  const [savedBoosts, setSavedBoosts] = useState<{ modalities: Record<string, number>; indications: Record<string, number> }>({ modalities: {}, indications: {} });
+
+  function recordSave(asset: { modality?: string | null; indication?: string | null }): void {
+    setSavedBoosts((prev) => {
+      const next = { modalities: { ...prev.modalities }, indications: { ...prev.indications } };
+      if (asset.modality && asset.modality !== "unknown") {
+        next.modalities[asset.modality] = (next.modalities[asset.modality] ?? 0) + 3;
+      }
+      if (asset.indication && asset.indication !== "unknown") {
+        next.indications[asset.indication] = (next.indications[asset.indication] ?? 0) + 2;
+      }
+      return next;
+    });
+  }
 
   async function send(overrideMsg?: string): Promise<void> {
     const raw = overrideMsg ?? input;
@@ -120,7 +146,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
       const response = await fetch("/api/eden/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-        body: JSON.stringify({ message: msg, sessionId: sessionId || undefined, userContext: userContext || undefined }),
+        body: JSON.stringify({ message: msg, sessionId: sessionId || undefined, userContext: { ...(userContext ?? {}), engagementBoosts: savedBoosts } }),
       });
 
       if (!response.ok || !response.body) {
@@ -232,6 +258,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
   function clearChat(): void {
     setMessages([]);
     setSessionId("");
+    setSavedBoosts({ modalities: {}, indications: {} });
   }
 
   function loadSession(session: EdenSessionSummary): void {
@@ -245,5 +272,5 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
     setSessionId(session.sessionId);
   }
 
-  return { messages, setMessages, input, setInput, streaming, streamingStage, sessionId, send, clearChat, loadSession };
+  return { messages, setMessages, input, setInput, streaming, streamingStage, sessionId, send, clearChat, loadSession, recordSave };
 }

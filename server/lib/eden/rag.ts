@@ -15,6 +15,10 @@ export type UserContext = {
   therapeuticAreas?: string[];
   dealStages?: string[];
   modalities?: string[];
+  engagementBoosts?: {
+    modalities?: Record<string, number>;
+    indications?: Record<string, number>;
+  };
 };
 
 // ── Structured filter types ───────────────────────────────────────────────
@@ -37,6 +41,15 @@ export type QueryFilters = {
   trending?: boolean;
 };
 
+export type CrossSessionMemory = {
+  topModalities: string[];
+  topIndications: string[];
+  topBiologies: string[];
+  topInstitutions: string[];
+  recentSummary?: string;
+  sessionCount: number;
+};
+
 export type SessionFocusContext = {
   modality?: string;
   geography?: GeoKey;
@@ -44,7 +57,43 @@ export type SessionFocusContext = {
   indication?: string;
   institution?: string;
   biology?: string;
+  _summary?: string;
+  _crossSessionMemory?: CrossSessionMemory;
 };
+
+export function buildCrossSessionMemory(
+  sessions: Array<{ focusContext?: Record<string, unknown> | null }>
+): CrossSessionMemory | null {
+  if (!sessions.length) return null;
+  const mc: Record<string, number> = {};
+  const ic: Record<string, number> = {};
+  const bc: Record<string, number> = {};
+  const nc: Record<string, number> = {};
+  let recentSummary: string | undefined;
+
+  for (let i = 0; i < sessions.length; i++) {
+    const fc = sessions[i].focusContext;
+    if (!fc) continue;
+    const w = sessions.length - i; // recency weight
+    if (fc.modality) mc[fc.modality as string] = (mc[fc.modality as string] ?? 0) + w;
+    if (fc.indication) ic[fc.indication as string] = (ic[fc.indication as string] ?? 0) + w;
+    if (fc.biology) bc[fc.biology as string] = (bc[fc.biology as string] ?? 0) + w;
+    if (fc.institution) nc[fc.institution as string] = (nc[fc.institution as string] ?? 0) + w;
+    if (!recentSummary && fc._summary) recentSummary = fc._summary as string;
+  }
+
+  const topN = (counts: Record<string, number>, n = 3) =>
+    Object.entries(counts).sort(([, a], [, b]) => b - a).slice(0, n).map(([k]) => k);
+
+  const topModalities = topN(mc);
+  const topIndications = topN(ic);
+  const topBiologies = topN(bc);
+  const topInstitutions = topN(nc);
+
+  if (!topModalities.length && !topIndications.length && !recentSummary) return null;
+
+  return { topModalities, topIndications, topBiologies, topInstitutions, recentSummary, sessionCount: sessions.length };
+}
 
 // In-session engagement signals: tracks which modalities/indications the user
 // has engaged with across turns (frequency-weighted, resets on explicit clear).
@@ -423,8 +472,13 @@ function extractFocusUpdates(message: string, current: SessionFocusContext, port
   if (!Object.keys(newFilters).length) return current; // no new filter signals → preserve
   // Detect explicit search/filter intent; avoid accumulating on pure information queries
   const hasExplicitIntent = /\b(?:show me|find me|give me|focus on|filter (?:by|for|to)|narrow|restrict|limit to|only show|let'?s look at|let'?s explore|looking for|searching for|interested in)\b/i.test(message)
-    || /\b(?:from|in|at|by)\s+(?:\w+\s+)?(?:institutions?|universities|europe|european|us|american|uk|british|asian)\b/i.test(message);
-  if (!hasExplicitIntent && Object.keys(current).length > 0) return current; // keep existing focus for info queries
+    || /\b(?:from|in|at|by)\s+(?:\w+\s+)?(?:institutions?|universities|europe|european|us|american|uk|british|asian)\b/i.test(message)
+    // Narrowing / refinement language — "now just preclinical", "only phase 1", "the Boston ones"
+    || /\b(?:just|only(?:\s+(?:the|show))?|now\s+(?:just|only|show\s+me?)|but\s+(?:only|just)|the\s+\w+(?:\s+\w+)?\s+ones?|specifically|in\s+particular)\b/i.test(message);
+  // Additive filters (new dimensions not yet in focus) always stack — they refine, not override.
+  // Only override-type changes (changing an existing focus field) need explicit intent.
+  const isAdditive = Object.keys(newFilters).every((k) => !(k in current));
+  if (!hasExplicitIntent && !isAdditive && Object.keys(current).length > 0) return current; // keep existing focus for info queries
   return { ...current, ...newFilters };
 }
 
@@ -537,8 +591,25 @@ export function buildFocusContextBlock(focus: SessionFocusContext): string {
   if (focus.indication) parts.push(`Indication area: ${focus.indication}`);
   if (focus.institution) parts.push(`Institution: ${focus.institution}`);
   if (focus.biology) parts.push(`Biology mechanism: ${focus.biology}`);
-  if (!parts.length) return "";
-  return `## Active session focus\n${parts.join(" | ")}\n\nWhen answering, naturally acknowledge the active filters. If the user asks a count question, use the filtered count, not the global total.`;
+
+  const sections: string[] = [];
+  if (parts.length) {
+    sections.push(`## Active session focus\n${parts.join(" | ")}\n\nWhen answering, naturally acknowledge the active filters. If the user asks a count question, use the filtered count, not the global total.`);
+  }
+
+  const mem = focus._crossSessionMemory;
+  if (mem) {
+    const histLines: string[] = ["## User history (prior sessions)"];
+    if (mem.topModalities.length) histLines.push(`Previously explored modalities: ${mem.topModalities.join(", ")}`);
+    if (mem.topIndications.length) histLines.push(`Previously explored indications: ${mem.topIndications.join(", ")}`);
+    if (mem.topBiologies.length) histLines.push(`Previously explored mechanisms: ${mem.topBiologies.join(", ")}`);
+    if (mem.topInstitutions.length) histLines.push(`Institutions of interest: ${mem.topInstitutions.join(", ")}`);
+    if (mem.recentSummary) histLines.push(`Last session summary: ${mem.recentSummary.slice(0, 300)}`);
+    histLines.push(`When relevant, acknowledge what the user has been tracking and make continuations feel natural. Do NOT recite history unprompted — use it to inform tone and proactive suggestions only.`);
+    sections.push(histLines.join("\n"));
+  }
+
+  return sections.join("\n\n");
 }
 
 export function buildEngagementBlock(signals: EngagementSignals): string {
@@ -1082,7 +1153,7 @@ export function isConversational(query: string): boolean {
 export type LiveSource = "clinicaltrials" | "patents" | "harvard";
 
 export type IntentClassification = {
-  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational";
+  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational" | "pipeline";
   filters: QueryFilters;
   backRefPosition: number | null; // 0=first, 1=second, 2=third
   liveSource: LiveSource | null;  // non-null only when query explicitly targets external live data
@@ -1096,6 +1167,7 @@ INTENTS:
 - back_ref: refers to a previously shown asset by position/anaphora ("the second one", "tell me more about it", "that one") — ONLY valid when hasPriorAssets=true
 - comparative: wants head-to-head comparison ("compare", "vs", "which is better")
 - definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
+- pipeline: user asks about their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio")
 - conversational: greeting, thanks, out-of-scope chat with no biotech search intent
 
 FILTER EXTRACTION (null if not mentioned in the message):
@@ -1122,9 +1194,16 @@ Return exactly this shape:
 export async function classifyIntent(
   message: string,
   hasPriorAssets: boolean,
+  focusContext?: SessionFocusContext,
 ): Promise<IntentClassification> {
   const fallback: IntentClassification = { intent: "search", filters: {}, backRefPosition: null, liveSource: null };
   try {
+    const focusParts: string[] = [];
+    if (focusContext?.modality) focusParts.push(`modality: ${focusContext.modality}`);
+    if (focusContext?.indication) focusParts.push(`indication: ${focusContext.indication}`);
+    if (focusContext?.institution) focusParts.push(`institution: ${focusContext.institution}`);
+    if (focusContext?.stage) focusParts.push(`stage: ${focusContext.stage}`);
+    const focusLine = focusParts.length > 0 ? `\nSessionFocus: ${focusParts.join(", ")}` : "";
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
@@ -1132,7 +1211,7 @@ export async function classifyIntent(
       max_tokens: 180,
       messages: [
         { role: "system", content: ROUTER_SYSTEM_PROMPT },
-        { role: "user", content: `hasPriorAssets: ${hasPriorAssets}\n\nMessage: ${message}` },
+        { role: "user", content: `hasPriorAssets: ${hasPriorAssets}${focusLine}\n\nMessage: ${message}` },
       ],
     });
     const raw = resp.choices[0]?.message?.content ?? "{}";
@@ -1232,12 +1311,14 @@ function buildContext(assets: RetrievedAsset[]): string {
 // Tier 2 (adaptive, additive): modality match +Math.min(2, freq), indication +Math.min(1, freq)
 // Tier 3 (active biology): biology match +2 when session focus biology is set
 // Only applied when assets.length > LIMIT, or when activeBiology forces reranking.
+export type RankedAsset = RetrievedAsset & { rankNote?: string };
+
 export function rerankAssets(
   assets: RetrievedAsset[],
   userContext?: UserContext,
   engagementSignals?: EngagementSignals,
   activeBiology?: string
-): RetrievedAsset[] {
+): RankedAsset[] {
   const LIMIT = 8;
 
   const preferredModalities = (userContext?.modalities ?? []).map((m) => m.toLowerCase());
@@ -1265,48 +1346,69 @@ export function rerankAssets(
 
   const scored = assets.map((a, idx) => {
     let boost = 0;
+    const noteparts: string[] = [];
 
     // Tier 1: static user-profile boost
     if (a.modality && a.modality !== "unknown") {
       const m = a.modality.toLowerCase();
-      if (preferredModalities.some((pm) => m.includes(pm) || pm.includes(m))) boost += 3;
+      if (preferredModalities.some((pm) => m.includes(pm) || pm.includes(m))) {
+        boost += 3;
+        noteparts.push("profile");
+      }
     }
     if (a.indication && a.indication !== "unknown") {
       const ind = a.indication.toLowerCase();
-      if (preferredAreas.some((pa) => ind.includes(pa) || pa.includes(ind))) boost += 2;
+      if (preferredAreas.some((pa) => ind.includes(pa) || pa.includes(ind))) {
+        boost += 2;
+        if (!noteparts.includes("profile")) noteparts.push("profile");
+      }
     }
 
     // Tier 2: adaptive in-session engagement boost (smaller, capped)
     if (a.modality && a.modality !== "unknown") {
       const m = a.modality.toLowerCase();
       const match = engagedModalities.find((em) => m.includes(em.key) || em.key.includes(m));
-      if (match) boost += Math.min(2, match.count);
+      if (match) { boost += Math.min(2, match.count); noteparts.push("session"); }
     }
     if (a.indication && a.indication !== "unknown") {
       const ind = a.indication.toLowerCase();
       const match = engagedIndications.find((ei) => ind.includes(ei.key) || ei.key.includes(ind));
-      if (match) boost += Math.min(1, match.count);
+      if (match) {
+        boost += Math.min(1, match.count);
+        if (!noteparts.includes("session")) noteparts.push("session");
+      }
     }
 
     // Tier 2 (cont.): adaptive biology engagement boost
     if (a.biology && a.biology !== "unknown") {
       const bio = a.biology.toLowerCase();
       const match = engagedBiologies.find((eb) => bio.includes(eb.key) || eb.key.includes(bio));
-      if (match) boost += Math.min(2, match.count);
+      if (match) {
+        boost += Math.min(2, match.count);
+        if (!noteparts.includes("session")) noteparts.push("session");
+      }
     }
 
     // Tier 3: active session biology filter boost
     if (activeBioLower && a.biology) {
       const bio = a.biology.toLowerCase();
-      if (bio.includes(activeBioLower) || activeBioLower.includes(bio)) boost += 2;
+      if (bio.includes(activeBioLower) || activeBioLower.includes(bio)) {
+        boost += 2;
+        noteparts.push("focus");
+      }
     }
 
+    // Build a compact rank note — only present when boosted above baseline
+    const rankNote = noteparts.length > 0
+      ? noteparts.map((n) => n === "profile" ? "Profile match" : n === "session" ? "Session signal" : "Focus match").join(" · ")
+      : undefined;
+
     // idx preserves semantic-similarity order as tiebreaker for equal-boost assets
-    return { asset: a, boost, idx };
+    return { asset: a, boost, idx, rankNote };
   });
 
   scored.sort((a, b) => b.boost - a.boost || a.idx - b.idx);
-  return scored.slice(0, LIMIT).map((s) => s.asset);
+  return scored.slice(0, LIMIT).map((s) => ({ ...s.asset, rankNote: s.rankNote }));
 }
 
 // ── Static industry intelligence ─────────────────────────────────────────
@@ -1617,23 +1719,35 @@ export async function* compareQuery(
     })
     .join("\n\n");
 
-  const comparePrompt = `You are doing a head-to-head BD comparison of ${assets.length} TTO assets for a pharma/biotech business development professional. Write a structured but conversational assessment — like a knowledgeable colleague sharing their genuine take.
+  const assetNames = assets.map((a, i) => `Asset ${i + 1}: ${a.assetName.slice(0, 40)}`);
+
+  const comparePrompt = `You are doing a head-to-head BD comparison of ${assets.length} TTO assets for a pharma/biotech business development professional.
 
 ASSETS TO COMPARE:
 ${assetBlock}
 
 USER QUESTION: ${question}
 
-Structure your comparison across these dimensions (use bold headers for each):
-- **Mechanism / Modality** — how do the mechanisms and modalities differ, and what does that mean for development risk?
-- **Development stage** — where are they relative to each other, and which is closer to de-risked?
-- **IP position** — what does the IP picture look like for each?
-- **Innovation claim** — which has the more differentiated scientific claim?
-- **Unmet need and commercial fit** — which addresses a more commercially compelling gap?
-- **Competitive context** — what does the landscape look like for each based on comparable drugs or prior art?
-- **EDEN take** — your direct, honest professional view on which is more commercially interesting at this stage and why
+RESPONSE FORMAT — two parts, in order:
 
-Be specific using the data provided. Name real tradeoffs. Avoid false balance — if one is clearly stronger on a dimension, say so. Close with one genuinely useful follow-up question.`;
+**Part 1: Comparison table**
+Output a markdown table with a row per dimension and a column per asset. Use exactly this structure:
+
+| Dimension | ${assetNames.join(" | ")} |
+|---|${assets.map(() => "---").join("|")}|
+| Modality | ... |
+| Stage | ... |
+| IP type | ... |
+| Target / MoA | ... |
+| Indication | ... |
+| Innovation claim | ... |
+| Unmet need | ... |
+| Competitive context | ... |
+
+Keep each cell concise — one short phrase or sentence. Use "N/A" when data is unavailable. Do NOT add narrative inside the table cells.
+
+**Part 2: EDEN take**
+After the table, write 3–4 sentences of direct professional opinion: which asset is more commercially compelling at this stage and why. Name specific tradeoffs. Avoid false balance — if one is clearly stronger, say so. Close with one genuinely useful follow-up question.`;
 
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
     { role: "system", content: systemPrompt },

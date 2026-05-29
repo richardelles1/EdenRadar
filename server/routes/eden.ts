@@ -14,6 +14,7 @@ import {
   isComparativeQuery, compareQuery, summarizeSession, classifyIntent,
   extractBackRefPosition, extractBackRefInstitution,
   type UserContext, type SessionFocusContext, type IntentClassification, type LiveSource,
+  type CrossSessionMemory, type RankedAsset, buildCrossSessionMemory,
 } from "../lib/eden/rag";
 import { searchClinicalTrials } from "../lib/sources/clinicaltrials";
 import { searchLens } from "../lib/sources/lens";
@@ -40,10 +41,16 @@ type AlertOfferConfig = {
   name: string; criteriaType: "custom";
   query?: string | null; modalities?: string[] | null;
   stages?: string[] | null; institutions?: string[] | null;
+  cadence?: "daily" | "weekly";
 };
+type WriteActionOffer =
+  | { type: "status_update"; ingestedAssetId: number; assetName: string; status: string; label: string }
+  | { type: "note_add"; ingestedAssetId: number; assetName: string; content: string; label: string }
+  | { type: "move_pipeline"; ingestedAssetId: number; assetName: string; pipelineName: string; label: string };
 type ActionOffer =
-  | { type: "save"; assets: ActionOfferAsset[] }
-  | { type: "alert"; label: string; config: AlertOfferConfig };
+  | { type: "save"; assets: ActionOfferAsset[]; targetPipelineName?: string }
+  | { type: "alert"; label: string; config: AlertOfferConfig }
+  | WriteActionOffer;
 
 // Intent patterns for save and alert offer detection.
 const SAVE_PATTERNS: RegExp[] = [
@@ -77,6 +84,100 @@ const ALERT_PATTERNS: RegExp[] = [
   /\bnew (assets|technologies|deals|listings) (from|at|like)\b/,
 ];
 
+// Write-action patterns: status update, note addition, pipeline move
+const STATUS_MAP: Array<[RegExp, string]> = [
+  [/\b(in[\s-]?discussion|actively discussing|discussing)\b/i, "in_discussion"],
+  [/\b(evaluating|due diligence|deep.?dive|diligence)\b/i, "evaluating"],
+  [/\b(on[\s-]?hold|pause|paused|hold)\b/i, "on_hold"],
+  [/\b(pass(ed)?|not interested|skip)\b/i, "passed"],
+  [/\bwatching\b/i, "watching"],
+];
+const WRITE_STATUS_PATTERNS: RegExp[] = [
+  /\b(?:mark|set|tag|update|change)(?:\s+(?:it|this|that))?\s+(?:as|to)\b/i,
+  /\b(?:move|advance)(?:\s+(?:it|this|that))?\s+(?:to|into)\b/i,
+  /\b(?:status|stage)\s*[:=]/i,
+];
+const WRITE_NOTE_PATTERNS: RegExp[] = [
+  /\b(?:add|write|leave|create)\s+a?\s*note[:\s]/i,
+  /\bnote(?:\s+that|:\s|[:\s])/i,
+  /\bannotate\b/i,
+];
+const WRITE_MOVE_PATTERNS: RegExp[] = [
+  /\b(?:move|transfer|put)\s+(?:this|it|that)\s+(?:to|into)\s+(?:my\s+|the\s+)?(.+?)\s+(?:pipeline|list|portfolio)\b/i,
+];
+
+function extractStatusTarget(message: string): string | null {
+  for (const [rx, status] of STATUS_MAP) {
+    if (rx.test(message)) return status;
+  }
+  return null;
+}
+function extractNoteContent(message: string): string | null {
+  const m = message.match(/\bnote[:\s]+(.{4,200})/i) ?? message.match(/\badd(?:\s+a)?\s+note[:\s]+(.{4,200})/i);
+  return m?.[1]?.trim().replace(/[.!?]*$/, "").slice(0, 200) ?? null;
+}
+
+const PIPELINE_NAME_PATTERNS: RegExp[] = [
+  /\b(?:save|add) (?:it|this|these|them) to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\b(?:put|move) (?:it|this|these|them) (?:in|into) (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\badd to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\bsave to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\bmy (.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+];
+
+const ALERT_NAME_PATTERNS: Array<[RegExp, number]> = [
+  [/\bwatch (?:for|out for) (.+)/i, 1],
+  [/\blet me know (?:when|if|about|of) (.+)/i, 1],
+  [/\balert me (?:when|if|about) (.+)/i, 1],
+  [/\bnotify me (?:when|if|about) (.+)/i, 1],
+  [/\bkeep me (?:posted|updated|informed) (?:on|about) (.+)/i, 1],
+  [/\bstay (?:updated|informed) (?:on|about) (.+)/i, 1],
+  [/\bmore (.+?) from\b/i, 1],
+  [/\bnew (.+?) from\b/i, 1],
+];
+
+function capitalize(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+const ALERT_NAME_STOPLIST = new Set([
+  "assets", "technologies", "results", "listings", "items", "things", "more", "new",
+  "any", "some", "data", "info", "information", "content", "deals", "news",
+]);
+
+function extractPipelineName(message: string): string | null {
+  for (const pattern of PIPELINE_NAME_PATTERNS) {
+    const m = message.match(pattern);
+    if (m?.[1]) return m[1].trim().slice(0, 100);
+  }
+  return null;
+}
+
+function extractAlertName(
+  message: string,
+  filters: { modality?: string | null; stage?: string | null; indication?: string | null; institution?: string | null },
+): string {
+  for (const [pattern, group] of ALERT_NAME_PATTERNS) {
+    const m = message.match(pattern);
+    if (m?.[group]) {
+      const phrase = m[group].trim().replace(/[?.!,]+$/, "").slice(0, 80);
+      if (phrase.length > 2 && !ALERT_NAME_STOPLIST.has(phrase.toLowerCase())) {
+        return capitalize(phrase);
+      }
+    }
+  }
+  const parts: string[] = [];
+  if (filters.modality) parts.push(filters.modality);
+  if (filters.indication) parts.push(filters.indication);
+  if (filters.stage) parts.push(filters.stage);
+  if (filters.institution) parts.push(`· ${filters.institution}`);
+  if (parts.length > 0) return `New ${parts.join(" ")} assets`.slice(0, 100);
+  return `New: ${message.trim().slice(0, 60)}`;
+}
+
+function detectCadence(message: string): "daily" | "weekly" {
+  if (/\b(daily|every day|each day|day by day)\b/i.test(message)) return "daily";
+  return "weekly";
+}
+
 function buildActionOffers(
   message: string,
   intent: string,
@@ -88,9 +189,12 @@ function buildActionOffers(
 
   // Save: explicit or high-intent signals + search path with results
   const hasSaveIntent = SAVE_PATTERNS.some((p) => p.test(lower));
-  if (hasSaveIntent && (intent === "search" || intent === "back_ref") && retrieved.length > 0) {
+  if (hasSaveIntent && (intent === "search" || intent === "back_ref" || intent === "comparative" || intent === "definitional") && retrieved.length > 0) {
     const topAssets = retrieved.filter((a) => a.similarity >= 0.55).slice(0, 2);
-    if (topAssets.length > 0) offers.push({ type: "save", assets: topAssets });
+    if (topAssets.length > 0) {
+      const targetPipelineName = extractPipelineName(message) ?? undefined;
+      offers.push({ type: "save", assets: topAssets, targetPipelineName });
+    }
   }
 
   // Alert: notify/watch/more signals → derive config from active filters
@@ -109,18 +213,44 @@ function buildActionOffers(
     const hasStructuredFilter = institutionFilter || modalityFilter || stageFilter;
     const queryVal = hasStructuredFilter ? null : message.trim().slice(0, 200);
 
-    const alertNameBase = labelParts.length > 0 ? `New ${labelParts.join(" ")} assets` : `New: ${message.trim().slice(0, 60)}`;
     offers.push({
       type: "alert", label,
       config: {
-        name: alertNameBase.slice(0, 100),
+        name: extractAlertName(message, filters).slice(0, 100),
         query: queryVal,
         modalities: modalityFilter,
         stages: stageFilter,
         institutions: institutionFilter,
         criteriaType: "custom",
+        cadence: detectCadence(message),
       },
     });
+  }
+
+  // Write actions: status update, note addition, pipeline move
+  // Only emitted when a single clear target asset is in context (intent is back_ref or a single-result search).
+  const targetAsset = retrieved.length === 1 ? retrieved[0] : null;
+  if (targetAsset) {
+    const hasStatusIntent = WRITE_STATUS_PATTERNS.some((p) => p.test(message));
+    if (hasStatusIntent) {
+      const status = extractStatusTarget(message);
+      if (status) {
+        const statusLabel: Record<string, string> = { in_discussion: "In Discussion", evaluating: "Evaluating", on_hold: "On Hold", passed: "Passed", watching: "Watching" };
+        offers.push({ type: "status_update", ingestedAssetId: targetAsset.id, assetName: targetAsset.assetName, status, label: `Mark as ${statusLabel[status] ?? status}` });
+      }
+    }
+    const hasNoteIntent = WRITE_NOTE_PATTERNS.some((p) => p.test(message));
+    if (hasNoteIntent) {
+      const content = extractNoteContent(message);
+      if (content) {
+        offers.push({ type: "note_add", ingestedAssetId: targetAsset.id, assetName: targetAsset.assetName, content, label: `Add note: "${content.slice(0, 50)}${content.length > 50 ? "…" : ""}"` });
+      }
+    }
+    const movePipelineMatch = message.match(WRITE_MOVE_PATTERNS[0]);
+    if (movePipelineMatch?.[1]) {
+      const pipelineName = movePipelineMatch[1].trim();
+      offers.push({ type: "move_pipeline", ingestedAssetId: targetAsset.id, assetName: targetAsset.assetName, pipelineName, label: `Move to "${pipelineName}"` });
+    }
   }
 
   return offers;
@@ -136,6 +266,10 @@ export function registerEdenRoutes(app: Express): void {
       therapeuticAreas: z.array(z.string().max(100)).max(20).optional(),
       modalities: z.array(z.string().max(100)).max(20).optional(),
       dealStages: z.array(z.string().max(100)).max(20).optional(),
+      engagementBoosts: z.object({
+        modalities: z.record(z.number()).optional(),
+        indications: z.record(z.number()).optional(),
+      }).optional(),
     }).optional(),
   });
 
@@ -221,6 +355,24 @@ export function registerEdenRoutes(app: Express): void {
       // ── Seed in-memory focus from DB on first message of this server process ──
       seedSessionFocusFromDb(sid, session.focusContext);
 
+      // ── Cross-session memory: load history for known users on first turn ──
+      // Aggregates the last 6 sessions' focus contexts into a memory block that
+      // gets injected into the system prompt, giving Eden longitudinal context.
+      let crossSessionMemory: CrossSessionMemory | null = null;
+      const isFirstTurn = (session.messages ?? []).length === 0;
+      if (requestUserId && isFirstTurn) {
+        try {
+          const recentSessions = await storage.getRecentSessionsForUser(requestUserId, 6);
+          crossSessionMemory = buildCrossSessionMemory(recentSessions);
+        } catch (e) {
+          console.warn("[eden] cross-session memory load failed:", (e as Error)?.message ?? e);
+        }
+      } else if (!isFirstTurn) {
+        // On subsequent turns, preserve the memory already attached to focusContext
+        const stored = session.focusContext?._crossSessionMemory as CrossSessionMemory | undefined;
+        if (stored) crossSessionMemory = stored;
+      }
+
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
       // ── Portfolio institution names for two-pass detection ────────────────
@@ -228,6 +380,8 @@ export function registerEdenRoutes(app: Express): void {
 
       // ── Session focus context (accumulated across turns) ──────────────────
       const focusContext = getOrUpdateSessionFocus(sid, message.trim(), portfolioInstitutionNames);
+      // Attach cross-session memory to focusContext so it flows into buildSystemPrompt
+      if (crossSessionMemory) focusContext._crossSessionMemory = crossSessionMemory;
       if (isEngagementResetMessage(message.trim())) {
         markEngagementReset(sid);
       }
@@ -245,12 +399,35 @@ export function registerEdenRoutes(app: Express): void {
 
       // Derive engagement signals early so back-ref and definitional paths also benefit.
       const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
+      // Merge client-side save boosts — explicit saves are stronger signals than passive views.
+      const boosts = ctx?.engagementBoosts;
+      if (boosts) {
+        for (const [m, v] of Object.entries(boosts.modalities ?? {})) {
+          engagementSignals.modalities[m] = (engagementSignals.modalities[m] ?? 0) + v;
+        }
+        for (const [ind, v] of Object.entries(boosts.indications ?? {})) {
+          engagementSignals.indications[ind] = (engagementSignals.indications[ind] ?? 0) + v;
+        }
+      }
+      // Pre-seed from cross-session history at weight 1 — weaker than session activity
+      // so it's a prior, not a bias. Only fires when session signals are thin.
+      if (crossSessionMemory && requestUserId) {
+        for (const m of crossSessionMemory.topModalities) {
+          if (!engagementSignals.modalities[m]) engagementSignals.modalities[m] = 1;
+        }
+        for (const ind of crossSessionMemory.topIndications) {
+          if (!engagementSignals.indications[ind]) engagementSignals.indications[ind] = 1;
+        }
+        for (const bio of crossSessionMemory.topBiologies) {
+          if (!engagementSignals.biologies[bio]) engagementSignals.biologies[bio] = 1;
+        }
+      }
 
       // ── LLM Intent Router + Embedding (parallel) ──────────────────────────────────
       // classifyIntent replaces the regex cascade. embedQuery runs speculatively
       // so it's ready when we reach the search path — cost is negligible if discarded.
       const [intentResult, precomputedEmbedding] = await Promise.allSettled([
-        classifyIntent(message.trim(), priorIds.length > 0),
+        classifyIntent(message.trim(), priorIds.length > 0, focusContext),
         embedQuery(message.trim()),
       ]);
       const intentClass: IntentClassification = intentResult.status === "fulfilled"
@@ -620,6 +797,12 @@ export function registerEdenRoutes(app: Express): void {
               assetIds: fetchedForCompare.map((a) => a.id),
               assets: compareAssetPayload,
             });
+            const compareOffers = buildActionOffers(
+              message.trim(), "comparative",
+              fetchedForCompare.map((a) => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, sourceUrl: a.sourceUrl, similarity: 1.0 })),
+              filters,
+            );
+            if (compareOffers.length > 0) sendEvent("action_offer", { offers: compareOffers });
             sendEvent("done", { sessionId: sid });
             return;
           }
@@ -640,7 +823,7 @@ export function registerEdenRoutes(app: Express): void {
           sendEvent("token", { text: token });
         }
 
-        const CONCEPT_SIMILARITY_THRESHOLD = 0.50;
+        const CONCEPT_SIMILARITY_THRESHOLD = 0.60;
         let relatedAssets: import("../storage").RetrievedAsset[] = [];
         try {
           const conceptEmbedding = await conceptEmbeddingPromise.catch(() => null);
@@ -682,6 +865,12 @@ export function registerEdenRoutes(app: Express): void {
             assetIds: relatedAssets.slice(0, 3).map((a) => a.id),
             assets: relatedAssetPayload,
           });
+          const defOffers = buildActionOffers(
+            message.trim(), "definitional",
+            relatedAssets.slice(0, 3).map((a) => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, sourceUrl: a.sourceUrl, similarity: a.similarity ?? 0.8 })),
+            filters,
+          );
+          if (defOffers.length > 0) sendEvent("action_offer", { offers: defOffers });
         } else {
           await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
         }
@@ -690,7 +879,79 @@ export function registerEdenRoutes(app: Express): void {
         return;
       }
 
-      // ── Path 5: Conversational ─────────────────────────────────────────────────
+      // ── Path 5: Pipeline / saved-asset browse ─────────────────────────────────
+      if (intentClass.intent === "pipeline" && requestUserId) {
+        // Detect optional named pipeline in the message (e.g. "show my gene therapy pipeline")
+        const namedPipeline = extractPipelineName(message.trim());
+        let pipelineListId: number | undefined;
+        let pipelineLabel = "your saved pipeline";
+
+        if (namedPipeline) {
+          try {
+            const lists = await storage.getPipelineLists(requestUserId);
+            const match = lists.find((l) =>
+              l.name.toLowerCase().includes(namedPipeline.toLowerCase()) ||
+              namedPipeline.toLowerCase().includes(l.name.toLowerCase())
+            );
+            if (match) {
+              pipelineListId = match.id;
+              pipelineLabel = `your "${match.name}" pipeline`;
+            }
+          } catch { /* fall through to all saved */ }
+        }
+
+        const savedList = await storage.getSavedAssets(pipelineListId, requestUserId).catch(() => []);
+        const ingestedIds = savedList
+          .map((s) => s.ingestedAssetId)
+          .filter((id): id is number => id !== null && id !== undefined);
+
+        let pipelineAssets: import("../storage").RetrievedAsset[] = [];
+        if (ingestedIds.length > 0) {
+          const fetched = await storage.getIngestedAssetsByIds(ingestedIds).catch(() => [] as import("../storage").RetrievedAsset[]);
+          // Apply active filters to narrow the view if the user asked for something specific
+          pipelineAssets = fetched.filter((a) => {
+            if (filters.modality && a.modality?.toLowerCase() !== filters.modality.toLowerCase()) return false;
+            if (filters.stage && a.developmentStage?.toLowerCase() !== filters.stage.toLowerCase()) return false;
+            if (filters.indication && !a.indication?.toLowerCase().includes(filters.indication.toLowerCase())) return false;
+            if (filters.institution && !a.institution?.toLowerCase().includes(filters.institution.toLowerCase())) return false;
+            if (filters.biology && !a.biology?.toLowerCase().includes(filters.biology.toLowerCase())) return false;
+            return true;
+          });
+          // If filters zeroed out results, show everything (user may be browsing, not filtering)
+          if (pipelineAssets.length === 0 && fetched.length > 0) {
+            pipelineAssets = fetched;
+          }
+        }
+
+        const pipelineAssetPayload = pipelineAssets.slice(0, 15).map((a) => ({
+          id: a.id, assetName: a.assetName, institution: a.institution,
+          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
+          developmentStage: a.developmentStage, biology: a.biology ?? undefined,
+          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
+        }));
+
+        sendEvent("context", { sessionId: sid, assets: pipelineAssetPayload });
+
+        const pipelineQuestion = pipelineAssets.length > 0
+          ? `[CONTEXT: These are the assets the user has saved in ${pipelineLabel}. They are NOT search results — they are assets this user has already bookmarked. Answer the question in the context of their saved portfolio.]\n\n${message.trim()}`
+          : `[CONTEXT: The user asked about ${pipelineLabel} but has no saved assets yet${namedPipeline ? ` in "${namedPipeline}"` : ""}. Inform them their pipeline is empty and suggest searching for assets to add.]\n\n${message.trim()}`;
+
+        let fullResponse = "";
+        for await (const token of ragQuery(pipelineQuestion, pipelineAssets.slice(0, 15), history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, {
+          role: "assistant", content: fullResponse,
+          assetIds: pipelineAssets.slice(0, 3).map((a) => a.id),
+          assets: pipelineAssetPayload,
+        });
+        sendEvent("done", { sessionId: sid });
+        return;
+      }
+      // If pipeline intent but no user ID, fall through to standard RAG search
+
+      // ── Path 6: Conversational ─────────────────────────────────────────────────
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
@@ -703,7 +964,7 @@ export function registerEdenRoutes(app: Express): void {
         return;
       }
 
-      // ── Path 6: Standard RAG (semantic retrieval) ──────────────────────────────
+      // ── Path 7: Standard RAG (semantic retrieval) ──────────────────────────────
 
       const institutionName = filters.institution ?? detectInstitutionName(message.trim(), portfolioInstitutionNames);
 
@@ -769,6 +1030,7 @@ export function registerEdenRoutes(app: Express): void {
         biology: a.biology ?? undefined,
         ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
         similarity: Math.round(a.similarity * 100) / 100,
+        rankNote: a.rankNote,
       }));
 
       const externalResults = await liveResultsPromise;
@@ -845,6 +1107,56 @@ export function registerEdenRoutes(app: Express): void {
     } catch (err) {
       console.error("[EDEN feedback]", err);
       return res.status(500).json({ error: "Failed to record feedback" });
+    }
+  });
+
+  // ── Write action endpoint: Eden-triggered status/note/move actions ──────────
+  // Resolves ingestedAssetId → savedAsset.id for this user, then executes the action.
+  app.post("/api/eden/write-action", verifyAnyAuth, async (req, res) => {
+    const userId = (req as any).userId as string | undefined;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+    const parsed = z.object({
+      type: z.enum(["status_update", "note_add", "move_pipeline"]),
+      ingestedAssetId: z.number().int().positive(),
+      payload: z.object({
+        status: z.enum(["watching", "evaluating", "in_discussion", "on_hold", "passed"]).optional(),
+        content: z.string().min(1).max(2000).optional(),
+        pipelineName: z.string().min(1).max(200).optional(),
+      }),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
+
+    const { type, ingestedAssetId, payload } = parsed.data;
+    try {
+      const saved = await storage.getSavedAssets(undefined, userId);
+      const target = saved.find((s) => s.ingestedAssetId === ingestedAssetId);
+      if (!target) return res.status(404).json({ error: "Asset not found in your pipeline — save it first" });
+
+      if (type === "status_update") {
+        if (!payload.status) return res.status(400).json({ error: "status required" });
+        await storage.updateSavedAssetStatus(target.id, payload.status);
+        return res.json({ ok: true, action: "status_update", status: payload.status });
+      }
+      if (type === "note_add") {
+        if (!payload.content) return res.status(400).json({ error: "content required" });
+        await storage.createAssetNote({ savedAssetId: target.id, userId, content: payload.content, authorName: userId });
+        return res.json({ ok: true, action: "note_add" });
+      }
+      if (type === "move_pipeline") {
+        if (!payload.pipelineName) return res.status(400).json({ error: "pipelineName required" });
+        const lists = await storage.getPipelineLists(userId);
+        const match = lists.find((l) =>
+          l.name.toLowerCase().includes(payload.pipelineName!.toLowerCase()) ||
+          payload.pipelineName!.toLowerCase().includes(l.name.toLowerCase())
+        );
+        if (!match) return res.status(404).json({ error: `Pipeline "${payload.pipelineName}" not found` });
+        await storage.updateSavedAssetPipeline(target.id, match.id);
+        return res.json({ ok: true, action: "move_pipeline", pipelineId: match.id, pipelineName: match.name });
+      }
+    } catch (err) {
+      console.error("[EDEN write-action]", err);
+      return res.status(500).json({ error: "Action failed" });
     }
   });
 

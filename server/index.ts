@@ -829,10 +829,11 @@ async function runStartupMigrations() {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
   }
 
-  // ── user_alerts: last_alert_sent_at column ────────────────────────────────
+  // ── user_alerts: last_alert_sent_at + cadence columns ────────────────────
   try {
     await client.query(`ALTER TABLE user_alerts ADD COLUMN IF NOT EXISTS last_alert_sent_at TIMESTAMP`);
-    log("[startup] user_alerts last_alert_sent_at column ready", "startup");
+    await client.query(`ALTER TABLE user_alerts ADD COLUMN IF NOT EXISTS cadence TEXT NOT NULL DEFAULT 'weekly'`);
+    log("[startup] user_alerts last_alert_sent_at + cadence columns ready", "startup");
   } catch (err: any) {
     log(`[startup] user_alerts migration failed: ${err?.message}`, "startup");
   }

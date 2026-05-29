@@ -658,7 +658,7 @@ function InstitutionMarquee() {
 /* ─────────────────────────── HeroCardDeck ────────────────────── */
 
 const HERO_CARDS: Array<{
-  type: "tto" | "trial" | "patent" | "research";
+  type: "intro" | "tto" | "trial" | "patent" | "research";
   score: number;
   name: string;
   indication: string;
@@ -669,6 +669,11 @@ const HERO_CARDS: Array<{
   sources: number;
   institution: string;
 }> = [
+  {
+    type: "intro",
+    score: 0, name: "", indication: "", summary: "",
+    stage: "", modality: "", rising: false, sources: 0, institution: "",
+  },
   {
     type: "tto",
     score: 9,
@@ -719,10 +724,11 @@ const HERO_CARDS: Array<{
   },
 ];
 
-const DECK_TINTS: Record<"tto" | "trial" | "patent" | "research", {
+const DECK_TINTS: Record<"intro" | "tto" | "trial" | "patent" | "research", {
   bg: string; border: string; strip: string;
   scoreColor: string; badgeBg: string; badgeBorderColor: string;
 }> = {
+  intro:    { bg: "linear-gradient(148deg, hsl(142 60% 38%) 0%, hsl(142 54% 30%) 100%)", border: "rgba(255,255,255,0.15)", strip: "#10b981", scoreColor: "#10b981", badgeBg: "transparent", badgeBorderColor: "transparent" },
   tto:      { bg: "#f0fdf4", border: "#a7f3d0", strip: "#10b981", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
   trial:    { bg: "#f0fdfa", border: "#99f6e4", strip: "#0d9488", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
   patent:   { bg: "#fffbeb", border: "#fde68a", strip: "#d97706", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
@@ -733,7 +739,8 @@ const DECK_STACK = [
   { tx: 0,  ty: 0,  scale: 1.00, opacity: 1.00 },
   { tx: 18, ty: 18, scale: 0.97, opacity: 0.88 },
   { tx: 36, ty: 36, scale: 0.94, opacity: 0.72 },
-  { tx: 54, ty: 54, scale: 0.91, opacity: 0.55 },
+  { tx: 54, ty: 54, scale: 0.91, opacity: 0.50 },
+  { tx: 72, ty: 72, scale: 0.88, opacity: 0.30 },
 ];
 
 function deckStagePillClass(stage: string): string {
@@ -749,6 +756,9 @@ function HeroCardDeck() {
   const [bookmarked, setBookmarked] = useState<Set<number>>(new Set());
   const [frontHovered, setFrontHovered] = useState(false);
   const paused = useRef(false);
+  const [deckWidth, setDeckWidth] = useState(() =>
+    typeof window !== "undefined" ? Math.min(500, window.innerWidth - 48) : 500
+  );
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -757,173 +767,266 @@ function HeroCardDeck() {
     return () => clearInterval(iv);
   }, []);
 
+  useEffect(() => {
+    function onResize() { setDeckWidth(Math.min(500, window.innerWidth - 48)); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  const deckScale = deckWidth / 500;
+
   return (
     <div
-      className="hidden lg:block select-none"
-      style={{ position: "relative", width: "500px", height: "480px", margin: "0 auto" }}
+      className="select-none"
+      style={{
+        position: "relative",
+        width: `${deckWidth}px`,
+        height: `${Math.round(deckWidth * 480 / 500)}px`,
+        margin: "0 auto",
+      }}
       onMouseEnter={() => { paused.current = true; }}
       onMouseLeave={() => { paused.current = false; }}
     >
-      {HERO_CARDS.map((card, cardIdx) => {
-        const pos = (cardIdx - activeIdx + HERO_CARDS.length) % HERO_CARDS.length;
-        const isFront = pos === 0;
-        const tint = DECK_TINTS[card.type];
-        const sp = DECK_STACK[pos];
-        const isBookmarked = bookmarked.has(cardIdx);
+      <div style={{
+        position: "absolute",
+        top: 0, left: 0,
+        width: "500px",
+        height: "480px",
+        transformOrigin: "top left",
+        transform: `scale(${deckScale})`,
+      }}>
+        {HERO_CARDS.map((card, cardIdx) => {
+          const pos = (cardIdx - activeIdx + HERO_CARDS.length) % HERO_CARDS.length;
+          if (pos >= DECK_STACK.length) return null;
+          const isFront = pos === 0;
+          const tint = DECK_TINTS[card.type];
+          const sp = DECK_STACK[pos];
+          const isBookmarked = bookmarked.has(cardIdx);
 
-        return (
-          <div
-            key={cardIdx}
-            className="absolute rounded-[17px] overflow-hidden"
-            style={{
-              top: 0, left: 0,
-              width: "480px", height: "445px",
-              transform: `translate(${sp.tx}px, ${sp.ty + (isFront && frontHovered ? -7 : 0)}px) scale(${isFront && frontHovered ? 1.015 : sp.scale})`,
-              transformOrigin: "top left",
-              zIndex: 4 - pos,
-              opacity: sp.opacity,
-              background: tint.bg,
-              border: `1px solid ${tint.border}`,
-              boxShadow: isFront
-                ? frontHovered
-                  ? "0 28px 60px rgba(0,0,0,0.22), 0 8px 24px rgba(0,0,0,0.10)"
-                  : "0 20px 48px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08)"
-                : "0 4px 12px rgba(0,0,0,0.06)",
-              transition: "transform 0.38s cubic-bezier(0.23,1,0.32,1), opacity 0.35s ease, box-shadow 0.35s ease",
-              cursor: isFront ? "pointer" : "default",
-            }}
-            onMouseEnter={() => { if (isFront) setFrontHovered(true); }}
-            onMouseLeave={() => { if (isFront) setFrontHovered(false); }}
-            onClick={isFront ? () => setActiveIdx(i => (i + 1) % HERO_CARDS.length) : undefined}
-          >
-            {/* Left strip */}
-            <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.strip }} />
-
-            {/* Tinted header zone */}
+          return (
             <div
-              className="absolute top-0 left-0 right-0 z-[3]"
+              key={cardIdx}
+              className="absolute rounded-[17px] overflow-hidden"
               style={{
-                height: "80px",
-                background: `${tint.strip}0d`,
-                borderBottom: `1px solid ${tint.strip}26`,
+                top: 0, left: 0,
+                width: "480px", height: "445px",
+                transform: `translate(${sp.tx}px, ${sp.ty + (isFront && frontHovered ? -7 : 0)}px) scale(${isFront && frontHovered ? 1.015 : sp.scale})`,
+                transformOrigin: "top left",
+                zIndex: 4 - pos,
+                opacity: sp.opacity,
+                background: tint.bg,
+                border: `1px solid ${tint.border}`,
+                boxShadow: isFront
+                  ? frontHovered
+                    ? "0 28px 60px rgba(0,0,0,0.22), 0 8px 24px rgba(0,0,0,0.10)"
+                    : "0 20px 48px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.08)"
+                  : "0 4px 12px rgba(0,0,0,0.06)",
+                transition: "transform 0.38s cubic-bezier(0.23,1,0.32,1), opacity 0.35s ease, box-shadow 0.35s ease",
+                cursor: isFront ? "pointer" : "default",
               }}
-            />
-
-            {/* Score badge — TTO only */}
-            {card.type === "tto" && (
-              <div
-                className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
-                style={{
-                  borderRadius: "17px 0 10px 0",
-                  minWidth: "80px",
-                  background: tint.badgeBg,
-                  borderBottom: `1px solid ${tint.badgeBorderColor}`,
-                  borderRight: `1px solid ${tint.badgeBorderColor}`,
-                  boxShadow: isFront ? `0 4px 20px ${tint.strip}40` : "none",
-                }}
-              >
-                <span className="text-[11px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
-                <span className="font-mono text-[40px] font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
-                  {card.score}
-                </span>
-              </div>
-            )}
-
-            {/* Type label — centered in top strip between score badge and bookmark */}
-            <div
-              className="absolute z-[4] flex items-center justify-center pointer-events-none"
-              style={{
-                top: 0,
-                left: card.type === "tto" ? "80px" : 0,
-                right: "68px",
-                height: "80px",
-              }}
+              onMouseEnter={() => { if (isFront) setFrontHovered(true); }}
+              onMouseLeave={() => { if (isFront) setFrontHovered(false); }}
+              onClick={isFront ? () => setActiveIdx(i => (i + 1) % HERO_CARDS.length) : undefined}
             >
-              <span className="text-[22px] font-bold uppercase tracking-[0.06em]" style={{ color: tint.strip }}>
-                {card.type === "tto" ? "TTO Asset" : card.type === "trial" ? "Clinical Trial" : card.type === "patent" ? "Patent" : "Research"}
-              </span>
-            </div>
+              {card.type === "intro" ? (
+                /* ── Branded intro card ── */
+                <div className="absolute inset-0 flex flex-col" style={{ padding: "28px 28px 24px" }}>
+                  {/* Radar ring watermark */}
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.09 }}>
+                    <svg width="100%" height="100%" viewBox="0 0 480 445" xmlns="http://www.w3.org/2000/svg">
+                      {[70, 130, 190, 260, 330, 400].map(r => (
+                        <circle key={r} cx="420" cy="50" r={r} fill="none" stroke="white" strokeWidth="1.2"/>
+                      ))}
+                    </svg>
+                  </div>
 
-            {/* Bookmark — front card only */}
-            {isFront && (
-              <div
-                className="absolute top-2 right-2 z-[5]"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setBookmarked(prev => {
-                    const next = new Set(prev);
-                    next.has(cardIdx) ? next.delete(cardIdx) : next.add(cardIdx);
-                    return next;
-                  });
-                }}
-              >
-                <button
-                  className={`w-14 h-14 rounded-lg flex items-center justify-center transition-all duration-200 ${
-                    isBookmarked
-                      ? "text-emerald-600 bg-emerald-500/10"
-                      : "text-zinc-400 hover:text-emerald-600 hover:bg-emerald-500/10"
-                  }`}
-                >
-                  {isBookmarked
-                    ? <BookmarkCheck className="w-8 h-8" />
-                    : <Bookmark className="w-8 h-8" />
-                  }
-                </button>
-              </div>
-            )}
+                  {/* Header */}
+                  <div className="relative flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 28 28" fill="none" aria-hidden style={{ flexShrink: 0 }}>
+                      <circle cx="14" cy="14" r="12" stroke="rgba(255,255,255,0.45)" strokeWidth="1.4"/>
+                      <circle cx="14" cy="14" r="7.5" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2" strokeOpacity="0.55"/>
+                      <circle cx="14" cy="14" r="3" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2" strokeOpacity="0.35"/>
+                      <line x1="2" y1="14" x2="5" y2="14" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                      <line x1="23" y1="14" x2="26" y2="14" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                      <line x1="14" y1="2" x2="14" y2="5" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                      <line x1="14" y1="23" x2="14" y2="26" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                    </svg>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.40)", letterSpacing: "-0.01em" }}>EdenRadar</span>
+                  </div>
 
-            {/* Content */}
-            <div className="absolute inset-0 z-[4] flex flex-col pl-6 pr-5 pt-[84px] pb-5">
-              <h3 className="text-[20px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
-                {card.name}
-              </h3>
-              <p className="text-[15px] text-zinc-500 leading-snug mt-3 line-clamp-1">
-                {card.indication}
-              </p>
-              <p className="text-[14px] text-zinc-600 leading-relaxed mt-3 line-clamp-3">
-                {card.summary}
-              </p>
-              <div className="flex flex-wrap gap-2.5 mt-4">
-                <span className={`text-[13px] font-medium px-3 py-1.5 rounded border-l-2 ${deckStagePillClass(card.stage)}`}>
-                  {card.stage}
-                </span>
-                <span className="text-[13px] font-medium px-3 py-1.5 rounded text-emerald-700 bg-emerald-50 border border-emerald-200/70">
-                  {card.modality}
-                </span>
-                {card.rising && (
-                  <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded bg-emerald-50 border border-emerald-200/70 text-emerald-600">
-                    <TrendingUp className="w-3.5 h-3.5" /> Rising
-                  </span>
-                )}
-                {card.sources >= 2 && (
-                  <span className="text-[13px] font-semibold px-3 py-1.5 rounded bg-sky-50 border border-sky-200/70 text-sky-600">
-                    {card.sources} sources
-                  </span>
-                )}
-              </div>
-              <div className="flex-1" />
-              <p className="flex items-center gap-2 text-[14px] text-zinc-700 font-medium leading-snug mb-4 line-clamp-1">
-                <Building2 className="w-3.5 h-3.5 shrink-0 opacity-50" />
-                {card.institution}
-              </p>
-              <div className="flex items-center gap-2">
-                <button
-                  className="flex-1 h-11 rounded-md text-[14px] font-semibold tracking-wide bg-emerald-600 text-white"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  Asset Dossier
-                </button>
-                <button
-                  className="h-11 px-4 rounded-md text-[12px] font-medium text-zinc-400"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  ✕
-                </button>
-              </div>
+                  {/* Headline */}
+                  <div className="relative" style={{ marginTop: "24px" }}>
+                    <div style={{ fontSize: "38px", fontWeight: 800, lineHeight: 1.15, color: "rgba(255,255,255,0.97)", letterSpacing: "-0.02em" }}>
+                      The biotech landscape, scored daily.
+                    </div>
+                    <p style={{ fontSize: "15px", fontWeight: 400, color: "rgba(255,255,255,0.68)", lineHeight: 1.55, marginTop: "14px" }}>
+                      EDEN monitors 350+ research institutions and surfaces what's worth your attention.
+                    </p>
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.15)", marginTop: "24px", marginBottom: "20px" }} />
+
+                  {/* 2×2 category grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                    {[
+                      { label: "TTO Assets",       dot: "#6ee7b7" },
+                      { label: "Clinical Trials",  dot: "#5eead4" },
+                      { label: "Patents & IP",      dot: "#fcd34d" },
+                      { label: "Research Papers",   dot: "#7dd3fc" },
+                    ].map(({ label, dot }) => (
+                      <div key={label} style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        background: "rgba(255,255,255,0.08)",
+                        border: "1px solid rgba(255,255,255,0.10)",
+                      }}>
+                        <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: dot, flexShrink: 0 }} />
+                        <span style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)" }}>{label}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Divider */}
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.15)", marginTop: "20px" }} />
+
+                  {/* Footer */}
+                  <div className="relative" style={{ paddingTop: "14px" }}>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.40)" }}>33K+ scored assets</span>
+                  </div>
+                </div>
+              ) : (
+                /* ── Data cards (TTO, trial, patent, research) ── */
+                <>
+                  {/* Left strip */}
+                  <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: tint.strip }} />
+
+                  {/* Tinted header zone */}
+                  <div
+                    className="absolute top-0 left-0 right-0 z-[3]"
+                    style={{
+                      height: "80px",
+                      background: `${tint.strip}0d`,
+                      borderBottom: `1px solid ${tint.strip}26`,
+                    }}
+                  />
+
+                  {/* Score badge — TTO only */}
+                  {card.type === "tto" && (
+                    <div
+                      className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-1.5"
+                      style={{
+                        borderRadius: "17px 0 10px 0",
+                        minWidth: "80px",
+                        background: tint.badgeBg,
+                        borderBottom: `1px solid ${tint.badgeBorderColor}`,
+                        borderRight: `1px solid ${tint.badgeBorderColor}`,
+                        boxShadow: isFront ? `0 4px 20px ${tint.strip}40` : "none",
+                      }}
+                    >
+                      <span className="text-[11px] font-bold tracking-[0.15em] uppercase leading-none" style={{ color: "#71717a" }}>Score</span>
+                      <span className="font-mono text-[40px] font-bold leading-tight tabular-nums mt-0.5" style={{ color: tint.scoreColor }}>
+                        {card.score}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Type label */}
+                  <div
+                    className="absolute z-[4] flex items-center justify-center pointer-events-none"
+                    style={{
+                      top: 0,
+                      left: card.type === "tto" ? "80px" : 0,
+                      right: "68px",
+                      height: "80px",
+                    }}
+                  >
+                    <span className="text-[22px] font-bold uppercase tracking-[0.06em]" style={{ color: tint.strip }}>
+                      {card.type === "tto" ? "TTO Asset" : card.type === "trial" ? "Clinical Trial" : card.type === "patent" ? "Patent" : "Research"}
+                    </span>
+                  </div>
+
+                  {/* Bookmark — front card only */}
+                  {isFront && (
+                    <div
+                      className="absolute top-2 right-2 z-[5]"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setBookmarked(prev => {
+                          const next = new Set(prev);
+                          next.has(cardIdx) ? next.delete(cardIdx) : next.add(cardIdx);
+                          return next;
+                        });
+                      }}
+                    >
+                      <button
+                        className={`w-14 h-14 rounded-lg flex items-center justify-center transition-all duration-200 ${
+                          isBookmarked
+                            ? "text-emerald-600 bg-emerald-500/10"
+                            : "text-zinc-400 hover:text-emerald-600 hover:bg-emerald-500/10"
+                        }`}
+                      >
+                        {isBookmarked ? <BookmarkCheck className="w-8 h-8" /> : <Bookmark className="w-8 h-8" />}
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Content */}
+                  <div className="absolute inset-0 z-[4] flex flex-col pl-6 pr-5 pt-[84px] pb-5">
+                    <h3 className="text-[20px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
+                      {card.name}
+                    </h3>
+                    <p className="text-[15px] text-zinc-500 leading-snug mt-3 line-clamp-1">
+                      {card.indication}
+                    </p>
+                    <p className="text-[14px] text-zinc-600 leading-relaxed mt-3 line-clamp-3">
+                      {card.summary}
+                    </p>
+                    <div className="flex flex-wrap gap-2.5 mt-4">
+                      <span className={`text-[13px] font-medium px-3 py-1.5 rounded border-l-2 ${deckStagePillClass(card.stage)}`}>
+                        {card.stage}
+                      </span>
+                      <span className="text-[13px] font-medium px-3 py-1.5 rounded text-emerald-700 bg-emerald-50 border border-emerald-200/70">
+                        {card.modality}
+                      </span>
+                      {card.rising && (
+                        <span className="inline-flex items-center gap-1.5 text-[13px] font-semibold px-3 py-1.5 rounded bg-emerald-50 border border-emerald-200/70 text-emerald-600">
+                          <TrendingUp className="w-3.5 h-3.5" /> Rising
+                        </span>
+                      )}
+                      {card.sources >= 2 && (
+                        <span className="text-[13px] font-semibold px-3 py-1.5 rounded bg-sky-50 border border-sky-200/70 text-sky-600">
+                          {card.sources} sources
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1" />
+                    <p className="flex items-center gap-2 text-[14px] text-zinc-700 font-medium leading-snug mb-4 line-clamp-1">
+                      <Building2 className="w-3.5 h-3.5 shrink-0 opacity-50" />
+                      {card.institution}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        className="flex-1 h-11 rounded-md text-[14px] font-semibold tracking-wide bg-emerald-600 text-white"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Asset Dossier
+                      </button>
+                      <button
+                        className="h-11 px-4 rounded-md text-[12px] font-medium text-zinc-400"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
+      </div>
     </div>
   );
 }
