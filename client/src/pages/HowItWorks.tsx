@@ -23,6 +23,21 @@ function useReveal(threshold = 0.15) {
   return ref;
 }
 
+function useReducedMotion() {
+  const [reduced, setReduced] = useState(
+    () => typeof window !== "undefined"
+      ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      : false
+  );
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const handler = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return reduced;
+}
+
 /* ─── EDEN Command Demo ──────────────────────────────────────── */
 
 interface AssetCardData {
@@ -49,24 +64,22 @@ interface DemoScenario {
   messages: ChatMessage[];
 }
 
-const BADGE_COLOR = "hsl(142 65% 48%)";
-
 const DEMO_ASSETS_JHU: AssetCardData[] = [
-  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: BADGE_COLOR },
-  { id: 2, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody", color: BADGE_COLOR },
-  { id: 3, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule", color: BADGE_COLOR },
+  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: "" },
+  { id: 2, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody", color: "" },
+  { id: 3, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule", color: "" },
 ];
 
 const DEMO_ASSETS_CNS: AssetCardData[] = [
-  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody", color: BADGE_COLOR },
-  { id: 5, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy", color: BADGE_COLOR },
-  { id: 6, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule", color: BADGE_COLOR },
+  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody", color: "" },
+  { id: 5, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy", color: "" },
+  { id: 6, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule", color: "" },
 ];
 
 const DEMO_ASSETS_ADC: AssetCardData[] = [
-  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC", color: BADGE_COLOR },
-  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC", color: BADGE_COLOR },
-  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC", color: BADGE_COLOR },
+  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC", color: "" },
+  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC", color: "" },
+  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC", color: "" },
 ];
 
 const DEMO_SCENARIOS: DemoScenario[] = [
@@ -113,16 +126,22 @@ const SCENARIO_COVERS: ScenarioCover[] = [
 /* ─── EDEN Intro ─────────────────────────────────────────────── */
 
 function EdenIntro({ onDone }: { onDone: () => void }) {
+  const reducedMotion = useReducedMotion();
+
   useEffect(() => {
-    const t = setTimeout(onDone, 2300);
+    const t = setTimeout(onDone, reducedMotion ? 100 : 2300);
     return () => clearTimeout(t);
-  }, []);
+  }, [reducedMotion]);
+
+  if (reducedMotion) {
+    return null;
+  }
 
   return (
     <div
       className="absolute inset-0 z-20 rounded-2xl flex flex-col items-center justify-center gap-5"
       style={{
-        background: "white",
+        background: "hsl(var(--card))",
         animation: "eden-intro-exit 0.45s cubic-bezier(0.4,0,0.2,1) 1.85s forwards",
       }}
     >
@@ -152,7 +171,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
             className="absolute rounded-full"
             style={{
               top: "50%", left: "50%", width: 64, height: 64,
-              border: "1.5px solid hsl(142 52% 36% / 0.4)",
+              border: "1.5px solid hsl(var(--primary) / 0.4)",
               animation: `eden-ring 1.8s ease-out ${d}s infinite`,
             }}
           />
@@ -170,7 +189,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
             key={i}
             className="text-5xl font-black"
             style={{
-              color: "hsl(222 20% 10%)",
+              color: "hsl(var(--foreground))",
               opacity: 0,
               animation: `eden-letter-in 0.38s cubic-bezier(0.2,0,0,1) ${i * 75 + 120}ms forwards`,
               letterSpacing: "0.06em",
@@ -184,7 +203,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
       <p
         className="text-[10px] font-semibold uppercase text-center"
         style={{
-          color: "hsl(142 52% 36%)",
+          color: "hsl(var(--primary))",
           opacity: 0,
           animation: "eden-sub-in 0.5s ease-out 580ms forwards",
           letterSpacing: "0.2em",
@@ -202,10 +221,15 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
 const SCAN_NAMES = ["MIT TTO", "Stanford OTL", "Johns Hopkins", "Mayo Clinic", "Max Planck", "Columbia", "UCSF", "Harvard OTD", "Yale TTO", "NIH", "Oxford TT", "Wellcome Trust", "Penn TTO", "Duke OLV", "Broad Institute", "Rockefeller"];
 
 function ScanningAnimation({ onDone }: { onDone: () => void }) {
+  const reducedMotion = useReducedMotion();
   const [nameIdx, setNameIdx] = useState(0);
   const [dots, setDots] = useState(1);
 
   useEffect(() => {
+    if (reducedMotion) {
+      const t = setTimeout(onDone, 80);
+      return () => clearTimeout(t);
+    }
     let step = 0;
     const iv = setInterval(() => {
       step++;
@@ -214,17 +238,17 @@ function ScanningAnimation({ onDone }: { onDone: () => void }) {
       if (step >= 16) { clearInterval(iv); setTimeout(onDone, 160); }
     }, 150);
     return () => clearInterval(iv);
-  }, []);
+  }, [reducedMotion]);
 
   return (
     <div className="flex items-center gap-2.5 py-1">
       <span
         className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-        style={{ background: "hsl(142 52% 36%)", animation: "eden-pulse 0.6s ease-in-out infinite" }}
+        style={{ background: "hsl(var(--primary))", animation: reducedMotion ? undefined : "eden-pulse 0.6s ease-in-out infinite" }}
       />
-      <span className="text-[11px] font-mono" style={{ color: "hsl(142 40% 40%)" }}>
+      <span className="text-[11px] font-mono" style={{ color: "hsl(var(--primary) / 0.75)" }}>
         Scanning 358 institutions{".".repeat(dots)}{" "}
-        <span key={nameIdx} style={{ animation: "scan-slide 0.12s ease-out forwards" }}>{SCAN_NAMES[nameIdx]}</span>
+        <span key={nameIdx} style={{ animation: reducedMotion ? undefined : "scan-slide 0.12s ease-out forwards" }}>{SCAN_NAMES[nameIdx]}</span>
       </span>
     </div>
   );
@@ -236,8 +260,8 @@ function QueryResultCard({ asset }: { asset: AssetCardData }) {
       className="flex items-center gap-3 rounded-xl px-4"
       style={{
         height: 58,
-        background: "white",
-        border: "1px solid hsl(220 13% 91%)",
+        background: "hsl(var(--background))",
+        border: "1px solid hsl(var(--border))",
         boxShadow: "0 3px 12px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.04)",
       }}
     >
@@ -246,8 +270,8 @@ function QueryResultCard({ asset }: { asset: AssetCardData }) {
         style={{
           width: 38,
           height: 38,
-          background: asset.color.replace(")", " / 0.12)"),
-          color: asset.color,
+          background: "hsl(var(--primary) / 0.12)",
+          color: "hsl(var(--primary))",
           fontSize: 13,
         }}
       >
@@ -274,6 +298,7 @@ function EdenChatDemo({
   onComplete?: () => void;
   coverData?: ScenarioCover | null;
 }) {
+  const reducedMotion = useReducedMotion();
   const [phase, setPhase] = useState<"intro" | "chat">("intro");
   const [visibleCount, setVisibleCount] = useState(0);
   const [scanningIdx, setScanningIdx] = useState<number | null>(null);
@@ -315,11 +340,11 @@ function EdenChatDemo({
             }
           }
         }
-      }, msg.delay);
+      }, reducedMotion ? i * 400 : msg.delay);
       tids.current.push(t);
     });
     return () => tids.current.forEach(clearTimeout);
-  }, [phase, messages]);
+  }, [phase, messages, reducedMotion]);
 
   function handleScanDone(idx: number) {
     setScanningIdx(null);
@@ -327,10 +352,10 @@ function EdenChatDemo({
       setDoneSet((prev) => new Set(prev).add(idx));
       scrollBottom();
       if (idx === messages.length - 1) {
-        const t = setTimeout(() => onComplete?.(), 3800);
+        const t = setTimeout(() => onComplete?.(), reducedMotion ? 1200 : 3800);
         tids.current.push(t);
       }
-    }, 350);
+    }, reducedMotion ? 0 : 350);
     tids.current.push(pauseT);
   }
 
@@ -338,8 +363,8 @@ function EdenChatDemo({
     <div
       className="relative flex flex-col rounded-2xl overflow-hidden"
       style={{
-        height: 540,
-        background: "white",
+        height: "clamp(420px, 62vh, 540px)",
+        background: "hsl(var(--card))",
         boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
       }}
     >
@@ -360,7 +385,7 @@ function EdenChatDemo({
       {/* Header */}
       <div
         className="flex items-center gap-3 px-5 py-3 border-b flex-shrink-0"
-        style={{ background: "hsl(0 0% 99%)", borderColor: "hsl(220 13% 91%)" }}
+        style={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
       >
         <img src="/images/eden-nx-mark.png" alt="EDEN" className="w-7 h-7 object-contain flex-shrink-0" />
         <div className="flex-1 min-w-0">
@@ -368,23 +393,30 @@ function EdenChatDemo({
           <p className="text-[10px] text-primary">Research Intelligence</p>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: "eden-pulse 2s ease-in-out infinite" }} />
+          <span
+            className="w-1.5 h-1.5 rounded-full bg-primary"
+            style={{ animation: reducedMotion ? undefined : "eden-pulse 2s ease-in-out infinite" }}
+          />
           <span className="text-[10px] font-semibold text-primary">Live · 358 TTOs</span>
         </div>
       </div>
 
-      {/* Messages area — relative so cover can overlay it */}
+      {/* Messages area */}
       <div className="flex-1 relative min-h-0">
         <div
           ref={chatRef}
+          role="log"
+          aria-live="polite"
+          aria-atomic="false"
+          aria-label="EDEN conversation"
           className="absolute inset-0 overflow-y-auto px-4 py-5 space-y-4"
-          style={{ background: "hsl(220 20% 98%)" }}
+          style={{ background: "hsl(var(--background))" }}
         >
           {messages.slice(0, visibleCount).map((msg, i) => (
             <div
               key={i}
               className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-              style={{ animation: "fade-up 0.32s ease-out forwards" }}
+              style={{ animation: reducedMotion ? undefined : "fade-up 0.32s ease-out forwards" }}
             >
               {msg.role === "eden" && <EdenAvatar size={26} />}
               <div className="flex flex-col gap-2 min-w-0" style={{ maxWidth: "88%" }}>
@@ -408,11 +440,11 @@ function EdenChatDemo({
                       <div
                         className="px-4 py-2.5 text-[12px] leading-relaxed text-left"
                         style={{
-                          background: "hsl(142 52% 36%)",
+                          background: "hsl(var(--primary))",
                           color: "white",
                           borderRadius: "4px 16px 16px 16px",
-                          boxShadow: "0 3px 12px hsl(142 52% 36% / 0.3)",
-                          animation: "fade-up 0.32s ease-out forwards",
+                          boxShadow: "0 3px 12px hsl(var(--primary) / 0.3)",
+                          animation: reducedMotion ? undefined : "fade-up 0.32s ease-out forwards",
                           textWrap: "pretty",
                         } as React.CSSProperties}
                       >
@@ -422,7 +454,14 @@ function EdenChatDemo({
                     {msg.assetCards && doneSet.has(i) && (
                       <div className="flex flex-col gap-1.5 mt-1">
                         {msg.assetCards.slice(0, 2).map((asset, idx) => (
-                          <div key={asset.id} style={{ animation: "fade-up 0.32s ease-out forwards", animationDelay: `${idx * 130}ms`, opacity: 0 }}>
+                          <div
+                            key={asset.id}
+                            style={{
+                              animation: reducedMotion ? undefined : "fade-up 0.32s ease-out forwards",
+                              animationDelay: reducedMotion ? undefined : `${idx * 130}ms`,
+                              opacity: reducedMotion ? 1 : 0,
+                            }}
+                          >
                             <QueryResultCard asset={asset} />
                           </div>
                         ))}
@@ -435,20 +474,19 @@ function EdenChatDemo({
           ))}
         </div>
 
-        {/* Scenario transition cover — overlays messages area, header stays visible */}
+        {/* Scenario transition cover — overlays messages area only; header stays visible */}
         {coverData && (
           <div
             className="absolute inset-0 z-10 flex flex-col"
             style={{
               background: "hsl(142 40% 7%)",
-              animation: "scenario-cover 3.5s linear forwards",
+              animation: reducedMotion ? undefined : "scenario-cover 3.5s linear forwards",
+              willChange: "opacity, transform",
               pointerEvents: "none",
             }}
           >
-            {/* Accent line */}
             <div style={{ height: 2, background: "hsl(142 65% 42%)", flexShrink: 0 }} />
 
-            {/* Content */}
             <div className="flex-1 flex flex-col justify-center px-8 py-6 min-h-0">
               <p
                 className="text-[9px] font-black uppercase mb-5"
@@ -460,7 +498,7 @@ function EdenChatDemo({
               <div
                 className="font-black tabular-nums leading-none mb-4 select-none"
                 style={{
-                  fontSize: 80,
+                  fontSize: "clamp(56px, 18vw, 80px)",
                   color: "hsl(142 30% 18%)",
                   letterSpacing: "-0.04em",
                   lineHeight: 0.88,
@@ -494,7 +532,6 @@ function EdenChatDemo({
               </p>
             </div>
 
-            {/* Progress segments */}
             <div className="flex items-center gap-1.5 px-8 pb-6 flex-shrink-0">
               {SCENARIO_COVERS.map((c) => (
                 <div
@@ -502,9 +539,7 @@ function EdenChatDemo({
                   style={{
                     height: 3,
                     borderRadius: 2,
-                    background: c.idx === coverData.idx
-                      ? "hsl(142 65% 42%)"
-                      : "hsl(142 25% 15%)",
+                    background: c.idx === coverData.idx ? "hsl(142 65% 42%)" : "hsl(142 25% 15%)",
                     flex: c.idx === coverData.idx ? 2 : 1,
                   }}
                 />
@@ -562,11 +597,9 @@ export default function HowItWorks() {
   function handleScenarioComplete() {
     const nextIdx = (activeScenario + 1) % DEMO_SCENARIOS.length;
     setCoverInfo(SCENARIO_COVERS[nextIdx]);
-    // Advance scenario 600ms before cover exits — first greeting fires exactly as cover disappears
     coverAdvanceTidRef.current = setTimeout(() => {
       setActiveScenario(nextIdx);
     }, 2900);
-    // Cover total lifetime matches the keyframe duration
     coverDismissTidRef.current = setTimeout(() => {
       setCoverInfo(null);
     }, 3500);
@@ -580,8 +613,8 @@ export default function HowItWorks() {
 
       <main className="flex-1">
 
-        {/* Hero — light centered with radar + amber headline accents */}
-        <section className="relative overflow-hidden" style={{ minHeight: "92vh" }}>
+        {/* Hero */}
+        <section aria-label="Product demo" className="relative overflow-hidden" style={{ minHeight: "92vh" }}>
           <RadarBackground />
 
           <div
@@ -598,7 +631,6 @@ export default function HowItWorks() {
               <span style={{ color: "hsl(33 85% 44%)" }}>lost</span>.
             </h1>
 
-            {/* Chat demo — cover rendered inside, header always visible */}
             <div className="w-full max-w-xl">
               <EdenChatDemo
                 messages={scenario.messages}
@@ -607,13 +639,12 @@ export default function HowItWorks() {
               />
             </div>
 
-            {/* Subheader bridge */}
             <p
               className="text-base sm:text-lg font-semibold tracking-tight text-center mt-7 mb-8"
-              style={{ color: "hsl(222 20% 22%)", letterSpacing: "-0.01em" }}
+              style={{ color: "hsl(var(--foreground))", letterSpacing: "-0.01em" }}
             >
               Before the patent.{" "}
-              <span style={{ color: "hsl(142 52% 36%)" }}>Before the competition.</span>
+              <span style={{ color: "hsl(var(--primary))" }}>Before the competition.</span>
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
@@ -633,7 +664,7 @@ export default function HowItWorks() {
                 onClick={() => navigate("/one-pager")}
                 data-testid="howitworks-cta-onepager"
                 className="h-11 px-8 font-semibold w-full sm:w-auto"
-                style={{ borderColor: "hsl(220 13% 82%)", color: "hsl(222 20% 32%)" }}
+                style={{ borderColor: "hsl(var(--border))", color: "hsl(var(--foreground))" }}
               >
                 View One-Pager
               </Button>
@@ -646,14 +677,14 @@ export default function HowItWorks() {
           />
         </section>
 
-        {/* How it works — sticky photo right bleeds to viewport edge */}
+        {/* How it works */}
         <section
+          aria-label="How it works"
           ref={stepsRef}
           className="reveal-section overflow-clip py-16 sm:py-24"
         >
           <div className="max-w-screen-xl mx-auto pl-4 sm:pl-6 flex gap-16 xl:gap-20 items-start">
 
-            {/* Left: four steps */}
             <div className="flex-1 min-w-0">
               <div style={{ borderTop: "1px solid hsl(var(--primary) / 0.22)", borderBottom: "1px solid hsl(var(--primary) / 0.22)" }}>
                 {HOW_IT_WORKS.map((step, i) => (
@@ -665,7 +696,6 @@ export default function HowItWorks() {
                       borderBottom: i < HOW_IT_WORKS.length - 1 ? "1px solid hsl(var(--border) / 0.38)" : "none",
                     }}
                   >
-                    {/* Number column */}
                     <div
                       className="hidden sm:flex flex-shrink-0 justify-end"
                       style={{
@@ -688,7 +718,6 @@ export default function HowItWorks() {
                       </span>
                     </div>
 
-                    {/* Mobile number */}
                     <span
                       className="block sm:hidden text-4xl font-black tabular-nums mr-5 flex-shrink-0"
                       style={{ color: "hsl(var(--primary))", opacity: 0.45 }}
@@ -696,11 +725,10 @@ export default function HowItWorks() {
                       {String(i + 1).padStart(2, "0")}
                     </span>
 
-                    {/* Content */}
                     <div className="flex-1 min-w-0 sm:pl-10">
-                      <h3 className="text-xl sm:text-2xl lg:text-[1.65rem] font-bold text-foreground mb-3 leading-snug">
+                      <h2 className="text-xl sm:text-2xl lg:text-[1.65rem] font-bold text-foreground mb-3 leading-snug">
                         {step.title}
-                      </h3>
+                      </h2>
                       <p className="text-base sm:text-[1.0625rem] text-muted-foreground leading-relaxed">
                         {step.body}
                       </p>
@@ -711,6 +739,7 @@ export default function HowItWorks() {
                       <img
                         src="/images/bd-conversation.jpg"
                         alt=""
+                        loading="lazy"
                         className="w-full object-cover block"
                         style={{ height: 220, objectPosition: "50% 22%" }}
                       />
@@ -721,7 +750,6 @@ export default function HowItWorks() {
               </div>
             </div>
 
-            {/* Right: sticky photo — spills to right viewport edge */}
             <div
               className="hidden lg:block flex-shrink-0 sticky self-start"
               style={{ width: 420, top: "5.5rem" }}
@@ -743,8 +771,8 @@ export default function HowItWorks() {
           </div>
         </section>
 
-        {/* Final CTA */}
-        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+        {/* CTA */}
+        <section aria-label="Get started" className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div
             className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{
