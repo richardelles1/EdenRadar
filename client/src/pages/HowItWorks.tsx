@@ -6,12 +6,7 @@ import { EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { RadarBackground } from "@/components/RadarBackground";
-import {
-  ArrowRight,
-  TrendingUp,
-  ShoppingBag,
-  Check,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
@@ -354,7 +349,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
     <div
       className="relative flex flex-col rounded-2xl overflow-hidden"
       style={{
-        height: 460,
+        height: 540,
         background: "white",
         boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
       }}
@@ -423,7 +418,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
                   )}
                   {msg.assetCards && doneSet.has(i) && (
                     <div className="flex flex-col gap-1.5 mt-1">
-                      {msg.assetCards.map((asset, idx) => (
+                      {msg.assetCards.slice(0, 2).map((asset, idx) => (
                         <div key={asset.id} style={{ animation: "fade-up 0.32s ease-out forwards", animationDelay: `${idx * 110}ms`, opacity: 0 }}>
                           <QueryResultCard asset={asset} />
                         </div>
@@ -442,20 +437,6 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
 
 /* ─── Portal Feature Lists ───────────────────────────────────── */
 
-const SCOUT_FEATURES = [
-  "Natural language queries across 358 TTOs",
-  "EDEN-scored dossiers + competitive cross-reference",
-  "Real-time alerts by email and in-product",
-  "Pipeline tracking, CSV export, team sharing",
-  "API access — integrate EDEN into your workflow",
-  "MCP server — query EDEN from any AI assistant",
-];
-
-const MARKET_FEATURES = [
-  "Anonymous listings (identity NDA-gated)",
-  "Secure deal rooms with audit trail",
-  "Success-fee aligned: free to list",
-];
 
 /* ─── How It Works Steps ─────────────────────────────────────── */
 
@@ -473,7 +454,7 @@ const HOW_IT_WORKS: { title: React.ReactNode; body: React.ReactNode }[] = [
     body: <>When a program fits your criteria, an alert goes out by email and in-product, in <span style={{ color: "hsl(33 85% 44%)", fontWeight: 600 }}>real time</span>, to everyone on your team. Some exclusivity windows close fast. EDEN makes sure you are never the last to know.</>,
   },
   {
-    title: "From match to deal-ready.",
+    title: "From signal to term sheet.",
     body: <>Build your pipeline, pull supporting literature, and construct your business case directly in <span className="text-primary font-semibold">EdenScout</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</>,
   },
 ];
@@ -488,7 +469,6 @@ export default function HowItWorks() {
   const [, navigate] = useLocation();
   const [activeScenario, setActiveScenario] = useState(0);
   const stepsRef = useReveal();
-  const tiersRef = useReveal();
 
   function handleScenarioComplete() {
     setActiveScenario((prev) => (prev + 1) % DEMO_SCENARIOS.length);
@@ -511,7 +491,7 @@ export default function HowItWorks() {
             style={{ minHeight: "92vh", paddingTop: "7rem", paddingBottom: "5rem" }}
           >
             <h1
-              className="font-black leading-[1.06] tracking-tight mb-5 max-w-2xl text-foreground"
+              className="font-black leading-[1.06] tracking-tight mb-10 max-w-2xl text-foreground"
               style={{ fontSize: "clamp(2.4rem, 5vw, 3.75rem)" }}
             >
               Most licensing deals are{" "}
@@ -519,15 +499,6 @@ export default function HowItWorks() {
               {", "}not{" "}
               <span style={{ color: "hsl(33 85% 44%)" }}>lost</span>.
             </h1>
-
-            <div className="mb-10 space-y-1.5 max-w-md">
-              <p className="text-base sm:text-lg leading-relaxed text-muted-foreground">
-                The asset was indexed. The window was open. The team that closed the deal searched smarter.
-              </p>
-              <p className="text-base sm:text-lg font-semibold text-primary">
-                EDEN makes sure that's you.
-              </p>
-            </div>
 
             {/* Chat demo — center stage */}
             <div className="w-full max-w-xl mb-10">
@@ -563,8 +534,8 @@ export default function HowItWorks() {
             <div className="flex-1 min-w-0">
               <div style={{ borderTop: "1px solid hsl(var(--primary) / 0.22)", borderBottom: "1px solid hsl(var(--primary) / 0.22)" }}>
                 {HOW_IT_WORKS.map((step, i) => (
+                  <React.Fragment key={i}>
                   <div
-                    key={i}
                     className="flex gap-0 py-14 sm:py-16 items-center"
                     style={{
                       minHeight: 240,
@@ -612,6 +583,17 @@ export default function HowItWorks() {
                       </p>
                     </div>
                   </div>
+                  {i === 1 && (
+                    <div className="block lg:hidden overflow-hidden" style={{ borderRadius: 16, margin: "4px 0 8px" }}>
+                      <img
+                        src="/images/bd-conversation.jpg"
+                        alt=""
+                        className="w-full object-cover block"
+                        style={{ height: 220, objectPosition: "50% 22%" }}
+                      />
+                    </div>
+                  )}
+                  </React.Fragment>
                 ))}
               </div>
             </div>
@@ -635,110 +617,6 @@ export default function HowItWorks() {
               />
             </div>
 
-          </div>
-        </section>
-
-        {/* Portal section — Scout first */}
-        <section
-          ref={tiersRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
-        >
-          <div className="mb-10">
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">
-              Built for deals.{" "}
-              <span className="text-primary">Not just discovery.</span>
-            </h2>
-            <p className="text-muted-foreground max-w-xl">
-              EdenScout is the full intelligence stack for BD teams. EdenMarket closes the deal.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-5 mb-6">
-
-            {/* Scout — featured */}
-            <div
-              className="p-8 rounded-2xl"
-              style={{
-                background: "hsl(152 35% 7%)",
-                border: "1px solid hsl(142 52% 36% / 0.28)",
-              }}
-            >
-              <div className="flex items-center gap-3 mb-7">
-                <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-                  style={{ background: "hsl(142 52% 36% / 0.15)" }}
-                >
-                  <TrendingUp className="w-5 h-5" style={{ color: "hsl(142 65% 55%)" }} />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2.5">
-                    <h3 className="font-bold text-white text-lg leading-none">EdenScout</h3>
-                    <span
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide"
-                      style={{ background: "hsl(142 52% 36% / 0.2)", color: "hsl(142 65% 58%)" }}
-                    >
-                      Subscription
-                    </span>
-                  </div>
-                  <p className="text-sm mt-0.5" style={{ color: "hsl(142 15% 60%)" }}>
-                    Intelligence platform for BD teams
-                  </p>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-3">
-                {SCOUT_FEATURES.map((f) => (
-                  <div key={f} className="flex items-start gap-2">
-                    <Check className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" style={{ color: "hsl(142 65% 55%)" }} />
-                    <span className="text-sm" style={{ color: "hsl(0 0% 83%)" }}>{f}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Market — secondary */}
-            <div
-              className="p-6 rounded-2xl bg-card"
-              style={{ border: "1px solid hsl(var(--portal-market) / 0.22)" }}
-            >
-              <div className="flex items-center gap-3 mb-5">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: "hsl(var(--portal-market) / 0.08)" }}
-                >
-                  <ShoppingBag className="w-4 h-4" style={{ color: "hsl(var(--portal-market))" }} />
-                </div>
-                <div>
-                  <h3 className="font-bold text-foreground text-sm leading-none">EdenMarket</h3>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Blind marketplace for licensable assets</p>
-                </div>
-              </div>
-              <div className="space-y-2.5">
-                {MARKET_FEATURES.map((f) => (
-                  <div key={f} className="flex items-start gap-1.5">
-                    <Check className="w-3 h-3 mt-0.5 flex-shrink-0" style={{ color: "hsl(var(--portal-market))" }} />
-                    <span className="text-[12px] text-foreground">{f}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-          </div>
-
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <p className="text-[12px] text-muted-foreground">
-              Also free:{" "}
-              <strong className="text-foreground font-semibold">EdenDiscovery</strong> for concept timestamping and{" "}
-              <strong className="text-foreground font-semibold">EdenLab</strong> for researcher workspaces.
-            </p>
-            <Link href="/pricing">
-              <button
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary/80 transition-colors flex-shrink-0"
-                data-testid="howitworks-link-full-pricing"
-              >
-                See full pricing
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </Link>
           </div>
         </section>
 
