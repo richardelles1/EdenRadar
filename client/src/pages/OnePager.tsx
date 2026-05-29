@@ -431,19 +431,49 @@ export default function OnePager() {
 
         /* ── Responsive ────────────────────────────────────────────── */
         @media (max-width: 640px) {
-          .op-shell { padding: 16px 0 40px; }
-          .op-hd { padding: 14px 20px; }
-          .op-hd-right .op-badge { display: none; }
-          .op-hero { padding: 26px 20px 28px; }
-          .op-hero-hed { font-size: 23px; }
-          .op-body { padding: 0 20px; }
-          .op-section { grid-template-columns: 36px 1fr; gap: 0 14px; padding: 22px 0; }
-          .op-cov { grid-template-columns: 1fr 1fr; }
+          .op-shell { padding: 12px 0 40px; }
+
+          .op-hd { padding: 12px 18px; }
+
+          .op-hero { padding: 22px 18px 22px; }
+          .op-hero::before { display: none; }
+          .op-hero-hed { font-size: 21px; margin-bottom: 10px; }
+          .op-hero-kicker { font-size: 12px; margin-bottom: 10px; }
+          .op-hero-body { font-size: 12px; line-height: 1.68; }
+
+          .op-body { padding: 0 18px; }
+          .op-section { grid-template-columns: 44px 1fr; gap: 0 12px; padding: 18px 0; }
+          .op-sec-num { font-size: 34px; }
+          .op-sec-hed { font-size: 13px; margin-bottom: 5px; }
+          .op-sec-body { font-size: 11.5px; line-height: 1.66; }
+
+          /* Switch to flex so display:none dividers are fully removed from layout */
+          .op-cov { display: flex; flex-wrap: wrap; }
           .op-cov-divider { display: none; }
-          .op-cov-cell { padding: 16px 20px; }
-          .op-pricing { padding: 18px 20px; }
+          .op-cov-cell {
+            flex: 0 0 50%;
+            padding: 18px 14px;
+            box-sizing: border-box;
+            border-right: 1px solid hsl(142 40% 20% / 0.45);
+            border-bottom: 1px solid hsl(142 40% 20% / 0.45);
+          }
+          /* Right column cells are the 3rd and 7th DOM children (1st and 3rd dividers are 2nd, 4th, 6th) */
+          .op-cov-cell:nth-child(3),
+          .op-cov-cell:nth-child(7) { border-right: none; }
+          /* Bottom row cells */
+          .op-cov-cell:nth-child(5),
+          .op-cov-cell:nth-child(7) { border-bottom: none; }
+          .op-cov-num { font-size: 22px; }
+          .op-cov-label { font-size: 8px; letter-spacing: 0.12em; }
+          .op-cov-ex { font-size: 9px; }
+
+          .op-pricing { padding: 16px 18px; }
           .op-pricing-table { grid-template-columns: 1fr; }
-          .op-ft { padding: 20px 20px; flex-direction: column; align-items: flex-start; gap: 16px; }
+
+          .op-ft { padding: 18px 18px; flex-direction: column; align-items: flex-start; gap: 14px; }
+          .op-ft-right { flex-direction: row; align-items: center; gap: 10px; }
+
+          .op-hint { padding: 0 18px; }
         }
 
         /* ── Print ─────────────────────────────────────────────────── */

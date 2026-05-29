@@ -993,10 +993,6 @@ export default function Landing() {
                   Get started
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
-                <Link href="/one-pager" className="mt-1 text-xs text-foreground/50 hover:text-foreground/80 transition-colors flex items-center gap-1" data-testid="link-landing-one-pager">
-                  Download the one-pager
-                  <ArrowRight className="w-3 h-3" />
-                </Link>
                 <div ref={statsRef} className="reveal-section grid grid-cols-2 gap-x-10 gap-y-5 mt-12 w-full max-w-sm">
                   {STATS.map((s) => (
                     <div key={s.label} data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
