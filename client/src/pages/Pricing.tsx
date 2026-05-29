@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
-import { Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake, ExternalLink } from "lucide-react";
+import { Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake, ExternalLink, FileText } from "lucide-react";
 import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
@@ -709,6 +709,10 @@ export default function Pricing() {
             <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
               EdenRadar surfaces licensable signals from 350+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
             </p>
+            <Link href="/one-pager" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-pricing-one-pager">
+              <FileText className="w-3.5 h-3.5" />
+              Download the EdenRadar one-pager
+            </Link>
           </div>
 
           {/* Product pill toggle */}
@@ -928,6 +932,7 @@ export default function Pricing() {
           <p>© {new Date().getFullYear()} EdenRadar. All rights reserved.</p>
           <div className="flex items-center gap-4">
             <Link href="/demo" className="hover:text-foreground transition-colors">Request Access</Link>
+            <Link href="/one-pager" className="hover:text-foreground transition-colors">One-pager</Link>
             <Link href="/how-it-works" className="hover:text-foreground transition-colors">How It Works</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors">Privacy Policy</Link>
             <Link href="/tos" className="hover:text-foreground transition-colors">Terms of Service</Link>

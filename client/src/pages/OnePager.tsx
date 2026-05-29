@@ -255,9 +255,9 @@ export default function OnePager() {
           color: hsl(33 85% 38%);
         }
 
-        /* ── Coverage strip (dark forest green) ────────────────────── */
+        /* ── Coverage strip ────────────────────────────────────────── */
         .op-cov {
-          background: hsl(142 38% 11%);
+          background: hsl(142 65% 11%);
           display: grid;
           grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr;
         }
@@ -308,15 +308,6 @@ export default function OnePager() {
           border-bottom: 1px solid hsl(142 28% 89%);
         }
 
-        .op-pricing-hed {
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: hsl(215 20% 48%);
-          margin-bottom: 13px;
-        }
-
         .op-pricing-table {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
@@ -331,7 +322,7 @@ export default function OnePager() {
         }
 
         .op-tier-featured {
-          background: hsl(142 42% 10%);
+          background: hsl(142 65% 10%);
         }
 
         .op-tier-name {
@@ -457,6 +448,10 @@ export default function OnePager() {
 
         /* ── Print ─────────────────────────────────────────────────── */
         @media print {
+          @page { margin: 0.25in; size: letter portrait; }
+          html { print-color-adjust: exact !important; -webkit-print-color-adjust: exact !important; }
+          .no-print { display: none !important; }
+
           .op-shell {
             background: #fff !important;
             padding: 0 !important;
@@ -468,9 +463,37 @@ export default function OnePager() {
             max-width: 100% !important;
             box-shadow: none !important;
           }
-          .op-cov { grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr !important; }
-          .op-pricing-table { grid-template-columns: 1fr 1fr 1fr !important; }
+          .op-hd { padding: 7px 28px !important; }
           .op-hd-right { display: flex !important; }
+
+          .op-hero { padding: 11px 28px 9px !important; }
+          .op-hero::before { display: none !important; }
+          .op-hero-hed { font-size: 20px !important; margin-bottom: 5px !important; }
+          .op-hero-kicker { font-size: 9.5px !important; margin-bottom: 5px !important; }
+          .op-hero-body { font-size: 9.5px !important; line-height: 1.55 !important; }
+
+          .op-body { padding: 0 28px !important; }
+          .op-section { padding: 7px 0 !important; grid-template-columns: 48px 1fr !important; gap: 0 11px !important; }
+          .op-sec-num { font-size: 32px !important; }
+          .op-sec-hed { font-size: 11px !important; margin-bottom: 3px !important; }
+          .op-sec-body { font-size: 9.5px !important; line-height: 1.52 !important; }
+
+          .op-cov { grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr !important; }
+          .op-cov-cell { padding: 8px 10px !important; }
+          .op-cov-num { font-size: 17px !important; margin-bottom: 2px !important; }
+          .op-cov-label { font-size: 6.5px !important; margin-bottom: 2px !important; }
+          .op-cov-ex { font-size: 8px !important; line-height: 1.45 !important; }
+
+          .op-pricing { padding: 8px 28px !important; }
+          .op-pricing-table { grid-template-columns: 1fr 1fr 1fr !important; }
+          .op-tier { padding: 7px 10px !important; }
+          .op-tier-price { font-size: 15px !important; margin-bottom: 3px !important; }
+          .op-tier-desc { font-size: 8.5px !important; line-height: 1.45 !important; }
+
+          .op-ft { padding: 9px 28px !important; }
+          .op-cta-btn { padding: 6px 13px !important; font-size: 9.5px !important; margin-bottom: 5px !important; }
+          .op-ft-contact { font-size: 8px !important; }
+          .op-qr-wrap { width: 46px !important; height: 46px !important; }
         }
       `}</style>
 
@@ -612,7 +635,7 @@ export default function OnePager() {
               <span className="op-cov-num amber">350+</span>
               <span className="op-cov-label">TTO Portals</span>
               <span className="op-cov-ex">
-                MIT &middot; Stanford &middot; Harvard &middot; Johns Hopkins &middot; UCSF &middot; Oxford &middot; Max Planck &middot; Broad Institute
+                Global Coverage of<br />Tech Transfer Network
               </span>
             </div>
             <div className="op-cov-divider" />
@@ -641,7 +664,6 @@ export default function OnePager() {
 
           {/* PRICING */}
           <div className="op-pricing">
-            <div className="op-pricing-hed">Pricing: Early Access Tiers</div>
             <div className="op-pricing-table">
               <div className="op-tier">
                 <div className="op-tier-name">Individual</div>
