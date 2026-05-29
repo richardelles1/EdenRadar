@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -13,10 +13,6 @@ import {
   TrendingUp,
   ShoppingBag,
   Check,
-  Search,
-  Sparkles,
-  Bell,
-  BarChart3,
 } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
@@ -59,43 +55,45 @@ interface DemoScenario {
   messages: ChatMessage[];
 }
 
+const BADGE_COLOR = "hsl(142 65% 48%)";
+
 const DEMO_ASSETS_JHU: AssetCardData[] = [
-  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: "hsl(142 65% 48%)" },
-  { id: 2, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule", color: "hsl(265 60% 60%)" },
-  { id: 3, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody", color: "hsl(38 92% 50%)" },
+  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: BADGE_COLOR },
+  { id: 2, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody", color: BADGE_COLOR },
+  { id: 3, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule", color: BADGE_COLOR },
 ];
 
 const DEMO_ASSETS_CNS: AssetCardData[] = [
-  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody", color: "hsl(142 65% 48%)" },
-  { id: 5, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule", color: "hsl(265 60% 60%)" },
-  { id: 6, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy", color: "hsl(38 92% 50%)" },
+  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody", color: BADGE_COLOR },
+  { id: 5, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy", color: BADGE_COLOR },
+  { id: 6, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule", color: BADGE_COLOR },
 ];
 
 const DEMO_ASSETS_ADC: AssetCardData[] = [
-  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC", color: "hsl(142 65% 48%)" },
-  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC", color: "hsl(265 60% 60%)" },
-  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC", color: "hsl(38 92% 50%)" },
+  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC", color: BADGE_COLOR },
+  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC", color: BADGE_COLOR },
+  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC", color: BADGE_COLOR },
 ];
 
 const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "institution",
     messages: [
-      { role: "user", text: "Show me top oncology assets from Johns Hopkins.", delay: 400 },
+      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 400 },
       { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 1600, scanning: true, assetCards: DEMO_ASSETS_JHU },
     ],
   },
   {
     id: "cross-tto",
     messages: [
-      { role: "user", text: "Preclinical CNS assets scoring above 85, any institution.", delay: 400 },
+      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 400 },
       { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 1600, scanning: true, assetCards: DEMO_ASSETS_CNS },
     ],
   },
   {
     id: "modality",
     messages: [
-      { role: "user", text: "ADC platforms available for exclusive license at IND-enabling stage.", delay: 400 },
+      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 400 },
       { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 1600, scanning: true, assetCards: DEMO_ASSETS_ADC },
     ],
   },
@@ -246,7 +244,7 @@ function ScanningAnimation({ onDone }: { onDone: () => void }) {
         style={{ background: "hsl(142 52% 36%)", animation: "eden-pulse 0.6s ease-in-out infinite" }}
       />
       <span className="text-[11px] font-mono" style={{ color: "hsl(142 40% 40%)" }}>
-        Scanning 350+ institutions{".".repeat(dots)}{" "}
+        Scanning 358 institutions{".".repeat(dots)}{" "}
         <span key={nameIdx} style={{ animation: "scan-slide 0.12s ease-out forwards" }}>{SCAN_NAMES[nameIdx]}</span>
       </span>
     </div>
@@ -368,7 +366,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span className="w-1.5 h-1.5 rounded-full bg-primary" style={{ animation: "eden-pulse 2s ease-in-out infinite" }} />
-          <span className="text-[10px] font-semibold text-primary">Live · 350+ TTOs</span>
+          <span className="text-[10px] font-semibold text-primary">Live · 358 TTOs</span>
         </div>
       </div>
 
@@ -402,14 +400,11 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
                 <>
                   {scanningIdx === i && <ScanningAnimation onDone={() => handleScanDone(i)} />}
                   {(streamingIdx === i || doneSet.has(i)) && (
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[9px] font-bold uppercase tracking-widest" style={{ color: "hsl(142 52% 36%)", letterSpacing: "0.18em" }}>EDEN</span>
-                      <p className="text-[12px] leading-relaxed" style={{ color: "hsl(222 15% 22%)" }}>
-                        {doneSet.has(i) ? msg.text : (
-                          <StreamingText text={msg.text} onDone={() => handleStreamDone(i)} />
-                        )}
-                      </p>
-                    </div>
+                    <p className="text-[12px] leading-relaxed" style={{ color: "hsl(222 15% 22%)" }}>
+                      {doneSet.has(i) ? msg.text : (
+                        <StreamingText text={msg.text} onDone={() => handleStreamDone(i)} />
+                      )}
+                    </p>
                   )}
                   {msg.assetCards && doneSet.has(i) && (
                     <div className="flex flex-col gap-1.5 mt-1">
@@ -461,7 +456,7 @@ const TIER_OVERVIEW = [
     color: "hsl(var(--portal-scout))",
     colorDim: "hsl(var(--portal-scout) / 0.08)",
     borderColor: "hsl(var(--portal-scout) / 0.3)",
-    features: ["EDEN queries across 350+ TTOs", "EDEN-scored dossiers + competitive cross-reference", "Alerts, CSV export, pipeline tracking"],
+    features: ["EDEN queries across 358 TTOs", "EDEN-scored dossiers + competitive cross-reference", "Alerts, CSV export, pipeline tracking"],
   },
   {
     icon: ShoppingBag,
@@ -475,41 +470,25 @@ const TIER_OVERVIEW = [
   },
 ];
 
-/* ─── Intelligence Channels ──────────────────────────────────── */
+/* ─── How It Works Steps ─────────────────────────────────────── */
 
-const INTEL_CHANNELS = [
+const HOW_IT_WORKS: { title: React.ReactNode; body: React.ReactNode }[] = [
   {
-    icon: Search,
-    tag: "Active",
-    title: "Natural language search",
-    desc: "Ask in plain English across all 350+ indexed institutions simultaneously. Filter by modality, stage, therapeutic area, or geography — EDEN returns ranked, enriched results in seconds.",
+    title: <>You tell <span className="text-primary">EDEN</span> what matters most.</>,
+    body: "Your therapeutic focus, target modalities, deal stage, geography. EDEN takes this as its operating brief and calibrates everything it surfaces around your priorities.",
   },
   {
-    icon: Sparkles,
-    tag: "Conversational",
-    title: "EDEN intelligence engine",
-    desc: "Go deeper with EDEN. Ask follow-up questions, request a full patent landscape, compare competing programs, or synthesize literature across 40+ live sources — all cited, all in plain English.",
+    title: <>The global tech transfer market, <span className="text-primary">under continuous watch</span>.</>,
+    body: "Every major research institution worldwide, indexed as new programs emerge. Assets classified, scored 0–100, and cross-referenced against known market activity the moment they appear.",
   },
   {
-    icon: Bell,
-    tag: "Automated",
-    title: "Standing alerts",
-    desc: "Set your criteria once. The moment a new matching asset appears from any of the 350+ monitored institutions, your team is notified before it surfaces publicly. No manual scanning, no missed deals.",
+    title: <>Matches reach you and <span className="text-primary">your team</span> before you go looking.</>,
+    body: <>When a program fits your criteria, an alert goes out by email and in-product, in <span style={{ color: "hsl(33 85% 44%)", fontWeight: 600 }}>real time</span>, to everyone on your team. Some exclusivity windows close fast. EDEN makes sure you are never the last to know.</>,
   },
   {
-    icon: BarChart3,
-    tag: "Structured",
-    title: "Landscape intelligence",
-    desc: "Every asset arrives with an EDEN-compiled context layer: patent coverage, clinical trial cross-reference, competitive program mapping, inventor history, and a deal readiness score 0–100.",
+    title: "From match to deal-ready.",
+    body: <>Build your pipeline, pull supporting literature, and construct your business case directly in <span className="text-primary font-semibold">EdenScout</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</>,
   },
-];
-
-/* ─── Stats ──────────────────────────────────────────────────── */
-
-const STATS = [
-  { value: "0–100", label: "EDEN readiness score" },
-  { value: "Daily", label: "Monitoring cadence" },
-  { value: "4",     label: "Portals in ecosystem" },
 ];
 
 /* ─── Main Page ──────────────────────────────────────────────── */
@@ -517,7 +496,7 @@ const STATS = [
 export default function HowItWorks() {
   useDocumentMeta({
     title: "How It Works — EdenRadar Platform Walkthrough",
-    description: "See how EDEN monitors 350+ tech transfer offices, scores assets 0–100, and delivers structured intelligence to BD teams, researchers, and concept creators across four interconnected portals.",
+    description: "See how EDEN monitors 358 tech transfer offices, scores assets 0–100, and delivers structured intelligence to BD teams, researchers, and concept creators across four interconnected portals.",
   });
   const [, navigate] = useLocation();
   const [activeScenario, setActiveScenario] = useState(0);
@@ -568,16 +547,6 @@ export default function HowItWorks() {
               <EdenChatDemo key={scenario.id} messages={scenario.messages} onComplete={handleScenarioComplete} />
             </div>
 
-            {/* Stats */}
-            <div className="flex gap-10 sm:gap-14 mb-10">
-              {STATS.map((s) => (
-                <div key={s.label} className="text-center">
-                  <div className="text-2xl font-bold mb-0.5 text-primary">{s.value}</div>
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-foreground/45">{s.label}</div>
-                </div>
-              ))}
-            </div>
-
             <Button
               size="lg"
               onClick={() => navigate("/login")}
@@ -596,52 +565,95 @@ export default function HowItWorks() {
           />
         </section>
 
-        {/* Intelligence delivery channels */}
+        {/* How it works — sticky photo right, steps scroll left */}
         <section
           ref={stepsRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
+          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-24"
         >
-          <div className="text-center mb-12">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Intelligence Delivery</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">
-              How intelligence reaches your team
-            </h2>
-            <p className="text-muted-foreground max-w-xl mx-auto">
-              Four distinct channels — each designed so the right asset finds you, whether you're actively searching or not.
-            </p>
-          </div>
-          <div className="space-y-3">
-            {INTEL_CHANNELS.map((ch, i) => (
-              <div
-                key={i}
-                className="stagger-item grid grid-cols-[4.5rem_1fr] sm:grid-cols-[7rem_1fr] gap-6 sm:gap-8 p-6 rounded-2xl transition-shadow duration-200 hover:shadow-md"
-                style={{
-                  background: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  boxShadow: "0 1px 4px rgba(0,0,0,0.05)",
-                  animationDelay: `${i * 80}ms`,
-                }}
-              >
-                <div className="flex flex-col items-start gap-3 pt-0.5">
+          <div className="flex gap-16 xl:gap-20 items-start">
+
+            {/* Left: four steps */}
+            <div className="flex-1 min-w-0">
+              <div style={{ borderTop: "1px solid hsl(var(--primary) / 0.22)", borderBottom: "1px solid hsl(var(--primary) / 0.22)" }}>
+                {HOW_IT_WORKS.map((step, i) => (
                   <div
-                    className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+                    key={i}
+                    className="flex gap-0 py-14 sm:py-16 items-center"
                     style={{
-                      background: "hsl(var(--primary) / 0.10)",
-                      boxShadow: "0 2px 8px hsl(var(--primary) / 0.12)",
+                      minHeight: 240,
+                      borderBottom: i < HOW_IT_WORKS.length - 1 ? "1px solid hsl(var(--border) / 0.38)" : "none",
                     }}
                   >
-                    <ch.icon className="w-5 h-5 text-primary" />
+                    {/* Number column */}
+                    <div
+                      className="hidden sm:flex flex-shrink-0 justify-end"
+                      style={{
+                        width: 88,
+                        paddingRight: 32,
+                        borderRight: "1px solid hsl(var(--primary) / 0.15)",
+                      }}
+                    >
+                      <span
+                        className="font-black tabular-nums"
+                        style={{
+                          fontSize: "clamp(48px, 5.5vw, 68px)",
+                          color: "hsl(var(--primary))",
+                          opacity: 0.55,
+                          lineHeight: 0.88,
+                          letterSpacing: "-0.04em",
+                        }}
+                      >
+                        {String(i + 1).padStart(2, "0")}
+                      </span>
+                    </div>
+
+                    {/* Mobile number */}
+                    <span
+                      className="block sm:hidden text-4xl font-black tabular-nums mr-5 flex-shrink-0"
+                      style={{ color: "hsl(var(--primary))", opacity: 0.45 }}
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+
+                    {/* Content */}
+                    <div className="flex-1 min-w-0 sm:pl-10">
+                      <h3 className="text-xl sm:text-2xl lg:text-[1.65rem] font-bold text-foreground mb-3 leading-snug">
+                        {step.title}
+                      </h3>
+                      <p className="text-base sm:text-[1.0625rem] text-muted-foreground leading-relaxed">
+                        {step.body}
+                      </p>
+                    </div>
                   </div>
-                  <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/50 leading-tight">
-                    {ch.tag}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-[15px] font-bold text-foreground mb-2 leading-snug">{ch.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{ch.desc}</p>
-                </div>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {/* Right: sticky photo — hidden below lg */}
+            <div
+              className="hidden lg:block flex-shrink-0 sticky self-start"
+              style={{ width: 340, top: "5.5rem" }}
+            >
+              <div
+                className="relative rounded-[20px] overflow-hidden"
+                style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.07)" }}
+              >
+                <img
+                  src="/images/bd-conversation.jpg"
+                  alt=""
+                  className="w-full object-cover block"
+                  style={{ height: 560, objectPosition: "50% 25%" }}
+                />
+                <div
+                  className="absolute bottom-0 left-0 right-0 pointer-events-none"
+                  style={{
+                    height: 160,
+                    background: "linear-gradient(to bottom, transparent, hsl(var(--background) / 0.94))",
+                  }}
+                />
+              </div>
+            </div>
+
           </div>
         </section>
 
