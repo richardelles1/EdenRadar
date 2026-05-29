@@ -96,18 +96,26 @@ function SuccessState({ name }: { name: string }) {
           While you wait
         </p>
         {[
-          "Browse EdenMarket — our confidential deal marketplace",
-          "See how EdenScout works on the How It Works page",
-          "Forward this to a colleague on your BD team",
-        ].map(item => (
-          <div key={item} className="flex items-start gap-2 mb-2 last:mb-0">
+          { text: "Browse EdenMarket — our confidential deal marketplace", href: "/market" },
+          { text: "See how EdenScout works on the How It Works page", href: "/how-it-works" },
+          { text: "Forward this to a colleague on your BD team", href: null },
+        ].map(({ text, href }) => (
+          <div key={text} className="flex items-start gap-2 mb-2 last:mb-0">
             <div
               className="w-1 h-1 rounded-full mt-[7px] shrink-0"
               style={{ background: "hsl(var(--primary))" }}
             />
-            <span className="text-[0.8rem] leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
-              {item}
-            </span>
+            {href ? (
+              <Link href={href}>
+                <span className="text-[0.8rem] leading-relaxed hover:text-foreground transition-colors cursor-pointer" style={{ color: "hsl(var(--muted-foreground))" }}>
+                  {text}
+                </span>
+              </Link>
+            ) : (
+              <span className="text-[0.8rem] leading-relaxed" style={{ color: "hsl(var(--muted-foreground))" }}>
+                {text}
+              </span>
+            )}
           </div>
         ))}
       </div>

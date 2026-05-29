@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PLAN_PRICES, formatPrice } from "@/lib/pricing";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
-const CONTACT_SALES = "sales@edenradar.com";
+const CONTACT_SALES = "hello@edenradar.com";
 
 const SCOUT_PLANS = [
   {
