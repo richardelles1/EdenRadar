@@ -576,6 +576,7 @@ export function registerIndexingRoutes(app: Express): void {
   app.get("/api/admin/collector-health", async (req, res) => {
     try {
 
+      const manualScraperNames = new Set(ALL_SCRAPERS.filter((s) => s.scraperType === "manual").map((s) => s.institution));
       const allInstitutionNames = ALL_SCRAPERS.filter((s) => s.scraperType !== "stub").map((s) => s.institution);
 
       const healthData = await storage.getCollectorHealthData();
@@ -597,7 +598,7 @@ export function registerIndexingRoutes(app: Express): void {
       // "syncing" status is always accurate regardless of DB session heartbeat lag.
       const liveActiveSyncs = new Set(getActiveSyncs());
 
-      const rows = allInstitutionNames.map((name) => {
+      const allComputedRows = allInstitutionNames.map((name) => {
         const dbRow = instMap.get(name);
         const totalInDb = dbRow?.totalInDb ?? 0;
         const biotechRelevant = dbRow?.biotechRelevant ?? 0;
@@ -692,6 +693,9 @@ export function registerIndexingRoutes(app: Express): void {
         };
       });
 
+      const rows = allComputedRows.filter((r) => !manualScraperNames.has(r.institution));
+      const manualRows = allComputedRows.filter((r) => manualScraperNames.has(r.institution));
+
       const manualInsts = await storage.getManualInstitutions();
       const activeSearchRows = manualInsts.map((m) => {
         const dbRow = instMap.get(m.name);
@@ -716,10 +720,11 @@ export function registerIndexingRoutes(app: Express): void {
 
       res.json({
         rows,
+        manualRows,
         activeSearchRows,
         totalInDb,
         totalBiotechRelevant,
-        totalInstitutions: allInstitutionNames.length,
+        totalInstitutions: rows.length,
         totalActiveSearch: manualInsts.length,
         issueCount,
         syncingCount,

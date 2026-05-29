@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Dot } from "recharts";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, Download, Database, RefreshCw, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, Key, PowerOff, RotateCcw, ArrowUpCircle, Shield, ShieldCheck, Lock, LogOut, DollarSign, type LucideIcon } from "lucide-react";
+import { Loader2, Download, Database, RefreshCw, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, ChevronsUpDown, Square, Key, PowerOff, RotateCcw, ArrowUpCircle, Shield, ShieldCheck, Lock, LogOut, DollarSign, Wrench, type LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -959,6 +959,7 @@ function DataHealth({ pw }: { pw: string }) {
   const [activeSearchOpen, setActiveSearchOpen] = useState(false);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const [healthPanelOpen, setHealthPanelOpen] = useState(false);
+  const [manualSyncOpen, setManualSyncOpen] = useState(false);
   const lastStableOrder = useRef<string[]>([]);
   const userCollapsedRef = useRef<string | null>(null);
   const { toast } = useToast();
@@ -1463,7 +1464,8 @@ function DataHealth({ pw }: { pw: string }) {
   const syncedToday = data.syncedToday ?? 0;
 
   const handleSyncClick = (institution: string) => {
-    if (data?.rows.find((r) => r.institution === institution)?.health === "syncing") return;
+    const allRows = [...(data?.rows ?? []), ...(data?.manualRows ?? [])];
+    if (allRows.find((r) => r.institution === institution)?.health === "syncing") return;
     setPendingSyncInst(institution);
     setExpandedInstitution(institution);
     syncMutation.mutate(institution);
@@ -2222,6 +2224,128 @@ function DataHealth({ pw }: { pw: string }) {
         </div>
         <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${healthPanelOpen ? "rotate-90" : ""}`} />
       </button>
+
+      {/* ── Manual Sync section ──────────────────────────────── */}
+      {(data.manualRows ?? []).length > 0 && (
+        <>
+          <button
+            className="w-full flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10 hover:bg-muted/20 transition-colors text-left"
+            onClick={() => setManualSyncOpen((v) => !v)}
+            data-testid="section-manual-sync"
+          >
+            <div className="flex items-center gap-2">
+              <Wrench className="h-4 w-4 text-orange-500" />
+              <span className="font-semibold text-foreground text-sm">Manual Sync</span>
+              <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{(data.manualRows ?? []).length}</span>
+              <span className="text-[11px] text-muted-foreground/60">Excluded from auto-pipeline — run or test manually</span>
+            </div>
+            <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${manualSyncOpen ? "rotate-90" : ""}`} />
+          </button>
+
+          {manualSyncOpen && (
+            <div className="overflow-x-auto" data-testid="manual-sync-panel">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
+                    <th className="text-center py-3 px-4 font-semibold text-foreground min-w-[140px]">Health</th>
+                    <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[90px]">Last Sync</th>
+                    <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[60px]">Error</th>
+                    <th className="text-center py-3 px-4 font-semibold text-foreground min-w-[80px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.manualRows ?? []).map((row) => {
+                    const isExpanded = expandedInstitution === row.institution;
+                    const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
+                    return (
+                      <React.Fragment key={row.institution}>
+                        <tr
+                          className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer ${isExpanded ? "bg-primary/5 border-b-0" : ""}`}
+                          data-testid={`manual-sync-row-${instSlug}`}
+                          onClick={() => handleRowClick(row.institution)}
+                        >
+                          <td className="py-2 px-4 font-medium text-foreground">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate">{row.institution}</span>
+                              <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-orange-600 border-orange-500/30 bg-orange-500/5">Manual</Badge>
+                            </div>
+                          </td>
+                          <td className="text-center py-2 px-3">
+                            <div className="inline-flex items-center gap-1.5 min-w-[7.5rem] justify-center">
+                              <HealthDot health={row.health} />
+                              <HealthLabel health={row.health} />
+                            </div>
+                          </td>
+                          <td className="py-2 px-4 text-xs text-muted-foreground whitespace-nowrap">
+                            {row.lastSyncAt ? relativeTime(row.lastSyncAt) : <span className="text-muted-foreground/40">Never</span>}
+                          </td>
+                          <td className="py-2 px-4 text-xs text-muted-foreground max-w-[220px]">
+                            {row.lastSyncError ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-red-500/80 truncate block max-w-[200px] cursor-help">
+                                    {row.lastSyncError.length > 45 ? row.lastSyncError.slice(0, 45) + "…" : row.lastSyncError}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" align="start" className="max-w-[360px] break-words text-xs">
+                                  {row.lastSyncError}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              <span className="text-muted-foreground/40">&mdash;</span>
+                            )}
+                          </td>
+                          <td className="text-center py-2 px-3">
+                            {row.health === "syncing" ? (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                                onClick={(e) => { e.stopPropagation(); cancelMutation.mutate(row.institution); }}
+                                disabled={cancellingInstitution === row.institution}
+                                data-testid={`button-cancel-manual-sync-${instSlug}`}
+                              >
+                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                Cancel
+                              </Button>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 px-2.5 text-xs"
+                                onClick={(e) => { e.stopPropagation(); handleSyncClick(row.institution); }}
+                                disabled={pendingSyncInst === row.institution}
+                                title={`Run sync for ${row.institution}`}
+                                data-testid={`button-manual-sync-${instSlug}`}
+                              >
+                                {pendingSyncInst === row.institution ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <><PlayCircle className="h-3.5 w-3.5 mr-1" />Run</>
+                                )}
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <ExpandedSyncPanel
+                            key={`manual-panel-${row.institution}`}
+                            institution={row.institution}
+                            pw={pw}
+                            onCollapse={() => setExpandedInstitution(null)}
+                            liveInDb={row.totalInDb}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
 
       {healthPanelOpen && (
         <div className="px-4 py-3" data-testid="scraper-health-panel">

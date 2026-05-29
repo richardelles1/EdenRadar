@@ -17,7 +17,7 @@ export interface ScrapedListing {
 
 export interface InstitutionScraper {
   institution: string;
-  scraperType?: "playwright" | "http" | "api" | "stub";
+  scraperType?: "playwright" | "http" | "api" | "stub" | "manual";
   tier?: 1 | 2 | 3 | 4;
   /** Override the default per-type timeout for this scraper (milliseconds). */
   scraperTimeoutMs?: number;

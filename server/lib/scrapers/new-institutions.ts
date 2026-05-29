@@ -1559,7 +1559,7 @@ export const uspScraper = createTechPublisherScraper("usp", "Inova USP (Universi
 export const oxfordScraper = createStubScraper("University of Oxford");
 // imperialScraper — real in-part "imperial" implementation is in Batch E section (end of file)
 export const uclScraper = createStubScraper("University College London");
-export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
+export const manchesterScraper: InstitutionScraper = { ...createInPartScraper("manchester", "University of Manchester"), scraperType: "manual" };
 // University of Edinburgh — handled by edinburghInnovationsScraper (line ~4731) which is
 // registered in ALL_SCRAPERS. Re-probed 2026-04-21: site now returns HTTP 200 (was HTTP 000);
 // pagination fixed in edinburghInnovationsScraper to use /p2, /p3, /p4 pattern.
@@ -1626,7 +1626,7 @@ export const ljubljanaScraper = createInPartScraper("ljubljana", "University of 
 // ── International: Canada ────────────────────────────────────────────────
 export const utorontoScraper = createInPartScraper("toronto", "University of Toronto");
 export const westernScraper = createInPartScraper("western", "Western University");
-export const queensuScraper = createInPartScraper("queensu", "Queen's University");
+export const queensuScraper: InstitutionScraper = { ...createInPartScraper("queensu", "Queen's University"), scraperType: "manual" };
 export const ualbertaScraper = createInPartScraper("ualberta", "University of Alberta");
 export const ubcScraper = createInPartScraper("ubc", "University of British Columbia");
 export const umanitobaScraper = createInPartScraper("manitoba", "University of Manitoba");

@@ -39,6 +39,7 @@ function mapPost(p: WpPost): ScrapedListing {
 
 export const dukeScraper: InstitutionScraper = {
   institution: INST,
+  scraperType: "manual",
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
     const posts = await fetchJson<WpPost[]>(

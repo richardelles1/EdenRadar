@@ -86,6 +86,7 @@ interface ActiveSearchRow {
 
 interface CollectorHealthData {
   rows: CollectorHealthRow[];
+  manualRows: CollectorHealthRow[];
   activeSearchRows: ActiveSearchRow[];
   totalInDb: number;
   totalBiotechRelevant: number;

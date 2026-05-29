@@ -205,6 +205,7 @@ export function getScraperHealthCache(): Map<string, ScraperHealthRow> {
 function buildTieredQueue(): string[] {
   const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
   for (const s of ALL_SCRAPERS) {
+    if (s.scraperType === "playwright" || s.scraperType === "manual" || s.scraperType === "stub") continue;
     const tier = getScraperTier(s.institution);
     buckets[tier].push(s.institution);
   }
@@ -222,7 +223,7 @@ function buildTieredQueue(): string[] {
  * Must be called AFTER the scraperHealthCache is freshly loaded. */
 function buildStalenessFirstQueue(): string[] {
   return [...ALL_SCRAPERS]
-    .filter((s) => s.scraperType !== "playwright")
+    .filter((s) => s.scraperType !== "playwright" && s.scraperType !== "manual" && s.scraperType !== "stub")
     .sort((a, b) => {
       const aAt = scraperHealthCache.get(a.institution)?.lastSuccessAt?.getTime() ?? 0;
       const bAt = scraperHealthCache.get(b.institution)?.lastSuccessAt?.getTime() ?? 0;
@@ -239,7 +240,7 @@ function getInstitutionQueue(): string[] {
 function getScraperType(institution: string): "playwright" | "http" | "api" {
   const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
   const t = scraper?.scraperType ?? "http";
-  return (t === "stub" ? "http" : t) as "playwright" | "http" | "api";
+  return (t === "stub" || t === "manual" ? "http" : t) as "playwright" | "http" | "api";
 }
 
 function isInBackoff(institution: string): boolean {
@@ -584,6 +585,7 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   }
   const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
   for (const s of ALL_SCRAPERS) {
+    if (s.scraperType === "manual" || s.scraperType === "stub") continue;
     const t = getScraperTier(s.institution);
     buckets[t].push(s.institution);
   }
