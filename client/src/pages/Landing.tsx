@@ -728,7 +728,7 @@ const DECK_TINTS: Record<"intro" | "tto" | "trial" | "patent" | "research", {
   bg: string; border: string; strip: string;
   scoreColor: string; badgeBg: string; badgeBorderColor: string;
 }> = {
-  intro:    { bg: "oklch(16% 0.035 160)", border: "rgba(16,185,129,0.25)", strip: "#10b981", scoreColor: "#10b981", badgeBg: "transparent", badgeBorderColor: "transparent" },
+  intro:    { bg: "linear-gradient(148deg, hsl(142 60% 38%) 0%, hsl(142 54% 30%) 100%)", border: "rgba(255,255,255,0.15)", strip: "#10b981", scoreColor: "#10b981", badgeBg: "transparent", badgeBorderColor: "transparent" },
   tto:      { bg: "#f0fdf4", border: "#a7f3d0", strip: "#10b981", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
   trial:    { bg: "#f0fdfa", border: "#99f6e4", strip: "#0d9488", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
   patent:   { bg: "#fffbeb", border: "#fde68a", strip: "#d97706", scoreColor: "#059669", badgeBg: "white", badgeBorderColor: "rgba(16,185,129,0.4)" },
@@ -832,65 +832,68 @@ function HeroCardDeck() {
                 /* ── Branded intro card ── */
                 <div className="absolute inset-0 flex flex-col" style={{ padding: "28px 28px 24px" }}>
                   {/* Radar ring watermark */}
-                  <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.07 }}>
+                  <div className="absolute inset-0 pointer-events-none overflow-hidden" style={{ opacity: 0.09 }}>
                     <svg width="100%" height="100%" viewBox="0 0 480 445" xmlns="http://www.w3.org/2000/svg">
                       {[70, 130, 190, 260, 330, 400].map(r => (
-                        <circle key={r} cx="420" cy="50" r={r} fill="none" stroke="#10b981" strokeWidth="1.2"/>
+                        <circle key={r} cx="420" cy="50" r={r} fill="none" stroke="white" strokeWidth="1.2"/>
                       ))}
                     </svg>
                   </div>
 
                   {/* Header */}
-                  <div className="relative flex items-center justify-between">
-                    <span style={{ fontSize: "11px", fontWeight: 800, letterSpacing: "0.2em", textTransform: "uppercase", color: "#10b981" }}>
-                      EdenRadar
-                    </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "11px", color: "oklch(55% 0.025 155)" }}>
-                      <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10b981", display: "inline-block", boxShadow: "0 0 0 3px rgba(16,185,129,0.22)" }} />
-                      Live
-                    </span>
+                  <div className="relative flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 28 28" fill="none" aria-hidden style={{ flexShrink: 0 }}>
+                      <circle cx="14" cy="14" r="12" stroke="rgba(255,255,255,0.45)" strokeWidth="1.4"/>
+                      <circle cx="14" cy="14" r="7.5" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2" strokeOpacity="0.55"/>
+                      <circle cx="14" cy="14" r="3" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2" strokeOpacity="0.35"/>
+                      <line x1="2" y1="14" x2="5" y2="14" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                      <line x1="23" y1="14" x2="26" y2="14" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                      <line x1="14" y1="2" x2="14" y2="5" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                      <line x1="14" y1="23" x2="14" y2="26" stroke="rgba(255,255,255,0.45)" strokeWidth="1.2"/>
+                    </svg>
+                    <span style={{ fontSize: "12px", fontWeight: 600, color: "rgba(255,255,255,0.40)", letterSpacing: "-0.01em" }}>EdenRadar</span>
                   </div>
 
-                  {/* Main stat */}
-                  <div className="relative" style={{ marginTop: "26px" }}>
-                    <div style={{ fontSize: "80px", fontWeight: 900, lineHeight: 1, color: "oklch(76% 0.13 75)", fontVariantNumeric: "tabular-nums" }}>
-                      350+
+                  {/* Headline */}
+                  <div className="relative" style={{ marginTop: "24px" }}>
+                    <div style={{ fontSize: "38px", fontWeight: 800, lineHeight: 1.15, color: "rgba(255,255,255,0.97)", letterSpacing: "-0.02em" }}>
+                      The biotech landscape, scored daily.
                     </div>
-                    <div style={{ fontSize: "22px", fontWeight: 700, color: "oklch(90% 0.02 155)", lineHeight: 1.25, marginTop: "8px" }}>
-                      research institutions,<br />one view.
-                    </div>
-                    <p style={{ fontSize: "14px", color: "oklch(58% 0.025 155)", marginTop: "10px", lineHeight: 1.65 }}>
-                      TTO assets, clinical trials, patents, and research — scored and surfaced daily.
+                    <p style={{ fontSize: "15px", fontWeight: 400, color: "rgba(255,255,255,0.68)", lineHeight: 1.55, marginTop: "14px" }}>
+                      EDEN monitors 350+ research institutions and surfaces what's worth your attention.
                     </p>
                   </div>
 
-                  {/* Category pills */}
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "22px" }}>
+                  {/* Divider */}
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.15)", marginTop: "24px", marginBottom: "20px" }} />
+
+                  {/* 2×2 category grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
                     {[
-                      { label: "TTO Assets",      color: "#10b981", bg: "rgba(16,185,129,0.12)" },
-                      { label: "Clinical Trials",  color: "#0d9488", bg: "rgba(13,148,136,0.12)" },
-                      { label: "Patents",           color: "#d97706", bg: "rgba(217,119,6,0.12)"  },
-                      { label: "Research",          color: "#0ea5e9", bg: "rgba(14,165,233,0.12)" },
-                    ].map(({ label, color, bg }) => (
-                      <span key={label} style={{
-                        fontSize: "12px", fontWeight: 600,
-                        padding: "5px 11px", borderRadius: "6px",
-                        background: bg, color,
-                        border: `1px solid ${color}30`,
+                      { label: "TTO Assets",       dot: "#6ee7b7" },
+                      { label: "Clinical Trials",  dot: "#5eead4" },
+                      { label: "Patents & IP",      dot: "#fcd34d" },
+                      { label: "Research Papers",   dot: "#7dd3fc" },
+                    ].map(({ label, dot }) => (
+                      <div key={label} style={{
+                        display: "flex", alignItems: "center", gap: "8px",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        background: "rgba(255,255,255,0.08)",
+                        border: "1px solid rgba(255,255,255,0.10)",
                       }}>
-                        {label}
-                      </span>
+                        <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: dot, flexShrink: 0 }} />
+                        <span style={{ fontSize: "13px", fontWeight: 500, color: "rgba(255,255,255,0.85)" }}>{label}</span>
+                      </div>
                     ))}
                   </div>
 
-                  <div style={{ flex: 1 }} />
+                  {/* Divider */}
+                  <div style={{ height: "1px", background: "rgba(255,255,255,0.15)", marginTop: "20px" }} />
 
                   {/* Footer */}
-                  <div className="relative flex items-center justify-between" style={{ borderTop: "1px solid rgba(16,185,129,0.15)", paddingTop: "14px" }}>
-                    <span style={{ fontSize: "12px", color: "oklch(42% 0.02 155)" }}>Updated every 24 hours</span>
-                    <span style={{ fontSize: "12px", fontWeight: 600, color: "oklch(60% 0.04 155)" }}>
-                      Click to explore →
-                    </span>
+                  <div className="relative" style={{ paddingTop: "14px" }}>
+                    <span style={{ fontSize: "12px", color: "rgba(255,255,255,0.40)" }}>33K+ scored assets</span>
                   </div>
                 </div>
               ) : (
