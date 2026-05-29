@@ -412,6 +412,7 @@ export interface IStorage {
   appendEdenMessage(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
   getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
   listEdenSessions(limit?: number): Promise<EdenSession[]>;
+  getRecentSessionsForUser(userId: string, limit?: number): Promise<EdenSession[]>;
   createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void>;
   getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
 
@@ -3889,6 +3890,15 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(edenSessions)
+      .orderBy(desc(edenSessions.updatedAt))
+      .limit(limit);
+  }
+
+  async getRecentSessionsForUser(userId: string, limit = 6): Promise<EdenSession[]> {
+    return db
+      .select()
+      .from(edenSessions)
+      .where(and(eq(edenSessions.userId, userId), isNotNull(edenSessions.focusContext)))
       .orderBy(desc(edenSessions.updatedAt))
       .limit(limit);
   }

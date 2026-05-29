@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library, Bell, CheckCircle2, Loader2, X } from "lucide-react";
+import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library, Bell, CheckCircle2, Loader2, X, Pencil } from "lucide-react";
 import { EdenAvatar, MarkdownContent, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
-import type { ChatAsset, ChatMessage, ExternalResult, ActionOffer, AlertOfferConfig } from "@/hooks/useEdenChat";
+import { getAuthHeaders } from "@/lib/queryClient";
+import type { ChatAsset, ChatMessage, ExternalResult, ActionOffer, AlertOfferConfig, WriteActionOffer } from "@/hooks/useEdenChat";
 
 function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
   if (!assets.length || !content) return assets;
@@ -244,6 +245,11 @@ function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = 
             {asset.ipType}
           </span>
         )}
+        {asset.rankNote && (
+          <span className="text-[9px] font-medium border rounded px-1.5 py-0.5 bg-emerald-500/8 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" title="Why this was ranked here">
+            ↑ {asset.rankNote}
+          </span>
+        )}
       </div>
 
       {/* Actions row */}
@@ -291,11 +297,13 @@ function ActionOffers({
 }) {
   const [alertStates, setAlertStates] = useState<Record<number, "idle" | "pending" | "creating" | "done" | "dismissed">>({});
   const [cadences, setCadences] = useState<Record<number, "daily" | "weekly">>({});
+  const [writeStates, setWriteStates] = useState<Record<string, "idle" | "executing" | "done" | "error">>({});
 
   const saveOffers = offers.filter((o): o is Extract<ActionOffer, { type: "save" }> => o.type === "save");
   const alertOffers = offers.filter((o): o is Extract<ActionOffer, { type: "alert" }> => o.type === "alert");
+  const writeOffers = offers.filter((o): o is WriteActionOffer => o.type === "status_update" || o.type === "note_add" || o.type === "move_pipeline");
 
-  if (saveOffers.length === 0 && alertOffers.length === 0) return null;
+  if (saveOffers.length === 0 && alertOffers.length === 0 && writeOffers.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-1.5 mt-2 ml-0.5" data-testid="action-offers">
@@ -407,6 +415,62 @@ function ActionOffers({
                 <CheckCircle2 className="h-3 w-3" />
                 Alert created
               </div>
+            )}
+          </div>
+        );
+      })}
+
+      {writeOffers.map((offer, wi) => {
+        const key = `${offer.type}-${offer.ingestedAssetId}-${wi}`;
+        const wState = writeStates[key] ?? "idle";
+        const isSaved = savedIngestedIds.has(offer.ingestedAssetId);
+        if (!isSaved) return null; // only show for assets already in pipeline
+
+        const execute = async () => {
+          setWriteStates((prev) => ({ ...prev, [key]: "executing" }));
+          try {
+            const payload =
+              offer.type === "status_update" ? { status: offer.status } :
+              offer.type === "note_add" ? { content: offer.content } :
+              { pipelineName: offer.pipelineName };
+            const authHeaders = await getAuthHeaders();
+            const res = await fetch("/api/eden/write-action", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", ...authHeaders },
+              body: JSON.stringify({ type: offer.type, ingestedAssetId: offer.ingestedAssetId, payload }),
+            });
+            setWriteStates((prev) => ({ ...prev, [key]: res.ok ? "done" : "error" }));
+          } catch {
+            setWriteStates((prev) => ({ ...prev, [key]: "error" }));
+          }
+        };
+
+        return (
+          <div key={key} className="flex flex-wrap items-center gap-1.5">
+            <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
+              <Pencil className="h-3 w-3 shrink-0" />
+              {offer.type === "status_update" ? "Update status:" : offer.type === "note_add" ? "Add note:" : "Move to pipeline:"}
+            </span>
+            {wState === "idle" && (
+              <button
+                onClick={execute}
+                className={`rounded-full border border-blue-500/30 bg-blue-500/8 text-blue-700 dark:text-blue-400 px-2.5 py-0.5 font-medium hover:bg-blue-500/15 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
+              >
+                {offer.label}
+              </button>
+            )}
+            {wState === "executing" && (
+              <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                <Loader2 className="h-3 w-3 animate-spin" /> Working...
+              </span>
+            )}
+            {wState === "done" && (
+              <span className={`flex items-center gap-1 text-emerald-600 dark:text-emerald-400 ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                <CheckCircle2 className="h-3 w-3" /> Done
+              </span>
+            )}
+            {wState === "error" && (
+              <span className={`text-destructive ${compact ? "text-[10px]" : "text-[11px]"}`}>Failed — try again</span>
             )}
           </div>
         );

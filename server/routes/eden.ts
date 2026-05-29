@@ -14,6 +14,7 @@ import {
   isComparativeQuery, compareQuery, summarizeSession, classifyIntent,
   extractBackRefPosition, extractBackRefInstitution,
   type UserContext, type SessionFocusContext, type IntentClassification, type LiveSource,
+  type CrossSessionMemory, type RankedAsset, buildCrossSessionMemory,
 } from "../lib/eden/rag";
 import { searchClinicalTrials } from "../lib/sources/clinicaltrials";
 import { searchLens } from "../lib/sources/lens";
@@ -42,9 +43,14 @@ type AlertOfferConfig = {
   stages?: string[] | null; institutions?: string[] | null;
   cadence?: "daily" | "weekly";
 };
+type WriteActionOffer =
+  | { type: "status_update"; ingestedAssetId: number; assetName: string; status: string; label: string }
+  | { type: "note_add"; ingestedAssetId: number; assetName: string; content: string; label: string }
+  | { type: "move_pipeline"; ingestedAssetId: number; assetName: string; pipelineName: string; label: string };
 type ActionOffer =
   | { type: "save"; assets: ActionOfferAsset[]; targetPipelineName?: string }
-  | { type: "alert"; label: string; config: AlertOfferConfig };
+  | { type: "alert"; label: string; config: AlertOfferConfig }
+  | WriteActionOffer;
 
 // Intent patterns for save and alert offer detection.
 const SAVE_PATTERNS: RegExp[] = [
@@ -77,6 +83,39 @@ const ALERT_PATTERNS: RegExp[] = [
   /\bmore (assets|technologies|listings) (from|at|like)\b/,
   /\bnew (assets|technologies|deals|listings) (from|at|like)\b/,
 ];
+
+// Write-action patterns: status update, note addition, pipeline move
+const STATUS_MAP: Array<[RegExp, string]> = [
+  [/\b(in[\s-]?discussion|actively discussing|discussing)\b/i, "in_discussion"],
+  [/\b(evaluating|due diligence|deep.?dive|diligence)\b/i, "evaluating"],
+  [/\b(on[\s-]?hold|pause|paused|hold)\b/i, "on_hold"],
+  [/\b(pass(ed)?|not interested|skip)\b/i, "passed"],
+  [/\bwatching\b/i, "watching"],
+];
+const WRITE_STATUS_PATTERNS: RegExp[] = [
+  /\b(?:mark|set|tag|update|change)(?:\s+(?:it|this|that))?\s+(?:as|to)\b/i,
+  /\b(?:move|advance)(?:\s+(?:it|this|that))?\s+(?:to|into)\b/i,
+  /\b(?:status|stage)\s*[:=]/i,
+];
+const WRITE_NOTE_PATTERNS: RegExp[] = [
+  /\b(?:add|write|leave|create)\s+a?\s*note[:\s]/i,
+  /\bnote(?:\s+that|:\s|[:\s])/i,
+  /\bannotate\b/i,
+];
+const WRITE_MOVE_PATTERNS: RegExp[] = [
+  /\b(?:move|transfer|put)\s+(?:this|it|that)\s+(?:to|into)\s+(?:my\s+|the\s+)?(.+?)\s+(?:pipeline|list|portfolio)\b/i,
+];
+
+function extractStatusTarget(message: string): string | null {
+  for (const [rx, status] of STATUS_MAP) {
+    if (rx.test(message)) return status;
+  }
+  return null;
+}
+function extractNoteContent(message: string): string | null {
+  const m = message.match(/\bnote[:\s]+(.{4,200})/i) ?? message.match(/\badd(?:\s+a)?\s+note[:\s]+(.{4,200})/i);
+  return m?.[1]?.trim().replace(/[.!?]*$/, "").slice(0, 200) ?? null;
+}
 
 const PIPELINE_NAME_PATTERNS: RegExp[] = [
   /\b(?:save|add) (?:it|this|these|them) to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
@@ -188,6 +227,32 @@ function buildActionOffers(
     });
   }
 
+  // Write actions: status update, note addition, pipeline move
+  // Only emitted when a single clear target asset is in context (intent is back_ref or a single-result search).
+  const targetAsset = retrieved.length === 1 ? retrieved[0] : null;
+  if (targetAsset) {
+    const hasStatusIntent = WRITE_STATUS_PATTERNS.some((p) => p.test(message));
+    if (hasStatusIntent) {
+      const status = extractStatusTarget(message);
+      if (status) {
+        const statusLabel: Record<string, string> = { in_discussion: "In Discussion", evaluating: "Evaluating", on_hold: "On Hold", passed: "Passed", watching: "Watching" };
+        offers.push({ type: "status_update", ingestedAssetId: targetAsset.id, assetName: targetAsset.assetName, status, label: `Mark as ${statusLabel[status] ?? status}` });
+      }
+    }
+    const hasNoteIntent = WRITE_NOTE_PATTERNS.some((p) => p.test(message));
+    if (hasNoteIntent) {
+      const content = extractNoteContent(message);
+      if (content) {
+        offers.push({ type: "note_add", ingestedAssetId: targetAsset.id, assetName: targetAsset.assetName, content, label: `Add note: "${content.slice(0, 50)}${content.length > 50 ? "…" : ""}"` });
+      }
+    }
+    const movePipelineMatch = message.match(WRITE_MOVE_PATTERNS[0]);
+    if (movePipelineMatch?.[1]) {
+      const pipelineName = movePipelineMatch[1].trim();
+      offers.push({ type: "move_pipeline", ingestedAssetId: targetAsset.id, assetName: targetAsset.assetName, pipelineName, label: `Move to "${pipelineName}"` });
+    }
+  }
+
   return offers;
 }
 
@@ -290,6 +355,24 @@ export function registerEdenRoutes(app: Express): void {
       // ── Seed in-memory focus from DB on first message of this server process ──
       seedSessionFocusFromDb(sid, session.focusContext);
 
+      // ── Cross-session memory: load history for known users on first turn ──
+      // Aggregates the last 6 sessions' focus contexts into a memory block that
+      // gets injected into the system prompt, giving Eden longitudinal context.
+      let crossSessionMemory: CrossSessionMemory | null = null;
+      const isFirstTurn = (session.messages ?? []).length === 0;
+      if (requestUserId && isFirstTurn) {
+        try {
+          const recentSessions = await storage.getRecentSessionsForUser(requestUserId, 6);
+          crossSessionMemory = buildCrossSessionMemory(recentSessions);
+        } catch (e) {
+          console.warn("[eden] cross-session memory load failed:", (e as Error)?.message ?? e);
+        }
+      } else if (!isFirstTurn) {
+        // On subsequent turns, preserve the memory already attached to focusContext
+        const stored = session.focusContext?._crossSessionMemory as CrossSessionMemory | undefined;
+        if (stored) crossSessionMemory = stored;
+      }
+
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
       // ── Portfolio institution names for two-pass detection ────────────────
@@ -297,6 +380,8 @@ export function registerEdenRoutes(app: Express): void {
 
       // ── Session focus context (accumulated across turns) ──────────────────
       const focusContext = getOrUpdateSessionFocus(sid, message.trim(), portfolioInstitutionNames);
+      // Attach cross-session memory to focusContext so it flows into buildSystemPrompt
+      if (crossSessionMemory) focusContext._crossSessionMemory = crossSessionMemory;
       if (isEngagementResetMessage(message.trim())) {
         markEngagementReset(sid);
       }
@@ -322,6 +407,19 @@ export function registerEdenRoutes(app: Express): void {
         }
         for (const [ind, v] of Object.entries(boosts.indications ?? {})) {
           engagementSignals.indications[ind] = (engagementSignals.indications[ind] ?? 0) + v;
+        }
+      }
+      // Pre-seed from cross-session history at weight 1 — weaker than session activity
+      // so it's a prior, not a bias. Only fires when session signals are thin.
+      if (crossSessionMemory && requestUserId) {
+        for (const m of crossSessionMemory.topModalities) {
+          if (!engagementSignals.modalities[m]) engagementSignals.modalities[m] = 1;
+        }
+        for (const ind of crossSessionMemory.topIndications) {
+          if (!engagementSignals.indications[ind]) engagementSignals.indications[ind] = 1;
+        }
+        for (const bio of crossSessionMemory.topBiologies) {
+          if (!engagementSignals.biologies[bio]) engagementSignals.biologies[bio] = 1;
         }
       }
 
@@ -932,6 +1030,7 @@ export function registerEdenRoutes(app: Express): void {
         biology: a.biology ?? undefined,
         ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
         similarity: Math.round(a.similarity * 100) / 100,
+        rankNote: a.rankNote,
       }));
 
       const externalResults = await liveResultsPromise;
@@ -1008,6 +1107,56 @@ export function registerEdenRoutes(app: Express): void {
     } catch (err) {
       console.error("[EDEN feedback]", err);
       return res.status(500).json({ error: "Failed to record feedback" });
+    }
+  });
+
+  // ── Write action endpoint: Eden-triggered status/note/move actions ──────────
+  // Resolves ingestedAssetId → savedAsset.id for this user, then executes the action.
+  app.post("/api/eden/write-action", verifyAnyAuth, async (req, res) => {
+    const userId = (req as any).userId as string | undefined;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+    const parsed = z.object({
+      type: z.enum(["status_update", "note_add", "move_pipeline"]),
+      ingestedAssetId: z.number().int().positive(),
+      payload: z.object({
+        status: z.enum(["watching", "evaluating", "in_discussion", "on_hold", "passed"]).optional(),
+        content: z.string().min(1).max(2000).optional(),
+        pipelineName: z.string().min(1).max(200).optional(),
+      }),
+    }).safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
+
+    const { type, ingestedAssetId, payload } = parsed.data;
+    try {
+      const saved = await storage.getSavedAssets(undefined, userId);
+      const target = saved.find((s) => s.ingestedAssetId === ingestedAssetId);
+      if (!target) return res.status(404).json({ error: "Asset not found in your pipeline — save it first" });
+
+      if (type === "status_update") {
+        if (!payload.status) return res.status(400).json({ error: "status required" });
+        await storage.updateSavedAssetStatus(target.id, payload.status);
+        return res.json({ ok: true, action: "status_update", status: payload.status });
+      }
+      if (type === "note_add") {
+        if (!payload.content) return res.status(400).json({ error: "content required" });
+        await storage.createAssetNote({ savedAssetId: target.id, userId, content: payload.content, authorName: userId });
+        return res.json({ ok: true, action: "note_add" });
+      }
+      if (type === "move_pipeline") {
+        if (!payload.pipelineName) return res.status(400).json({ error: "pipelineName required" });
+        const lists = await storage.getPipelineLists(userId);
+        const match = lists.find((l) =>
+          l.name.toLowerCase().includes(payload.pipelineName!.toLowerCase()) ||
+          payload.pipelineName!.toLowerCase().includes(l.name.toLowerCase())
+        );
+        if (!match) return res.status(404).json({ error: `Pipeline "${payload.pipelineName}" not found` });
+        await storage.updateSavedAssetPipeline(target.id, match.id);
+        return res.json({ ok: true, action: "move_pipeline", pipelineId: match.id, pipelineName: match.name });
+      }
+    } catch (err) {
+      console.error("[EDEN write-action]", err);
+      return res.status(500).json({ error: "Action failed" });
     }
   });
 

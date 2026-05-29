@@ -11,6 +11,7 @@ export type ChatAsset = {
   sourceName?: string | null;
   sourceUrl?: string | null;
   similarity: number;
+  rankNote?: string;
 };
 
 export type ExternalResult = {
@@ -46,9 +47,15 @@ export type AlertOfferConfig = {
   cadence?: "daily" | "weekly";
 };
 
+export type WriteActionOffer =
+  | { type: "status_update"; ingestedAssetId: number; assetName: string; status: string; label: string }
+  | { type: "note_add"; ingestedAssetId: number; assetName: string; content: string; label: string }
+  | { type: "move_pipeline"; ingestedAssetId: number; assetName: string; pipelineName: string; label: string };
+
 export type ActionOffer =
   | { type: "save"; assets: Array<{ id: number; assetName: string; institution: string; modality?: string | null; developmentStage?: string | null; indication?: string | null; sourceUrl?: string | null }>; targetPipelineName?: string }
-  | { type: "alert"; label: string; config: AlertOfferConfig };
+  | { type: "alert"; label: string; config: AlertOfferConfig }
+  | WriteActionOffer;
 
 export type EdenSessionSummary = {
   id: number;
