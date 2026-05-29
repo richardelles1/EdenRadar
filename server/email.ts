@@ -16,7 +16,7 @@ const FROM_MARKET = "EdenMarket <market@edenradar.com>";
 export const FROM_DIGEST = "EdenRadar Alerts <digest@edenradar.com>";
 
 const ADMIN_NOTIFICATION_EMAILS = (
-  process.env.ADMIN_NOTIFICATION_EMAILS ?? "admin@edenradar.com"
+  process.env.ADMIN_NOTIFICATION_EMAILS ?? "wmohamed@edennx.com,relles@edennx.com"
 )
   .split(",")
   .map((s) => s.trim())
@@ -909,5 +909,38 @@ export function sendAdminNotificationEmail(
   return sendEmail(recipients, subject, baseHtml(bodyHtml, { replyToHint: SUPPORT_EMAIL }), {
     from: FROM_NOREPLY,
     replyTo: SUPPORT_EMAIL,
+  });
+}
+
+export function sendDemoRequestEmail(data: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  company: string;
+  role: string;
+  teamSize: string;
+  intent: string;
+}): Promise<void> {
+  const fullName = `${data.firstName} ${data.lastName}`.trim();
+  const subject = `New early access request: ${fullName} — ${data.company}`;
+  const html = baseHtml(`
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#111827;">New Early Access Request</h1>
+    <p style="margin:0 0 20px;font-size:14px;color:#6b7280;">Submitted via /demo</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;">
+      <tr><td style="padding:8px 0;color:#6b7280;width:130px;">Name</td><td style="padding:8px 0;color:#111827;font-weight:600;">${fullName}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Email</td><td style="padding:8px 0;"><a href="mailto:${data.email}" style="color:#059669;">${data.email}</a></td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Company</td><td style="padding:8px 0;color:#111827;font-weight:600;">${data.company}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Role</td><td style="padding:8px 0;color:#111827;">${data.role}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;">Team size</td><td style="padding:8px 0;color:#111827;">${data.teamSize || "—"}</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;vertical-align:top;">Looking for</td><td style="padding:8px 0;color:#111827;">${data.intent || "—"}</td></tr>
+    </table>
+    <div style="margin-top:24px;padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;">
+      <p style="margin:0;font-size:13px;color:#065f46;">Reply directly to this email to respond to ${data.firstName}.</p>
+    </div>
+  `);
+  const recipients = getAdminNotificationRecipients();
+  return sendEmail(recipients, subject, html, {
+    from: FROM_NOREPLY,
+    replyTo: data.email,
   });
 }

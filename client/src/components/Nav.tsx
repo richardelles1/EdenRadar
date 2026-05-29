@@ -21,7 +21,7 @@ type NavProps = {
   onOpenSaved?: () => void;
 };
 
-const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list"];
+const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo"];
 
 function normalizePath(path: string) {
   const stripped = path.split("?")[0].split("#")[0];
@@ -321,15 +321,27 @@ export function Nav({ onOpenSaved }: NavProps) {
           </Button>
 
           {isPublic ? (
-            <Link href="/login">
-              <Button
-                size="sm"
-                className="h-8 px-4 font-semibold text-xs hidden sm:flex"
-                data-testid="button-nav-signin"
-              >
-                Sign In
-              </Button>
-            </Link>
+            <div className="hidden sm:flex items-center gap-2">
+              <Link href="/demo">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 px-4 font-semibold text-xs border-primary/30 text-primary hover:bg-primary/8"
+                  data-testid="button-nav-request-access"
+                >
+                  Request Access
+                </Button>
+              </Link>
+              <Link href="/login">
+                <Button
+                  size="sm"
+                  className="h-8 px-4 font-semibold text-xs"
+                  data-testid="button-nav-signin"
+                >
+                  Sign In
+                </Button>
+              </Link>
+            </div>
           ) : (
             <>
               {onOpenSaved ? (

@@ -956,7 +956,7 @@ export default function Landing() {
 
   if (!loading && session && role) return null;
 
-  function handleLogin() { navigate("/login"); }
+  function handleLogin() { navigate("/demo"); }
   function handleGetStarted() {
     document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
   }
@@ -1226,6 +1226,11 @@ export default function Landing() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/demo" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-demo">
+                    Request Access
+                  </Link>
+                </li>
+                <li>
                   <Link href="/one-pager" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-one-pager">
                     EdenScout One-Pager
                   </Link>
@@ -1247,7 +1252,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <button
-                    onClick={handleLogin}
+                    onClick={() => navigate("/login")}
                     className="text-xs text-foreground hover:text-primary transition-colors text-left"
                     data-testid="footer-link-login"
                   >

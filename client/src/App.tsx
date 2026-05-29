@@ -60,6 +60,7 @@ import HowItWorks from "@/pages/HowItWorks";
 import Tos from "@/pages/Tos";
 import Privacy from "@/pages/Privacy";
 import Pricing from "@/pages/Pricing";
+import Demo from "@/pages/Demo";
 import BillingSuccess from "@/pages/BillingSuccess";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
@@ -418,6 +419,7 @@ function Router() {
       <Route path="/tos" component={Tos} />
       <Route path="/privacy" component={Privacy} />
       <Route path="/pricing" component={Pricing} />
+      <Route path="/demo" component={Demo} />
       <Route path="/billing/success" component={BillingSuccess} />
 
       <Route path="/discovery">

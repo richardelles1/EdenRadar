@@ -511,12 +511,12 @@ export default function HowItWorks() {
 
             <Button
               size="lg"
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/demo")}
               data-testid="howitworks-cta-hero"
               className="h-11 px-8 font-semibold gap-2 border-0"
               style={{ background: "hsl(33 85% 44%)", color: "white" }}
             >
-              Try EdenScout
+              Request Access
               <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -643,12 +643,12 @@ export default function HowItWorks() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
                 size="lg"
-                onClick={() => navigate("/login")}
+                onClick={() => navigate("/demo")}
                 data-testid="howitworks-cta-main"
                 className="h-11 px-7 font-semibold"
                 style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}
               >
-                Get Started
+                Request Access
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <Button
@@ -673,6 +673,7 @@ export default function HowItWorks() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
           <p>© {new Date().getFullYear()} EdenRadar. All rights reserved.</p>
           <div className="flex items-center gap-4">
+            <Link href="/demo" className="hover:text-foreground transition-colors" data-testid="footer-link-demo">Request Access</Link>
             <Link href="/pricing" className="hover:text-foreground transition-colors" data-testid="footer-link-pricing">Pricing</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors" data-testid="footer-link-privacy">Privacy Policy</Link>
             <Link href="/tos" className="hover:text-foreground transition-colors" data-testid="footer-link-tos">Terms of Service</Link>
