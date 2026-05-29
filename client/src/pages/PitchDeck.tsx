@@ -30,17 +30,13 @@ import {
   Link2,
   Lock,
   Workflow,
-  Dna,
-  Shield,
   Check,
-  Bell,
   ShoppingBag,
 } from "lucide-react";
 import { motion, AnimatePresence, useInView, useReducedMotion } from "framer-motion";
-import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
-import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
+import { EdenAvatar } from "@/components/EdenOrb";
 import { ExportMenu } from "@/components/ExportMenu";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
@@ -66,22 +62,22 @@ const DARK = {
 };
 
 const LIGHT = {
-  bg: "#ffffff",
-  bgLight: "#f6f8fa",
-  border: "#d0d7de",
-  text: "#1c2128",
-  textMuted: "#57606a",
-  green: "#1a7f37",
-  greenDim: "rgba(26,127,55,0.10)",
-  amber: "#9a6700",
-  amberDim: "rgba(154,103,0,0.10)",
-  violet: "#6e40c9",
-  violetDim: "rgba(110,64,201,0.10)",
-  indigo: "#3b4ad1",
-  indigoDim: "rgba(59,74,209,0.10)",
-  accent: "#0969da",
-  red: "#cf222e",
-  redDim: "rgba(207,34,46,0.10)",
+  bg: "hsl(210,25%,97%)",
+  bgLight: "hsl(210,25%,93%)",
+  border: "hsl(142,28%,87%)",
+  text: "hsl(222,47%,12%)",
+  textMuted: "hsl(215,18%,48%)",
+  green: "hsl(142,52%,36%)",
+  greenDim: "hsl(142,52%,36%,0.08)",
+  amber: "hsl(33,85%,44%)",
+  amberDim: "hsl(33,85%,44%,0.08)",
+  violet: "hsl(265,55%,48%)",
+  violetDim: "hsl(265,55%,48%,0.08)",
+  indigo: "hsl(232,60%,52%)",
+  indigoDim: "hsl(232,60%,52%,0.08)",
+  accent: "hsl(222,70%,45%)",
+  red: "hsl(0,70%,52%)",
+  redDim: "hsl(0,70%,52%,0.08)",
 };
 
 type Colors = typeof DARK;
@@ -119,7 +115,7 @@ function PitchLeftRadar({ bg }: { bg: string }) {
       const ringCount = 7;
       const ringSpacing = maxR / ringCount;
       const ringAlpha = dark ? 0.08 : 0.03;
-      const sweepPeak = dark ? 0.15 : 0.05;
+      const sweepPeak = dark ? 0.15 : 0.09;
       const sweepAngle = Math.PI / 2;
       const sweepSteps = 24;
 
@@ -142,7 +138,7 @@ function PitchLeftRadar({ bg }: { bg: string }) {
         ctx.moveTo(cx, cy);
         ctx.arc(cx, cy, maxR, startA, endA);
         ctx.closePath();
-        ctx.fillStyle = "#065f46";
+        ctx.fillStyle = "#c47d1a";
         ctx.globalAlpha = t * sweepPeak;
         ctx.fill();
       }
@@ -533,7 +529,8 @@ function CoverSlide({ colors }: { colors: Colors }) {
           </h1>
           <p className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4" style={{ color: colors.green }}>Biotech Intelligence Platform</p>
           <p className="text-sm sm:text-base lg:text-lg max-w-sm sm:max-w-md lg:max-w-xl mb-8 sm:mb-10" style={{ color: colors.textMuted }}>
-            The first platform to connect early-stage concept, development, structured labs, institutional research, and industry asset intelligence in a single ecosystem.
+            350+ tech transfer offices. 33,000+ scored assets. 40+ live data sources. The intelligence layer that gets BD teams{" "}
+            <span style={{ color: colors.amber, fontWeight: 600 }}>upstream of the patent.</span>
           </p>
           <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-xs" style={{ color: colors.textMuted }}>
             <span>Founded 2026</span>
@@ -542,15 +539,41 @@ function CoverSlide({ colors }: { colors: Colors }) {
           </div>
         </div>
 
-        <div className="hidden md:block w-[40%] relative shrink-0" style={{ zIndex: 20 }}>
-          <img
-            src={imgLabWork}
-            alt="Researchers at work"
-            className="absolute inset-0 w-full h-full object-cover"
-            style={{ objectPosition: "right center" }}
-          />
-          <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 28%), linear-gradient(to top, ${colors.bg}88 0%, transparent 50%)` }} />
-          <div className="absolute inset-0" style={{ background: `${colors.green}0d` }} />
+        {/* Right panel: live product preview */}
+        <div className="hidden md:flex w-[42%] shrink-0 flex-col justify-center gap-2.5 pr-8 lg:pr-12 relative" style={{ zIndex: 20 }}>
+          {[
+            { score: 93, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", modality: "Antibody" },
+            { score: 92, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", modality: "ADC" },
+            { score: 91, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", modality: "Cell Therapy" },
+          ].map((a, i) => (
+            <div
+              key={a.score}
+              className="flex items-center gap-3 rounded-xl px-4"
+              style={{
+                height: 60,
+                background: colors.bgLight,
+                border: `1px solid ${colors.border}`,
+                boxShadow: "0 4px 16px rgba(0,0,0,0.06), 0 1px 4px rgba(0,0,0,0.04)",
+                opacity: 1 - i * 0.08,
+                transform: `scale(${1 - i * 0.015})`,
+                transformOrigin: "center right",
+              }}
+            >
+              <div
+                className="flex-shrink-0 flex items-center justify-center rounded-lg font-bold tabular-nums"
+                style={{ width: 38, height: 38, background: colors.amberDim, color: colors.amber, fontSize: 14 }}
+              >
+                {a.score}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-semibold leading-snug truncate" style={{ color: colors.text }}>{a.title}</p>
+                <p className="text-[10px] mt-0.5" style={{ color: colors.textMuted }}>{a.institution} · {a.stage} · {a.modality}</p>
+              </div>
+            </div>
+          ))}
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-right mt-1" style={{ color: colors.textMuted }}>
+            Live from 358 monitored institutions
+          </p>
         </div>
       </div>
 
@@ -599,8 +622,8 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
             <span style={{ color: colors.green }}>connective tissue of research & biotech.</span>
           </h2>
           <blockquote
-            className="text-base sm:text-lg lg:text-xl italic mb-4 max-w-lg leading-relaxed pl-4"
-            style={{ color: colors.textMuted, borderLeft: `3px solid ${colors.green}44` }}
+            className="text-base sm:text-lg lg:text-xl italic mb-4 max-w-lg leading-relaxed"
+            style={{ color: colors.textMuted }}
           >
             "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments, creating direct connections between scientists and the industry partners who can advance it."
           </blockquote>
@@ -708,7 +731,7 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
 
   const industryPortals = [
     {
-      title: "EdenRadar", tagline: "Industry intelligence across 300+ TTOs", money: "Industry SaaS subscription",
+      title: "EdenRadar", tagline: "Industry intelligence across 350+ TTOs", money: "Industry SaaS subscription",
       color: colors.green, dim: colors.greenDim, icon: Search,
       items: [
         "EDEN-scored and enriched asset dossiers",
@@ -729,18 +752,6 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
     },
   ];
 
-  const researcherPortals = [
-    {
-      title: "EdenDiscovery", tagline: "Creative concept community · supply side", role: "Top-of-funnel · supply",
-      color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
-      items: ["Submit hypotheses before research begins", "EDEN credibility scoring (0–100)", "Surfaces to Scout subscribers"],
-    },
-    {
-      title: "EdenLab", tagline: "Project-based research workspace · supply side", role: "Researcher community · supply",
-      color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
-      items: ["11-section structured project canvas", "Literature synthesis across 40+ sources", "Signals flow into Scout"],
-    },
-  ];
 
   return (
     <Slide index={4} section="Our Solution" accent={colors.green} colors={colors}>
@@ -790,7 +801,7 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
                 className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs sm:text-xs font-bold uppercase tracking-wider w-fit mb-2"
                 style={{ background: `${p.color}22`, color: p.color, border: `1px solid ${p.color}55` }}
               >
-                💰 {p.money}
+                {p.money}
               </div>
               <ul className="space-y-1 mt-auto">
                 {p.items.map((item) => (
@@ -805,524 +816,286 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
         </div>
       </div>
 
-      {/* ── FOR RESEARCHERS (below, smaller / supply-side) ── */}
-      <div className="opacity-90">
-        <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
-          <FlaskConical className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: colors.amber }} />
-          <p className="text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>For Researchers · Supply Side</p>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5">
-          {researcherPortals.map((p, i) => (
-            <motion.div
-              key={p.title}
-              className="rounded-xl p-2.5 sm:p-3 flex flex-col"
-              style={{ background: p.dim, border: `1px solid ${p.color}33`, borderTop: `2px solid ${p.color}` }}
-              initial={skip ? false : { opacity: 0, y: 8 }}
-              animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 8 }}
-              transition={skip ? { duration: 0 } : { duration: 0.4, delay: 0.2 + i * 0.08, ease: "easeOut" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: `${p.color}88` }}>
-                  <p.icon className="w-3 h-3 sm:w-3.5 sm:h-3.5" style={{ color: "#fff" }} />
-                </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs sm:text-sm font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
-                  <p className="text-xs sm:text-xs font-semibold uppercase tracking-wider leading-none mt-0.5" style={{ color: p.color }}>{p.role}</p>
-                </div>
-              </div>
-              <p className="text-xs sm:text-xs leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-3 sm:mt-4 relative flex items-center rounded-lg overflow-hidden" style={{ height: 32, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33, ${colors.indigo}44)`, border: "1px solid transparent" }}>
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22, ${colors.indigo}33)` }} />
-        <span className="relative z-10 flex-1 text-center text-xs sm:text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
-          Supply → Discover → Transact
-        </span>
-        <div className="relative z-10 flex items-center justify-center w-8 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.indigo}66, ${colors.indigo}aa)` }}>
-          <ChevronRight className="w-4 h-4" style={{ color: "#fff" }} />
-        </div>
+      {/* ── Supply side footnote ── */}
+      <div className="mt-2 sm:mt-3 flex items-center gap-3 rounded-lg px-3 py-2.5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+        <FlaskConical className="w-3.5 h-3.5 shrink-0" style={{ color: colors.textMuted }} />
+        <p className="text-xs" style={{ color: colors.textMuted }}>
+          <span className="font-semibold" style={{ color: colors.amber }}>EdenDiscovery</span> and{" "}
+          <span className="font-semibold" style={{ color: colors.violet }}>EdenLab</span>
+          {" "}are free researcher tools that feed the data network — concepts and research projects become scored assets visible to Scout subscribers.
+        </p>
+        <ArrowRight className="w-3.5 h-3.5 shrink-0" style={{ color: colors.green }} />
       </div>
     </Slide>
   );
 }
 
-/* ═══════════════════════ SLIDE 6 — EDEN CHAT DEMO ═══════════════════════ */
+/* ═══════════════════════ SLIDE 8 — EDEN ENGINE (SCENARIO CHAT DEMO) ═══════════════════════ */
 
-interface PitchChatMessage {
-  role: "user" | "eden";
+interface PitchChatMsg {
+  role: "eden" | "user";
   text: string;
   delay: number;
-  showCards?: boolean;
-  showCrisprCards?: boolean;
+  instant?: boolean;
+  scanning?: boolean;
+  assets?: { id: number; title: string; institution: string; stage: string; score: number; modality: string }[];
 }
 
-interface PitchAssetCard {
-  id: number;
+interface PitchScenario {
+  id: string;
+  number: string;
+  eyebrow: string;
   title: string;
-  institution: string;
-  area: string;
-  stage: string;
-  score: number;
-  modality: string;
-  color: string;
-  icon: typeof Dna;
+  messages: PitchChatMsg[];
 }
 
-const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
+const PITCH_SCAN_NAMES = ["MIT TTO", "Stanford OTL", "Johns Hopkins", "Mayo Clinic", "Max Planck", "Columbia", "UCSF", "Harvard OTD", "Yale TTO", "NIH", "Oxford TT", "Penn TTO", "Duke OLV", "Broad Institute", "Rockefeller"];
+
+const JHU_PITCH_ASSETS = [
+  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy" },
+  { id: 2, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody" },
+  { id: 3, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule" },
+];
+
+const CNS_PITCH_ASSETS = [
+  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody" },
+  { id: 5, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy" },
+  { id: 6, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule" },
+];
+
+const ADC_PITCH_ASSETS = [
+  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC" },
+  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC" },
+  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC" },
+];
+
+const PITCH_SCENARIOS: PitchScenario[] = [
   {
-    role: "eden",
-    delay: 500,
-    text: "Welcome. I'm EDEN, EdenRadar's research intelligence engine. I monitor, classify, and enrich biotech assets across 300+ tech transfer offices in real time. I also surface signals directly from active research labs before they reach the patent stage. What would you like to explore?",
+    id: "institution", number: "01", eyebrow: "Institution Focus", title: "Oncology pipeline at Hopkins.",
+    messages: [
+      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 600, instant: true },
+      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 1200 },
+      { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging: the HDAC inhibitor overlaps with Pfizer's Seagen integration territory — likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 3000, scanning: true, assets: JHU_PITCH_ASSETS },
+    ],
   },
   {
-    role: "user",
-    delay: 5500,
-    text: "What's the hottest area in oncology right now across all TTOs?",
+    id: "cross-tto", number: "02", eyebrow: "Cross-TTO Discovery", title: "Preclinical CNS across 22 institutions.",
+    messages: [
+      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 600, instant: true },
+      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 1200 },
+      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file.", delay: 3000, scanning: true, assets: CNS_PITCH_ASSETS },
+    ],
   },
   {
-    role: "eden",
-    delay: 7500,
-    text: "Solid tumor immunotherapy is showing the highest new-listing velocity in the past 30 days, particularly next-generation PD-1/PD-L1 combinations and bispecific antibody platforms. I'm detecting convergence signals across 14 institutions. Here are the top-ranked new listings:",
-    showCards: true,
-  },
-  {
-    role: "user",
-    delay: 17000,
-    text: "Show me CRISPR-based assets targeting rare disease, any university stage.",
-  },
-  {
-    role: "eden",
-    delay: 19000,
-    text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies (6 institutions active, no approved competitors). Here are the top results:",
-    showCrisprCards: true,
-  },
-  {
-    role: "user",
-    delay: 30000,
-    text: "Compare the competitive landscape for the top HDAC inhibitor asset.",
-  },
-  {
-    role: "eden",
-    delay: 32000,
-    text: "Commercial HDAC inhibitors (Vorinostat, Romidepsin, Panobinostat) are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
-  },
-  {
-    role: "user",
-    delay: 45000,
-    text: "What else is EDEN watching that we should know about?",
-  },
-  {
-    role: "eden",
-    delay: 47000,
-    text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders, 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets, activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
+    id: "modality", number: "03", eyebrow: "Modality Filter", title: "ADC platforms open for exclusive licensing.",
+    messages: [
+      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 600, instant: true },
+      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 1200 },
+      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. The linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet — you're acquiring the full stack. I've already removed programs that only offered non-exclusive terms.", delay: 3000, scanning: true, assets: ADC_PITCH_ASSETS },
+    ],
   },
 ];
 
-const PITCH_DEMO_ASSETS: PitchAssetCard[] = [
-  {
-    id: 1,
-    title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen",
-    institution: "Johns Hopkins University",
-    area: "Oncology",
-    stage: "Preclinical",
-    score: 91,
-    modality: "Cell Therapy",
-    color: "hsl(142 65% 48%)",
-    icon: Dna,
-  },
-  {
-    id: 2,
-    title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment",
-    institution: "Johns Hopkins University",
-    area: "Oncology",
-    stage: "Discovery",
-    score: 85,
-    modality: "Small Molecule",
-    color: "hsl(265 60% 60%)",
-    icon: Shield,
-  },
-  {
-    id: 3,
-    title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma",
-    institution: "Johns Hopkins University",
-    area: "Oncology",
-    stage: "IND-Enabling",
-    score: 88,
-    modality: "Antibody",
-    color: "hsl(38 92% 50%)",
-    icon: TrendingUp,
-  },
-];
-
-const PITCH_CRISPR_ASSETS: PitchAssetCard[] = [
-  {
-    id: 4,
-    title: "Ex Vivo HSC Editing for Sickle Cell Disease via Base Editing",
-    institution: "MIT, Koch Institute",
-    area: "Rare Disease",
-    stage: "Preclinical",
-    score: 94,
-    modality: "Gene Editing",
-    color: "hsl(142 65% 48%)",
-    icon: Dna,
-  },
-  {
-    id: 5,
-    title: "CRISPR-Cas12a Knockin for Spinal Muscular Atrophy (SMA)",
-    institution: "Stanford University",
-    area: "Rare Disease",
-    stage: "Discovery",
-    score: 88,
-    modality: "Gene Therapy",
-    color: "hsl(265 60% 60%)",
-    icon: Brain,
-  },
-];
-
-function PitchDemoAssetCard({ asset, colors }: { asset: PitchAssetCard; colors: Colors }) {
-  return (
-    <div
-      className="rounded-lg p-3 flex flex-col gap-1.5"
-      style={{
-        background: colors.bg,
-        border: `1px solid ${asset.color.replace(")", " / 0.3)")}`,
-        borderTop: `2px solid ${asset.color}`,
-      }}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs sm:text-xs font-semibold leading-snug flex-1" style={{ color: colors.text }}>{asset.title}</p>
-        <span
-          className="flex-shrink-0 text-xs sm:text-xs font-bold px-1.5 py-0.5 rounded-full"
-          style={{ background: asset.color.replace(")", " / 0.15)"), color: asset.color }}
-        >
-          {asset.score}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-1 text-xs sm:text-xs">
-        <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: colors.bgLight, color: colors.textMuted }}>{asset.institution}</span>
-        <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: asset.color.replace(")", " / 0.12)"), color: asset.color }}>{asset.area}</span>
-        <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: colors.bgLight, color: colors.textMuted }}>{asset.stage}</span>
-        <span className="px-1.5 py-0.5 rounded-full font-medium" style={{ background: colors.bgLight, color: colors.textMuted }}>{asset.modality}</span>
-      </div>
-    </div>
-  );
-}
-
-function PitchEdenChat({ colors, mobile = false, chatHeight = 320 }: { colors: Colors; mobile?: boolean; chatHeight?: number }) {
-  const [visibleCount, setVisibleCount] = useState(0);
-  const chatRef = useRef<HTMLDivElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const started = useRef(false);
+function PitchScanAnim({ onDone, colors }: { onDone: () => void; colors: Colors }) {
+  const [nameIdx, setNameIdx] = useState(0);
+  const [dots, setDots] = useState(1);
 
   useEffect(() => {
-    if (started.current) return;
-    const el = wrapperRef.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          started.current = true;
-          PITCH_CHAT_MESSAGES.forEach((msg, i) => {
-            setTimeout(() => {
-              setVisibleCount(i + 1);
-              requestAnimationFrame(() =>
-                requestAnimationFrame(() =>
-                  requestAnimationFrame(() => {
-                    chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
-                  })
-                )
-              );
-            }, msg.delay);
-          });
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.25 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
+    let step = 0;
+    const iv = setInterval(() => {
+      step++;
+      setNameIdx(p => (p + 1) % PITCH_SCAN_NAMES.length);
+      setDots(p => (p % 3) + 1);
+      if (step >= 14) { clearInterval(iv); setTimeout(onDone, 120); }
+    }, 140);
+    return () => clearInterval(iv);
   }, []);
 
   return (
-    <div ref={wrapperRef} className={mobile ? "h-full flex flex-col min-h-0" : ""}>
+    <div className="flex items-center gap-2 py-0.5">
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: colors.green, animation: "eden-pulse 0.6s ease-in-out infinite" }} />
+      <span className="text-[11px] font-mono" style={{ color: `${colors.green}cc` }}>
+        Scanning 358 institutions{".".repeat(dots)}{" "}
+        <span key={nameIdx} style={{ animation: "scan-slide 0.12s ease-out forwards" }}>{PITCH_SCAN_NAMES[nameIdx]}</span>
+      </span>
+    </div>
+  );
+}
+
+function PitchQueryResultCard({ asset, colors }: { asset: { id: number; title: string; institution: string; stage: string; score: number; modality: string }; colors: Colors }) {
+  return (
+    <div
+      className="flex items-center gap-3 rounded-xl px-4"
+      style={{
+        height: 54,
+        background: colors.bgLight,
+        border: `1px solid ${colors.border}`,
+        boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+      }}
+    >
+      <div
+        className="flex-shrink-0 flex items-center justify-center rounded-lg font-bold tabular-nums"
+        style={{ width: 36, height: 36, background: colors.greenDim, color: colors.green, fontSize: 13 }}
+      >
+        {asset.score}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[12px] font-semibold leading-snug truncate" style={{ color: colors.text }}>{asset.title}</p>
+        <p className="text-[10px] mt-0.5" style={{ color: colors.textMuted }}>
+          {asset.institution} · {asset.stage} · {asset.modality}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function PitchScenarioChat({ scenario, colors }: { scenario: PitchScenario; colors: Colors }) {
+  const [visibleCount, setVisibleCount] = useState(0);
+  const [scanningIdx, setScanningIdx] = useState<number | null>(null);
+  const [doneSet, setDoneSet] = useState<Set<number>>(new Set());
+  const chatRef = useRef<HTMLDivElement>(null);
+  const tids = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const reducedMotion = useReducedMotion();
+
+  const scrollBottom = () =>
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
+    }));
+
+  useEffect(() => {
+    tids.current.forEach(clearTimeout);
+    tids.current = [];
+    setVisibleCount(0);
+    setScanningIdx(null);
+    setDoneSet(new Set());
+
+    scenario.messages.forEach((msg, i) => {
+      const t = setTimeout(() => {
+        setVisibleCount(i + 1);
+        scrollBottom();
+        if (msg.role === "eden") {
+          if (msg.instant) {
+            setDoneSet(prev => new Set(prev).add(i));
+          } else if (msg.scanning) {
+            setScanningIdx(i);
+          } else {
+            setDoneSet(prev => new Set(prev).add(i));
+          }
+        }
+      }, reducedMotion ? i * 300 : msg.delay);
+      tids.current.push(t);
+    });
+
+    return () => tids.current.forEach(clearTimeout);
+  }, [scenario]);
+
+  function handleScanDone(idx: number) {
+    setScanningIdx(null);
+    const t = setTimeout(() => {
+      setDoneSet(prev => new Set(prev).add(idx));
+      scrollBottom();
+    }, reducedMotion ? 0 : 300);
+    tids.current.push(t);
+  }
+
+  const msgs = scenario.messages;
+
+  return (
+    <div
+      className="relative flex flex-col rounded-2xl overflow-hidden"
+      style={{
+        height: "clamp(340px, 52vh, 460px)",
+        background: colors.bgLight,
+        border: `1px solid ${colors.border}`,
+        boxShadow: "0 20px 56px rgba(0,0,0,0.09), 0 4px 16px rgba(0,0,0,0.05)",
+      }}
+    >
+      <style>{`
+        @keyframes eden-pulse { 0%,100%{opacity:1}50%{opacity:0.35} }
+        @keyframes fade-up { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+        @keyframes scan-slide { from{opacity:0;transform:translateX(-5px)} to{opacity:1;transform:translateX(0)} }
+      `}</style>
+
+      {/* Chrome bar */}
+      <div
+        className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0"
+        style={{ background: colors.bg, borderBottom: `1px solid ${colors.border}` }}
+      >
+        <img src="/images/eden-nx-mark.png" alt="EDEN" className="w-6 h-6 object-contain flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-bold leading-tight" style={{ color: colors.text }}>EDEN</p>
+          <p className="text-[9px] font-semibold uppercase tracking-wider" style={{ color: colors.green }}>Research Intelligence</p>
+        </div>
+        <span className="w-1.5 h-1.5 rounded-full" style={{ background: colors.green, animation: "eden-pulse 2s ease-in-out infinite" }} />
+      </div>
+
+      {/* Messages */}
       <div
         ref={chatRef}
-        className="pitch-chat-scroll flex flex-col gap-3 overflow-y-auto"
-        style={mobile
-          ? { flex: 1, minHeight: 0, scrollbarWidth: "none", msOverflowStyle: "none" }
-          : { maxHeight: chatHeight, scrollbarWidth: "none", msOverflowStyle: "none" }}
+        className="flex flex-col gap-3 overflow-y-auto flex-1 p-4"
+        style={{ scrollbarWidth: "none" } as CSSProperties}
       >
-        {PITCH_CHAT_MESSAGES.slice(0, visibleCount).map((msg, i) => (
+        {msgs.slice(0, visibleCount).map((msg, i) => (
           <div
             key={i}
             className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-            style={{ animation: "fade-up 0.35s ease-out forwards" }}
+            style={{ animation: "fade-up 0.3s ease-out forwards" }}
           >
-            {msg.role === "eden" && <EdenAvatar size={26} />}
-            <div className="max-w-[84%] flex flex-col gap-2">
-              <div
-                className="px-3.5 py-2.5 rounded-xl text-xs sm:text-xs leading-relaxed"
-                style={
-                  msg.role === "user"
-                    ? { background: colors.green, color: "#fff", borderRadius: "14px 14px 4px 14px" }
-                    : { background: colors.bgLight, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: "14px 14px 14px 4px" }
-                }
-              >
-                {msg.text}
-              </div>
-              {msg.showCards && (
-                <div className="space-y-2">
-                  {PITCH_DEMO_ASSETS.map((a) => (
-                    <PitchDemoAssetCard key={a.id} asset={a} colors={colors} />
+            {msg.role === "eden" && <EdenAvatar size={24} />}
+            <div className="max-w-[85%] flex flex-col gap-2">
+              {doneSet.has(i) ? (
+                <div
+                  className="px-3.5 py-2.5 text-xs leading-relaxed"
+                  style={msg.role === "user"
+                    ? { background: colors.green, color: "#fff", borderRadius: "12px 12px 4px 12px" }
+                    : { background: colors.bg, color: colors.text, border: `1px solid ${colors.border}`, borderRadius: "12px 12px 12px 4px" }
+                  }
+                >
+                  {msg.text}
+                </div>
+              ) : scanningIdx === i ? (
+                <div
+                  className="px-3.5 py-2.5"
+                  style={{ background: colors.bg, border: `1px solid ${colors.border}`, borderRadius: "12px 12px 12px 4px" }}
+                >
+                  <PitchScanAnim onDone={() => handleScanDone(i)} colors={colors} />
+                </div>
+              ) : (
+                <div className="flex gap-1 items-center px-3.5 py-2.5 rounded-xl" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
+                  {[0, 0.3, 0.6].map(d => (
+                    <span key={d} className="w-1.5 h-1.5 rounded-full" style={{ background: colors.green, animation: `bounce 1.2s ease-in-out ${d}s infinite` }} />
                   ))}
                 </div>
               )}
-              {msg.showCrisprCards && (
-                <div className="space-y-2">
-                  {PITCH_CRISPR_ASSETS.map((a) => (
-                    <PitchDemoAssetCard key={a.id} asset={a} colors={colors} />
-                  ))}
+              {doneSet.has(i) && msg.assets && (
+                <div className="space-y-1.5">
+                  {msg.assets.map(a => <PitchQueryResultCard key={a.id} asset={a} colors={colors} />)}
                 </div>
               )}
             </div>
           </div>
         ))}
-        {visibleCount > 0 && visibleCount < PITCH_CHAT_MESSAGES.length && (
-          <div className="flex gap-2.5">
-            <EdenAvatar size={26} isThinking />
-            <div
-              className="px-3.5 py-2.5 rounded-xl text-xs"
-              style={{ background: colors.bgLight, color: colors.textMuted, border: `1px solid ${colors.border}`, borderRadius: "14px 14px 14px 4px" }}
-            >
-              <span className="flex gap-1 items-center">
-                {[0, 0.3, 0.6].map((d) => (
-                  <span
-                    key={d}
-                    className="w-1.5 h-1.5 rounded-full inline-block"
-                    style={{ background: colors.green, animation: `bounce 1.2s ease-in-out ${d}s infinite` }}
-                  />
-                ))}
-              </span>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-type EdenPanelId = "db-pull" | "email-push" | "ai-query";
-
-function makeEdenPanels(colors: Colors) {
-  const isDark = colors.bg !== "#ffffff";
-  const shade1 = isDark ? "#1e9b55" : "#0a5c28";
-  const shade2 = isDark ? "#2dba68" : "#168040";
-  const shade3 = isDark ? "#3fb950" : "#1a7f37";
-  return [
-    {
-      id: "db-pull" as EdenPanelId,
-      step: "01",
-      label: "Live Database Pull",
-      icon: Database,
-      color: shade1,
-      desc: "Continuously collects and enriches assets from 300+ TTO databases. Every listing is scored, classified, and made searchable on arrival.",
-    },
-    {
-      id: "email-push" as EdenPanelId,
-      step: "02",
-      label: "Real-Time Email Push",
-      icon: Bell,
-      color: shade2,
-      desc: "Sends personalised digest alerts the moment new assets match a scout's saved criteria: modality, stage, or institution.",
-    },
-    {
-      id: "ai-query" as EdenPanelId,
-      step: "03",
-      label: "EDEN AI Query",
-      icon: Brain,
-      color: shade3,
-      desc: "Natural-language Q&A across the entire TTO landscape. Query in plain English and get ranked, scored results instantly.",
-    },
-  ];
-}
-
-const PULL_MOCK = [
-  {
-    id: 1,
-    score: 92,
-    title: "CAR-T Cell Therapy for CD19/CD22 Dual Antigen",
-    institution: "Johns Hopkins University",
-    modality: "Cell Therapy",
-    stage: "Pre-Clinical",
-    area: "Oncology",
-  },
-  {
-    id: 2,
-    score: 87,
-    title: "CRISPR Base Editing for Beta-Thalassemia",
-    institution: "MIT Technology Licensing Office",
-    modality: "Gene Therapy",
-    stage: "Research",
-    area: "Rare Disease",
-  },
-  {
-    id: 3,
-    score: 79,
-    title: "Novel HDAC Inhibitor for Solid Tumor Microenvironment",
-    institution: "Stanford Office of Technology",
-    modality: "Small Molecule",
-    stage: "Research",
-    area: "Oncology",
-  },
-];
-
-function PullDetailZone({ colors, panelColor, mobile = false }: { colors: Colors; panelColor: string; mobile?: boolean }) {
-  return (
-    <div className="rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${panelColor}33` }}>
-      <div className="flex items-center gap-2 mb-3">
-        <Database className="w-3.5 h-3.5" style={{ color: panelColor }} />
-        <p className="text-xs sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>Live TTO Feed · 300+ Sources</p>
-        <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: panelColor, animation: "bounce 1.5s ease-in-out infinite" }} />
-          <p className="text-xs sm:text-xs" style={{ color: colors.textMuted }}>Updating now</p>
-        </div>
-      </div>
-      <div className={`grid gap-2 sm:gap-3 ${mobile ? "grid-cols-1" : "grid-cols-3"}`}>
-        {PULL_MOCK.map((asset) => (
-          <div key={asset.id} className="rounded-lg p-2.5 sm:p-3" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
-            <div className="flex items-start justify-between gap-2 mb-1.5">
-              <p className="text-xs sm:text-xs font-semibold leading-snug" style={{ color: colors.text }}>{asset.title}</p>
-              <span className="text-xs sm:text-xs font-extrabold tabular-nums shrink-0 px-1.5 py-0.5 rounded" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
-            </div>
-            <p className="text-xs sm:text-xs mb-2" style={{ color: colors.textMuted }}>{asset.institution}</p>
-            <div className="flex flex-wrap gap-1">
-              {[asset.modality, asset.stage, asset.area].map((tag) => (
-                <span key={tag} className="text-xs sm:text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>{tag}</span>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors; panelColor: string; mobile?: boolean }) {
-  return (
-    <div className={`grid gap-3 ${mobile ? "grid-cols-1" : "grid-cols-2"}`}>
-      {/* Card 1: Asset alert match */}
-      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${panelColor}44` }}>
-        <div className="px-4 py-3 flex items-start gap-3" style={{ background: `${panelColor}18`, borderBottom: `1px solid ${panelColor}33` }}>
-          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: panelColor }}>
-            <Bell className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-xs sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
-            <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 new TTO assets match your alert</p>
-            <p className="text-xs sm:text-xs mt-0.5" style={{ color: colors.textMuted }}>Alert: "Oncology · Pre-Clinical · Any modality"</p>
-          </div>
-        </div>
-        <div className="px-4 py-3" style={{ background: colors.bgLight }}>
-          <p className="text-xs sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
-            EDEN found 3 new assets this week matching your saved criteria across 2 institutions.
-          </p>
-          <div className="space-y-2">
-            {PULL_MOCK.slice(0, 2).map((asset) => (
-              <div key={asset.id} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
-                <span className="text-xs sm:text-xs font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>{asset.title}</p>
-                  <p className="text-xs sm:text-xs" style={{ color: colors.textMuted }}>{asset.institution} · {asset.stage}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs sm:text-xs mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
-            View all 3 assets in EdenRadar
-          </p>
-        </div>
-      </div>
-
-      {/* Card 2: New TTOs added */}
-      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${panelColor}44` }}>
-        <div className="px-4 py-3 flex items-start gap-3" style={{ background: `${panelColor}18`, borderBottom: `1px solid ${panelColor}33` }}>
-          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: panelColor }}>
-            <Database className="w-4 h-4 text-white" />
-          </div>
-          <div>
-            <p className="text-xs sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
-            <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 New Tech Transfer Offices Added</p>
-            <p className="text-xs sm:text-xs mt-0.5" style={{ color: colors.textMuted }}>Network update · EdenRadar coverage expanded</p>
-          </div>
-        </div>
-        <div className="px-4 py-3" style={{ background: colors.bgLight }}>
-          <p className="text-xs sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
-            EDEN added 3 new tech transfer offices to the monitored network this week.
-          </p>
-          <div className="space-y-2">
-            {["Stanford University", "University at Buffalo", "Johns Hopkins University"].map((office) => (
-              <div key={office} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
-                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: panelColor }} />
-                <p className="text-xs font-semibold flex-1" style={{ color: colors.text }}>{office}</p>
-                <span className="text-xs px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>New</span>
-              </div>
-            ))}
-          </div>
-          <p className="text-xs sm:text-xs mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
-            Explore new TTO assets in EdenRadar
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EdenDetailZone({ panelId, colors, panelColor, mobile = false }: { panelId: EdenPanelId; colors: Colors; panelColor: string; mobile?: boolean }) {
-  if (panelId === "db-pull") return <PullDetailZone colors={colors} panelColor={panelColor} mobile={mobile} />;
-  if (panelId === "email-push") return <PushDetailZone colors={colors} panelColor={panelColor} mobile={mobile} />;
-  return (
-    <div
-      className="rounded-xl p-3 sm:p-4"
-      style={{ background: colors.bgLight, border: `1px solid ${panelColor}33` }}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <Brain className="w-3.5 h-3.5" style={{ color: panelColor }} />
-        <p className="text-xs sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>
-          EDEN AI Query · Live Demo
-        </p>
-      </div>
-      <div className={mobile ? "flex flex-col" : "flex items-start gap-4"}>
-        {!mobile && (
-          <div className="shrink-0 pt-1">
-            <EdenOrb />
-          </div>
-        )}
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <PitchEdenChat colors={colors} mobile={mobile} chatHeight={mobile ? 240 : 290} />
-        </div>
       </div>
     </div>
   );
 }
 
 function PitchEdenChatSlide({ colors }: { colors: Colors }) {
-  const [activePanel, setActivePanel] = useState<EdenPanelId | null>(null);
-  const panels = makeEdenPanels(colors);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const [chatKey, setChatKey] = useState(0);
 
-  function togglePanel(id: EdenPanelId) {
-    setActivePanel((prev) => (prev === id ? null : id));
+  function switchTo(idx: number) {
+    setActiveIdx(idx);
+    setChatKey(k => k + 1);
   }
+
+  const scenario = PITCH_SCENARIOS[activeIdx];
 
   return (
     <Slide index={8} section="EDEN" accent={colors.green} colors={colors}>
-
-      {/* ── HEADER ── */}
-      <div className="flex items-start justify-between mb-4 sm:mb-5">
+      <div className="flex items-start justify-between mb-3 sm:mb-4">
         <div>
-          <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: colors.green }}>How EDEN works</p>
+          <p className="text-xs font-bold uppercase tracking-widest mb-1.5" style={{ color: colors.green }}>EDEN in action</p>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold leading-tight" style={{ color: colors.text }}>
             The Intelligence Engine.
           </h2>
@@ -1330,117 +1103,28 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
         <EdenAvatar size={44} />
       </div>
 
-      {/* ── DESKTOP: 3-column panels + shared detail zone below ── */}
-      <div className="hidden lg:block">
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          {panels.map((panel) => {
-            const isActive = activePanel === panel.id;
-            return (
-              <button
-                key={panel.id}
-                onClick={() => togglePanel(panel.id)}
-                className="rounded-xl p-4 flex flex-col text-left transition-all duration-200"
-                style={{
-                  background: isActive ? `${panel.color}1e` : `${panel.color}0d`,
-                  border: `2px solid ${isActive ? panel.color : `${panel.color}44`}`,
-                  borderTop: `3px solid ${panel.color}`,
-                  cursor: "pointer",
-                  outline: "none",
-                  boxShadow: isActive ? `0 0 20px ${panel.color}22` : "none",
-                }}
-              >
-                <div className="flex items-center gap-2.5 mb-3">
-                  <div
-                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
-                    style={{ background: isActive ? panel.color : `${panel.color}44` }}
-                  >
-                    <panel.icon className="w-5 h-5" style={{ color: isActive ? "#fff" : panel.color }} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold uppercase tracking-widest leading-none" style={{ color: `${panel.color}88` }}>{panel.step}</p>
-                    <p className="text-base font-extrabold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
-                  </div>
-                </div>
-                <p className="text-xs leading-relaxed flex-1" style={{ color: colors.textMuted }}>{panel.desc}</p>
-                <p className="text-xs mt-2.5 font-semibold" style={{ color: `${panel.color}88` }}>
-                  {isActive ? "Click to close" : "Click to explore"}
-                </p>
-              </button>
-            );
-          })}
-        </div>
-
-        <AnimatePresence mode="wait">
-          {activePanel && (
-            <motion.div
-              key={activePanel}
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.28, ease: "easeOut" }}
-              style={{ overflow: "hidden" }}
-            >
-              <EdenDetailZone
-                panelId={activePanel}
-                colors={colors}
-                panelColor={panels.find((p) => p.id === activePanel)!.color}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
+      {/* Scenario tabs */}
+      <div className="flex gap-2 mb-2 flex-wrap">
+        {PITCH_SCENARIOS.map((s, i) => (
+          <button
+            key={s.id}
+            onClick={() => switchTo(i)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all duration-200"
+            style={{
+              background: activeIdx === i ? colors.green : colors.bgLight,
+              color: activeIdx === i ? "#fff" : colors.textMuted,
+              border: `1px solid ${activeIdx === i ? colors.green : colors.border}`,
+            }}
+          >
+            <span className="font-mono text-[9px] opacity-60">{s.number}</span>
+            {s.eyebrow}
+          </button>
+        ))}
       </div>
 
-      {/* ── MOBILE: stacked panels with inline detail zones ── */}
-      <div className="lg:hidden space-y-2.5">
-        {panels.map((panel) => {
-          const isActive = activePanel === panel.id;
-          return (
-            <div key={panel.id}>
-              <button
-                onClick={() => togglePanel(panel.id)}
-                className="w-full rounded-xl px-3 py-3 flex items-center gap-3 text-left transition-all duration-200"
-                style={{
-                  background: isActive ? `${panel.color}18` : `${panel.color}0d`,
-                  border: `1px solid ${isActive ? panel.color : `${panel.color}44`}`,
-                  borderLeft: `3px solid ${panel.color}`,
-                  outline: "none",
-                }}
-              >
-                <div
-                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
-                  style={{ background: isActive ? panel.color : `${panel.color}44` }}
-                >
-                  <panel.icon className="w-4 h-4" style={{ color: isActive ? "#fff" : panel.color }} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
-                  <p className="text-xs leading-snug mt-0.5 line-clamp-2" style={{ color: colors.textMuted }}>{panel.desc}</p>
-                </div>
-                <ChevronRight
-                  className="w-4 h-4 shrink-0 transition-transform duration-200"
-                  style={{ color: panel.color, transform: isActive ? "rotate(90deg)" : "none" }}
-                />
-              </button>
+      <p className="text-sm sm:text-base font-semibold mb-3" style={{ color: colors.text }}>{scenario.title}</p>
 
-              <AnimatePresence>
-                {isActive && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
-                    style={{ overflow: "hidden" }}
-                  >
-                    <div className="mt-2">
-                      <EdenDetailZone panelId={panel.id} colors={colors} panelColor={panel.color} mobile />
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          );
-        })}
-      </div>
+      <PitchScenarioChat key={chatKey} scenario={scenario} colors={colors} />
     </Slide>
   );
 }
@@ -1448,7 +1132,7 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 7 — EDEN RADAR ═══════════════════════ */
 function RadarSlide({ colors }: { colors: Colors }) {
   const features = [
-    { icon: Building2, label: "300+ Tech Transfer Offices", desc: "Continuously collected with bespoke and automated ingestion pipelines across major research universities" },
+    { icon: Building2, label: "350+ Tech Transfer Offices", desc: "Continuously collected with bespoke and automated ingestion pipelines across major research universities" },
     { icon: FileBarChart2, label: "EDEN-Enriched Dossiers", desc: "Every asset classified by target, modality, indication, and development stage with supporting literature" },
     { icon: Zap, label: "First to Know", desc: "Real-time alerts on new listings, convergence signals, and rising activity clusters by therapy area" },
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
@@ -1467,7 +1151,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
         </div>
       </div>
       <p className="text-sm sm:text-base lg:text-lg mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
-        The industry-facing layer. EdenRadar monitors 300+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
+        The industry-facing layer. EdenRadar monitors 350+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {features.map((f) => (
@@ -1483,10 +1167,30 @@ function RadarSlide({ colors }: { colors: Colors }) {
         ))}
       </div>
 
+      {/* Sample assets from the network */}
+      <div className="mt-3 sm:mt-4 space-y-1.5">
+        <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: colors.textMuted }}>Live from the network</p>
+        {[
+          { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy" },
+          { id: 2, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody" },
+          { id: 3, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC" },
+        ].map(a => (
+          <div key={a.id} className="flex items-center gap-3 rounded-xl px-4" style={{ height: 52, background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+            <div className="flex-shrink-0 flex items-center justify-center rounded-lg font-bold tabular-nums" style={{ width: 34, height: 34, background: colors.amberDim, color: colors.amber, fontSize: 12 }}>
+              {a.score}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[12px] font-semibold leading-snug truncate" style={{ color: colors.text }}>{a.title}</p>
+              <p className="text-[10px] mt-0.5" style={{ color: colors.textMuted }}>{a.institution} · {a.stage} · {a.modality}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Industry handoff to Market */}
       <div
         className="mt-4 sm:mt-5 rounded-xl p-3 sm:p-3.5 flex items-center gap-2.5 sm:gap-3"
-        style={{ background: colors.indigoDim, border: `1px solid ${colors.indigo}55`, borderLeft: `3px solid ${colors.indigo}` }}
+        style={{ background: colors.indigoDim, border: `2px solid ${colors.indigo}55` }}
       >
         <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: colors.indigo }}>
           <ShoppingBag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
@@ -1660,7 +1364,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
   const statsRef = useRef<HTMLDivElement>(null);
   const statsInView = useInView(statsRef, { once: false, amount: 0.3 });
   const stats: { num?: number; suffix?: string; text?: string; label: string; icon: ElementType; color: string }[] = [
-    { num: 300, suffix: "+", label: "Tech Transfer Offices", icon: Building2, color: colors.green },
+    { num: 350, suffix: "+", label: "Tech Transfer Offices", icon: Building2, color: colors.green },
     { num: 40, suffix: "+", label: "Research Data Sources", icon: Database, color: colors.violet },
     { text: "Custom GPT-5", label: "Classifier & Enrichment", icon: Brain, color: colors.green },
     { num: 11, suffix: "-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
@@ -1679,7 +1383,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
     "Evidence extraction and citation management",
   ];
   const scoutFeatures = [
-    "EDEN queries across 300+ TTOs",
+    "EDEN queries across 350+ TTOs",
     "Custom push alerts via email",
     "Institution intelligence and TTO profiles",
     "Enriched dossiers with competitive cross-reference",
@@ -2013,7 +1717,24 @@ export default function PitchDeck() {
       "EdenRadar's investor pitch: a 3-sided biotech ecosystem connecting industry BD, university research, and concept founders through AI-powered asset discovery and a confidential deal marketplace.",
   });
   const [current, setCurrent] = useState(0);
-  const [isDark, setIsDark] = useState(() => localStorage.getItem("eden-theme") !== "light");
+  const [isDark, setIsDark] = useState(() => localStorage.getItem("eden-theme") === "dark");
+
+  useEffect(() => {
+    const id = "barlow-font-pitch";
+    if (!document.getElementById(id)) {
+      const link = document.createElement("link");
+      link.id = id; link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap";
+      document.head.appendChild(link);
+    }
+    const style = document.getElementById("pitch-font-override") ?? (() => {
+      const s = document.createElement("style");
+      s.id = "pitch-font-override";
+      document.head.appendChild(s);
+      return s;
+    })();
+    style.textContent = `.pitch-deck { font-family: 'Barlow', system-ui, sans-serif; } .pitch-deck h1, .pitch-deck h2, .pitch-deck h3 { font-family: 'Barlow Semi Condensed', system-ui, sans-serif; letter-spacing: -0.025em; }`;
+  }, []);
   const containerRef = useRef<HTMLDivElement>(null);
   const isPrint = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("print");
 
