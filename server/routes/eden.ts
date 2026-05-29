@@ -143,7 +143,7 @@ function buildActionOffers(
 
   // Save: explicit or high-intent signals + search path with results
   const hasSaveIntent = SAVE_PATTERNS.some((p) => p.test(lower));
-  if (hasSaveIntent && (intent === "search" || intent === "back_ref") && retrieved.length > 0) {
+  if (hasSaveIntent && (intent === "search" || intent === "back_ref" || intent === "comparative" || intent === "definitional") && retrieved.length > 0) {
     const topAssets = retrieved.filter((a) => a.similarity >= 0.55).slice(0, 2);
     if (topAssets.length > 0) {
       const targetPipelineName = extractPipelineName(message) ?? undefined;
@@ -678,6 +678,12 @@ export function registerEdenRoutes(app: Express): void {
               assetIds: fetchedForCompare.map((a) => a.id),
               assets: compareAssetPayload,
             });
+            const compareOffers = buildActionOffers(
+              message.trim(), "comparative",
+              fetchedForCompare.map((a) => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, sourceUrl: a.sourceUrl, similarity: 1.0 })),
+              filters,
+            );
+            if (compareOffers.length > 0) sendEvent("action_offer", { offers: compareOffers });
             sendEvent("done", { sessionId: sid });
             return;
           }
@@ -740,6 +746,12 @@ export function registerEdenRoutes(app: Express): void {
             assetIds: relatedAssets.slice(0, 3).map((a) => a.id),
             assets: relatedAssetPayload,
           });
+          const defOffers = buildActionOffers(
+            message.trim(), "definitional",
+            relatedAssets.slice(0, 3).map((a) => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, sourceUrl: a.sourceUrl, similarity: a.similarity ?? 0.8 })),
+            filters,
+          );
+          if (defOffers.length > 0) sendEvent("action_offer", { offers: defOffers });
         } else {
           await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
         }
