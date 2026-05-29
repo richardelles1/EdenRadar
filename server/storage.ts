@@ -1531,12 +1531,10 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .groupBy(ingestedAssets.institution);
 
-    const sessionRows = await db.execute(sql`
-      SELECT DISTINCT ON (institution) *
-      FROM sync_sessions
-      ORDER BY institution, created_at DESC
-    `);
-    const sessions = sessionRows.rows as unknown as SyncSession[];
+    const sessions = await db
+      .selectDistinctOn([syncSessions.institution])
+      .from(syncSessions)
+      .orderBy(syncSessions.institution, desc(syncSessions.createdAt));
 
     return { institutions: instRows, syncSessions: sessions };
   }
