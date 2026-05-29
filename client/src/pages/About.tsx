@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useLocation, Link } from "wouter";
+import { Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,12 @@ import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { RadarBackground } from "@/components/RadarBackground";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
+
+// Amber is the EdenRadar CTA / accent color, used across all brand surfaces.
+const AMBER = "hsl(33 85% 44%)";
+const AMBER_MARK = "hsl(33 85% 44% / 0.28)";
+const AMBER_BORDER = "hsl(33 85% 44% / 0.25)";
+const AMBER_BORDER_LIGHT = "hsl(33 85% 44% / 0.30)";
 
 function useReveal(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
@@ -29,7 +35,6 @@ function useReveal(threshold = 0.15) {
   return ref;
 }
 
-
 const FOUNDERS = [
   {
     name: "Wafick Mohamed",
@@ -38,6 +43,7 @@ const FOUNDERS = [
     bio: [
       "Dr. Wafick Mohamed is a biotech executive, entrepreneur, and educator dedicated to advancing science for patient impact. With extensive experience across global pharma and emerging biotech, he specializes in building quality systems, scaling operations, and leading organizations from the ground up.",
       "As Founder and CEO of WKM Consulting Services LLC, Dr. Mohamed has launched and shaped multiple innovative companies. He also serves as a professor of research and entrepreneurship, mentoring the next generation of scientific and business leaders.",
+      "He holds a Doctorate in Science, a Master of Science, and certifications including CQA, PMP, and CLSSBB.",
     ],
     quote:
       "We are extremely proud to be part of an industry that is pushing the boundaries of science to enhance patients' lives. We will help our clients identify gaps and generate new ideas and solutions to improve their processes and products.",
@@ -48,7 +54,8 @@ const FOUNDERS = [
     photo: richardPhoto,
     bio: [
       "Richard Elles is a dynamic healthcare leader with a diverse background in strategy development, corporate leadership, patient advocacy, and process improvement. A dedicated and PMP-certified Project Manager, Rich has deployed extensive management systems across consulting firms, healthtech startups, academic institutions, and research teams.",
-      "As the founder of Oriva, Inc., Rich has harnessed the power of cutting-edge technology to redefine philanthropic development. He is a two-time Ironman and leverages his experience in endurance sports to connect with corporate wellness initiatives to power new giving trends. Rich completed his Bachelor's Degree in Business at Drexel University before earning a Master's Degree in Public Administration from Villanova University.",
+      "As the founder of Oriva, Inc., Rich has harnessed the power of cutting-edge technology to redefine philanthropic development. He is a two-time Ironman and leverages his experience in endurance sports to connect with corporate wellness initiatives to power new giving trends.",
+      "Rich completed his Bachelor's Degree in Business at Drexel University before earning a Master's Degree in Public Administration from Villanova University.",
     ],
     quote:
       "We are thrilled to bring new energy and laser focus to an industry in need of organization as it drives innovation. The opportunity to create in biotech and research spaces is matched only by the promise of what success will unlock for patients and consumers worldwide.",
@@ -74,13 +81,46 @@ const VALUES = [
   },
 ];
 
+// Quote breaks are intentionally always-dark contrast bands regardless of page theme.
+function QuoteBreak({ quote, name, title }: { quote: string; name: string; title: string }) {
+  const ref = useReveal(0.1);
+  return (
+    <section
+      ref={ref}
+      className="reveal-section py-20 sm:py-28"
+      style={{ background: "hsl(222 47% 5%)" }}
+    >
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
+        <div
+          className="text-8xl leading-none mb-2 select-none"
+          style={{ color: AMBER_MARK, fontFamily: "Georgia, serif" }}
+          aria-hidden="true"
+        >
+          &ldquo;
+        </div>
+        <blockquote className="text-xl sm:text-2xl font-medium text-white leading-relaxed">
+          {quote}
+        </blockquote>
+        <div
+          className="mt-8 pt-6"
+          style={{ borderTop: "1px solid hsl(0 0% 100% / 0.08)" }}
+        >
+          <p className="text-sm font-semibold" style={{ color: AMBER }}>
+            {name}
+          </p>
+          <p className="text-xs mt-0.5" style={{ color: "hsl(220 15% 62%)" }}>{title}</p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function About() {
   useDocumentMeta({
     title: "About EdenRadar — Bridging Biotech Research and Industry",
     description:
       "Meet the team behind EdenRadar. We're building the connective tissue between university research, industry BD, and biotech entrepreneurs to accelerate translation of breakthrough science.",
   });
-  const [, navigate] = useLocation();
   const missionRef = useReveal();
   const foundersRef = useReveal();
   const valuesRef = useReveal();
@@ -98,22 +138,24 @@ export default function About() {
             className="relative z-10 flex flex-col items-center justify-center text-center px-4 sm:px-6"
             style={{ minHeight: "52vh", paddingTop: "7rem", paddingBottom: "5rem" }}
           >
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight max-w-3xl">
-              Built by industry insiders,{" "}
-              <span style={{ color: "hsl(33 85% 44%)" }}>for the industry.</span>
+            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-foreground mb-6 leading-tight max-w-3xl text-balance">
+              Most breakthrough science never leaves the university.{" "}
+              <span style={{ color: AMBER }}>That's the gap we came to close.</span>
             </h1>
             <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
-              EdenRadar was founded on a single conviction: the world's most important biotech assets are locked inside university technology transfer offices, and the industry teams that need them have no efficient way to find them.
+              EdenRadar was built by two people who've worked the problem from both sides: the research infrastructure that produces the science, and the industry teams that need it.
             </p>
             <Button
+              asChild
               size="lg"
-              onClick={() => navigate("/demo")}
               data-testid="about-cta-main"
               className="h-11 px-8 font-semibold text-base border-0"
-              style={{ background: "hsl(33 85% 44%)", color: "white" }}
+              style={{ background: AMBER, color: "white" }}
             >
-              Request Access
-              <ArrowRight className="w-4 h-4 ml-2" />
+              <Link href="/demo">
+                Request Access
+                <ArrowRight className="w-4 h-4 ml-2" />
+              </Link>
             </Button>
           </div>
           <div
@@ -134,12 +176,12 @@ export default function About() {
               border: "1px solid hsl(var(--portal-scout) / 0.2)",
             }}
           >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 55% / 0.15) 0%, transparent 60%)" }} aria-hidden />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 55% / 0.15) 0%, transparent 60%)" }} aria-hidden="true" />
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">Our Mission</p>
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 leading-tight max-w-3xl mx-auto">
               Accelerate science to patient impact by eliminating the discovery gap between university research and industry development.
             </h2>
-            <p className="text-muted-foreground text-base leading-relaxed max-w-2xl mx-auto">
+            <p className="text-base leading-relaxed max-w-2xl mx-auto" style={{ color: "hsl(220 15% 62%)" }}>
               Every year, thousands of licensable technologies sit quietly inside research institutions while industry teams spend months and millions searching through fragmented databases and cold calls. EdenRadar changes that with EDEN-enriched discovery, structured intelligence, and a connected ecosystem designed for the modern biotech deal.
             </p>
           </div>
@@ -152,79 +194,79 @@ export default function About() {
         >
           <div className="text-center mb-14">
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Leadership</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
               The founders
             </h2>
+            <p className="text-base text-muted-foreground max-w-xl mx-auto leading-relaxed">
+              Two professionals who worked across pharma, biotech, and research infrastructure, and saw the same discovery gap from different vantage points.
+            </p>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 sm:gap-14">
+          <div className="space-y-16 sm:space-y-20">
             {FOUNDERS.map((founder, fi) => (
-              <div key={fi} className="flex flex-col gap-6">
-                {/* Card */}
-                <div
-                  className="rounded-2xl p-7 sm:p-9 flex flex-col sm:flex-row gap-7 items-start"
-                  style={{
-                    background: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                  }}
-                >
-                  {/* Photo circle */}
-                  <div className="flex-shrink-0 flex flex-col items-center gap-3 mx-auto sm:mx-0">
-                    <div
-                      className="overflow-hidden"
+              <div
+                key={fi}
+                className="flex flex-col sm:flex-row gap-8 sm:gap-12 items-start"
+              >
+                {/* Photo */}
+                <div className="flex-shrink-0 mx-auto sm:mx-0">
+                  <div
+                    style={{
+                      width: "clamp(120px, 30vw, 172px)",
+                      aspectRatio: "172 / 216",
+                      borderRadius: "0.875rem",
+                      overflow: "hidden",
+                      border: "2px solid hsl(var(--portal-scout) / 0.35)",
+                      boxShadow: "0 0 0 5px hsl(var(--portal-scout) / 0.07)",
+                    }}
+                  >
+                    <img
+                      src={founder.photo}
+                      alt={`${founder.name}, ${founder.title}`}
+                      loading="lazy"
                       style={{
-                        width: 128,
-                        height: 128,
-                        borderRadius: "50%",
-                        border: "3px solid hsl(var(--portal-scout) / 0.5)",
-                        boxShadow: "0 0 0 4px hsl(var(--portal-scout) / 0.1)",
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        objectPosition: "center top",
+                        display: "block",
                       }}
-                    >
-                      <img
-                        src={founder.photo}
-                        alt={`${founder.name}, ${founder.title}`}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
-                          objectPosition: "center top",
-                          display: "block",
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Bio text */}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-xl font-bold text-foreground mb-0.5">{founder.name}</h3>
-                    <p className="text-sm font-semibold text-primary mb-4">{founder.title}</p>
-                    <div className="space-y-3">
-                      {founder.bio.map((paragraph, pi) => (
-                        <p key={pi} className="text-sm text-muted-foreground leading-relaxed">
-                          {paragraph}
-                        </p>
-                      ))}
-                    </div>
+                    />
                   </div>
                 </div>
 
-                {/* Founder quote */}
-                <div
-                  className="rounded-xl px-7 py-5"
-                  style={{
-                    background: "hsl(var(--portal-scout) / 0.08)",
-                    border: "1px solid hsl(var(--portal-scout) / 0.18)",
-                  }}
-                >
-                  <p className="text-sm italic text-foreground leading-relaxed">
-                    "{founder.quote}"
-                  </p>
-                  <p className="mt-3 text-xs font-semibold text-primary">{founder.name}</p>
+                {/* Bio */}
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-2xl font-bold text-foreground mb-1">{founder.name}</h3>
+                  <p className="text-sm font-semibold text-primary mb-5">{founder.title}</p>
+                  <div className="space-y-3">
+                    {founder.bio.map((paragraph, pi) => (
+                      <p
+                        key={pi}
+                        className="leading-relaxed"
+                        style={{
+                          fontSize: pi === founder.bio.length - 1 ? "0.8125rem" : "0.875rem",
+                          color: pi === founder.bio.length - 1
+                            ? "hsl(var(--muted-foreground) / 0.7)"
+                            : "hsl(var(--muted-foreground))",
+                        }}
+                      >
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </section>
+
+        {/* Quote — Richard */}
+        <QuoteBreak
+          quote={FOUNDERS[1].quote}
+          name={FOUNDERS[1].name}
+          title={FOUNDERS[1].title}
+        />
 
         {/* Values */}
         <section
@@ -232,7 +274,6 @@ export default function About() {
           className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16"
         >
           <div className="text-center mb-12">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">What Drives Us</p>
             <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
               Our values
             </h2>
@@ -247,6 +288,7 @@ export default function About() {
                 <span
                   className="text-5xl sm:text-6xl font-bold tabular-nums leading-none select-none font-mono mt-0.5"
                   style={{ color: "hsl(var(--primary) / 0.20)" }}
+                  aria-hidden="true"
                 >
                   {String(i + 1).padStart(2, "0")}
                 </span>
@@ -259,41 +301,50 @@ export default function About() {
           </div>
         </section>
 
+        {/* Quote — Wafick */}
+        <QuoteBreak
+          quote={FOUNDERS[0].quote}
+          name={FOUNDERS[0].name}
+          title={FOUNDERS[0].title}
+        />
+
         {/* Bottom CTA */}
         <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
           <div
             className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{
               background: "linear-gradient(135deg, hsl(25 80% 6%) 0%, hsl(33 75% 9%) 60%, hsl(38 70% 7%) 100%)",
-              border: "1px solid hsl(33 85% 44% / 0.25)",
+              border: `1px solid ${AMBER_BORDER}`,
             }}
           >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 44% / 0.12) 0%, transparent 60%)" }} aria-hidden />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 44% / 0.12) 0%, transparent 60%)" }} aria-hidden="true" />
             <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
               The discovery gap is a solvable problem.
             </h2>
             <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(33 40% 68%)" }}>
-              EdenRadar was built to close it — systematically, at scale, starting with the first search you run.
+              EdenRadar was built to close it: systematically, at scale, starting with the first search you run.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
+                asChild
                 size="lg"
-                onClick={() => navigate("/demo")}
                 data-testid="about-cta-bottom"
                 className="h-11 px-7 font-semibold"
                 style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}
               >
-                Request Access
-                <ArrowRight className="w-4 h-4 ml-2" />
+                <Link href="/demo">
+                  Request Access
+                  <ArrowRight className="w-4 h-4 ml-2" />
+                </Link>
               </Button>
               <Button
+                asChild
                 size="lg"
-                onClick={() => navigate("/pricing")}
                 data-testid="about-cta-pricing"
                 className="h-11 px-7 font-semibold"
-                style={{ background: "transparent", border: "1px solid hsl(33 85% 44% / 0.3)", color: "hsl(33 60% 68%)" }}
+                style={{ background: "transparent", border: `1px solid ${AMBER_BORDER_LIGHT}`, color: "hsl(33 60% 68%)" }}
               >
-                See Pricing
+                <Link href="/pricing">See Pricing</Link>
               </Button>
             </div>
           </div>
