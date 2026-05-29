@@ -73,7 +73,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "institution",
     messages: [
-      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 300, instant: true },
+      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 600, instant: true },
       { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 900 },
       { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_JHU },
     ],
@@ -81,7 +81,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "cross-tto",
     messages: [
-      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 300, instant: true },
+      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 600, instant: true },
       { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 900 },
       { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_CNS },
     ],
@@ -89,7 +89,7 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "modality",
     messages: [
-      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 300, instant: true },
+      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 600, instant: true },
       { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 900 },
       { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_ADC },
     ],
@@ -134,19 +134,23 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
         @keyframes scan-slide { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
       `}</style>
 
-      <div className="relative" style={{ width: 52, height: 52 }}>
+      <div className="relative flex items-center justify-center" style={{ width: 64, height: 64 }}>
         {[0, 0.35, 0.7].map((d, i) => (
           <span
             key={i}
             className="absolute rounded-full"
             style={{
-              top: "50%", left: "50%", width: 52, height: 52,
-              border: "1.5px solid hsl(142 52% 36% / 0.45)",
+              top: "50%", left: "50%", width: 64, height: 64,
+              border: "1.5px solid hsl(142 52% 36% / 0.4)",
               animation: `eden-ring 1.8s ease-out ${d}s infinite`,
             }}
           />
         ))}
-        <EdenAvatar size={52} />
+        <img
+          src="/images/eden-nx-mark.png"
+          alt="EDEN"
+          style={{ width: 44, height: 44, objectFit: "contain", position: "relative", zIndex: 1 }}
+        />
       </div>
 
       <div className="flex items-end gap-2.5">
@@ -340,7 +344,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
     setDoneSet((prev) => new Set(prev).add(idx));
     scrollBottom();
     if (idx === messages.length - 1) {
-      const t = setTimeout(() => onComplete?.(), 3500);
+      const t = setTimeout(() => onComplete?.(), 2500);
       tids.current.push(t);
     }
   }
@@ -412,7 +416,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
                       }}
                     >
                       {doneSet.has(i) ? msg.text : (
-                        <StreamingText text={msg.text} onDone={() => handleStreamDone(i)} cursorColor="rgba(255,255,255,0.7)" />
+                        <StreamingText text={msg.text} speed={85} onDone={() => handleStreamDone(i)} cursorColor="rgba(255,255,255,0.7)" />
                       )}
                     </div>
                   )}
@@ -502,7 +506,7 @@ export default function HowItWorks() {
 
             {/* Chat demo — center stage */}
             <div className="w-full max-w-xl mb-10">
-              <EdenChatDemo key={scenario.id} messages={scenario.messages} onComplete={handleScenarioComplete} />
+              <EdenChatDemo messages={scenario.messages} onComplete={handleScenarioComplete} />
             </div>
 
             <Button
