@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library, Bell, CheckCircle2, Loader2, X } from "lucide-react";
 import { EdenAvatar, MarkdownContent, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
@@ -187,12 +188,14 @@ function ExternalResultsPanel({
   );
 }
 
-function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
+function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = false }: {
   asset: ChatAsset;
   index: number;
   savedIngestedIds: Set<number>;
+  onAssetSaved?: (asset: { modality?: string | null; indication?: string | null }) => void;
   compact?: boolean;
 }) {
+  const [, setLocation] = useLocation();
   const { label, cls } = relevanceLabel(asset.similarity);
   const leftBorder = modalityLeftBorder(asset.modality);
   const isSaved = savedIngestedIds.has(asset.id);
@@ -245,7 +248,17 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
 
       {/* Actions row */}
       <div className="flex items-center justify-between mt-0.5 pt-1.5 border-t border-border/50">
-        <PipelinePicker payload={payload} alreadySaved={isSaved} />
+        <div className="flex items-center gap-2">
+          <PipelinePicker payload={payload} alreadySaved={isSaved} onSaved={() => onAssetSaved?.({ modality: asset.modality, indication: asset.indication })} />
+          <button
+            onClick={() => setLocation(`/asset/${asset.id}`)}
+            className={`text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
+            data-testid={`citation-dossier-${index}`}
+          >
+            <FileSearch className="h-2.5 w-2.5 shrink-0" />
+            Dossier
+          </button>
+        </div>
         {asset.sourceUrl && (
           <a
             href={asset.sourceUrl}
@@ -255,7 +268,7 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
             data-testid={`citation-link-${index}`}
           >
             <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-            View source
+            Source
           </a>
         )}
       </div>
@@ -267,11 +280,13 @@ function ActionOffers({
   offers,
   savedIngestedIds,
   onCreateAlert,
+  onAssetSaved,
   compact = false,
 }: {
   offers: ActionOffer[];
   savedIngestedIds: Set<number>;
   onCreateAlert?: (config: AlertOfferConfig) => Promise<void>;
+  onAssetSaved?: (asset: { modality?: string | null; indication?: string | null }) => void;
   compact?: boolean;
 }) {
   const [alertStates, setAlertStates] = useState<Record<number, "idle" | "pending" | "creating" | "done" | "dismissed">>({});
@@ -310,7 +325,7 @@ function ActionOffers({
                   data-testid={`save-offer-asset-${a.id}`}
                 >
                   <span className={`max-w-[130px] truncate text-foreground font-medium ${compact ? "text-[10px]" : "text-[11px]"}`}>{a.assetName}</span>
-                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} defaultPipelineName={offer.targetPipelineName} />
+                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} defaultPipelineName={offer.targetPipelineName} onSaved={() => onAssetSaved?.({ modality: a.modality, indication: a.indication })} />
                 </span>
               );
             })}
@@ -412,6 +427,7 @@ export type EdenChatThreadProps = {
   onSend: (q: string) => void;
   onToggleCitations: (i: number, open: boolean) => void;
   onCreateAlert?: (config: AlertOfferConfig) => Promise<void>;
+  onAssetSaved?: (asset: { modality?: string | null; indication?: string | null }) => void;
   compact?: boolean;
   chatEndRef?: React.RefObject<HTMLDivElement>;
 };
@@ -428,6 +444,7 @@ export function EdenChatThread({
   onSend,
   onToggleCitations,
   onCreateAlert,
+  onAssetSaved,
   compact = false,
   chatEndRef,
 }: EdenChatThreadProps) {
@@ -528,6 +545,7 @@ export function EdenChatThread({
                   offers={msg.actionOffers}
                   savedIngestedIds={savedIngestedIds}
                   onCreateAlert={onCreateAlert}
+                  onAssetSaved={onAssetSaved}
                   compact={compact}
                 />
               )}
@@ -595,7 +613,7 @@ export function EdenChatThread({
                             key={a.id}
                             style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 50}ms` }}
                           >
-                            <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} compact={compact} />
+                            <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} onAssetSaved={onAssetSaved} compact={compact} />
                           </div>
                         ))}
                       </div>

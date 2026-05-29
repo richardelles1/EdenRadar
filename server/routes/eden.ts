@@ -99,6 +99,11 @@ const ALERT_NAME_PATTERNS: Array<[RegExp, number]> = [
 
 function capitalize(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+const ALERT_NAME_STOPLIST = new Set([
+  "assets", "technologies", "results", "listings", "items", "things", "more", "new",
+  "any", "some", "data", "info", "information", "content", "deals", "news",
+]);
+
 function extractPipelineName(message: string): string | null {
   for (const pattern of PIPELINE_NAME_PATTERNS) {
     const m = message.match(pattern);
@@ -115,7 +120,9 @@ function extractAlertName(
     const m = message.match(pattern);
     if (m?.[group]) {
       const phrase = m[group].trim().replace(/[?.!,]+$/, "").slice(0, 80);
-      if (phrase.length > 2) return capitalize(phrase);
+      if (phrase.length > 2 && !ALERT_NAME_STOPLIST.has(phrase.toLowerCase())) {
+        return capitalize(phrase);
+      }
     }
   }
   const parts: string[] = [];
@@ -194,6 +201,10 @@ export function registerEdenRoutes(app: Express): void {
       therapeuticAreas: z.array(z.string().max(100)).max(20).optional(),
       modalities: z.array(z.string().max(100)).max(20).optional(),
       dealStages: z.array(z.string().max(100)).max(20).optional(),
+      engagementBoosts: z.object({
+        modalities: z.record(z.number()).optional(),
+        indications: z.record(z.number()).optional(),
+      }).optional(),
     }).optional(),
   });
 
@@ -303,12 +314,22 @@ export function registerEdenRoutes(app: Express): void {
 
       // Derive engagement signals early so back-ref and definitional paths also benefit.
       const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
+      // Merge client-side save boosts — explicit saves are stronger signals than passive views.
+      const boosts = ctx?.engagementBoosts;
+      if (boosts) {
+        for (const [m, v] of Object.entries(boosts.modalities ?? {})) {
+          engagementSignals.modalities[m] = (engagementSignals.modalities[m] ?? 0) + v;
+        }
+        for (const [ind, v] of Object.entries(boosts.indications ?? {})) {
+          engagementSignals.indications[ind] = (engagementSignals.indications[ind] ?? 0) + v;
+        }
+      }
 
       // ── LLM Intent Router + Embedding (parallel) ──────────────────────────────────
       // classifyIntent replaces the regex cascade. embedQuery runs speculatively
       // so it's ready when we reach the search path — cost is negligible if discarded.
       const [intentResult, precomputedEmbedding] = await Promise.allSettled([
-        classifyIntent(message.trim(), priorIds.length > 0),
+        classifyIntent(message.trim(), priorIds.length > 0, focusContext),
         embedQuery(message.trim()),
       ]);
       const intentClass: IntentClassification = intentResult.status === "fulfilled"
@@ -704,7 +725,7 @@ export function registerEdenRoutes(app: Express): void {
           sendEvent("token", { text: token });
         }
 
-        const CONCEPT_SIMILARITY_THRESHOLD = 0.50;
+        const CONCEPT_SIMILARITY_THRESHOLD = 0.60;
         let relatedAssets: import("../storage").RetrievedAsset[] = [];
         try {
           const conceptEmbedding = await conceptEmbeddingPromise.catch(() => null);
@@ -760,7 +781,79 @@ export function registerEdenRoutes(app: Express): void {
         return;
       }
 
-      // ── Path 5: Conversational ─────────────────────────────────────────────────
+      // ── Path 5: Pipeline / saved-asset browse ─────────────────────────────────
+      if (intentClass.intent === "pipeline" && requestUserId) {
+        // Detect optional named pipeline in the message (e.g. "show my gene therapy pipeline")
+        const namedPipeline = extractPipelineName(message.trim());
+        let pipelineListId: number | undefined;
+        let pipelineLabel = "your saved pipeline";
+
+        if (namedPipeline) {
+          try {
+            const lists = await storage.getPipelineLists(requestUserId);
+            const match = lists.find((l) =>
+              l.name.toLowerCase().includes(namedPipeline.toLowerCase()) ||
+              namedPipeline.toLowerCase().includes(l.name.toLowerCase())
+            );
+            if (match) {
+              pipelineListId = match.id;
+              pipelineLabel = `your "${match.name}" pipeline`;
+            }
+          } catch { /* fall through to all saved */ }
+        }
+
+        const savedList = await storage.getSavedAssets(pipelineListId, requestUserId).catch(() => []);
+        const ingestedIds = savedList
+          .map((s) => s.ingestedAssetId)
+          .filter((id): id is number => id !== null && id !== undefined);
+
+        let pipelineAssets: import("../storage").RetrievedAsset[] = [];
+        if (ingestedIds.length > 0) {
+          const fetched = await storage.getIngestedAssetsByIds(ingestedIds).catch(() => [] as import("../storage").RetrievedAsset[]);
+          // Apply active filters to narrow the view if the user asked for something specific
+          pipelineAssets = fetched.filter((a) => {
+            if (filters.modality && a.modality?.toLowerCase() !== filters.modality.toLowerCase()) return false;
+            if (filters.stage && a.developmentStage?.toLowerCase() !== filters.stage.toLowerCase()) return false;
+            if (filters.indication && !a.indication?.toLowerCase().includes(filters.indication.toLowerCase())) return false;
+            if (filters.institution && !a.institution?.toLowerCase().includes(filters.institution.toLowerCase())) return false;
+            if (filters.biology && !a.biology?.toLowerCase().includes(filters.biology.toLowerCase())) return false;
+            return true;
+          });
+          // If filters zeroed out results, show everything (user may be browsing, not filtering)
+          if (pipelineAssets.length === 0 && fetched.length > 0) {
+            pipelineAssets = fetched;
+          }
+        }
+
+        const pipelineAssetPayload = pipelineAssets.slice(0, 15).map((a) => ({
+          id: a.id, assetName: a.assetName, institution: a.institution,
+          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
+          developmentStage: a.developmentStage, biology: a.biology ?? undefined,
+          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
+        }));
+
+        sendEvent("context", { sessionId: sid, assets: pipelineAssetPayload });
+
+        const pipelineQuestion = pipelineAssets.length > 0
+          ? `[CONTEXT: These are the assets the user has saved in ${pipelineLabel}. They are NOT search results — they are assets this user has already bookmarked. Answer the question in the context of their saved portfolio.]\n\n${message.trim()}`
+          : `[CONTEXT: The user asked about ${pipelineLabel} but has no saved assets yet${namedPipeline ? ` in "${namedPipeline}"` : ""}. Inform them their pipeline is empty and suggest searching for assets to add.]\n\n${message.trim()}`;
+
+        let fullResponse = "";
+        for await (const token of ragQuery(pipelineQuestion, pipelineAssets.slice(0, 15), history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, {
+          role: "assistant", content: fullResponse,
+          assetIds: pipelineAssets.slice(0, 3).map((a) => a.id),
+          assets: pipelineAssetPayload,
+        });
+        sendEvent("done", { sessionId: sid });
+        return;
+      }
+      // If pipeline intent but no user ID, fall through to standard RAG search
+
+      // ── Path 6: Conversational ─────────────────────────────────────────────────
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
@@ -773,7 +866,7 @@ export function registerEdenRoutes(app: Express): void {
         return;
       }
 
-      // ── Path 6: Standard RAG (semantic retrieval) ──────────────────────────────
+      // ── Path 7: Standard RAG (semantic retrieval) ──────────────────────────────
 
       const institutionName = filters.institution ?? detectInstitutionName(message.trim(), portfolioInstitutionNames);
 

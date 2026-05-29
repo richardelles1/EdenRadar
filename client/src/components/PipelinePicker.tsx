@@ -91,6 +91,7 @@ type Props = {
   iconClassName?: string;
   bare?: boolean;
   defaultPipelineName?: string;
+  onSaved?: () => void;
 };
 
 function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
@@ -110,7 +111,7 @@ function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
   };
 }
 
-export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName, bare, defaultPipelineName }: Props) {
+export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName, bare, defaultPipelineName, onSaved }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -234,6 +235,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         description: pl ? `${data.moved ? "Moved to" : "Added to"} "${pl.name}"` : (data.moved ? "Moved to Uncategorised" : "Added to Uncategorised"),
       });
       setOpen(false);
+      if (!data.moved) onSaved?.();
     },
     onError: (err) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });
@@ -307,6 +309,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
       qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
       toast({ title: moved ? "Asset moved" : "Asset saved", description: `${moved ? "Moved to" : "Added to"} "${pipeline.name}"` });
       setNewName(""); setCreateShared(false); setCreating(false); setOpen(false);
+      if (!moved) onSaved?.();
     },
     onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
   });

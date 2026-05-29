@@ -15,6 +15,10 @@ export type UserContext = {
   therapeuticAreas?: string[];
   dealStages?: string[];
   modalities?: string[];
+  engagementBoosts?: {
+    modalities?: Record<string, number>;
+    indications?: Record<string, number>;
+  };
 };
 
 // ── Structured filter types ───────────────────────────────────────────────
@@ -1082,7 +1086,7 @@ export function isConversational(query: string): boolean {
 export type LiveSource = "clinicaltrials" | "patents" | "harvard";
 
 export type IntentClassification = {
-  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational";
+  intent: "search" | "aggregation" | "back_ref" | "comparative" | "definitional" | "conversational" | "pipeline";
   filters: QueryFilters;
   backRefPosition: number | null; // 0=first, 1=second, 2=third
   liveSource: LiveSource | null;  // non-null only when query explicitly targets external live data
@@ -1096,6 +1100,7 @@ INTENTS:
 - back_ref: refers to a previously shown asset by position/anaphora ("the second one", "tell me more about it", "that one") — ONLY valid when hasPriorAssets=true
 - comparative: wants head-to-head comparison ("compare", "vs", "which is better")
 - definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
+- pipeline: user asks about their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio")
 - conversational: greeting, thanks, out-of-scope chat with no biotech search intent
 
 FILTER EXTRACTION (null if not mentioned in the message):
@@ -1122,9 +1127,16 @@ Return exactly this shape:
 export async function classifyIntent(
   message: string,
   hasPriorAssets: boolean,
+  focusContext?: SessionFocusContext,
 ): Promise<IntentClassification> {
   const fallback: IntentClassification = { intent: "search", filters: {}, backRefPosition: null, liveSource: null };
   try {
+    const focusParts: string[] = [];
+    if (focusContext?.modality) focusParts.push(`modality: ${focusContext.modality}`);
+    if (focusContext?.indication) focusParts.push(`indication: ${focusContext.indication}`);
+    if (focusContext?.institution) focusParts.push(`institution: ${focusContext.institution}`);
+    if (focusContext?.stage) focusParts.push(`stage: ${focusContext.stage}`);
+    const focusLine = focusParts.length > 0 ? `\nSessionFocus: ${focusParts.join(", ")}` : "";
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
@@ -1132,7 +1144,7 @@ export async function classifyIntent(
       max_tokens: 180,
       messages: [
         { role: "system", content: ROUTER_SYSTEM_PROMPT },
-        { role: "user", content: `hasPriorAssets: ${hasPriorAssets}\n\nMessage: ${message}` },
+        { role: "user", content: `hasPriorAssets: ${hasPriorAssets}${focusLine}\n\nMessage: ${message}` },
       ],
     });
     const raw = resp.choices[0]?.message?.content ?? "{}";
