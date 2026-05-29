@@ -73,30 +73,31 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "institution",
     messages: [
-      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 600, instant: true },
-      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 900 },
-      { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_JHU },
+      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 700, instant: true },
+      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 1200 },
+      { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 3000, scanning: true, assetCards: DEMO_ASSETS_JHU },
     ],
   },
   {
     id: "cross-tto",
     messages: [
-      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 600, instant: true },
-      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 900 },
-      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_CNS },
+      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 700, instant: true },
+      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 1200 },
+      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 3000, scanning: true, assetCards: DEMO_ASSETS_CNS },
     ],
   },
   {
     id: "modality",
     messages: [
-      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 600, instant: true },
-      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 900 },
-      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_ADC },
+      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 700, instant: true },
+      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 1200 },
+      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 3000, scanning: true, assetCards: DEMO_ASSETS_ADC },
     ],
   },
 ];
 
 interface ScenarioCover {
+  idx: number;
   number: string;
   eyebrow: string;
   title: string;
@@ -104,24 +105,9 @@ interface ScenarioCover {
 }
 
 const SCENARIO_COVERS: ScenarioCover[] = [
-  {
-    number: "01",
-    eyebrow: "Institution Focus",
-    title: "Oncology pipeline at Hopkins.",
-    desc: "What's worth a look when you know where to start.",
-  },
-  {
-    number: "02",
-    eyebrow: "Cross-TTO Discovery",
-    title: "Preclinical CNS across 22 institutions.",
-    desc: "Surfacing the strongest programs before your window closes.",
-  },
-  {
-    number: "03",
-    eyebrow: "Modality Filter",
-    title: "ADC platforms open for exclusive licensing.",
-    desc: "Finding what fits your deal structure, not just your science.",
-  },
+  { idx: 0, number: "01", eyebrow: "Institution Focus", title: "Oncology pipeline at Hopkins.", desc: "What's worth a look when you know where to start." },
+  { idx: 1, number: "02", eyebrow: "Cross-TTO Discovery", title: "Preclinical CNS across 22 institutions.", desc: "Surfacing the strongest programs before your window closes." },
+  { idx: 2, number: "03", eyebrow: "Modality Filter", title: "ADC platforms open for exclusive licensing.", desc: "Finding what fits your deal structure, not just your science." },
 ];
 
 /* ─── EDEN Intro ─────────────────────────────────────────────── */
@@ -213,7 +199,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
 
 /* ─── Scanning Animation + Result Card ──────────────────────── */
 
-const SCAN_NAMES = ["MIT TTO", "Stanford OTL", "Johns Hopkins", "Mayo Clinic", "Max Planck", "Columbia", "UCSF", "Harvard OTD", "Yale TTO", "NIH", "Oxford TT", "Wellcome Trust"];
+const SCAN_NAMES = ["MIT TTO", "Stanford OTL", "Johns Hopkins", "Mayo Clinic", "Max Planck", "Columbia", "UCSF", "Harvard OTD", "Yale TTO", "NIH", "Oxford TT", "Wellcome Trust", "Penn TTO", "Duke OLV", "Broad Institute", "Rockefeller"];
 
 function ScanningAnimation({ onDone }: { onDone: () => void }) {
   const [nameIdx, setNameIdx] = useState(0);
@@ -225,8 +211,8 @@ function ScanningAnimation({ onDone }: { onDone: () => void }) {
       step++;
       setNameIdx((p) => (p + 1) % SCAN_NAMES.length);
       setDots((p) => (p % 3) + 1);
-      if (step >= 11) { clearInterval(iv); setTimeout(onDone, 120); }
-    }, 130);
+      if (step >= 16) { clearInterval(iv); setTimeout(onDone, 160); }
+    }, 150);
     return () => clearInterval(iv);
   }, []);
 
@@ -279,7 +265,15 @@ function QueryResultCard({ asset }: { asset: AssetCardData }) {
 
 /* ─── EDEN Chat Demo ─────────────────────────────────────────── */
 
-function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onComplete?: () => void }) {
+function EdenChatDemo({
+  messages,
+  onComplete,
+  coverData,
+}: {
+  messages: ChatMessage[];
+  onComplete?: () => void;
+  coverData?: ScenarioCover | null;
+}) {
   const [phase, setPhase] = useState<"intro" | "chat">("intro");
   const [visibleCount, setVisibleCount] = useState(0);
   const [scanningIdx, setScanningIdx] = useState<number | null>(null);
@@ -316,7 +310,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
           } else {
             setDoneSet((prev) => new Set(prev).add(i));
             if (i === messages.length - 1) {
-              const t2 = setTimeout(() => onComplete?.(), 2500);
+              const t2 = setTimeout(() => onComplete?.(), 3800);
               tids.current.push(t2);
             }
           }
@@ -329,12 +323,15 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
 
   function handleScanDone(idx: number) {
     setScanningIdx(null);
-    setDoneSet((prev) => new Set(prev).add(idx));
-    scrollBottom();
-    if (idx === messages.length - 1) {
-      const t = setTimeout(() => onComplete?.(), 2500);
-      tids.current.push(t);
-    }
+    const pauseT = setTimeout(() => {
+      setDoneSet((prev) => new Set(prev).add(idx));
+      scrollBottom();
+      if (idx === messages.length - 1) {
+        const t = setTimeout(() => onComplete?.(), 3800);
+        tids.current.push(t);
+      }
+    }, 350);
+    tids.current.push(pauseT);
   }
 
   return (
@@ -351,10 +348,10 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
         @keyframes fade-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         @keyframes scan-slide { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
         @keyframes scenario-cover {
-          0%   { opacity: 0; transform: translateY(14px); }
-          14%  { opacity: 1; transform: translateY(0); }
-          78%  { opacity: 1; transform: translateY(0); }
-          100% { opacity: 0; transform: translateY(-10px); }
+          0%   { opacity: 0; transform: translateY(20px) scale(0.98); animation-timing-function: cubic-bezier(0.16,1,0.3,1); }
+          10%  { opacity: 1; transform: translateY(0) scale(1); animation-timing-function: linear; }
+          82%  { opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; }
+          100% { opacity: 0; transform: translateY(0) scale(1); }
         }
       `}</style>
 
@@ -376,65 +373,145 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
         </div>
       </div>
 
-      {/* Messages */}
-      <div
-        ref={chatRef}
-        className="flex-1 overflow-y-auto px-4 py-5 space-y-4 min-h-0"
-        style={{ background: "hsl(220 20% 98%)" }}
-      >
-        {messages.slice(0, visibleCount).map((msg, i) => (
+      {/* Messages area — relative so cover can overlay it */}
+      <div className="flex-1 relative min-h-0">
+        <div
+          ref={chatRef}
+          className="absolute inset-0 overflow-y-auto px-4 py-5 space-y-4"
+          style={{ background: "hsl(220 20% 98%)" }}
+        >
+          {messages.slice(0, visibleCount).map((msg, i) => (
+            <div
+              key={i}
+              className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+              style={{ animation: "fade-up 0.32s ease-out forwards" }}
+            >
+              {msg.role === "eden" && <EdenAvatar size={26} />}
+              <div className="flex flex-col gap-2 min-w-0" style={{ maxWidth: "88%" }}>
+                {msg.role === "user" ? (
+                  <div
+                    className="px-4 py-2.5 text-[12px] leading-relaxed font-medium text-left"
+                    style={{
+                      background: "hsl(33 85% 44%)",
+                      color: "white",
+                      borderRadius: "16px 16px 4px 16px",
+                      boxShadow: "0 3px 12px hsl(33 85% 44% / 0.28)",
+                      textWrap: "pretty",
+                    } as React.CSSProperties}
+                  >
+                    {msg.text}
+                  </div>
+                ) : (
+                  <>
+                    {scanningIdx === i && <ScanningAnimation onDone={() => handleScanDone(i)} />}
+                    {doneSet.has(i) && (
+                      <div
+                        className="px-4 py-2.5 text-[12px] leading-relaxed text-left"
+                        style={{
+                          background: "hsl(142 52% 36%)",
+                          color: "white",
+                          borderRadius: "4px 16px 16px 16px",
+                          boxShadow: "0 3px 12px hsl(142 52% 36% / 0.3)",
+                          animation: "fade-up 0.32s ease-out forwards",
+                          textWrap: "pretty",
+                        } as React.CSSProperties}
+                      >
+                        {msg.text}
+                      </div>
+                    )}
+                    {msg.assetCards && doneSet.has(i) && (
+                      <div className="flex flex-col gap-1.5 mt-1">
+                        {msg.assetCards.slice(0, 2).map((asset, idx) => (
+                          <div key={asset.id} style={{ animation: "fade-up 0.32s ease-out forwards", animationDelay: `${idx * 130}ms`, opacity: 0 }}>
+                            <QueryResultCard asset={asset} />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Scenario transition cover — overlays messages area, header stays visible */}
+        {coverData && (
           <div
-            key={i}
-            className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-            style={{ animation: "fade-up 0.28s ease-out forwards" }}
+            className="absolute inset-0 z-10 flex flex-col"
+            style={{
+              background: "hsl(142 40% 7%)",
+              animation: "scenario-cover 3.5s linear forwards",
+              pointerEvents: "none",
+            }}
           >
-            {msg.role === "eden" && <EdenAvatar size={26} />}
-            <div className="flex flex-col gap-2 min-w-0" style={{ maxWidth: "88%" }}>
-              {msg.role === "user" ? (
+            {/* Accent line */}
+            <div style={{ height: 2, background: "hsl(142 65% 42%)", flexShrink: 0 }} />
+
+            {/* Content */}
+            <div className="flex-1 flex flex-col justify-center px-8 py-6 min-h-0">
+              <p
+                className="text-[9px] font-black uppercase mb-5"
+                style={{ color: "hsl(142 52% 42%)", letterSpacing: "0.22em" }}
+              >
+                {coverData.eyebrow}
+              </p>
+
+              <div
+                className="font-black tabular-nums leading-none mb-4 select-none"
+                style={{
+                  fontSize: 80,
+                  color: "hsl(142 30% 18%)",
+                  letterSpacing: "-0.04em",
+                  lineHeight: 0.88,
+                }}
+              >
+                {coverData.number}
+              </div>
+
+              <h3
+                className="font-bold leading-tight mb-3"
+                style={{
+                  fontSize: "clamp(17px, 2.1vw, 21px)",
+                  letterSpacing: "-0.025em",
+                  color: "hsl(142 15% 90%)",
+                  maxWidth: 280,
+                  textWrap: "pretty",
+                } as React.CSSProperties}
+              >
+                {coverData.title}
+              </h3>
+
+              <p
+                className="text-[12px] leading-relaxed"
+                style={{
+                  color: "hsl(142 18% 50%)",
+                  maxWidth: 260,
+                  textWrap: "pretty",
+                } as React.CSSProperties}
+              >
+                {coverData.desc}
+              </p>
+            </div>
+
+            {/* Progress segments */}
+            <div className="flex items-center gap-1.5 px-8 pb-6 flex-shrink-0">
+              {SCENARIO_COVERS.map((c) => (
                 <div
-                  className="px-4 py-2.5 text-[12px] leading-relaxed font-medium text-left"
+                  key={c.idx}
                   style={{
-                    background: "hsl(33 85% 44%)",
-                    color: "white",
-                    borderRadius: "16px 16px 4px 16px",
-                    boxShadow: "0 3px 12px hsl(33 85% 44% / 0.28)",
-                    textWrap: "pretty",
-                  } as React.CSSProperties}
-                >
-                  {msg.text}
-                </div>
-              ) : (
-                <>
-                  {scanningIdx === i && <ScanningAnimation onDone={() => handleScanDone(i)} />}
-                  {doneSet.has(i) && (
-                    <div
-                      className="px-4 py-2.5 text-[12px] leading-relaxed text-left"
-                      style={{
-                        background: "hsl(142 52% 36%)",
-                        color: "white",
-                        borderRadius: "4px 16px 16px 16px",
-                        boxShadow: "0 3px 12px hsl(142 52% 36% / 0.3)",
-                        animation: "fade-up 0.3s ease-out forwards",
-                        textWrap: "pretty",
-                      } as React.CSSProperties}
-                    >
-                      {msg.text}
-                    </div>
-                  )}
-                  {msg.assetCards && doneSet.has(i) && (
-                    <div className="flex flex-col gap-1.5 mt-1">
-                      {msg.assetCards.slice(0, 2).map((asset, idx) => (
-                        <div key={asset.id} style={{ animation: "fade-up 0.32s ease-out forwards", animationDelay: `${idx * 110}ms`, opacity: 0 }}>
-                          <QueryResultCard asset={asset} />
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              )}
+                    height: 3,
+                    borderRadius: 2,
+                    background: c.idx === coverData.idx
+                      ? "hsl(142 65% 42%)"
+                      : "hsl(142 25% 15%)",
+                    flex: c.idx === coverData.idx ? 2 : 1,
+                  }}
+                />
+              ))}
             </div>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );
@@ -471,20 +548,28 @@ export default function HowItWorks() {
   const [, navigate] = useLocation();
   const [activeScenario, setActiveScenario] = useState(0);
   const [coverInfo, setCoverInfo] = useState<ScenarioCover | null>(null);
-  const coverTidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coverAdvanceTidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const coverDismissTidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepsRef = useReveal();
 
   useEffect(() => {
-    return () => { if (coverTidRef.current) clearTimeout(coverTidRef.current); };
+    return () => {
+      if (coverAdvanceTidRef.current) clearTimeout(coverAdvanceTidRef.current);
+      if (coverDismissTidRef.current) clearTimeout(coverDismissTidRef.current);
+    };
   }, []);
 
   function handleScenarioComplete() {
     const nextIdx = (activeScenario + 1) % DEMO_SCENARIOS.length;
     setCoverInfo(SCENARIO_COVERS[nextIdx]);
-    coverTidRef.current = setTimeout(() => {
-      setCoverInfo(null);
+    // Advance scenario 600ms before cover exits — first greeting fires exactly as cover disappears
+    coverAdvanceTidRef.current = setTimeout(() => {
       setActiveScenario(nextIdx);
-    }, 2200);
+    }, 2900);
+    // Cover total lifetime matches the keyframe duration
+    coverDismissTidRef.current = setTimeout(() => {
+      setCoverInfo(null);
+    }, 3500);
   }
 
   const scenario = DEMO_SCENARIOS[activeScenario];
@@ -513,46 +598,13 @@ export default function HowItWorks() {
               <span style={{ color: "hsl(33 85% 44%)" }}>lost</span>.
             </h1>
 
-            {/* Chat demo — center stage */}
-            <div className="w-full max-w-xl relative">
-              <EdenChatDemo messages={scenario.messages} onComplete={handleScenarioComplete} />
-
-              {/* Scenario transition cover */}
-              {coverInfo && (
-                <div
-                  className="absolute inset-0 z-30 rounded-2xl flex flex-col items-center justify-center gap-5 px-10"
-                  style={{
-                    background: "white",
-                    animation: "scenario-cover 2.2s cubic-bezier(0.4,0,0.2,1) forwards",
-                    boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07)",
-                    pointerEvents: "none",
-                  }}
-                >
-                  <p
-                    className="text-[10px] font-black uppercase tracking-[0.18em]"
-                    style={{ color: "hsl(142 52% 36%)" }}
-                  >
-                    {coverInfo.eyebrow}
-                  </p>
-                  <div className="text-center">
-                    <span
-                      className="font-black tabular-nums block mb-3"
-                      style={{ fontSize: 56, color: "hsl(220 13% 91%)", lineHeight: 1, letterSpacing: "-0.04em" }}
-                    >
-                      {coverInfo.number}
-                    </span>
-                    <h3
-                      className="font-bold text-foreground leading-snug mb-2"
-                      style={{ fontSize: "clamp(18px, 2.2vw, 22px)", letterSpacing: "-0.02em" }}
-                    >
-                      {coverInfo.title}
-                    </h3>
-                    <p className="text-[13px] leading-relaxed" style={{ color: "hsl(220 10% 52%)", maxWidth: 260, margin: "0 auto" }}>
-                      {coverInfo.desc}
-                    </p>
-                  </div>
-                </div>
-              )}
+            {/* Chat demo — cover rendered inside, header always visible */}
+            <div className="w-full max-w-xl">
+              <EdenChatDemo
+                messages={scenario.messages}
+                onComplete={handleScenarioComplete}
+                coverData={coverInfo}
+              />
             </div>
 
             {/* Subheader bridge */}
