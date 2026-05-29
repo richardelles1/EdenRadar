@@ -129,7 +129,7 @@ export default function Demo() {
   useDocumentMeta({
     title: "Request Early Access — EdenRadar",
     description:
-      "Apply for early access to EdenRadar: AI-powered biotech asset discovery across 400+ technology transfer offices. Tell us about your BD team and we'll be in touch.",
+      "Apply for early access to EdenRadar: AI-powered biotech asset discovery across 350+ technology transfer offices. Tell us about your BD team and we'll be in touch.",
   });
 
   const [form, setForm] = useState<FormData>({
@@ -463,8 +463,11 @@ export default function Demo() {
                     {submitState === "error" && (
                       <p className="text-center text-sm text-destructive">
                         Something went wrong. Email us at{" "}
-                        <a href="mailto:hello@edennx.com" className="underline text-primary">
-                          hello@edennx.com
+                        <a href="mailto:wmohamed@edennx.com" className="underline text-primary">
+                          wmohamed@edennx.com
+                        </a>{" "}or{" "}
+                        <a href="mailto:relles@edennx.com" className="underline text-primary">
+                          relles@edennx.com
                         </a>
                       </p>
                     )}
