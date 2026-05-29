@@ -1,7 +1,8 @@
-import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ThumbsUp, ThumbsDown, ExternalLink, Download, Bookmark, BookmarkCheck, FlaskConical, FileSearch, Library, Bell, CheckCircle2, Loader2, X } from "lucide-react";
 import { EdenAvatar, MarkdownContent, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
-import type { ChatAsset, ChatMessage, ExternalResult } from "@/hooks/useEdenChat";
+import type { ChatAsset, ChatMessage, ExternalResult, ActionOffer, AlertOfferConfig } from "@/hooks/useEdenChat";
 
 function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
   if (!assets.length || !content) return assets;
@@ -262,6 +263,129 @@ function CitationCard({ asset, index, savedIngestedIds, compact = false }: {
   );
 }
 
+function ActionOffers({
+  offers,
+  savedIngestedIds,
+  onCreateAlert,
+  compact = false,
+}: {
+  offers: ActionOffer[];
+  savedIngestedIds: Set<number>;
+  onCreateAlert?: (config: AlertOfferConfig) => Promise<void>;
+  compact?: boolean;
+}) {
+  const [alertStates, setAlertStates] = useState<Record<number, "idle" | "pending" | "creating" | "done" | "dismissed">>({});
+
+  const saveOffers = offers.filter((o): o is Extract<ActionOffer, { type: "save" }> => o.type === "save");
+  const alertOffers = offers.filter((o): o is Extract<ActionOffer, { type: "alert" }> => o.type === "alert");
+
+  if (saveOffers.length === 0 && alertOffers.length === 0) return null;
+
+  return (
+    <div className="flex flex-col gap-1.5 mt-2 ml-0.5" data-testid="action-offers">
+      {saveOffers.map((offer, oi) => {
+        const unsaved = offer.assets.filter((a) => !savedIngestedIds.has(a.id));
+        if (unsaved.length === 0) return null;
+        return (
+          <div key={`save-${oi}`} className="flex flex-wrap items-center gap-1.5">
+            <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
+              <Bookmark className="h-3 w-3 shrink-0" />
+              Save to pipeline:
+            </span>
+            {unsaved.map((a) => {
+              const payload: PipelinePickerPayload = {
+                asset_name: a.assetName,
+                modality: a.modality || undefined,
+                development_stage: a.developmentStage || undefined,
+                disease_indication: (a.indication && a.indication !== "unknown") ? a.indication : undefined,
+                source_name: "tto",
+                source_url: a.sourceUrl ?? null,
+                ingested_asset_id: a.id,
+              };
+              return (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5"
+                  data-testid={`save-offer-asset-${a.id}`}
+                >
+                  <span className={`max-w-[130px] truncate text-foreground font-medium ${compact ? "text-[10px]" : "text-[11px]"}`}>{a.assetName}</span>
+                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} />
+                </span>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {alertOffers.map((offer, oi) => {
+        const state = alertStates[oi] ?? "idle";
+        if (state === "dismissed") return null;
+        const setOiState = (s: "idle" | "pending" | "creating" | "done" | "dismissed") => setAlertStates((prev) => ({ ...prev, [oi]: s }));
+        return (
+          <div key={`alert-${oi}`} className="flex flex-wrap items-center gap-1.5" data-testid={`alert-offer-${oi}`}>
+            {state === "idle" && (
+              <button
+                className={`flex items-center gap-1 rounded-full border border-amber-500/25 bg-amber-500/5 text-muted-foreground hover:text-foreground hover:border-amber-500/50 hover:bg-amber-500/10 px-2.5 py-1 transition-all ${compact ? "text-[10px]" : "text-[11px]"}`}
+                onClick={() => setOiState("pending")}
+                data-testid={`alert-offer-chip-${oi}`}
+              >
+                <Bell className="h-3 w-3 shrink-0" />
+                Watch: {offer.label}
+              </button>
+            )}
+            {state === "pending" && (
+              <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5">
+                <Bell className="h-3 w-3 text-amber-500 shrink-0" />
+                <span className={`font-medium text-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>{offer.config.name}</span>
+                {offer.config.institutions?.map((inst) => (
+                  <span key={inst} className={`bg-muted rounded px-1.5 py-0.5 text-muted-foreground ${compact ? "text-[9px]" : "text-[10px]"}`}>{inst}</span>
+                ))}
+                {offer.config.modalities?.map((m) => (
+                  <span key={m} className={`bg-muted rounded px-1.5 py-0.5 text-muted-foreground ${compact ? "text-[9px]" : "text-[10px]"}`}>{m}</span>
+                ))}
+                {offer.config.stages?.map((s) => (
+                  <span key={s} className={`bg-muted rounded px-1.5 py-0.5 text-muted-foreground ${compact ? "text-[9px]" : "text-[10px]"}`}>{s}</span>
+                ))}
+                <button
+                  className={`font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
+                  onClick={async () => {
+                    if (!onCreateAlert) return;
+                    setOiState("creating");
+                    try { await onCreateAlert(offer.config); setOiState("done"); }
+                    catch { setOiState("pending"); }
+                  }}
+                  data-testid={`alert-offer-create-${oi}`}
+                >
+                  Create alert
+                </button>
+                <button
+                  className={`text-muted-foreground/50 hover:text-muted-foreground transition-colors ${compact ? "text-[9px]" : "text-[10px]"}`}
+                  onClick={() => setOiState("dismissed")}
+                  data-testid={`alert-offer-dismiss-${oi}`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+            {state === "creating" && (
+              <div className={`flex items-center gap-1.5 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Creating alert...
+              </div>
+            )}
+            {state === "done" && (
+              <div className={`flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 ${compact ? "text-[10px]" : "text-[11px]"}`}>
+                <CheckCircle2 className="h-3 w-3" />
+                Alert created
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export type EdenChatThreadProps = {
   messages: ChatMessage[];
   streaming: boolean;
@@ -273,6 +397,7 @@ export type EdenChatThreadProps = {
   onBookmark: (result: ExternalResult) => void;
   onSend: (q: string) => void;
   onToggleCitations: (i: number, open: boolean) => void;
+  onCreateAlert?: (config: AlertOfferConfig) => Promise<void>;
   compact?: boolean;
   chatEndRef?: React.RefObject<HTMLDivElement>;
 };
@@ -288,6 +413,7 @@ export function EdenChatThread({
   onBookmark,
   onSend,
   onToggleCitations,
+  onCreateAlert,
   compact = false,
   chatEndRef,
 }: EdenChatThreadProps) {
@@ -380,6 +506,16 @@ export function EdenChatThread({
                     </button>
                   ))}
                 </div>
+              )}
+
+              {/* Action offers — save to pipeline + set alert */}
+              {msg.role === "assistant" && !msg.isStreaming && msg.actionOffers && msg.actionOffers.length > 0 && (
+                <ActionOffers
+                  offers={msg.actionOffers}
+                  savedIngestedIds={savedIngestedIds}
+                  onCreateAlert={onCreateAlert}
+                  compact={compact}
+                />
               )}
 
               {/* External live results — rendered before TTO citations when present */}

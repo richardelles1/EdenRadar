@@ -1,7 +1,6 @@
 ﻿import { useEffect, useState } from "react";
 import { Printer } from "lucide-react";
 import QRCode from "qrcode";
-import { ExportMenu } from "@/components/ExportMenu";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 function useQrSvg(url: string) {
@@ -90,6 +89,18 @@ export default function OnePager() {
           color: hsl(215 20% 42%);
           text-align: center;
           font-family: 'Barlow', system-ui, sans-serif;
+        }
+
+        @media (max-width: 640px) {
+          .op-controls {
+            position: relative;
+            top: auto;
+            right: auto;
+            width: 100%;
+            padding: 10px 14px;
+            justify-content: flex-end;
+            background: hsl(210 25% 88%);
+          }
         }
 
         /* ── Document ──────────────────────────────────────────────── */
@@ -529,19 +540,7 @@ export default function OnePager() {
 
       <div className="op-shell">
         {/* ── Export controls (screen only) ── */}
-        <div className="no-print op-controls" data-export-control>
-          <ExportMenu
-            label="Save to Cloud"
-            getContent={async () => {
-              const { captureCurrentPageAsHtml, utf8ToBase64 } = await import("@/components/ExportMenu");
-              const html = captureCurrentPageAsHtml();
-              return {
-                content: utf8ToBase64(html),
-                filename: `EdenRadar_One_Pager_${new Date().toISOString().slice(0, 10)}.html`,
-                fileType: "html",
-              };
-            }}
-          />
+        <div className="no-print op-controls">
           <button
             onClick={handlePrint}
             data-testid="button-download-pdf"

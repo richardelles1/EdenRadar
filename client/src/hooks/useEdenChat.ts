@@ -33,7 +33,21 @@ export type ChatMessage = {
   externalResults?: ExternalResult[];
   activeSource?: ActiveSource;
   isStreaming?: boolean;
+  actionOffers?: ActionOffer[];
 };
+
+export type AlertOfferConfig = {
+  name: string;
+  criteriaType: "custom";
+  query?: string | null;
+  modalities?: string[] | null;
+  stages?: string[] | null;
+  institutions?: string[] | null;
+};
+
+export type ActionOffer =
+  | { type: "save"; assets: Array<{ id: number; assetName: string; institution: string; modality?: string | null; developmentStage?: string | null; indication?: string | null; sourceUrl?: string | null }> }
+  | { type: "alert"; label: string; config: AlertOfferConfig };
 
 export type EdenSessionSummary = {
   id: number;
@@ -54,13 +68,22 @@ type SseContextPayload = { sessionId?: string; assets: ChatAsset[]; externalResu
 type SseTokenPayload = { text: string };
 type SseDonePayload = { sessionId?: string };
 type SseErrorPayload = { message: string };
+type SseActionOfferPayload = { offers: ActionOffer[] };
 
-function parseSsePayload(evt: string, raw: unknown): void | { type: "context"; data: SseContextPayload } | { type: "token"; data: SseTokenPayload } | { type: "done"; data: SseDonePayload } | { type: "error"; data: SseErrorPayload } {
+function parseSsePayload(evt: string, raw: unknown):
+  void
+  | { type: "context"; data: SseContextPayload }
+  | { type: "token"; data: SseTokenPayload }
+  | { type: "done"; data: SseDonePayload }
+  | { type: "error"; data: SseErrorPayload }
+  | { type: "action_offer"; data: SseActionOfferPayload }
+{
   if (typeof raw !== "object" || raw === null) return;
   if (evt === "context") return { type: "context", data: raw as SseContextPayload };
   if (evt === "token") return { type: "token", data: raw as SseTokenPayload };
   if (evt === "done") return { type: "done", data: raw as SseDonePayload };
   if (evt === "error") return { type: "error", data: raw as SseErrorPayload };
+  if (evt === "action_offer") return { type: "action_offer", data: raw as SseActionOfferPayload };
 }
 
 export type EdenUserContext = {
@@ -156,6 +179,14 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
               const upd = [...prev];
               const last = upd[upd.length - 1];
               if (last?.role === "assistant") upd[upd.length - 1] = { ...last, content: last.content + d.text };
+              return upd;
+            });
+          } else if (dispatched.type === "action_offer") {
+            const d = dispatched.data;
+            setMessages((prev) => {
+              const upd = [...prev];
+              const last = upd[upd.length - 1];
+              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, actionOffers: d.offers };
               return upd;
             });
           } else if (dispatched.type === "done") {

@@ -1981,6 +1981,18 @@ function EnrichmentPipelinePanel({ pw, onGaveUpClick }: { pw: string; onGaveUpCl
                   </p>
                 </div>
               )}
+              {status?.status === "interrupted" && (
+                <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30" data-testid="enrichment-interrupted">
+                  <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Job interrupted</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-500">Server restarted mid-run ({status.processed} of {status.total} processed). Dismiss to start fresh.</p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="h-6 text-xs text-amber-600 dark:text-amber-400 hover:text-amber-800 shrink-0" onClick={() => dismissError.mutate()} disabled={dismissError.isPending} data-testid="button-dismiss-enrichment-interrupted">
+                    {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+                  </Button>
+                </div>
+              )}
               {status?.status === "error" && (
                 <div className="flex items-start gap-2 p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
                   <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />

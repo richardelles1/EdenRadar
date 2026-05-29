@@ -86,6 +86,7 @@ interface ActiveSearchRow {
 
 interface CollectorHealthData {
   rows: CollectorHealthRow[];
+  manualRows: CollectorHealthRow[];
   activeSearchRows: ActiveSearchRow[];
   totalInDb: number;
   totalBiotechRelevant: number;
@@ -163,6 +164,7 @@ interface SyncSessionData {
 interface SyncStatusResponse {
   found: boolean;
   session?: SyncSessionData;
+  lastSuccessRawCount?: number | null;
   newEntries?: Array<{
     assetName: string;
     sourceUrl: string | null;

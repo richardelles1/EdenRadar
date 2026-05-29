@@ -30,6 +30,102 @@ const aiRateLimit = rateLimit({
   message: { error: "Too many requests — please wait a moment before trying again." },
 });
 
+// ── Action Offer Types ──────────────────────────────────────────────────────
+type ActionOfferAsset = {
+  id: number; assetName: string; institution: string; similarity: number;
+  modality?: string | null; developmentStage?: string | null;
+  indication?: string | null; sourceUrl?: string | null;
+};
+type AlertOfferConfig = {
+  name: string; criteriaType: "custom";
+  query?: string | null; modalities?: string[] | null;
+  stages?: string[] | null; institutions?: string[] | null;
+};
+type ActionOffer =
+  | { type: "save"; assets: ActionOfferAsset[] }
+  | { type: "alert"; label: string; config: AlertOfferConfig };
+
+// Intent patterns for save and alert offer detection.
+const SAVE_PATTERNS: RegExp[] = [
+  /\bsave (this|it|them|these)\b/,/\bbookmark (this|it|these)\b/,
+  /\badd (this|it|these|that) to\b/,/\btrack (this|it|these)\b/,
+  /\bkeep (this|it|these)\b/,/\bwatchlist\b/,
+  /\badd to (my |our )?(pipeline|list|watchlist|portfolio)\b/,
+  /\bput (this|it|these) in\b/,/\bI('d| would) like to save\b/,/\bcan you save\b/,
+  /\bhow (do I|can I) contact\b/,/\blicensing (terms|status|interest|info)\b/,
+  /\bI('m| am) (very |quite |really )?(interested|intrigued)\b/,
+  /\bthis is (exactly|precisely) what\b/,
+  /\bthis (looks|seems) (perfect|ideal|great|promising|very relevant)\b/,
+  /\bI (love|like|prefer) this\b/,/\b(most|very) (interesting|relevant|promising|compelling)\b/,
+  /\bworth (evaluating|a deeper look|following up|tracking)\b/,
+  /\bwant to (evaluate|explore|follow up on|dig into)\b/,
+  /\bI('d| would) (like to |want to )?(evaluate|explore|discuss)\b/,
+  /\bof (these|those),? (I )?prefer\b/,/\bthe (first|second|top) one\b/,
+  /\bthis one specifically\b/,/\bthis particular\b/,
+];
+const ALERT_PATTERNS: RegExp[] = [
+  /\blet me know (when|if|about)\b/,/\bnotif(y|ication) me\b/,/\balert me\b/,
+  /\bkeep me posted\b/,/\bwatch (for|out for)\b/,/\bmonitor (this|new)\b/,
+  /\bfollow up (on|with)\b/,/\bupdate me\b/,/\bremind me\b/,/\bnext time\b/,
+  /\bif (more|anything|new) (comes?|appears?|is added)\b/,
+  /\bstay (updated|informed|in the loop)\b/,
+  /\bwhen (they|it|there) (comes?|arrives?|becomes? available)\b/,
+  /\bare there (any more|more|others|new)\b/,/\bany more (like this|coming)\b/,
+  /\bwill there be (more|new|others)\b/,
+  /\banything (else |new )?(coming|in the pipeline)\b/,
+  /\bmore (assets|technologies|listings) (from|at|like)\b/,
+  /\bnew (assets|technologies|deals|listings) (from|at|like)\b/,
+];
+
+function buildActionOffers(
+  message: string,
+  intent: string,
+  retrieved: ActionOfferAsset[],
+  filters: { modality?: string | null; stage?: string | null; indication?: string | null; institution?: string | null },
+): ActionOffer[] {
+  const offers: ActionOffer[] = [];
+  const lower = message.toLowerCase();
+
+  // Save: explicit or high-intent signals + search path with results
+  const hasSaveIntent = SAVE_PATTERNS.some((p) => p.test(lower));
+  if (hasSaveIntent && (intent === "search" || intent === "back_ref") && retrieved.length > 0) {
+    const topAssets = retrieved.filter((a) => a.similarity >= 0.55).slice(0, 2);
+    if (topAssets.length > 0) offers.push({ type: "save", assets: topAssets });
+  }
+
+  // Alert: notify/watch/more signals → derive config from active filters
+  const hasAlertIntent = ALERT_PATTERNS.some((p) => p.test(lower));
+  if (hasAlertIntent) {
+    const institutionFilter = filters.institution ? [filters.institution] : null;
+    const modalityFilter = filters.modality ? [filters.modality] : null;
+    const stageFilter = filters.stage ? [filters.stage] : null;
+
+    const labelParts: string[] = [];
+    if (filters.institution) labelParts.push(filters.institution);
+    if (filters.modality) labelParts.push(filters.modality);
+    if (filters.indication) labelParts.push(filters.indication);
+    const label = labelParts.length > 0 ? labelParts.join(", ") : "this topic";
+
+    const hasStructuredFilter = institutionFilter || modalityFilter || stageFilter;
+    const queryVal = hasStructuredFilter ? null : message.trim().slice(0, 200);
+
+    const alertNameBase = labelParts.length > 0 ? `New ${labelParts.join(" ")} assets` : `New: ${message.trim().slice(0, 60)}`;
+    offers.push({
+      type: "alert", label,
+      config: {
+        name: alertNameBase.slice(0, 100),
+        query: queryVal,
+        modalities: modalityFilter,
+        stages: stageFilter,
+        institutions: institutionFilter,
+        criteriaType: "custom",
+      },
+    });
+  }
+
+  return offers;
+}
+
 export function registerEdenRoutes(app: Express): void {
   const chatBodySchema = z.object({
     message: z.string().min(1).max(4000),
@@ -293,6 +389,8 @@ export function registerEdenRoutes(app: Express): void {
           role: "assistant", content: fullResponse,
           assetIds: targeted.map((a) => a.id), assets: assetPayload,
         });
+        const backRefOffers = buildActionOffers(message.trim(), "back_ref", targeted.map((a) => ({ ...a, similarity: 1.0 })), filters);
+        if (backRefOffers.length > 0) sendEvent("action_offer", { offers: backRefOffers });
         sendEvent("done", { sessionId: sid });
         return;
       }
@@ -688,6 +786,8 @@ export function registerEdenRoutes(app: Express): void {
         assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
       });
 
+      const searchOffers = buildActionOffers(message.trim(), "search", retrieved, filters);
+      if (searchOffers.length > 0) sendEvent("action_offer", { offers: searchOffers });
       sendEvent("done", { sessionId: sid });
     } catch (err: unknown) {
       const errMsg = "Chat failed";

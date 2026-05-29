@@ -266,12 +266,15 @@ export function registerIngestRoutes(app: Express): void {
 
       const currentIndexed = await storage.getInstitutionIndexedCount(institution);
 
+      const healthRow = getScraperHealthCache().get(institution);
+
       res.json({
         found: true,
         session: {
           ...session,
           currentIndexed,
         },
+        lastSuccessRawCount: healthRow?.lastSuccessRawCount ?? null,
         newEntries: stagingRows
           .filter((r) => r.isNew && r.relevant === true)
           .map((r) => ({

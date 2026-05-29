@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -38,7 +38,26 @@ function useReducedMotion() {
   return reduced;
 }
 
-/* ─── EDEN Command Demo ──────────────────────────────────────── */
+/* ─── SVG radar mark (avoids Canva white-bg artifact) ─────────── */
+
+function RadarMark({ size = 28 }: { size?: number }) {
+  return (
+    <svg
+      width={size} height={size} viewBox="0 0 28 28" fill="none" aria-hidden
+      style={{ color: "hsl(var(--primary))", flexShrink: 0 }}
+    >
+      <circle cx="14" cy="14" r="12" stroke="currentColor" strokeWidth="1.4" />
+      <circle cx="14" cy="14" r="7.5" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.55" />
+      <circle cx="14" cy="14" r="3" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.35" />
+      <line x1="2" y1="14" x2="5" y2="14" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="23" y1="14" x2="26" y2="14" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="14" y1="2" x2="14" y2="5" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="14" y1="23" x2="14" y2="26" stroke="currentColor" strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+/* ─── Data types ─────────────────────────────────────────────── */
 
 interface AssetCardData {
   id: number;
@@ -47,83 +66,123 @@ interface AssetCardData {
   stage: string;
   score: number;
   modality: string;
-  color: string;
 }
 
 interface ChatMessage {
   role: "eden" | "user";
   text: string;
   delay: number;
+  typingFor?: number;
   assetCards?: AssetCardData[];
   scanning?: boolean;
   instant?: boolean;
 }
 
-interface DemoScenario {
-  id: string;
-  messages: ChatMessage[];
-}
+/* ─── Asset data ─────────────────────────────────────────────── */
 
 const DEMO_ASSETS_JHU: AssetCardData[] = [
-  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy", color: "" },
-  { id: 2, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody", color: "" },
-  { id: 3, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule", color: "" },
+  { id: 1, title: "CAR-T Cell Therapy Targeting CD19/CD22 Dual Antigen", institution: "Johns Hopkins", stage: "Preclinical", score: 91, modality: "Cell Therapy" },
+  { id: 2, title: "Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma", institution: "Johns Hopkins", stage: "IND-Enabling", score: 88, modality: "Antibody" },
+  { id: 3, title: "HDAC Inhibitor Platform for Solid Tumor Microenvironment", institution: "Johns Hopkins", stage: "Discovery", score: 85, modality: "Small Molecule" },
 ];
 
 const DEMO_ASSETS_CNS: AssetCardData[] = [
-  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody", color: "" },
-  { id: 5, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy", color: "" },
-  { id: 6, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule", color: "" },
+  { id: 4, title: "α-Synuclein Targeting Antibody for Parkinson's Disease", institution: "Mayo Clinic", stage: "Preclinical", score: 93, modality: "Antibody" },
+  { id: 5, title: "AAV9 Gene Therapy Targeting Motor Neurons in ALS", institution: "Columbia University", stage: "IND-Enabling", score: 89, modality: "Gene Therapy" },
+  { id: 6, title: "LRRK2 Kinase Inhibitor Platform for Neurodegeneration", institution: "Stanford University", stage: "Discovery", score: 87, modality: "Small Molecule" },
 ];
 
 const DEMO_ASSETS_ADC: AssetCardData[] = [
-  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC", color: "" },
-  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC", color: "" },
-  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC", color: "" },
+  { id: 7, title: "HER2-Targeted ADC with Novel Cleavable Linker Chemistry", institution: "MIT Koch Institute", stage: "IND-Enabling", score: 92, modality: "ADC" },
+  { id: 8, title: "TROP2-Directed ADC for Triple-Negative Breast Cancer", institution: "Mem. Sloan Kettering", stage: "Preclinical", score: 86, modality: "ADC" },
+  { id: 9, title: "CD33 ADC with Disulfide Linker for AML", institution: "Univ. of Washington", stage: "Discovery", score: 84, modality: "ADC" },
 ];
 
-const DEMO_SCENARIOS: DemoScenario[] = [
+/* ─── Single continuous conversation ─────────────────────────── */
+
+const FULL_CONVERSATION: ChatMessage[] = [
   {
-    id: "institution",
-    messages: [
-      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 700, instant: true },
-      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 1200 },
-      { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 3000, scanning: true, assetCards: DEMO_ASSETS_JHU },
-    ],
+    role: "user",
+    text: "Good morning. We're building out an oncology pipeline and want to see what's active at Hopkins. Where should we start?",
+    delay: 1200,
   },
   {
-    id: "cross-tto",
-    messages: [
-      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 700, instant: true },
-      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 1200 },
-      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 3000, scanning: true, assetCards: DEMO_ASSETS_CNS },
-    ],
+    role: "eden",
+    text: "14 JHU oncology programs in your focus area. The HDAC inhibitor's target space overlaps with Pfizer's recent Seagen territory, so worth flagging before you invest time. The CAR-T is different: dual-antigen targeting, listed as available for licensing on the JHU TTO portal. I'd start there.",
+    delay: 3200,
+    scanning: true,
+    assetCards: DEMO_ASSETS_JHU,
   },
   {
-    id: "modality",
-    messages: [
-      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 700, instant: true },
-      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 1200 },
-      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 3000, scanning: true, assetCards: DEMO_ASSETS_ADC },
-    ],
+    role: "user",
+    text: "Tell me more about the CAR-T. What makes it stand out?",
+    delay: 11500,
+  },
+  {
+    role: "eden",
+    text: "It targets CD19 and CD22 simultaneously, addressing the single-antigen resistance that has limited earlier CAR-T programs. Patent is pending. The innovation claim flags the dual-targeting approach as not yet replicated in the current competitive landscape. Three supporting publications are indexed. Licensing readiness is marked active on the JHU portal.",
+    delay: 15200,
+    typingFor: 1800,
+  },
+  {
+    role: "user",
+    text: "The 91 is the highest there. Can you pull preclinical CNS across all institutions?",
+    delay: 21000,
+  },
+  {
+    role: "eden",
+    text: "Strong programs at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein antibody leads: recently indexed, mechanism well-documented, listed as available. Columbia's ALS gene therapy is IND-enabling and still available. Two are showing rising momentum this month, meaning new activity has been indexed since we last scored them.",
+    delay: 23000,
+    scanning: true,
+    assetCards: DEMO_ASSETS_CNS,
+  },
+  {
+    role: "user",
+    text: "The Columbia ALS program: is it already in discussion somewhere or still open?",
+    delay: 33000,
+  },
+  {
+    role: "eden",
+    text: "Listed as available on the Columbia TTO portal. No competing programs in the ALS space are indexed past discovery stage right now. The competing assets panel shows three others in this space, none close in development or coverage.",
+    delay: 36800,
+    typingFor: 1800,
+  },
+  {
+    role: "user",
+    text: "Let's add Columbia ALS and Hopkins CAR-T to the pipeline.",
+    delay: 42500,
+  },
+  {
+    role: "eden",
+    text: "Added. Columbia ALS and Hopkins CAR-T are in your CAR-T pipeline under Watching. You can move them through stages as your process develops: Evaluating, In Discussion, On Hold, or Passed.",
+    delay: 46200,
+    typingFor: 1800,
+  },
+  {
+    role: "user",
+    text: "Set an alert for gene therapy, anything new that looks strong.",
+    delay: 52000,
+  },
+  {
+    role: "eden",
+    text: "How often do you want to hear from me: real-time as programs are discovered, daily digest, or weekly summary?",
+    delay: 55500,
+    typingFor: 1800,
+  },
+  {
+    role: "user",
+    text: "Real-time.",
+    delay: 61000,
+  },
+  {
+    role: "eden",
+    text: "Alert is live across gene therapy, all institutions, as discovered. You'll hear from me the moment something new is indexed. When you're ready to go deeper on either program, the full dossier is one click away: supporting literature, competing assets, and enrichment data are all in there. Good session. What's next?",
+    delay: 64000,
+    typingFor: 1800,
   },
 ];
 
-interface ScenarioCover {
-  idx: number;
-  number: string;
-  eyebrow: string;
-  title: string;
-  desc: string;
-}
-
-const SCENARIO_COVERS: ScenarioCover[] = [
-  { idx: 0, number: "01", eyebrow: "Institution Focus", title: "Oncology pipeline at Hopkins.", desc: "What's worth a look when you know where to start." },
-  { idx: 1, number: "02", eyebrow: "Cross-TTO Discovery", title: "Preclinical CNS across 22 institutions.", desc: "Surfacing the strongest programs before your window closes." },
-  { idx: 2, number: "03", eyebrow: "Modality Filter", title: "ADC platforms open for exclusive licensing.", desc: "Finding what fits your deal structure, not just your science." },
-];
-
-/* ─── EDEN Intro ─────────────────────────────────────────────── */
+/* ─── EDEN Intro splash ──────────────────────────────────────── */
 
 function EdenIntro({ onDone }: { onDone: () => void }) {
   const reducedMotion = useReducedMotion();
@@ -131,11 +190,9 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     const t = setTimeout(onDone, reducedMotion ? 100 : 2300);
     return () => clearTimeout(t);
-  }, [reducedMotion]);
+  }, [reducedMotion, onDone]);
 
-  if (reducedMotion) {
-    return null;
-  }
+  if (reducedMotion) return null;
 
   return (
     <div
@@ -143,6 +200,8 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
       style={{
         background: "hsl(var(--card))",
         animation: "eden-intro-exit 0.45s cubic-bezier(0.4,0,0.2,1) 1.85s forwards",
+        willChange: "opacity, transform",
+        pointerEvents: "none",
       }}
     >
       <style>{`
@@ -156,7 +215,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
         }
         @keyframes eden-intro-exit {
           from { opacity: 1; transform: translateY(0); }
-          to   { opacity: 0; transform: translateY(-14px); pointer-events: none; }
+          to   { opacity: 0; transform: translateY(-14px); }
         }
         @keyframes eden-ring {
           0%   { opacity: 0.55; transform: translate(-50%,-50%) scale(1); }
@@ -176,11 +235,9 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
             }}
           />
         ))}
-        <img
-          src="/images/eden-nx-mark.png"
-          alt="EDEN"
-          style={{ width: 44, height: 44, objectFit: "contain", position: "relative", zIndex: 1 }}
-        />
+        <div style={{ position: "relative", zIndex: 1 }}>
+          <RadarMark size={38} />
+        </div>
       </div>
 
       <div className="flex items-end gap-2.5">
@@ -216,7 +273,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
   );
 }
 
-/* ─── Scanning Animation + Result Card ──────────────────────── */
+/* ─── Scanning animation ─────────────────────────────────────── */
 
 const SCAN_NAMES = ["MIT TTO", "Stanford OTL", "Johns Hopkins", "Mayo Clinic", "Max Planck", "Columbia", "UCSF", "Harvard OTD", "Yale TTO", "NIH", "Oxford TT", "Wellcome Trust", "Penn TTO", "Duke OLV", "Broad Institute", "Rockefeller"];
 
@@ -238,7 +295,7 @@ function ScanningAnimation({ onDone }: { onDone: () => void }) {
       if (step >= 16) { clearInterval(iv); setTimeout(onDone, 160); }
     }, 150);
     return () => clearInterval(iv);
-  }, [reducedMotion]);
+  }, [reducedMotion, onDone]);
 
   return (
     <div className="flex items-center gap-2.5 py-1">
@@ -254,6 +311,8 @@ function ScanningAnimation({ onDone }: { onDone: () => void }) {
   );
 }
 
+/* ─── Query result card ──────────────────────────────────────── */
+
 function QueryResultCard({ asset }: { asset: AssetCardData }) {
   return (
     <div
@@ -268,8 +327,7 @@ function QueryResultCard({ asset }: { asset: AssetCardData }) {
       <div
         className="flex-shrink-0 flex items-center justify-center rounded-lg font-bold tabular-nums"
         style={{
-          width: 38,
-          height: 38,
+          width: 38, height: 38,
           background: "hsl(var(--primary) / 0.12)",
           color: "hsl(var(--primary))",
           fontSize: 13,
@@ -289,73 +347,72 @@ function QueryResultCard({ asset }: { asset: AssetCardData }) {
 
 /* ─── EDEN Chat Demo ─────────────────────────────────────────── */
 
-function EdenChatDemo({
-  messages,
-  onComplete,
-  coverData,
-}: {
-  messages: ChatMessage[];
-  onComplete?: () => void;
-  coverData?: ScenarioCover | null;
-}) {
+function EdenChatDemo({ messages }: { messages: ChatMessage[] }) {
   const reducedMotion = useReducedMotion();
   const [phase, setPhase] = useState<"intro" | "chat">("intro");
   const [visibleCount, setVisibleCount] = useState(0);
   const [scanningIdx, setScanningIdx] = useState<number | null>(null);
+  const [typingIdx, setTypingIdx] = useState<number | null>(null);
   const [doneSet, setDoneSet] = useState<Set<number>>(new Set());
   const chatRef = useRef<HTMLDivElement>(null);
+  const userScrolledUp = useRef(false);
   const tids = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  const scrollBottom = () =>
+  const scrollBottom = useCallback(() => {
+    if (userScrolledUp.current) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
     }));
+  }, []);
 
-  useEffect(() => {
-    tids.current.forEach(clearTimeout);
-    tids.current = [];
-    setVisibleCount(0);
-    setScanningIdx(null);
-    setDoneSet(new Set());
-  }, [messages]);
+  const handleScroll = useCallback(() => {
+    if (!chatRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatRef.current;
+    userScrolledUp.current = scrollHeight - scrollTop - clientHeight > 80;
+  }, []);
 
   useEffect(() => {
     if (phase !== "chat") return;
     tids.current.forEach(clearTimeout);
     tids.current = [];
+
     messages.forEach((msg, i) => {
+      const delay = reducedMotion ? Math.min(i * 500, 5000) : msg.delay;
+      const typingFor = !reducedMotion && !msg.instant && !msg.scanning && msg.typingFor ? msg.typingFor : 0;
+
+      if (typingFor > 0 && msg.role === "eden") {
+        const tTyping = setTimeout(() => {
+          setTypingIdx(i);
+          scrollBottom();
+        }, Math.max(0, delay - typingFor));
+        tids.current.push(tTyping);
+      }
+
       const t = setTimeout(() => {
+        if (msg.role === "eden") setTypingIdx(null);
         setVisibleCount(i + 1);
         scrollBottom();
+
         if (msg.role === "eden") {
-          if (msg.instant) {
-            setDoneSet((prev) => new Set(prev).add(i));
+          if (msg.instant || !msg.scanning) {
+            setDoneSet(prev => new Set(prev).add(i));
           } else if (msg.scanning) {
             setScanningIdx(i);
-          } else {
-            setDoneSet((prev) => new Set(prev).add(i));
-            if (i === messages.length - 1) {
-              const t2 = setTimeout(() => onComplete?.(), 3800);
-              tids.current.push(t2);
-            }
           }
         }
-      }, reducedMotion ? i * 400 : msg.delay);
+      }, delay);
       tids.current.push(t);
     });
+
     return () => tids.current.forEach(clearTimeout);
-  }, [phase, messages, reducedMotion]);
+  }, [phase, messages, reducedMotion, scrollBottom]);
 
   function handleScanDone(idx: number) {
     setScanningIdx(null);
     const pauseT = setTimeout(() => {
-      setDoneSet((prev) => new Set(prev).add(idx));
+      setDoneSet(prev => new Set(prev).add(idx));
       scrollBottom();
-      if (idx === messages.length - 1) {
-        const t = setTimeout(() => onComplete?.(), reducedMotion ? 1200 : 3800);
-        tids.current.push(t);
-      }
-    }, reducedMotion ? 0 : 350);
+    }, reducedMotion ? 0 : 380);
     tids.current.push(pauseT);
   }
 
@@ -363,7 +420,7 @@ function EdenChatDemo({
     <div
       className="relative flex flex-col rounded-2xl overflow-hidden"
       style={{
-        height: "clamp(420px, 62vh, 540px)",
+        height: "clamp(440px, 66vh, 560px)",
         background: "hsl(var(--card))",
         boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
       }}
@@ -372,12 +429,15 @@ function EdenChatDemo({
         @keyframes eden-pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
         @keyframes fade-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
         @keyframes scan-slide { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
-        @keyframes scenario-cover {
-          0%   { opacity: 0; transform: translateY(20px) scale(0.98); animation-timing-function: cubic-bezier(0.16,1,0.3,1); }
-          10%  { opacity: 1; transform: translateY(0) scale(1); animation-timing-function: linear; }
-          82%  { opacity: 1; transform: translateY(0) scale(1); animation-timing-function: ease-in; }
-          100% { opacity: 0; transform: translateY(0) scale(1); }
+        @keyframes typing-dot {
+          0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+          30% { opacity: 1; transform: translateY(-3px); }
         }
+        .eden-chat-scroll::-webkit-scrollbar { width: 3px; }
+        .eden-chat-scroll::-webkit-scrollbar-track { background: transparent; }
+        .eden-chat-scroll::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 2px; }
+        .eden-chat-scroll::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.3); }
+        .eden-chat-scroll { scrollbar-width: thin; scrollbar-color: hsl(var(--border)) transparent; }
       `}</style>
 
       {phase === "intro" && <EdenIntro onDone={() => setPhase("chat")} />}
@@ -387,7 +447,7 @@ function EdenChatDemo({
         className="flex items-center gap-3 px-5 py-3 border-b flex-shrink-0"
         style={{ background: "hsl(var(--background))", borderColor: "hsl(var(--border))" }}
       >
-        <img src="/images/eden-nx-mark.png" alt="EDEN" className="w-7 h-7 object-contain flex-shrink-0" />
+        <RadarMark size={26} />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight text-foreground">EDEN</p>
           <p className="text-[10px] text-primary">Research Intelligence</p>
@@ -401,22 +461,23 @@ function EdenChatDemo({
         </div>
       </div>
 
-      {/* Messages area */}
+      {/* Messages */}
       <div className="flex-1 relative min-h-0">
         <div
           ref={chatRef}
+          onScroll={handleScroll}
           role="log"
           aria-live="polite"
           aria-atomic="false"
           aria-label="EDEN conversation"
-          className="absolute inset-0 overflow-y-auto px-4 py-5 space-y-4"
+          className="eden-chat-scroll absolute inset-0 overflow-y-auto px-4 py-5 space-y-4"
           style={{ background: "hsl(var(--background))" }}
         >
           {messages.slice(0, visibleCount).map((msg, i) => (
             <div
               key={i}
               className={`flex gap-2.5 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
-              style={{ animation: reducedMotion ? undefined : "fade-up 0.32s ease-out forwards" }}
+              style={{ animation: reducedMotion ? undefined : "fade-up 0.38s ease-out forwards" }}
             >
               {msg.role === "eden" && <EdenAvatar size={26} />}
               <div className="flex flex-col gap-2 min-w-0" style={{ maxWidth: "88%" }}>
@@ -444,7 +505,7 @@ function EdenChatDemo({
                           color: "white",
                           borderRadius: "4px 16px 16px 16px",
                           boxShadow: "0 3px 12px hsl(var(--primary) / 0.3)",
-                          animation: reducedMotion ? undefined : "fade-up 0.32s ease-out forwards",
+                          animation: reducedMotion ? undefined : "fade-up 0.38s ease-out forwards",
                           textWrap: "pretty",
                         } as React.CSSProperties}
                       >
@@ -452,13 +513,13 @@ function EdenChatDemo({
                       </div>
                     )}
                     {msg.assetCards && doneSet.has(i) && (
-                      <div className="flex flex-col gap-1.5 mt-1">
-                        {msg.assetCards.slice(0, 2).map((asset, idx) => (
+                      <div className="flex flex-col gap-2 mt-0.5">
+                        {msg.assetCards.map((asset, idx) => (
                           <div
                             key={asset.id}
                             style={{
-                              animation: reducedMotion ? undefined : "fade-up 0.32s ease-out forwards",
-                              animationDelay: reducedMotion ? undefined : `${idx * 130}ms`,
+                              animation: reducedMotion ? undefined : "fade-up 0.38s ease-out forwards",
+                              animationDelay: reducedMotion ? undefined : `${idx * 200}ms`,
                               opacity: reducedMotion ? 1 : 0,
                             }}
                           >
@@ -472,81 +533,38 @@ function EdenChatDemo({
               </div>
             </div>
           ))}
-        </div>
 
-        {/* Scenario transition cover — overlays messages area only; header stays visible */}
-        {coverData && (
-          <div
-            className="absolute inset-0 z-10 flex flex-col"
-            style={{
-              background: "hsl(142 40% 7%)",
-              animation: reducedMotion ? undefined : "scenario-cover 3.5s linear forwards",
-              willChange: "opacity, transform",
-              pointerEvents: "none",
-            }}
-          >
-            <div style={{ height: 2, background: "hsl(142 65% 42%)", flexShrink: 0 }} />
-
-            <div className="flex-1 flex flex-col justify-center px-8 py-6 min-h-0">
-              <p
-                className="text-[9px] font-black uppercase mb-5"
-                style={{ color: "hsl(142 52% 42%)", letterSpacing: "0.22em" }}
-              >
-                {coverData.eyebrow}
-              </p>
-
+          {/* Typing indicator */}
+          {typingIdx !== null && (
+            <div
+              className="flex gap-2.5"
+              style={{ animation: reducedMotion ? undefined : "fade-up 0.3s ease-out forwards" }}
+            >
+              <EdenAvatar size={26} />
               <div
-                className="font-black tabular-nums leading-none mb-4 select-none"
+                className="px-4 py-3"
                 style={{
-                  fontSize: "clamp(56px, 18vw, 80px)",
-                  color: "hsl(142 30% 18%)",
-                  letterSpacing: "-0.04em",
-                  lineHeight: 0.88,
+                  background: "hsl(var(--primary))",
+                  borderRadius: "4px 16px 16px 16px",
+                  boxShadow: "0 3px 12px hsl(var(--primary) / 0.3)",
                 }}
               >
-                {coverData.number}
+                <div className="flex gap-1.5 items-center" style={{ height: 16 }}>
+                  {[0, 1, 2].map(d => (
+                    <span
+                      key={d}
+                      className="w-1.5 h-1.5 rounded-full"
+                      style={{
+                        background: "rgba(255,255,255,0.65)",
+                        animation: reducedMotion ? undefined : `typing-dot 1.1s ease-in-out ${d * 0.16}s infinite`,
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
-
-              <h3
-                className="font-bold leading-tight mb-3"
-                style={{
-                  fontSize: "clamp(17px, 2.1vw, 21px)",
-                  letterSpacing: "-0.025em",
-                  color: "hsl(142 15% 90%)",
-                  maxWidth: 280,
-                  textWrap: "pretty",
-                } as React.CSSProperties}
-              >
-                {coverData.title}
-              </h3>
-
-              <p
-                className="text-[12px] leading-relaxed"
-                style={{
-                  color: "hsl(142 18% 50%)",
-                  maxWidth: 260,
-                  textWrap: "pretty",
-                } as React.CSSProperties}
-              >
-                {coverData.desc}
-              </p>
             </div>
-
-            <div className="flex items-center gap-1.5 px-8 pb-6 flex-shrink-0">
-              {SCENARIO_COVERS.map((c) => (
-                <div
-                  key={c.idx}
-                  style={{
-                    height: 3,
-                    borderRadius: 2,
-                    background: c.idx === coverData.idx ? "hsl(142 65% 42%)" : "hsl(142 25% 15%)",
-                    flex: c.idx === coverData.idx ? 2 : 1,
-                  }}
-                />
-              ))}
-            </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
@@ -581,31 +599,7 @@ export default function HowItWorks() {
     description: "See how EDEN monitors 358 tech transfer offices, scores assets 0–100, and delivers structured intelligence to BD teams, researchers, and concept creators across four interconnected portals.",
   });
   const [, navigate] = useLocation();
-  const [activeScenario, setActiveScenario] = useState(0);
-  const [coverInfo, setCoverInfo] = useState<ScenarioCover | null>(null);
-  const coverAdvanceTidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const coverDismissTidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepsRef = useReveal();
-
-  useEffect(() => {
-    return () => {
-      if (coverAdvanceTidRef.current) clearTimeout(coverAdvanceTidRef.current);
-      if (coverDismissTidRef.current) clearTimeout(coverDismissTidRef.current);
-    };
-  }, []);
-
-  function handleScenarioComplete() {
-    const nextIdx = (activeScenario + 1) % DEMO_SCENARIOS.length;
-    setCoverInfo(SCENARIO_COVERS[nextIdx]);
-    coverAdvanceTidRef.current = setTimeout(() => {
-      setActiveScenario(nextIdx);
-    }, 2900);
-    coverDismissTidRef.current = setTimeout(() => {
-      setCoverInfo(null);
-    }, 3500);
-  }
-
-  const scenario = DEMO_SCENARIOS[activeScenario];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -632,11 +626,7 @@ export default function HowItWorks() {
             </h1>
 
             <div className="w-full max-w-xl">
-              <EdenChatDemo
-                messages={scenario.messages}
-                onComplete={handleScenarioComplete}
-                coverData={coverInfo}
-              />
+              <EdenChatDemo messages={FULL_CONVERSATION} />
             </div>
 
             <p

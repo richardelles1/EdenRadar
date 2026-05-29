@@ -125,6 +125,7 @@ async function parsePdf(pdfUrl: string, pdfToText: string): Promise<ScrapedListi
 
 export const dartmouthScraper: InstitutionScraper = {
   institution: INST,
+  scraperType: "manual",
 
   async scrape(): Promise<ScrapedListing[]> {
     const pdfToText = findPdfToText();

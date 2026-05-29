@@ -438,78 +438,174 @@ export const wsuScraper = createTechPublisherScraper(
   { selector: "a[href*='/techcase']", maxPg: 80 }
 );
 
-// University of Arizona uses Inteum + Algolia InstantSearch on arizona.technologypublisher.com
-// (public search-only key embedded in the site's own JS bundle).
-// Querying Algolia directly is cleaner than scraping the JS-rendered HTML.
+// University of Arizona — Algolia facet-based strategy.
+//
+// The search-only key is capped at 1000 records per query (/browse returns 403).
+// To capture the full corpus, we first query with facets discovery to get all
+// category values, then fire one paginated query per facet value. Each subset is
+// well under 1000 records, so we collect everything without a browser.
 export const arizonaScraper: InstitutionScraper = {
   institution: "University of Arizona",
   scraperType: "api",
+
   async scrape(): Promise<ScrapedListing[]> {
+    const INST = "University of Arizona";
     const APP_ID = "FXYPBJV847";
     const API_KEY = "dc5e756eb21643534a7780c3bc930540";
     const INDEX = "Prod_Inteum_TechnologyPublisher_arizona";
-    const PAGE_SIZE = 100;
-    const results: ScrapedListing[] = [];
-    let page = 0;
-    let nbPages = 1;
-    do {
-      const res = await fetch(
-        `https://${APP_ID}-dsn.algolia.net/1/indexes/${INDEX}/query`,
-        {
-          method: "POST",
-          headers: {
-            "X-Algolia-Application-Id": APP_ID,
-            "X-Algolia-API-Key": API_KEY,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ params: `hitsPerPage=${PAGE_SIZE}&page=${page}` }),
-        }
-      );
-      if (!res.ok) throw new Error(`Algolia ${res.status}`);
-      const data = await res.json() as {
-        hits: Array<{
-          title?: string;
-          descriptionTruncated?: string;
-          descriptionFull?: string;
-          Url?: string;
-          finalPathCategories?: string;
-          finalPathInventors?: string;
-          techID?: string;
-          disclosureDate?: string;
-        }>;
-        nbPages: number;
-      };
-      nbPages = data.nbPages;
-      for (const hit of data.hits) {
-        if (!hit.title) continue;
-        // Construct URL from title slug when Algolia omits hit.Url (older entries)
-        const url = hit.Url ?? `https://arizona.technologypublisher.com/tech/${hit.title.replace(/\s+/g, '_')}`;
-        const categories = hit.finalPathCategories
-          ? hit.finalPathCategories.split(",").map((c) => c.trim().split(" > ").pop() ?? c.trim())
-          : undefined;
-        const inventors = hit.finalPathInventors
-          ? hit.finalPathInventors.split(",").map((s) => s.trim()).filter(Boolean)
-          : undefined;
-        results.push({
-          title: hit.title,
-          description: hit.descriptionFull ?? hit.descriptionTruncated ?? "",
-          url,
-          institution: "University of Arizona",
-          technologyId: hit.techID,
-          categories,
-          inventors,
-          publishedDate: hit.disclosureDate,
-        });
-      }
-      page++;
-    } while (page < nbPages);
+    const BASE_URL = "https://arizona.technologypublisher.com";
+    const ALGOLIA_URL = `https://${APP_ID}-dsn.algolia.net/1/indexes/${INDEX}/query`;
 
-    // Depth-fetch: for listings without full descriptions, fetch individual listing pages
-    // and parse labeled content sections (Invention, Background, Applications, Advantages,
-    // Classifications) that Inteum TechnologyPublisher renders in the HTML.
+    type ArizonaHit = {
+      title?: string;
+      descriptionTruncated?: string;
+      descriptionFull?: string;
+      Url?: string;
+      finalPathCategories?: string | string[];
+      finalPathInventors?: string | string[];
+      techID?: string;
+      disclosureDate?: string;
+      objectID?: string;
+    };
+
+    const ATTRS = [
+      "title", "descriptionTruncated", "descriptionFull", "Url",
+      "finalPathCategories", "finalPathInventors", "techID", "disclosureDate",
+    ];
+
+    function hitToListing(hit: ArizonaHit): ScrapedListing | null {
+      if (!hit.title) return null;
+      const rawUrl = hit.Url ?? "";
+      const url = rawUrl.startsWith("http") ? rawUrl
+        : rawUrl.startsWith("/") ? `${BASE_URL}${rawUrl}`
+        : hit.techID ? `${BASE_URL}/tech/${hit.techID}` : "";
+      if (!url) return null;
+
+      const toArr = (v: string | string[] | undefined): string[] =>
+        Array.isArray(v) ? v : typeof v === "string" && v ? v.split(",") : [];
+
+      const categories = toArr(hit.finalPathCategories)
+        .map((c) => c.trim().split(" > ").pop() ?? c.trim())
+        .filter(Boolean);
+      const inventors = toArr(hit.finalPathInventors)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      return {
+        title: hit.title,
+        description: hit.descriptionFull ?? hit.descriptionTruncated ?? "",
+        url,
+        institution: INST,
+        technologyId: hit.techID,
+        categories: categories.length ? categories : undefined,
+        inventors: inventors.length ? inventors : undefined,
+        publishedDate: hit.disclosureDate,
+      };
+    }
+
+    async function algoliaQuery(body: object): Promise<{
+      hits: ArizonaHit[];
+      nbPages: number;
+      nbHits: number;
+      facets?: Record<string, Record<string, number>>;
+    }> {
+      const res = await fetch(ALGOLIA_URL, {
+        method: "POST",
+        headers: {
+          "X-Algolia-Application-Id": APP_ID,
+          "X-Algolia-API-Key": API_KEY,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw new Error(`Algolia ${res.status}`);
+      return res.json();
+    }
+
+    const allHits = new Map<string, ArizonaHit>();
+
+    function ingest(hits: ArizonaHit[]): number {
+      let added = 0;
+      for (const hit of hits) {
+        const key = hit.techID ?? hit.objectID ?? hit.title;
+        if (!key || allHits.has(key)) continue;
+        allHits.set(key, hit);
+        added++;
+      }
+      return added;
+    }
+
+    try {
+      // Step 1: baseline + facet discovery in one query.
+      // "Technology Classifications.lvl0" is the configured facet (14 top-level
+      // categories, max 496 records each — all under the 1000 cap).
+      const FACET_ATTRS = ["Technology Classifications.lvl0"];
+      const discovery = await algoliaQuery({
+        query: "",
+        facets: FACET_ATTRS,
+        hitsPerPage: 1000,
+        page: 0,
+        attributesToRetrieve: ATTRS,
+      });
+      ingest(discovery.hits);
+      console.log(`[scraper] ${INST}: baseline ${allHits.size} of ${discovery.nbHits} total`);
+
+      if (discovery.nbHits > allHits.size) {
+        // Step 2: iterate each facet value to capture records beyond the 1000-cap
+        const facetsData = discovery.facets ?? {};
+
+        for (const attr of FACET_ATTRS) {
+          const values = Object.entries(facetsData[attr] ?? {});
+          if (values.length === 0) continue;
+          console.log(`[scraper] ${INST}: ${attr} — ${values.length} filter values`);
+
+          for (const [value] of values) {
+            let page = 0, totalPages = 1;
+            while (page < totalPages && page < 20) {
+              const r = await algoliaQuery({
+                query: "",
+                facetFilters: [[`${attr}:${value}`]],
+                hitsPerPage: 1000,
+                page,
+                attributesToRetrieve: ATTRS,
+              });
+              totalPages = Math.min(r.nbPages, 20);
+              const added = ingest(r.hits);
+              if (added > 0) {
+                console.log(`[scraper] ${INST}: ${attr}="${value}" p${page} +${added} (total ${allHits.size})`);
+              }
+              if (r.hits.length === 0) break;
+              page++;
+            }
+          }
+        }
+      }
+
+      if (allHits.size === 0 && discovery.nbHits > 0) {
+        console.warn(`[scraper] ${INST}: facet strategy returned 0 — retrying without facets`);
+        let p = 0, nbPages = 1;
+        do {
+          const r = await algoliaQuery({ query: "", hitsPerPage: 1000, page: p, attributesToRetrieve: ATTRS });
+          nbPages = r.nbPages;
+          ingest(r.hits);
+          if (r.hits.length === 0) break;
+          p++;
+        } while (p < nbPages && p < 10);
+      }
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+    }
+
+    const results: ScrapedListing[] = [];
+    for (const hit of allHits.values()) {
+      const listing = hitToListing(hit);
+      if (listing) results.push(listing);
+    }
+
+    // Depth-fetch for thin descriptions
     const DEPTH_THRESHOLD = 300;
     const DEPTH_CONCURRENCY = 5;
-    // Section labels to extract, in priority order (Inteum TP standard headings)
     const SECTION_LABELS = [
       "Invention", "Background", "Application", "Advantage",
       "Classification", "Description", "Overview", "Abstract",
@@ -530,11 +626,8 @@ export const arizonaScraper: InstitutionScraper = {
             });
             if (!pr.ok) continue;
             const html = await pr.text();
-
-            // Try extracting labeled content sections first (primary approach)
             const sectionParts: string[] = [];
             for (const label of SECTION_LABELS) {
-              // Match heading with label, then capture text content of the next block
               const re = new RegExp(
                 `<(?:h[2-6]|strong|b|dt)[^>]*>[^<]*${label}[^<]*<\\/(?:h[2-6]|strong|b|dt)>\\s*(?:<[^>]*>\\s*)*([^<]{30,})`,
                 "i"
@@ -545,7 +638,6 @@ export const arizonaScraper: InstitutionScraper = {
                 if (text.length >= 30) sectionParts.push(`${label}: ${text}`);
               }
             }
-
             if (sectionParts.length > 0) {
               const combined = sectionParts.join(" | ");
               if (combined.length > (item.r.description ?? "").length) {
@@ -553,8 +645,6 @@ export const arizonaScraper: InstitutionScraper = {
                 continue;
               }
             }
-
-            // Fallback: meta description tag
             const metaMatch =
               html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{50,})["']/i) ??
               html.match(/<meta[^>]+content=["']([^"']{50,})["'][^>]+name=["']description["']/i);
@@ -567,12 +657,10 @@ export const arizonaScraper: InstitutionScraper = {
       await Promise.allSettled(
         Array.from({ length: Math.min(DEPTH_CONCURRENCY, needsDepth.length) }, depthWorker)
       );
-      const enrichedCount = needsDepth.filter(({ i }) => (results[i]?.description?.length ?? 0) >= 50).length;
-      console.log(`[scraper] University of Arizona: detail fetch complete: ${enrichedCount} of ${needsDepth.length} enriched`);
-      const sample = results.find(l => (l.description?.length ?? 0) > 200);
-      if (sample) console.log(`[scraper] University of Arizona: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
+      console.log(`[scraper] ${INST}: depth fetch complete — ${needsDepth.length} thin listings processed`);
     }
 
+    console.log(`[scraper] ${INST}: ${results.length} listings`);
     return results;
   },
 };
@@ -1471,7 +1559,7 @@ export const uspScraper = createTechPublisherScraper("usp", "Inova USP (Universi
 export const oxfordScraper = createStubScraper("University of Oxford");
 // imperialScraper — real in-part "imperial" implementation is in Batch E section (end of file)
 export const uclScraper = createStubScraper("University College London");
-export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
+export const manchesterScraper: InstitutionScraper = { ...createInPartScraper("manchester", "University of Manchester"), scraperType: "manual" };
 // University of Edinburgh — handled by edinburghInnovationsScraper (line ~4731) which is
 // registered in ALL_SCRAPERS. Re-probed 2026-04-21: site now returns HTTP 200 (was HTTP 000);
 // pagination fixed in edinburghInnovationsScraper to use /p2, /p3, /p4 pattern.
@@ -1538,7 +1626,7 @@ export const ljubljanaScraper = createInPartScraper("ljubljana", "University of 
 // ── International: Canada ────────────────────────────────────────────────
 export const utorontoScraper = createInPartScraper("toronto", "University of Toronto");
 export const westernScraper = createInPartScraper("western", "Western University");
-export const queensuScraper = createInPartScraper("queensu", "Queen's University");
+export const queensuScraper: InstitutionScraper = { ...createInPartScraper("queensu", "Queen's University"), scraperType: "manual" };
 export const ualbertaScraper = createInPartScraper("ualberta", "University of Alberta");
 export const ubcScraper = createInPartScraper("ubc", "University of British Columbia");
 export const umanitobaScraper = createInPartScraper("manitoba", "University of Manitoba");

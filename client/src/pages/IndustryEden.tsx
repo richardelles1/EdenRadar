@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, Zap, Mic, MicOff, ChevronRight, PanelLeft, Plus, FlaskConical, FileSearch, Library, Database } from "lucide-react";
 import { EdenAvatar, EdenOrb, EdenIntro, getPersonalizedCards, getSearchLabel } from "@/components/EdenOrb";
 import { EdenChatThread } from "@/components/EdenChatThread";
-import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type StreamingStage, type ActiveSource, type ExternalResult } from "@/hooks/useEdenChat";
+import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type StreamingStage, type ActiveSource, type ExternalResult, type AlertOfferConfig } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { getIndustryProfile } from "@/hooks/use-industry";
@@ -232,6 +232,20 @@ export default function IndustryEden() {
 
   const lastAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant" && !m.isStreaming);
   const activeSource: ActiveSource = lastAssistantMsg?.activeSource ?? "tto";
+
+  async function handleCreateAlert(config: AlertOfferConfig): Promise<void> {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch("/api/alerts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify(config),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({ error: "Failed" }));
+      throw new Error(d.error || "Failed to create alert");
+    }
+    toast({ title: "Alert created", description: `You'll be notified of new matches for "${config.name}"`, duration: 3000 });
+  }
 
   async function handleBookmark(result: ExternalResult) {
     if (bookmarkedIds.has(result.id)) return;
@@ -539,6 +553,7 @@ export default function IndustryEden() {
                 onBookmark={handleBookmark}
                 onSend={handleSend}
                 onToggleCitations={(i, open) => setExpandedCitations((prev) => ({ ...prev, [i]: open }))}
+                onCreateAlert={handleCreateAlert}
                 compact={false}
                 chatEndRef={chatEndRef as React.RefObject<HTMLDivElement>}
               />
