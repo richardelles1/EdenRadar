@@ -1,4 +1,4 @@
-import { Fragment, useState, useEffect } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
@@ -163,6 +163,34 @@ function buildDrawerParams(ctx: DrawerContext, pageOffset: number, range?: Range
   return p.toString();
 }
 
+// ── useCountUp ────────────────────────────────────────────────────────────────
+
+function useCountUp(target: number, duration = 700): number {
+  const [val, setVal] = useState(0);
+  const frameRef = useRef<number>(0);
+  const fromRef = useRef<number>(0);
+
+  useEffect(() => {
+    cancelAnimationFrame(frameRef.current);
+    if (!target) { fromRef.current = 0; setVal(0); return; }
+    const from = fromRef.current;
+    const start = performance.now();
+    const run = (now: number) => {
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 4);
+      const next = Math.round(from + eased * (target - from));
+      fromRef.current = next;
+      setVal(next);
+      if (t < 1) frameRef.current = requestAnimationFrame(run);
+      else fromRef.current = target;
+    };
+    frameRef.current = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(frameRef.current);
+  }, [target, duration]);
+
+  return val;
+}
+
 // ── EmptyState ────────────────────────────────────────────────────────────────
 
 function EmptyState({ message }: { message: string }) {
@@ -219,7 +247,7 @@ function StageFunnelPanel({ data }: { data: StageFunnelEntry[] }) {
     <TooltipProvider delayDuration={300}>
       <div className="flex flex-col h-full">
         <div className="flex-1 space-y-2.5">
-          {ordered.map((entry) => {
+          {ordered.map((entry, i) => {
             const pct = total > 0 ? Math.round((entry.count / total) * 100) : 0;
             const barWidth = Math.max(4, Math.sqrt(entry.count / maxCount) * 100);
             const color = STAGE_COLORS[entry.stage] ?? ACCENT;
@@ -242,8 +270,12 @@ function StageFunnelPanel({ data }: { data: StageFunnelEntry[] }) {
                 </div>
                 <div className="flex-1 min-w-0 h-7 rounded-md overflow-hidden" style={{ background: "hsl(var(--muted) / 0.25)" }}>
                   <div
-                    className="h-full rounded-md flex items-center px-2.5 transition-all duration-700"
-                    style={{ width: `${barWidth}%`, background: color, minWidth: 50 }}
+                    className="h-full rounded-md flex items-center px-2.5"
+                    style={{
+                      width: `${barWidth}%`, background: color, minWidth: 50,
+                      animation: `bar-reveal 650ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 60}ms both`,
+                      transition: "width 500ms cubic-bezier(0.16, 1, 0.3, 1)",
+                    }}
                   >
                     <span className="text-[10px] font-bold text-white/90 tabular-nums">
                       {entry.count.toLocaleString()}
@@ -688,13 +720,16 @@ function WeeklyVelocityPanel({ data, totalIndexed, onBarClick, setTooltip }: {
             return (
               <div
                 key={entry.week}
-                className="flex-1 min-w-0 rounded-t-md transition-all duration-150"
+                className="flex-1 min-w-0 rounded-t-md"
                 style={{
                   height: `${h}px`,
                   background: "linear-gradient(to bottom, hsl(142 71% 52%), hsl(142 71% 36%))",
                   opacity,
                   cursor: entry.count > 0 ? "pointer" : "default",
                   minHeight: entry.count > 0 ? "8px" : "0px",
+                  transformOrigin: "bottom center",
+                  animation: entry.count > 0 ? `bar-grow-y 500ms cubic-bezier(0.16, 1, 0.3, 1) ${i * 12}ms both` : undefined,
+                  transition: "height 150ms ease-out, opacity 150ms ease-out",
                 }}
                 onMouseEnter={(e) => {
                   const pos = calcTooltipPos(e);
@@ -929,6 +964,9 @@ export default function MarketIntelligence() {
   const risingCount = data?.risingAssets?.filter((a) => a.momentumScore >= 40).length ?? 0;
   const topBiology = data?.biologyLandscape?.[0]?.biology ?? null;
 
+  const animatedTotal = useCountUp(data?.totalAssetsIndexed ?? 0);
+  const animatedRising = useCountUp(risingCount);
+
   return (
     <div className="min-h-screen" style={{ background: "hsl(var(--background))" }}>
       <style>{`
@@ -940,10 +978,25 @@ export default function MarketIntelligence() {
           from { transform: translateX(100%); }
           to   { transform: translateX(0); }
         }
+        @keyframes bar-reveal {
+          from { clip-path: inset(0 100% 0 0); }
+          to   { clip-path: inset(0 0% 0 0); }
+        }
+        @keyframes bar-grow-y {
+          from { transform: scaleY(0); }
+          to   { transform: scaleY(1); }
+        }
+        @keyframes live-pulse {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.45; }
+        }
         .intel-scroll::-webkit-scrollbar { width: 3px; }
         .intel-scroll::-webkit-scrollbar-track { background: transparent; }
         .intel-scroll::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 9999px; }
         .intel-scroll::-webkit-scrollbar-thumb:hover { background: hsl(var(--muted-foreground) / 0.35); }
+        @media (prefers-reduced-motion: reduce) {
+          * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+        }
       `}</style>
 
       {tooltip && (
@@ -978,7 +1031,7 @@ export default function MarketIntelligence() {
                 <div className="flex items-center gap-2">
                   <h1 className="text-2xl font-bold text-foreground tracking-tight">Landscape Intelligence</h1>
                   <span className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                    style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}>
+                    style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT, animation: "live-pulse 2.5s ease-in-out infinite" }}>
                     Live
                   </span>
                 </div>
@@ -994,14 +1047,14 @@ export default function MarketIntelligence() {
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
                     style={{ background: ACCENT_FAINT, border: "1px solid hsl(142 71% 45% / 0.15)" }}>
-                    <span className="font-black tabular-nums text-foreground">{data.totalAssetsIndexed.toLocaleString()}</span>
+                    <span className="font-black tabular-nums text-foreground">{animatedTotal.toLocaleString()}</span>
                     <span className="text-muted-foreground">indexed</span>
                   </div>
                   {risingCount > 0 && (
                     <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs"
                       style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}>
                       <Zap className="w-3 h-3" style={{ color: ACCENT }} />
-                      <span className="font-black tabular-nums text-foreground">{risingCount}</span>
+                      <span className="font-black tabular-nums text-foreground">{animatedRising}</span>
                       <span className="text-muted-foreground">rising</span>
                     </div>
                   )}
