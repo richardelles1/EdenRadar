@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -96,6 +96,34 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   },
 ];
 
+interface ScenarioCover {
+  number: string;
+  eyebrow: string;
+  title: string;
+  desc: string;
+}
+
+const SCENARIO_COVERS: ScenarioCover[] = [
+  {
+    number: "01",
+    eyebrow: "Institution Focus",
+    title: "Oncology pipeline at Hopkins.",
+    desc: "What's worth a look when you know where to start.",
+  },
+  {
+    number: "02",
+    eyebrow: "Cross-TTO Discovery",
+    title: "Preclinical CNS across 22 institutions.",
+    desc: "Surfacing the strongest programs before your window closes.",
+  },
+  {
+    number: "03",
+    eyebrow: "Modality Filter",
+    title: "ADC platforms open for exclusive licensing.",
+    desc: "Finding what fits your deal structure, not just your science.",
+  },
+];
+
 /* ─── EDEN Intro ─────────────────────────────────────────────── */
 
 function EdenIntro({ onDone }: { onDone: () => void }) {
@@ -129,9 +157,6 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
           0%   { opacity: 0.55; transform: translate(-50%,-50%) scale(1); }
           100% { opacity: 0;    transform: translate(-50%,-50%) scale(2.4); }
         }
-        @keyframes eden-pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
-        @keyframes fade-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes scan-slide { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
       `}</style>
 
       <div className="relative flex items-center justify-center" style={{ width: 64, height: 64 }}>
@@ -183,39 +208,6 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
         Engine for Discovery &amp; Emerging Networks
       </p>
     </div>
-  );
-}
-
-/* ─── Streaming Text ─────────────────────────────────────────── */
-
-function StreamingText({ text, speed = 55, onDone, cursorColor = "hsl(142 52% 36%)" }: { text: string; speed?: number; onDone?: () => void; cursorColor?: string }) {
-  const [count, setCount] = useState(0);
-  const onDoneRef = useRef(onDone);
-  onDoneRef.current = onDone;
-
-  useEffect(() => {
-    setCount(0);
-    if (!text) return;
-    let i = 0;
-    const ms = Math.round(1000 / speed);
-    const iv = setInterval(() => {
-      i++;
-      setCount(i);
-      if (i >= text.length) { clearInterval(iv); onDoneRef.current?.(); }
-    }, ms);
-    return () => clearInterval(iv);
-  }, [text, speed]);
-
-  return (
-    <>
-      {text.slice(0, count)}
-      {count < text.length && (
-        <span
-          className="inline-block ml-px align-middle"
-          style={{ width: 2, height: "0.85em", background: cursorColor, animation: "eden-pulse 0.7s ease-in-out infinite" }}
-        />
-      )}
-    </>
   );
 }
 
@@ -291,7 +283,6 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
   const [phase, setPhase] = useState<"intro" | "chat">("intro");
   const [visibleCount, setVisibleCount] = useState(0);
   const [scanningIdx, setScanningIdx] = useState<number | null>(null);
-  const [streamingIdx, setStreamingIdx] = useState<number | null>(null);
   const [doneSet, setDoneSet] = useState<Set<number>>(new Set());
   const chatRef = useRef<HTMLDivElement>(null);
   const tids = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -306,7 +297,6 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
     tids.current = [];
     setVisibleCount(0);
     setScanningIdx(null);
-    setStreamingIdx(null);
     setDoneSet(new Set());
   }, [messages]);
 
@@ -324,7 +314,11 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
           } else if (msg.scanning) {
             setScanningIdx(i);
           } else {
-            setStreamingIdx(i);
+            setDoneSet((prev) => new Set(prev).add(i));
+            if (i === messages.length - 1) {
+              const t2 = setTimeout(() => onComplete?.(), 2500);
+              tids.current.push(t2);
+            }
           }
         }
       }, msg.delay);
@@ -335,12 +329,6 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
 
   function handleScanDone(idx: number) {
     setScanningIdx(null);
-    setStreamingIdx(idx);
-    scrollBottom();
-  }
-
-  function handleStreamDone(idx: number) {
-    setStreamingIdx(null);
     setDoneSet((prev) => new Set(prev).add(idx));
     scrollBottom();
     if (idx === messages.length - 1) {
@@ -358,6 +346,18 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
         boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
       }}
     >
+      <style>{`
+        @keyframes eden-pulse { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
+        @keyframes fade-up { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes scan-slide { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
+        @keyframes scenario-cover {
+          0%   { opacity: 0; transform: translateY(14px); }
+          14%  { opacity: 1; transform: translateY(0); }
+          78%  { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-10px); }
+        }
+      `}</style>
+
       {phase === "intro" && <EdenIntro onDone={() => setPhase("chat")} />}
 
       {/* Header */}
@@ -392,32 +392,33 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
             <div className="flex flex-col gap-2 min-w-0" style={{ maxWidth: "88%" }}>
               {msg.role === "user" ? (
                 <div
-                  className="px-4 py-2.5 text-[12px] leading-relaxed font-medium"
+                  className="px-4 py-2.5 text-[12px] leading-relaxed font-medium text-left"
                   style={{
                     background: "hsl(33 85% 44%)",
                     color: "white",
                     borderRadius: "16px 16px 4px 16px",
                     boxShadow: "0 3px 12px hsl(33 85% 44% / 0.28)",
-                  }}
+                    textWrap: "pretty",
+                  } as React.CSSProperties}
                 >
                   {msg.text}
                 </div>
               ) : (
                 <>
                   {scanningIdx === i && <ScanningAnimation onDone={() => handleScanDone(i)} />}
-                  {(streamingIdx === i || doneSet.has(i)) && (
+                  {doneSet.has(i) && (
                     <div
-                      className="px-4 py-2.5 text-[12px] leading-relaxed"
+                      className="px-4 py-2.5 text-[12px] leading-relaxed text-left"
                       style={{
                         background: "hsl(142 52% 36%)",
                         color: "white",
                         borderRadius: "4px 16px 16px 16px",
                         boxShadow: "0 3px 12px hsl(142 52% 36% / 0.3)",
-                      }}
+                        animation: "fade-up 0.3s ease-out forwards",
+                        textWrap: "pretty",
+                      } as React.CSSProperties}
                     >
-                      {doneSet.has(i) ? msg.text : (
-                        <StreamingText text={msg.text} speed={85} onDone={() => handleStreamDone(i)} cursorColor="rgba(255,255,255,0.7)" />
-                      )}
+                      {msg.text}
                     </div>
                   )}
                   {msg.assetCards && doneSet.has(i) && (
@@ -438,9 +439,6 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
     </div>
   );
 }
-
-/* ─── Portal Feature Lists ───────────────────────────────────── */
-
 
 /* ─── How It Works Steps ─────────────────────────────────────── */
 
@@ -472,10 +470,21 @@ export default function HowItWorks() {
   });
   const [, navigate] = useLocation();
   const [activeScenario, setActiveScenario] = useState(0);
+  const [coverInfo, setCoverInfo] = useState<ScenarioCover | null>(null);
+  const coverTidRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stepsRef = useReveal();
 
+  useEffect(() => {
+    return () => { if (coverTidRef.current) clearTimeout(coverTidRef.current); };
+  }, []);
+
   function handleScenarioComplete() {
-    setActiveScenario((prev) => (prev + 1) % DEMO_SCENARIOS.length);
+    const nextIdx = (activeScenario + 1) % DEMO_SCENARIOS.length;
+    setCoverInfo(SCENARIO_COVERS[nextIdx]);
+    coverTidRef.current = setTimeout(() => {
+      setCoverInfo(null);
+      setActiveScenario(nextIdx);
+    }, 2200);
   }
 
   const scenario = DEMO_SCENARIOS[activeScenario];
@@ -491,11 +500,11 @@ export default function HowItWorks() {
           <RadarBackground />
 
           <div
-            className="relative z-10 flex flex-col items-center justify-center text-center px-4 sm:px-6"
+            className="relative z-10 flex flex-col items-center justify-center px-4 sm:px-6"
             style={{ minHeight: "92vh", paddingTop: "7rem", paddingBottom: "5rem" }}
           >
             <h1
-              className="font-black leading-[1.06] tracking-tight mb-10 max-w-2xl text-foreground"
+              className="font-black leading-[1.06] tracking-tight mb-10 max-w-2xl text-foreground text-center"
               style={{ fontSize: "clamp(2.4rem, 5vw, 3.75rem)" }}
             >
               Most licensing deals are{" "}
@@ -505,8 +514,64 @@ export default function HowItWorks() {
             </h1>
 
             {/* Chat demo — center stage */}
-            <div className="w-full max-w-xl mb-10">
+            <div className="w-full max-w-xl relative">
               <EdenChatDemo messages={scenario.messages} onComplete={handleScenarioComplete} />
+
+              {/* Scenario transition cover */}
+              {coverInfo && (
+                <div
+                  className="absolute inset-0 z-30 rounded-2xl flex flex-col items-center justify-center gap-5 px-10"
+                  style={{
+                    background: "white",
+                    animation: "scenario-cover 2.2s cubic-bezier(0.4,0,0.2,1) forwards",
+                    boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07)",
+                    pointerEvents: "none",
+                  }}
+                >
+                  <p
+                    className="text-[10px] font-black uppercase tracking-[0.18em]"
+                    style={{ color: "hsl(142 52% 36%)" }}
+                  >
+                    {coverInfo.eyebrow}
+                  </p>
+                  <div className="text-center">
+                    <span
+                      className="font-black tabular-nums block mb-3"
+                      style={{ fontSize: 56, color: "hsl(220 13% 91%)", lineHeight: 1, letterSpacing: "-0.04em" }}
+                    >
+                      {coverInfo.number}
+                    </span>
+                    <h3
+                      className="font-bold text-foreground leading-snug mb-2"
+                      style={{ fontSize: "clamp(18px, 2.2vw, 22px)", letterSpacing: "-0.02em" }}
+                    >
+                      {coverInfo.title}
+                    </h3>
+                    <p className="text-[13px] leading-relaxed" style={{ color: "hsl(220 10% 52%)", maxWidth: 260, margin: "0 auto" }}>
+                      {coverInfo.desc}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Subheader bridge */}
+            <div className="flex items-center justify-center gap-8 sm:gap-12 mt-8 mb-8 flex-wrap">
+              {[
+                { stat: "358", label: "TTOs monitored" },
+                { stat: "0–100", label: "EDEN scoring" },
+                { stat: "Real-time", label: "BD alerts" },
+              ].map(({ stat, label }, i) => (
+                <React.Fragment key={label}>
+                  {i > 0 && (
+                    <span className="hidden sm:block w-px h-6" style={{ background: "hsl(220 13% 88%)" }} />
+                  )}
+                  <div className="text-center">
+                    <p className="text-sm font-black text-foreground tracking-tight">{stat}</p>
+                    <p className="text-[11px] mt-0.5" style={{ color: "hsl(220 10% 52%)" }}>{label}</p>
+                  </div>
+                </React.Fragment>
+              ))}
             </div>
 
             <Button
