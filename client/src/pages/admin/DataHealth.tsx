@@ -324,12 +324,18 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
 
   const rawCount = session?.rawCount ?? 0;
   const currentInDb = liveInDb ?? session?.currentIndexed ?? 0;
+  const lastSuccessRawCount = statusData?.lastSuccessRawCount ?? null;
   // zeroGuard fires only when the session has an error message (HTTP error, block, rate-limit)
   // OR when the DB is empty — meaning the scraper genuinely couldn't collect anything.
   // A clean enriched+0 with no error message and existing DB rows means "index is current."
   const zeroGuard = isEnriched && rawCount === 0 && (!!session?.errorMessage || currentInDb === 0);
   const upToDate = isEnriched && rawCount === 0 && !session?.errorMessage && currentInDb > 0;
-  const softWarning = isEnriched && currentInDb > 0 && rawCount > 0 && rawCount < currentInDb * 0.5;
+  // Compare this run's raw count against the previous successful run, not the DB total.
+  // DB total grows indefinitely as assets accumulate; lastSuccessRawCount reflects what
+  // the portal actually had last time. A >50% drop from the prior run signals a real regression.
+  const softWarning = isEnriched && rawCount > 0
+    && lastSuccessRawCount != null && lastSuccessRawCount > 0
+    && rawCount < lastSuccessRawCount * 0.5;
 
   const phaseLabel = syncForThisInst && session?.status !== "running" ? "Starting sync..."
     : session?.phase === "scraping" ? "Collecting..."
@@ -566,9 +572,9 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                 <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="sync-soft-warning">
                   <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below expected count</p>
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below prior run</p>
                     <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                      Collected {rawCount} results but {currentInDb} are currently in DB. This is below 50% of the expected count; the collector may only be returning partial results.
+                      Collected {rawCount} results vs {lastSuccessRawCount} last time (more than 50% drop). The collector may be returning partial results or the site may be rate-limiting.
                     </p>
                   </div>
                 </div>

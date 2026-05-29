@@ -163,6 +163,7 @@ interface SyncSessionData {
 interface SyncStatusResponse {
   found: boolean;
   session?: SyncSessionData;
+  lastSuccessRawCount?: number | null;
   newEntries?: Array<{
     assetName: string;
     sourceUrl: string | null;
