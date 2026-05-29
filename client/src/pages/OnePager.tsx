@@ -190,8 +190,8 @@ export default function OnePager() {
         .op-hero-kicker {
           position: relative;
           font-size: 13px;
-          font-weight: 500;
-          color: hsl(142 52% 36%);
+          font-weight: 600;
+          color: hsl(33 85% 40%);
           margin-bottom: 14px;
           letter-spacing: 0.01em;
         }
@@ -267,7 +267,8 @@ export default function OnePager() {
         }
 
         .op-cov-cell {
-          padding: 20px 26px;
+          padding: 20px 16px;
+          text-align: center;
         }
 
         .op-cov-num {
@@ -298,63 +299,6 @@ export default function OnePager() {
           font-size: 10.5px;
           color: hsl(142 18% 58%);
           line-height: 1.55;
-        }
-
-        /* ── EdenMarket ────────────────────────────────────────────── */
-        .op-market {
-          background: hsl(210 25% 97%);
-          border-bottom: 1px solid hsl(142 28% 89%);
-          display: grid;
-          grid-template-columns: 152px 1fr;
-        }
-
-        .op-market-left {
-          padding: 20px 22px;
-          background: hsl(142 20% 95%);
-          border-right: 1px solid hsl(142 28% 89%);
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-        }
-
-        .op-market-eyebrow {
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.18em;
-          text-transform: uppercase;
-          color: hsl(142 52% 36%);
-          margin-bottom: 5px;
-        }
-
-        .op-market-name {
-          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
-          font-size: 15px;
-          font-weight: 700;
-          color: hsl(222 47% 12%);
-          letter-spacing: -0.01em;
-          line-height: 1.1;
-        }
-
-        .op-market-right {
-          padding: 20px 24px;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px 28px;
-        }
-
-        .op-market-item-label {
-          font-size: 9px;
-          font-weight: 700;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: hsl(215 20% 48%);
-          margin-bottom: 4px;
-        }
-
-        .op-market-item-body {
-          font-size: 11.5px;
-          line-height: 1.62;
-          color: hsl(222 25% 34%);
         }
 
         /* ── Pricing ───────────────────────────────────────────────── */
@@ -506,9 +450,6 @@ export default function OnePager() {
           .op-cov { grid-template-columns: 1fr 1fr; }
           .op-cov-divider { display: none; }
           .op-cov-cell { padding: 16px 20px; }
-          .op-market { grid-template-columns: 1fr; }
-          .op-market-left { border-right: none; border-bottom: 1px solid hsl(210 20% 90%); padding: 14px 20px; }
-          .op-market-right { grid-template-columns: 1fr; padding: 16px 20px; }
           .op-pricing { padding: 18px 20px; }
           .op-pricing-table { grid-template-columns: 1fr; }
           .op-ft { padding: 20px 20px; flex-direction: column; align-items: flex-start; gap: 16px; }
@@ -528,12 +469,6 @@ export default function OnePager() {
             box-shadow: none !important;
           }
           .op-cov { grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr !important; }
-          .op-market { grid-template-columns: 152px 1fr !important; }
-          .op-market-left {
-            border-right: 1px solid hsl(210 20% 90%) !important;
-            border-bottom: none !important;
-          }
-          .op-market-right { grid-template-columns: 1fr 1fr !important; }
           .op-pricing-table { grid-template-columns: 1fr 1fr 1fr !important; }
           .op-hd-right { display: flex !important; }
         }
@@ -608,7 +543,7 @@ export default function OnePager() {
             <div className="op-section">
               <div className="op-sec-num">01</div>
               <div>
-                <h2 className="op-sec-hed">Search 350+ TTO portals and 39 live APIs, scored against your deal profile.</h2>
+                <h2 className="op-sec-hed">Monitor 350+ tech transfer offices in real time, scored against your deal profile.</h2>
                 <p className="op-sec-body">
                   A single query scans <strong>350+ technology transfer office portals</strong> for pre-commercial,
                   pre-patent assets alongside <strong>active clinical trial registries</strong>,{" "}
@@ -690,44 +625,17 @@ export default function OnePager() {
             </div>
             <div className="op-cov-divider" />
             <div className="op-cov-cell">
-              <span className="op-cov-num emerald">500K+</span>
-              <span className="op-cov-label">Clinical Trials</span>
-              <span className="op-cov-ex">
-                ClinicalTrials.gov &middot; WHO ICTRP &middot; EU Clinical Trials Register
-              </span>
+              <span className="op-cov-num emerald">12</span>
+              <span className="op-cov-label">Data Intelligence Layers</span>
+              <span className="op-cov-ex">Per asset &middot; Structured &middot; AI-synthesised</span>
             </div>
             <div className="op-cov-divider" />
             <div className="op-cov-cell">
-              <span className="op-cov-num emerald">39</span>
-              <span className="op-cov-label">Live APIs</span>
+              <span className="op-cov-num emerald">40+</span>
+              <span className="op-cov-label">Live Data Sources</span>
               <span className="op-cov-ex">
-                PubMed &middot; bioRxiv &middot; USPTO &middot; NIH Reporter &middot; OpenAlex &middot; more
+                Patents &middot; Clinical Trials &middot; Research
               </span>
-            </div>
-          </div>
-
-          {/* EDENMARKET */}
-          <div className="op-market">
-            <div className="op-market-left">
-              <div className="op-market-eyebrow">Also included</div>
-              <div className="op-market-name">EdenMarket</div>
-            </div>
-            <div className="op-market-right">
-              <div>
-                <div className="op-market-item-label">Buyers</div>
-                <div className="op-market-item-body">
-                  Browse blind biotech listings: therapeutic area, modality, stage, and IP profile visible;
-                  seller identity revealed only after NDA. Org-wide access at $1,000/mo.
-                </div>
-              </div>
-              <div>
-                <div className="op-market-item-label">Sellers</div>
-                <div className="op-market-item-body">
-                  Free to list. Success fees only when a deal closes (pre-clin $10k, clinical $30k,
-                  late-stage $50k); our incentives stay aligned with yours from first listing
-                  to signed term sheet.
-                </div>
-              </div>
             </div>
           </div>
 
