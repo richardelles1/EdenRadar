@@ -40,9 +40,10 @@ type AlertOfferConfig = {
   name: string; criteriaType: "custom";
   query?: string | null; modalities?: string[] | null;
   stages?: string[] | null; institutions?: string[] | null;
+  cadence?: "daily" | "weekly";
 };
 type ActionOffer =
-  | { type: "save"; assets: ActionOfferAsset[] }
+  | { type: "save"; assets: ActionOfferAsset[]; targetPipelineName?: string }
   | { type: "alert"; label: string; config: AlertOfferConfig };
 
 // Intent patterns for save and alert offer detection.
@@ -77,6 +78,60 @@ const ALERT_PATTERNS: RegExp[] = [
   /\bnew (assets|technologies|deals|listings) (from|at|like)\b/,
 ];
 
+const PIPELINE_NAME_PATTERNS: RegExp[] = [
+  /\b(?:save|add) (?:it|this|these|them) to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\b(?:put|move) (?:it|this|these|them) (?:in|into) (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\badd to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\bsave to (?:my |our |the )?(.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+  /\bmy (.+?) (?:pipeline|list|portfolio|watchlist)\b/i,
+];
+
+const ALERT_NAME_PATTERNS: Array<[RegExp, number]> = [
+  [/\bwatch (?:for|out for) (.+)/i, 1],
+  [/\blet me know (?:when|if|about|of) (.+)/i, 1],
+  [/\balert me (?:when|if|about) (.+)/i, 1],
+  [/\bnotify me (?:when|if|about) (.+)/i, 1],
+  [/\bkeep me (?:posted|updated|informed) (?:on|about) (.+)/i, 1],
+  [/\bstay (?:updated|informed) (?:on|about) (.+)/i, 1],
+  [/\bmore (.+?) from\b/i, 1],
+  [/\bnew (.+?) from\b/i, 1],
+];
+
+function capitalize(s: string): string { return s.charAt(0).toUpperCase() + s.slice(1); }
+
+function extractPipelineName(message: string): string | null {
+  for (const pattern of PIPELINE_NAME_PATTERNS) {
+    const m = message.match(pattern);
+    if (m?.[1]) return m[1].trim().slice(0, 100);
+  }
+  return null;
+}
+
+function extractAlertName(
+  message: string,
+  filters: { modality?: string | null; stage?: string | null; indication?: string | null; institution?: string | null },
+): string {
+  for (const [pattern, group] of ALERT_NAME_PATTERNS) {
+    const m = message.match(pattern);
+    if (m?.[group]) {
+      const phrase = m[group].trim().replace(/[?.!,]+$/, "").slice(0, 80);
+      if (phrase.length > 2) return capitalize(phrase);
+    }
+  }
+  const parts: string[] = [];
+  if (filters.modality) parts.push(filters.modality);
+  if (filters.indication) parts.push(filters.indication);
+  if (filters.stage) parts.push(filters.stage);
+  if (filters.institution) parts.push(`· ${filters.institution}`);
+  if (parts.length > 0) return `New ${parts.join(" ")} assets`.slice(0, 100);
+  return `New: ${message.trim().slice(0, 60)}`;
+}
+
+function detectCadence(message: string): "daily" | "weekly" {
+  if (/\b(daily|every day|each day|day by day)\b/i.test(message)) return "daily";
+  return "weekly";
+}
+
 function buildActionOffers(
   message: string,
   intent: string,
@@ -90,7 +145,10 @@ function buildActionOffers(
   const hasSaveIntent = SAVE_PATTERNS.some((p) => p.test(lower));
   if (hasSaveIntent && (intent === "search" || intent === "back_ref") && retrieved.length > 0) {
     const topAssets = retrieved.filter((a) => a.similarity >= 0.55).slice(0, 2);
-    if (topAssets.length > 0) offers.push({ type: "save", assets: topAssets });
+    if (topAssets.length > 0) {
+      const targetPipelineName = extractPipelineName(message) ?? undefined;
+      offers.push({ type: "save", assets: topAssets, targetPipelineName });
+    }
   }
 
   // Alert: notify/watch/more signals → derive config from active filters
@@ -109,16 +167,16 @@ function buildActionOffers(
     const hasStructuredFilter = institutionFilter || modalityFilter || stageFilter;
     const queryVal = hasStructuredFilter ? null : message.trim().slice(0, 200);
 
-    const alertNameBase = labelParts.length > 0 ? `New ${labelParts.join(" ")} assets` : `New: ${message.trim().slice(0, 60)}`;
     offers.push({
       type: "alert", label,
       config: {
-        name: alertNameBase.slice(0, 100),
+        name: extractAlertName(message, filters).slice(0, 100),
         query: queryVal,
         modalities: modalityFilter,
         stages: stageFilter,
         institutions: institutionFilter,
         criteriaType: "custom",
+        cadence: detectCadence(message),
       },
     });
   }

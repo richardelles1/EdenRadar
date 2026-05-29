@@ -43,10 +43,11 @@ export type AlertOfferConfig = {
   modalities?: string[] | null;
   stages?: string[] | null;
   institutions?: string[] | null;
+  cadence?: "daily" | "weekly";
 };
 
 export type ActionOffer =
-  | { type: "save"; assets: Array<{ id: number; assetName: string; institution: string; modality?: string | null; developmentStage?: string | null; indication?: string | null; sourceUrl?: string | null }> }
+  | { type: "save"; assets: Array<{ id: number; assetName: string; institution: string; modality?: string | null; developmentStage?: string | null; indication?: string | null; sourceUrl?: string | null }>; targetPipelineName?: string }
   | { type: "alert"; label: string; config: AlertOfferConfig };
 
 export type EdenSessionSummary = {

@@ -781,6 +781,7 @@ export const userAlerts = pgTable("user_alerts", {
   stages: text("stages").array(),
   institutions: text("institutions").array(),
   criteriaType: text("criteria_type").notNull().default("custom"),
+  cadence: text("cadence").notNull().default("weekly"),
   enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastAlertSentAt: timestamp("last_alert_sent_at"),

@@ -90,6 +90,7 @@ type Props = {
   variant?: "icon" | "button";
   iconClassName?: string;
   bare?: boolean;
+  defaultPipelineName?: string;
 };
 
 function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
@@ -109,7 +110,7 @@ function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
   };
 }
 
-export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName, bare }: Props) {
+export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName, bare, defaultPipelineName }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
 
@@ -396,6 +397,21 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
 
   const isPending = saveMutation.isPending || createAndSaveMutation.isPending || removeMutation.isPending;
   const dialogIsPending = dialogSaveMutation.isPending || dialogCreateAndSaveMutation.isPending || removeMutation.isPending;
+
+  // Auto-save to the matched pipeline when caller passes a defaultPipelineName.
+  const autoSaveFiredRef = useRef(false);
+  useEffect(() => {
+    if (!defaultPipelineName || isSaved || autoSaveFiredRef.current || !pipelinesData || saveMutation.isPending) return;
+    const nameLower = defaultPipelineName.toLowerCase();
+    const match = pipelines.find(
+      (p) => p.name.toLowerCase().includes(nameLower) || nameLower.includes(p.name.toLowerCase())
+    );
+    if (!match) return;
+    autoSaveFiredRef.current = true;
+    saveMutation.mutate({ pipelineListId: match.id });
+  // saveMutation.mutate is stable; omitting it from deps is intentional
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pipelinesData, savedData, defaultPipelineName, isSaved]);
 
   const handleCreateAndSave = () => {
     const name = newName.trim();

@@ -275,6 +275,7 @@ function ActionOffers({
   compact?: boolean;
 }) {
   const [alertStates, setAlertStates] = useState<Record<number, "idle" | "pending" | "creating" | "done" | "dismissed">>({});
+  const [cadences, setCadences] = useState<Record<number, "daily" | "weekly">>({});
 
   const saveOffers = offers.filter((o): o is Extract<ActionOffer, { type: "save" }> => o.type === "save");
   const alertOffers = offers.filter((o): o is Extract<ActionOffer, { type: "alert" }> => o.type === "alert");
@@ -290,7 +291,7 @@ function ActionOffers({
           <div key={`save-${oi}`} className="flex flex-wrap items-center gap-1.5">
             <span className={`flex items-center gap-1 text-muted-foreground ${compact ? "text-[10px]" : "text-[11px]"}`}>
               <Bookmark className="h-3 w-3 shrink-0" />
-              Save to pipeline:
+              {offer.targetPipelineName ? `Save to "${offer.targetPipelineName}":` : "Save to pipeline:"}
             </span>
             {unsaved.map((a) => {
               const payload: PipelinePickerPayload = {
@@ -309,7 +310,7 @@ function ActionOffers({
                   data-testid={`save-offer-asset-${a.id}`}
                 >
                   <span className={`max-w-[130px] truncate text-foreground font-medium ${compact ? "text-[10px]" : "text-[11px]"}`}>{a.assetName}</span>
-                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} />
+                  <PipelinePicker payload={payload} alreadySaved={savedIngestedIds.has(a.id)} defaultPipelineName={offer.targetPipelineName} />
                 </span>
               );
             })}
@@ -321,6 +322,7 @@ function ActionOffers({
         const state = alertStates[oi] ?? "idle";
         if (state === "dismissed") return null;
         const setOiState = (s: "idle" | "pending" | "creating" | "done" | "dismissed") => setAlertStates((prev) => ({ ...prev, [oi]: s }));
+        const cadence = cadences[oi] ?? offer.config.cadence ?? "weekly";
         return (
           <div key={`alert-${oi}`} className="flex flex-wrap items-center gap-1.5" data-testid={`alert-offer-${oi}`}>
             {state === "idle" && (
@@ -346,12 +348,24 @@ function ActionOffers({
                 {offer.config.stages?.map((s) => (
                   <span key={s} className={`bg-muted rounded px-1.5 py-0.5 text-muted-foreground ${compact ? "text-[9px]" : "text-[10px]"}`}>{s}</span>
                 ))}
+                <div className={`flex items-center gap-0.5 border border-amber-500/20 rounded-full overflow-hidden ${compact ? "text-[9px]" : "text-[10px]"}`}>
+                  {(["daily", "weekly"] as const).map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setCadences((prev) => ({ ...prev, [oi]: c }))}
+                      className={`px-1.5 py-0.5 capitalize transition-colors ${cadence === c ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid={`alert-offer-cadence-${c}-${oi}`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </div>
                 <button
                   className={`font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 transition-colors ${compact ? "text-[10px]" : "text-[11px]"}`}
                   onClick={async () => {
                     if (!onCreateAlert) return;
                     setOiState("creating");
-                    try { await onCreateAlert(offer.config); setOiState("done"); }
+                    try { await onCreateAlert({ ...offer.config, cadence }); setOiState("done"); }
                     catch { setOiState("pending"); }
                   }}
                   data-testid={`alert-offer-create-${oi}`}
