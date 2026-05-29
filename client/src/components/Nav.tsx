@@ -21,7 +21,7 @@ type NavProps = {
   onOpenSaved?: () => void;
 };
 
-const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo"];
+const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo", "/one-pager"];
 
 function normalizePath(path: string) {
   const stripped = path.split("?")[0].split("#")[0];
@@ -277,6 +277,18 @@ export function Nav({ onOpenSaved }: NavProps) {
                     Pricing
                   </button>
                 </Link>
+                <Link href="/one-pager">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/one-pager"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-one-pager"
+                  >
+                    One-pager
+                  </button>
+                </Link>
               </>
             ) : (
               portalLinks.map((link) => {
@@ -454,6 +466,15 @@ export function Nav({ onOpenSaved }: NavProps) {
               data-testid="link-nav-mobile-pricing"
             >
               Pricing
+            </button>
+          </Link>
+          <Link href="/one-pager">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-one-pager"
+            >
+              One-pager
             </button>
           </Link>
           <Link href="/login">
