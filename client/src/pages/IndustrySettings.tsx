@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+﻿import { useState, useEffect, useMemo } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -866,7 +866,7 @@ export default function IndustrySettings() {
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-500/40 text-violet-600 dark:text-violet-400">New</Badge>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      Connect Claude or any MCP-compatible AI directly to your Eden Scout data. Search assets, read enriched details, and manage your pipeline — all from a conversation.
+                      Connect Claude or any MCP-compatible AI directly to your EdenRadar data. Search assets, read enriched details, and manage your pipeline — all from a conversation.
                     </p>
 
                     {/* Endpoint */}
@@ -940,7 +940,7 @@ export default function IndustrySettings() {
                 </div>
                 <div>
                   <p className="text-sm font-medium text-foreground">No API key</p>
-                  <p className="text-xs text-muted-foreground mt-1">Generate a key to access the EdenRadar API and connect AI tools to your Eden Scout data.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Generate a key to access the EdenRadar API and connect AI tools to your EdenRadar data.</p>
                 </div>
                 <Button
                   size="sm"
@@ -960,7 +960,7 @@ export default function IndustrySettings() {
                   <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-violet-500/40 text-violet-600 dark:text-violet-400">New</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Connect Claude or any MCP-compatible AI directly to your Eden Scout data. Search assets, read enriched details, and manage your pipeline — all from a conversation. Generate an API key above to get your setup config.
+                  Connect Claude or any MCP-compatible AI directly to your EdenRadar data. Search assets, read enriched details, and manage your pipeline — all from a conversation. Generate an API key above to get your setup config.
                 </p>
                 <div>
                   <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Endpoint</p>
@@ -1040,7 +1040,7 @@ export default function IndustrySettings() {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-foreground">EdenScout</p>
+              <p className="text-sm font-semibold text-foreground">EdenRadar</p>
               <Badge variant="secondary" className={cn(
                 "border text-xs px-1.5 py-0 h-4",
                 org?.planTier === "enterprise"

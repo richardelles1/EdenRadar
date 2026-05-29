@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import { Sprout, ArrowLeft } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
@@ -19,7 +19,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function Privacy() {
   useDocumentMeta({
     title: "Privacy Policy | EdenRadar",
-    description: "How EdenRadar collects, uses, and safeguards your data across EdenScout, EdenLab, EdenDiscovery and EdenMarket.",
+    description: "How EdenRadar collects, uses, and safeguards your data across EdenRadar, EdenLab, EdenDiscovery and EdenMarket.",
   });
   return (
     <div className="min-h-screen bg-background">

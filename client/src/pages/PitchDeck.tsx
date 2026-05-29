@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Children } from "react";
+﻿import { useState, useEffect, useRef, Children } from "react";
 import type { ReactNode, ElementType, CSSProperties } from "react";
 import {
   Printer,
@@ -708,7 +708,7 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
 
   const industryPortals = [
     {
-      title: "EdenScout", tagline: "Industry intelligence across 300+ TTOs", money: "Industry SaaS subscription",
+      title: "EdenRadar", tagline: "Industry intelligence across 300+ TTOs", money: "Industry SaaS subscription",
       color: colors.green, dim: colors.greenDim, icon: Search,
       items: [
         "EDEN-scored and enriched asset dossiers",
@@ -1241,7 +1241,7 @@ function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
             ))}
           </div>
           <p className="text-xs sm:text-xs mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
-            View all 3 assets in EdenScout
+            View all 3 assets in EdenRadar
           </p>
         </div>
       </div>
@@ -1255,7 +1255,7 @@ function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
           <div>
             <p className="text-xs sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
             <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 New Tech Transfer Offices Added</p>
-            <p className="text-xs sm:text-xs mt-0.5" style={{ color: colors.textMuted }}>Network update · EdenScout coverage expanded</p>
+            <p className="text-xs sm:text-xs mt-0.5" style={{ color: colors.textMuted }}>Network update · EdenRadar coverage expanded</p>
           </div>
         </div>
         <div className="px-4 py-3" style={{ background: colors.bgLight }}>
@@ -1272,7 +1272,7 @@ function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors
             ))}
           </div>
           <p className="text-xs sm:text-xs mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
-            Explore new TTO assets in EdenScout
+            Explore new TTO assets in EdenRadar
           </p>
         </div>
       </div>
@@ -1454,7 +1454,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
   ];
   return (
-    <Slide index={6} section="EdenScout" accent={colors.green} colors={colors} waves>
+    <Slide index={6} section="EdenRadar" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.greenDim }}>
@@ -1467,7 +1467,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
         </div>
       </div>
       <p className="text-sm sm:text-base lg:text-lg mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
-        The industry-facing layer. EdenScout monitors 300+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
+        The industry-facing layer. EdenRadar monitors 300+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {features.map((f) => (
@@ -1515,7 +1515,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
     { icon: Workflow, text: "11-section structured research project canvas" },
     { icon: BookOpen, text: "Literature synthesis across 40+ academic sources" },
     { icon: Award, text: "Grants matched to your research profile" },
-    { icon: Link2, text: "Signals flow directly to EdenScout subscribers" },
+    { icon: Link2, text: "Signals flow directly to EdenRadar subscribers" },
   ];
 
   return (
@@ -1606,7 +1606,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
             style={{ background: `${colors.violet}22`, color: colors.violet, border: `1px solid ${colors.violet}44` }}
           >
             <ArrowRight className="w-3 h-3" />
-            Signals flow directly to EdenScout
+            Signals flow directly to EdenRadar
           </div>
         </div>
       </div>
@@ -1714,7 +1714,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
       {/* Pricing — Scout + Market headline tiers, side-by-side */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
 
-        {/* EdenScout — paid SaaS */}
+        {/* EdenRadar — paid SaaS */}
         <div className="rounded-xl p-4 sm:p-5 flex flex-col" style={{ background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`, border: `2px solid ${colors.green}88`, boxShadow: `0 0 32px ${colors.green}1a` }}>
           <div className="flex items-start justify-between mb-2.5 sm:mb-3">
             <div className="flex items-center gap-2.5 sm:gap-3">
@@ -1726,7 +1726,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
                   <p className="text-xs font-bold uppercase tracking-widest" style={{ color: colors.green }}>Industry SaaS</p>
                   <span className="px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider" style={{ background: colors.green, color: "#fff" }}>Most Popular</span>
                 </div>
-                <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenScout</h3>
+                <h3 className="text-base sm:text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenRadar</h3>
                 <p className="text-xs" style={{ color: colors.text }}>Subscription intelligence for BD teams</p>
               </div>
             </div>

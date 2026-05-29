@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
@@ -96,15 +96,15 @@ export function ScoutGate({ children }: { children: React.ReactNode }) {
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-600/10 border border-emerald-600/20 mb-2">
             <Lock className="w-3.5 h-3.5 text-emerald-600" />
             <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 tracking-wide uppercase">
-              EdenScout subscription required
+              EdenRadar subscription required
             </span>
           </div>
           <h1 className="text-3xl sm:text-4xl font-bold text-foreground tracking-tight">
             Unlock the full<br />
-            <span className="text-emerald-600">EdenScout</span> platform
+            <span className="text-emerald-600">EdenRadar</span> platform
           </h1>
           <p className="text-muted-foreground text-base max-w-xl mx-auto">
-            EdenScout gives your BD team continuous access to licensable biotech assets from 300+ tech transfer offices, enriched and scored by EDEN.
+            EdenRadar gives your BD team continuous access to licensable biotech assets from 300+ tech transfer offices, enriched and scored by EDEN.
           </p>
         </div>
 
@@ -114,7 +114,7 @@ export function ScoutGate({ children }: { children: React.ReactNode }) {
               <div className="w-8 h-8 rounded-lg bg-emerald-600/10 flex items-center justify-center">
                 <Radar className="w-4 h-4 text-emerald-600" />
               </div>
-              <h2 className="text-sm font-bold text-foreground">What you get with EdenScout</h2>
+              <h2 className="text-sm font-bold text-foreground">What you get with EdenRadar</h2>
             </div>
             <ul className="space-y-2.5">
               {SCOUT_FEATURES.map((f) => (

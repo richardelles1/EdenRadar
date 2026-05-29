@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -6,14 +6,7 @@ import { EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { RadarBackground } from "@/components/RadarBackground";
-import {
-  ArrowRight,
-  Lightbulb,
-  FlaskConical,
-  TrendingUp,
-  ShoppingBag,
-  Check,
-} from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
   const ref = useRef<HTMLDivElement>(null);
@@ -48,6 +41,7 @@ interface ChatMessage {
   delay: number;
   assetCards?: AssetCardData[];
   scanning?: boolean;
+  instant?: boolean;
 }
 
 interface DemoScenario {
@@ -79,22 +73,25 @@ const DEMO_SCENARIOS: DemoScenario[] = [
   {
     id: "institution",
     messages: [
-      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 400 },
-      { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 1600, scanning: true, assetCards: DEMO_ASSETS_JHU },
+      { role: "eden", text: "14 new programs indexed at Hopkins since Monday. Anything specific on your radar?", delay: 600, instant: true },
+      { role: "user", text: "We're expanding our oncology pipeline. What's worth a look at Hopkins right now?", delay: 900 },
+      { role: "eden", text: "14 JHU oncology programs indexed. Worth flagging before you dig in: the HDAC inhibitor's target space overlaps with Pfizer's recent Seagen integration territory, so that one's likely a dead end for most buyers. The CAR-T is different. PI has two prior licensings at this exact stage, both to top-10 pharma. I'd start there.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_JHU },
     ],
   },
   {
     id: "cross-tto",
     messages: [
-      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 400 },
-      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 1600, scanning: true, assetCards: DEMO_ASSETS_CNS },
+      { role: "eden", text: "Good morning. I'm watching 22 active preclinical CNS programs this week, three with exclusivity windows under 90 days.", delay: 600, instant: true },
+      { role: "user", text: "CNS startup, just closed our Series A. What preclinical assets are looking strong right now?", delay: 900 },
+      { role: "eden", text: "Strong cluster at Mayo, Stanford, and Columbia. Mayo's alpha-synuclein program leads at 93. The PI has closed two prior licensings at preclinical stage, both above $40M upfront. Separate note: Columbia's ALS program has an exclusivity window closing in 60 days with no recorded LOIs on file. That one may be worth a call this week.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_CNS },
     ],
   },
   {
     id: "modality",
     messages: [
-      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 400 },
-      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 1600, scanning: true, assetCards: DEMO_ASSETS_ADC },
+      { role: "eden", text: "Three new ADC programs cleared IND-enabling stage this month. Two are still open for exclusive licensing.", delay: 600, instant: true },
+      { role: "user", text: "We need ADC platforms we can take exclusive. IND-enabling stage, ideally.", delay: 900 },
+      { role: "eden", text: "Fourteen ADCs match. MIT HER2 leads at 92. One thing to know: the linker chemistry is covered by a separate patent, but both assets fall under a single exclusive license term sheet, so you're acquiring the full stack. I've already removed the three programs that only offered non-exclusive terms.", delay: 2600, scanning: true, assetCards: DEMO_ASSETS_ADC },
     ],
   },
 ];
@@ -137,19 +134,23 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
         @keyframes scan-slide { from { opacity:0; transform:translateX(-5px); } to { opacity:1; transform:translateX(0); } }
       `}</style>
 
-      <div className="relative" style={{ width: 52, height: 52 }}>
+      <div className="relative flex items-center justify-center" style={{ width: 64, height: 64 }}>
         {[0, 0.35, 0.7].map((d, i) => (
           <span
             key={i}
             className="absolute rounded-full"
             style={{
-              top: "50%", left: "50%", width: 52, height: 52,
-              border: "1.5px solid hsl(142 52% 36% / 0.45)",
+              top: "50%", left: "50%", width: 64, height: 64,
+              border: "1.5px solid hsl(142 52% 36% / 0.4)",
               animation: `eden-ring 1.8s ease-out ${d}s infinite`,
             }}
           />
         ))}
-        <EdenAvatar size={52} />
+        <img
+          src="/images/eden-nx-mark.png"
+          alt="EDEN"
+          style={{ width: 44, height: 44, objectFit: "contain", position: "relative", zIndex: 1 }}
+        />
       </div>
 
       <div className="flex items-end gap-2.5">
@@ -187,7 +188,7 @@ function EdenIntro({ onDone }: { onDone: () => void }) {
 
 /* ─── Streaming Text ─────────────────────────────────────────── */
 
-function StreamingText({ text, speed = 55, onDone }: { text: string; speed?: number; onDone?: () => void }) {
+function StreamingText({ text, speed = 55, onDone, cursorColor = "hsl(142 52% 36%)" }: { text: string; speed?: number; onDone?: () => void; cursorColor?: string }) {
   const [count, setCount] = useState(0);
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
@@ -211,7 +212,7 @@ function StreamingText({ text, speed = 55, onDone }: { text: string; speed?: num
       {count < text.length && (
         <span
           className="inline-block ml-px align-middle"
-          style={{ width: 2, height: "0.85em", background: "hsl(142 52% 36%)", animation: "eden-pulse 0.7s ease-in-out infinite" }}
+          style={{ width: 2, height: "0.85em", background: cursorColor, animation: "eden-pulse 0.7s ease-in-out infinite" }}
         />
       )}
     </>
@@ -318,8 +319,13 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
         setVisibleCount(i + 1);
         scrollBottom();
         if (msg.role === "eden") {
-          if (msg.scanning) setScanningIdx(i);
-          else setStreamingIdx(i);
+          if (msg.instant) {
+            setDoneSet((prev) => new Set(prev).add(i));
+          } else if (msg.scanning) {
+            setScanningIdx(i);
+          } else {
+            setStreamingIdx(i);
+          }
         }
       }, msg.delay);
       tids.current.push(t);
@@ -338,7 +344,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
     setDoneSet((prev) => new Set(prev).add(idx));
     scrollBottom();
     if (idx === messages.length - 1) {
-      const t = setTimeout(() => onComplete?.(), 3500);
+      const t = setTimeout(() => onComplete?.(), 2500);
       tids.current.push(t);
     }
   }
@@ -347,7 +353,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
     <div
       className="relative flex flex-col rounded-2xl overflow-hidden"
       style={{
-        height: 460,
+        height: 540,
         background: "white",
         boxShadow: "0 32px 72px rgba(0,0,0,0.13), 0 8px 24px rgba(0,0,0,0.07), 0 2px 6px rgba(0,0,0,0.04)",
       }}
@@ -359,7 +365,7 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
         className="flex items-center gap-3 px-5 py-3 border-b flex-shrink-0"
         style={{ background: "hsl(0 0% 99%)", borderColor: "hsl(220 13% 91%)" }}
       >
-        <EdenAvatar size={26} />
+        <img src="/images/eden-nx-mark.png" alt="EDEN" className="w-7 h-7 object-contain flex-shrink-0" />
         <div className="flex-1 min-w-0">
           <p className="text-sm font-bold leading-tight text-foreground">EDEN</p>
           <p className="text-[10px] text-primary">Research Intelligence</p>
@@ -400,15 +406,23 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
                 <>
                   {scanningIdx === i && <ScanningAnimation onDone={() => handleScanDone(i)} />}
                   {(streamingIdx === i || doneSet.has(i)) && (
-                    <p className="text-[12px] leading-relaxed" style={{ color: "hsl(222 15% 22%)" }}>
+                    <div
+                      className="px-4 py-2.5 text-[12px] leading-relaxed"
+                      style={{
+                        background: "hsl(142 52% 36%)",
+                        color: "white",
+                        borderRadius: "4px 16px 16px 16px",
+                        boxShadow: "0 3px 12px hsl(142 52% 36% / 0.3)",
+                      }}
+                    >
                       {doneSet.has(i) ? msg.text : (
-                        <StreamingText text={msg.text} onDone={() => handleStreamDone(i)} />
+                        <StreamingText text={msg.text} speed={85} onDone={() => handleStreamDone(i)} cursorColor="rgba(255,255,255,0.7)" />
                       )}
-                    </p>
+                    </div>
                   )}
                   {msg.assetCards && doneSet.has(i) && (
                     <div className="flex flex-col gap-1.5 mt-1">
-                      {msg.assetCards.map((asset, idx) => (
+                      {msg.assetCards.slice(0, 2).map((asset, idx) => (
                         <div key={asset.id} style={{ animation: "fade-up 0.32s ease-out forwards", animationDelay: `${idx * 110}ms`, opacity: 0 }}>
                           <QueryResultCard asset={asset} />
                         </div>
@@ -425,50 +439,8 @@ function EdenChatDemo({ messages, onComplete }: { messages: ChatMessage[]; onCom
   );
 }
 
-/* ─── Portal Tier Overview ───────────────────────────────────── */
+/* ─── Portal Feature Lists ───────────────────────────────────── */
 
-const TIER_OVERVIEW = [
-  {
-    icon: Lightbulb,
-    name: "EdenDiscovery",
-    tagline: "Concept registry for early-stage innovators",
-    price: "Free",
-    color: "hsl(var(--portal-discovery))",
-    colorDim: "hsl(var(--portal-discovery) / 0.08)",
-    borderColor: "hsl(var(--portal-discovery) / 0.3)",
-    features: ["Submit and timestamp early-stage concepts", "EDEN credibility scoring (0–100)", "Surface to industry scouts"],
-  },
-  {
-    icon: FlaskConical,
-    name: "EdenLab",
-    tagline: "Project workspace for academic researchers",
-    price: "Free",
-    color: "hsl(var(--portal-lab))",
-    colorDim: "hsl(var(--portal-lab) / 0.08)",
-    borderColor: "hsl(var(--portal-lab) / 0.3)",
-    features: ["11-section structured research canvas", "Literature synthesis across 40+ sources", "Grants discovery matched to your profile"],
-  },
-  {
-    icon: TrendingUp,
-    name: "EdenScout",
-    tagline: "Intelligence platform for BD teams",
-    price: "Paid",
-    color: "hsl(var(--portal-scout))",
-    colorDim: "hsl(var(--portal-scout) / 0.08)",
-    borderColor: "hsl(var(--portal-scout) / 0.3)",
-    features: ["EDEN queries across 358 TTOs", "EDEN-scored dossiers + competitive cross-reference", "Alerts, CSV export, pipeline tracking"],
-  },
-  {
-    icon: ShoppingBag,
-    name: "EdenMarket",
-    tagline: "Blind marketplace for licensable assets",
-    price: "Paid",
-    color: "hsl(var(--portal-market))",
-    colorDim: "hsl(var(--portal-market) / 0.08)",
-    borderColor: "hsl(var(--portal-market) / 0.3)",
-    features: ["Anonymous listings (identity NDA-gated)", "Secure deal rooms with audit trail", "Success-fee aligned: free to list"],
-  },
-];
 
 /* ─── How It Works Steps ─────────────────────────────────────── */
 
@@ -486,8 +458,8 @@ const HOW_IT_WORKS: { title: React.ReactNode; body: React.ReactNode }[] = [
     body: <>When a program fits your criteria, an alert goes out by email and in-product, in <span style={{ color: "hsl(33 85% 44%)", fontWeight: 600 }}>real time</span>, to everyone on your team. Some exclusivity windows close fast. EDEN makes sure you are never the last to know.</>,
   },
   {
-    title: "From match to deal-ready.",
-    body: <>Build your pipeline, pull supporting literature, and construct your business case directly in <span className="text-primary font-semibold">EdenScout</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</>,
+    title: "From signal to term sheet.",
+    body: <>Build your pipeline, pull supporting literature, and construct your business case directly in <span className="text-primary font-semibold">EdenRadar</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</>,
   },
 ];
 
@@ -501,7 +473,6 @@ export default function HowItWorks() {
   const [, navigate] = useLocation();
   const [activeScenario, setActiveScenario] = useState(0);
   const stepsRef = useReveal();
-  const tiersRef = useReveal();
 
   function handleScenarioComplete() {
     setActiveScenario((prev) => (prev + 1) % DEMO_SCENARIOS.length);
@@ -524,7 +495,7 @@ export default function HowItWorks() {
             style={{ minHeight: "92vh", paddingTop: "7rem", paddingBottom: "5rem" }}
           >
             <h1
-              className="font-black leading-[1.06] tracking-tight mb-5 max-w-2xl text-foreground"
+              className="font-black leading-[1.06] tracking-tight mb-10 max-w-2xl text-foreground"
               style={{ fontSize: "clamp(2.4rem, 5vw, 3.75rem)" }}
             >
               Most licensing deals are{" "}
@@ -533,28 +504,19 @@ export default function HowItWorks() {
               <span style={{ color: "hsl(33 85% 44%)" }}>lost</span>.
             </h1>
 
-            <div className="mb-10 space-y-1.5 max-w-md">
-              <p className="text-base sm:text-lg leading-relaxed text-muted-foreground">
-                The asset was indexed. The window was open. The team that closed the deal searched smarter.
-              </p>
-              <p className="text-base sm:text-lg font-semibold text-primary">
-                EDEN makes sure that's you.
-              </p>
-            </div>
-
             {/* Chat demo — center stage */}
             <div className="w-full max-w-xl mb-10">
-              <EdenChatDemo key={scenario.id} messages={scenario.messages} onComplete={handleScenarioComplete} />
+              <EdenChatDemo messages={scenario.messages} onComplete={handleScenarioComplete} />
             </div>
 
             <Button
               size="lg"
-              onClick={() => navigate("/login")}
+              onClick={() => navigate("/demo")}
               data-testid="howitworks-cta-hero"
               className="h-11 px-8 font-semibold gap-2 border-0"
               style={{ background: "hsl(33 85% 44%)", color: "white" }}
             >
-              Try EdenScout
+              Request Access
               <ArrowRight className="w-3.5 h-3.5" />
             </Button>
           </div>
@@ -565,19 +527,19 @@ export default function HowItWorks() {
           />
         </section>
 
-        {/* How it works — sticky photo right, steps scroll left */}
+        {/* How it works — sticky photo right bleeds to viewport edge */}
         <section
           ref={stepsRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-24"
+          className="reveal-section overflow-clip py-16 sm:py-24"
         >
-          <div className="flex gap-16 xl:gap-20 items-start">
+          <div className="max-w-screen-xl mx-auto pl-4 sm:pl-6 flex gap-16 xl:gap-20 items-start">
 
             {/* Left: four steps */}
             <div className="flex-1 min-w-0">
               <div style={{ borderTop: "1px solid hsl(var(--primary) / 0.22)", borderBottom: "1px solid hsl(var(--primary) / 0.22)" }}>
                 {HOW_IT_WORKS.map((step, i) => (
+                  <React.Fragment key={i}>
                   <div
-                    key={i}
                     className="flex gap-0 py-14 sm:py-16 items-center"
                     style={{
                       minHeight: 240,
@@ -625,124 +587,40 @@ export default function HowItWorks() {
                       </p>
                     </div>
                   </div>
+                  {i === 1 && (
+                    <div className="block lg:hidden overflow-hidden" style={{ borderRadius: 16, margin: "4px 0 8px" }}>
+                      <img
+                        src="/images/bd-conversation.jpg"
+                        alt=""
+                        className="w-full object-cover block"
+                        style={{ height: 220, objectPosition: "50% 22%" }}
+                      />
+                    </div>
+                  )}
+                  </React.Fragment>
                 ))}
               </div>
             </div>
 
-            {/* Right: sticky photo — hidden below lg */}
+            {/* Right: sticky photo — spills to right viewport edge */}
             <div
               className="hidden lg:block flex-shrink-0 sticky self-start"
-              style={{ width: 340, top: "5.5rem" }}
+              style={{ width: 420, top: "5.5rem" }}
             >
-              <div
-                className="relative rounded-[20px] overflow-hidden"
-                style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.12), 0 8px 24px rgba(0,0,0,0.07)" }}
-              >
-                <img
-                  src="/images/bd-conversation.jpg"
-                  alt=""
-                  className="w-full object-cover block"
-                  style={{ height: 560, objectPosition: "50% 25%" }}
-                />
-                <div
-                  className="absolute bottom-0 left-0 right-0 pointer-events-none"
-                  style={{
-                    height: 160,
-                    background: "linear-gradient(to bottom, transparent, hsl(var(--background) / 0.94))",
-                  }}
-                />
-              </div>
+              <img
+                src="/images/bd-conversation.jpg"
+                alt=""
+                className="block object-cover"
+                style={{
+                  width: 420,
+                  height: "max(820px, 90vh)",
+                  objectPosition: "50% 22%",
+                  borderRadius: "20px 0 0 20px",
+                  boxShadow: "-12px 0 48px rgba(0,0,0,0.10), -4px 0 16px rgba(0,0,0,0.06)",
+                }}
+              />
             </div>
 
-          </div>
-        </section>
-
-        {/* Portal tier overview */}
-        <section
-          ref={tiersRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20"
-        >
-          <div className="text-center mb-12">
-            <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-3">Choose Your Entry Point</p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4">
-              Four portals. One ecosystem.
-            </h2>
-            <p className="text-muted-foreground max-w-lg mx-auto">
-              Every tier is purpose-built for a different side of the biotech deal. Start free, upgrade when your workflow demands it.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-            <div className="space-y-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Free forever</p>
-              {TIER_OVERVIEW.filter((t) => t.price === "Free").map((tier, i) => (
-                <div
-                  key={tier.name}
-                  className="flex gap-4 p-4 rounded-xl bg-card stagger-item transition-shadow duration-200 hover:shadow-md"
-                  style={{ border: `1px solid ${tier.borderColor}`, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", animationDelay: `${i * 80}ms` }}
-                >
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
-                    <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
-                      <span className="text-xs font-bold" style={{ color: tier.color }}>{tier.price}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug mb-2">{tier.tagline}</p>
-                    <div className="space-y-1">
-                      {tier.features.map((f) => (
-                        <div key={f} className="flex items-center gap-1.5">
-                          <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
-                          <span className="text-[11px] text-foreground">{f}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="space-y-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Subscription</p>
-              {TIER_OVERVIEW.filter((t) => t.price === "Paid").map((tier, i) => (
-                <div
-                  key={tier.name}
-                  className="flex gap-4 p-4 rounded-xl bg-card stagger-item transition-shadow duration-200 hover:shadow-md"
-                  style={{ border: `1px solid ${tier.borderColor}`, boxShadow: "0 1px 4px rgba(0,0,0,0.05)", animationDelay: `${(i + 2) * 80}ms` }}
-                >
-                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: tier.colorDim }}>
-                    <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex items-baseline gap-2 mb-1">
-                      <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
-                      <span className="text-xs font-semibold" style={{ color: tier.color }}>{tier.price}</span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground leading-snug mb-2">{tier.tagline}</p>
-                    <div className="space-y-1">
-                      {tier.features.map((f) => (
-                        <div key={f} className="flex items-center gap-1.5">
-                          <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
-                          <span className="text-[11px] text-foreground">{f}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="text-center">
-            <Link href="/pricing">
-              <button
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary/80 transition-colors"
-                data-testid="howitworks-link-full-pricing"
-              >
-                See full pricing and plan details
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </Link>
           </div>
         </section>
 
@@ -765,12 +643,12 @@ export default function HowItWorks() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
                 size="lg"
-                onClick={() => navigate("/login")}
+                onClick={() => navigate("/demo")}
                 data-testid="howitworks-cta-main"
                 className="h-11 px-7 font-semibold"
                 style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}
               >
-                Get Started
+                Request Access
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
               <Button
@@ -784,7 +662,7 @@ export default function HowItWorks() {
               </Button>
             </div>
             <p className="text-xs mt-6" style={{ color: "hsl(33 30% 48%)" }}>
-              3-day free trial on EdenScout · No card required for researcher tiers
+              3-day free trial on EdenRadar · No card required for researcher tiers
             </p>
           </div>
         </section>
@@ -795,6 +673,7 @@ export default function HowItWorks() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
           <p>© {new Date().getFullYear()} EdenRadar. All rights reserved.</p>
           <div className="flex items-center gap-4">
+            <Link href="/demo" className="hover:text-foreground transition-colors" data-testid="footer-link-demo">Request Access</Link>
             <Link href="/pricing" className="hover:text-foreground transition-colors" data-testid="footer-link-pricing">Pricing</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors" data-testid="footer-link-privacy">Privacy Policy</Link>
             <Link href="/tos" className="hover:text-foreground transition-colors" data-testid="footer-link-tos">Terms of Service</Link>

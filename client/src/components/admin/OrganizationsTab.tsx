@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+﻿import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { StripeBillingEvent } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
@@ -422,7 +422,7 @@ export function OrganizationsTab({ pw }: { pw: string }) {
             Organizations
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Manage EdenScout subscriber organizations, seat limits, and billing configuration.
+            Manage EdenRadar subscriber organizations, seat limits, and billing configuration.
           </p>
         </div>
         <Button onClick={openCreateOrg} data-testid="button-create-org" className="gap-2">
@@ -1125,7 +1125,7 @@ export function OrganizationsTab({ pw }: { pw: string }) {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-xs text-muted-foreground">
-              A new EdenScout account will be created. The member receives an email with a link to set their own password.
+              A new EdenRadar account will be created. The member receives an email with a link to set their own password.
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="member-email">Email</Label>

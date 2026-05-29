@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+﻿import { Link } from "wouter";
 import { Sprout, ArrowLeft } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
@@ -19,7 +19,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 export default function Tos() {
   useDocumentMeta({
     title: "Terms of Service | EdenRadar",
-    description: "EdenRadar Terms of Service governing use of the EdenScout, EdenLab, EdenDiscovery and EdenMarket platforms.",
+    description: "EdenRadar Terms of Service governing use of the EdenRadar, EdenLab, EdenDiscovery and EdenMarket platforms.",
   });
   return (
     <div className="min-h-screen bg-background">
@@ -72,7 +72,7 @@ export default function Tos() {
             <ul className="list-disc pl-5 space-y-1">
               <li><strong className="text-foreground">EdenDiscovery</strong> - a free concept exploration feed for early-stage researchers.</li>
               <li><strong className="text-foreground">EdenLab</strong> - a free research workspace for academic and institutional users.</li>
-              <li><strong className="text-foreground">EdenScout</strong> - a paid intelligence and pipeline management tool for industry buyers.</li>
+              <li><strong className="text-foreground">EdenRadar</strong> - a paid intelligence and pipeline management tool for industry buyers.</li>
             </ul>
             <p>
               We reserve the right to modify, suspend, or discontinue any part of the Service at any time with reasonable notice where practicable.
@@ -104,7 +104,7 @@ export default function Tos() {
 
           <Section title="5. Subscriptions and Payments">
             <p>
-              EdenScout is a paid service available on the following plans: Individual ($1,999/month), Team-5 ($8,999/month), Team-10 ($16,999/month), and Enterprise (custom pricing). Free tiers (EdenDiscovery, EdenLab) are provided at no charge and may be modified or discontinued at our discretion.
+              EdenRadar is a paid service available on the following plans: Individual ($1,999/month), Team-5 ($8,999/month), Team-10 ($16,999/month), and Enterprise (custom pricing). Free tiers (EdenDiscovery, EdenLab) are provided at no charge and may be modified or discontinued at our discretion.
             </p>
             <p>
               Paid plans are billed in advance on a monthly or annual basis. All fees are non-refundable except as required by law or as expressly stated in your order. We may adjust pricing with at least 30 days' written notice to active subscribers.

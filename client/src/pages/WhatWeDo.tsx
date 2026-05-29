@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+﻿import { useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -115,7 +115,7 @@ const PORTALS = [
   },
   {
     icon: TrendingUp,
-    title: "EdenScout",
+    title: "EdenRadar",
     tier: "Tier 3",
     tagline: "Industry intelligence platform",
     color: "hsl(var(--portal-scout))",
@@ -129,7 +129,7 @@ const PORTALS = [
       "Institution intelligence and researcher profiles",
       "EDEN-compiled dossiers and board-ready reports",
     ],
-    vision: "EdenScout is the platform your BD team has always needed. Instead of cold calls and conference hallways, you get a continuously enriched window into every major TTO on the planet.",
+    vision: "EdenRadar is the platform your BD team has always needed. Instead of cold calls and conference hallways, you get a continuously enriched window into every major TTO on the planet.",
   },
   {
     icon: ShoppingBag,

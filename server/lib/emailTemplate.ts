@@ -1,4 +1,4 @@
-export interface DispatchAsset {
+﻿export interface DispatchAsset {
   id: number;
   assetName: string;
   institution: string;
@@ -56,7 +56,7 @@ const G_BRIGHT = "#36bb6c";
 const G_DARK   = "#0d1e14";
 const G_MID    = "#1a3325";
 
-/* Sprout icon in a rounded green square — matches EdenScout icon from login screen */
+/* Sprout icon in a rounded green square — matches EdenRadar icon from login screen */
 const SPROUT_LOGO_SVG = `<svg width="38" height="38" viewBox="0 0 38 38" style="display:block;" xmlns="http://www.w3.org/2000/svg">
   <rect width="38" height="38" rx="8" fill="${G_MAIN}"/>
   <g stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none">

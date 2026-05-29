@@ -1,4 +1,4 @@
-import { useLocation } from "wouter";
+﻿import { useLocation } from "wouter";
 import { Radar, ShoppingBag, FlaskConical, Lightbulb } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -46,7 +46,7 @@ export function AppSwitcher({ active }: { active: AppKey }) {
         return { allowed: true };
       case "scout":
         if (role === "industry") return { allowed: true };
-        return { allowed: false, reason: "EdenScout is for industry accounts." };
+        return { allowed: false, reason: "EdenRadar is for industry accounts." };
       case "market":
         // Task #752 — any user with a Market entitlement (per-user grant or
         // org subscription) can enter EdenMarket regardless of portal role.

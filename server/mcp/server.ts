@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Eden MCP Server — per-request factory.
  *
  * Each HTTP request gets its own McpServer + transport.  Stateless mode means
@@ -38,7 +38,7 @@ const SERVER_INFO = {
 };
 
 const INSTRUCTIONS = `
-Eden Scout gives you conversational access to a curated database of university and research institution technology transfer office (TTO) assets — pharmaceutical compounds, medical devices, diagnostics, and research tools seeking industry partners.
+EdenRadar gives you conversational access to a curated database of university and research institution technology transfer office (TTO) assets — pharmaceutical compounds, medical devices, diagnostics, and research tools seeking industry partners.
 
 Tool tiers:
 • Free (no key): search and browse — up to 10 results per call, 20 calls/hr per IP

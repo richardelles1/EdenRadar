@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
+﻿import { useState, useMemo, useEffect, useRef, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, useSearch } from "wouter";
@@ -1211,7 +1211,7 @@ export default function Scout() {
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h1 className="text-2xl font-bold text-foreground tracking-tight">EdenScout</h1>
+                      <h1 className="text-2xl font-bold text-foreground tracking-tight">EdenRadar</h1>
                       <span
                         className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
                         style={{ background: "hsl(142 71% 45% / 0.12)", color: "hsl(142 71% 45%)" }}

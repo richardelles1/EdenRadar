@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+﻿import type { Express, Request, Response } from "express";
 
 const SITE_NAME = "EdenRadar";
 const DEFAULT_OG_IMAGE = "/og-image.png";
@@ -42,20 +42,20 @@ export const PUBLIC_PAGES: PublicPage[] = [
     path: "/how-it-works",
     title: "How EdenRadar Works — From Discovery Concept to Closed Deal",
     description:
-      "See how EdenRadar's three portals work together: EdenDiscovery for early-stage concepts, EdenLab for structured research, and EdenScout for industry asset discovery — all powered by the EDEN intelligence engine.",
+      "See how EdenRadar's three portals work together: EdenDiscovery for early-stage concepts, EdenLab for structured research, and EdenRadar for industry asset discovery — all powered by the EDEN intelligence engine.",
     changefreq: "monthly",
   },
   {
     path: "/pricing",
-    title: "Pricing — EdenScout, EdenLab, EdenDiscovery & EdenMarket | EdenRadar",
+    title: "Pricing — EdenRadar, EdenLab, EdenDiscovery & EdenMarket | EdenRadar",
     description:
-      "Free for researchers and concept creators. EdenScout starts at affordable per-seat pricing for industry BD teams. EdenMarket adds confidential deal flow with success-fee pricing.",
+      "Free for researchers and concept creators. EdenRadar starts at affordable per-seat pricing for industry BD teams. EdenMarket adds confidential deal flow with success-fee pricing.",
     changefreq: "monthly",
     schemas: [
       {
         "@context": "https://schema.org",
         "@type": "Product",
-        name: "EdenScout",
+        name: "EdenRadar",
         description:
           "Continuous discovery and AI enrichment of biotech assets from 300+ tech transfer offices for industry BD teams.",
         brand: { "@type": "Brand", name: "EdenRadar" },

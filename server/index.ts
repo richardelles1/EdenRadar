@@ -1,4 +1,4 @@
-import { initSentry } from "./lib/sentry";
+﻿import { initSentry } from "./lib/sentry";
 import * as Sentry from "@sentry/node";
 initSentry();
 
@@ -1196,7 +1196,7 @@ function planTierLabel(tier: string | null | undefined): string {
     case "team5":      return "Team (5 seats)";
     case "team10":     return "Team (10 seats)";
     case "enterprise": return "Enterprise";
-    default:           return tier ?? "EdenScout";
+    default:           return tier ?? "EdenRadar";
   }
 }
 
@@ -1644,7 +1644,7 @@ async function createMarketDealsTables() {
     await db.execute(sql`ALTER TABLE market_deals ADD COLUMN IF NOT EXISTS status_history JSONB NOT NULL DEFAULT '[]'`);
     await db.execute(sql`ALTER TABLE market_deals ADD COLUMN IF NOT EXISTS nda_document_path TEXT`);
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS market_deals_eoi_id_unique ON market_deals(eoi_id)`);
-    // EdenScout linkage — allow sellers to link a listing to an ingested_assets record
+    // EdenRadar linkage — allow sellers to link a listing to an ingested_assets record
     await db.execute(sql`ALTER TABLE market_listings ADD COLUMN IF NOT EXISTS ingested_asset_id INTEGER`);
     // Add FK constraint (idempotent via pg_constraint check)
     await db.execute(sql`
@@ -1655,7 +1655,7 @@ async function createMarketDealsTables() {
         END IF;
       END $$
     `);
-    // In-app notifications table for EdenScout → EdenMarket availability signal
+    // In-app notifications table for EdenRadar → EdenMarket availability signal
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_availability_notifications (
         id               SERIAL PRIMARY KEY,

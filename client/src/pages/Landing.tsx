@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
@@ -393,10 +393,10 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
 
       {active === "industry" ? (
         <div className="space-y-6" key="industry" id="portal-panel-industry" role="tabpanel" aria-labelledby="portal-tab-industry">
-          {/* EdenScout sub-section */}
+          {/* EdenRadar sub-section */}
           <div className="space-y-3">
             <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-primary/60">
-              EdenScout: Pipeline Intelligence
+              EdenRadar: Pipeline Intelligence
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {INDUSTRY_TILES.map((tile, i) => (
@@ -455,7 +455,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
               className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors duration-150 flex items-center gap-1"
               data-testid="button-toggle-scout-cta"
             >
-              Explore EdenScout
+              Explore EdenRadar
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
             <span className="hidden sm:block text-border" aria-hidden="true">|</span>
@@ -558,7 +558,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
           >
             <Building2 className="w-4 h-4" />
-            EdenScout
+            EdenRadar
           </Button>
           <Link href="/market" className="w-full sm:w-auto">
             <Button
@@ -956,7 +956,7 @@ export default function Landing() {
 
   if (!loading && session && role) return null;
 
-  function handleLogin() { navigate("/login"); }
+  function handleLogin() { navigate("/demo"); }
   function handleGetStarted() {
     document.getElementById("explore")?.scrollIntoView({ behavior: "smooth" });
   }
@@ -1196,8 +1196,8 @@ export default function Landing() {
               <h4 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-3">For Industry</h4>
               <ul className="space-y-2">
                 <li>
-                  <Link href="/scout" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edenscout">
-                    EdenScout
+                  <Link href="/scout" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-EdenRadar">
+                    EdenRadar
                   </Link>
                 </li>
                 <li>
@@ -1226,8 +1226,13 @@ export default function Landing() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/demo" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-demo">
+                    Request Access
+                  </Link>
+                </li>
+                <li>
                   <Link href="/one-pager" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-one-pager">
-                    EdenScout One-Pager
+                    EdenRadar One-Pager
                   </Link>
                 </li>
               </ul>
@@ -1247,7 +1252,7 @@ export default function Landing() {
                 </li>
                 <li>
                   <button
-                    onClick={handleLogin}
+                    onClick={() => navigate("/login")}
                     className="text-xs text-foreground hover:text-primary transition-colors text-left"
                     data-testid="footer-link-login"
                   >

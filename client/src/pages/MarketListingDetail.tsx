@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -292,7 +292,7 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
         <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
         <div className="flex-1 text-left">
           <p className="text-xs font-bold text-foreground">Eden Intelligence</p>
-          <p className="text-[10px] text-muted-foreground">EdenScout-powered market signals</p>
+          <p className="text-[10px] text-muted-foreground">EdenRadar-powered market signals</p>
         </div>
         {open ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
       </button>
@@ -397,7 +397,7 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
                             a.completenessScore >= 40 ? "text-amber-600 border-amber-500/30 bg-amber-500/8" :
                             "text-muted-foreground border-border"
                           )}
-                          title={`EdenScout completeness: ${a.completenessScore}%`}
+                          title={`EdenRadar completeness: ${a.completenessScore}%`}
                         >
                           <Zap className="w-2 h-2" />{a.completenessScore}
                         </span>

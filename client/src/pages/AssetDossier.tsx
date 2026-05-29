@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+﻿import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -277,7 +277,7 @@ export default function AssetDossier() {
       a.href = url;
       const disposition = res.headers.get("Content-Disposition") ?? "";
       const match = disposition.match(/filename="([^"]+)"/);
-      a.download = match?.[1] ?? `EdenScout_Dossier.pdf`;
+      a.download = match?.[1] ?? `EdenRadar_Dossier.pdf`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
@@ -983,7 +983,7 @@ export default function AssetDossier() {
                   dotColor = "bg-emerald-500";
                 } else if (event.event_type === "first_indexed") {
                   label = "Asset first indexed";
-                  sublabel = "Added to EdenScout";
+                  sublabel = "Added to EdenRadar";
                   dotColor = "bg-sky-500";
                 } else if (event.event_type === "content_update") {
                   label = "Content updated";

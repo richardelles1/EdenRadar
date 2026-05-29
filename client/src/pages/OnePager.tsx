@@ -1,85 +1,17 @@
-import { useEffect, useState } from "react";
-import { Printer, Search, BarChart3, GitBranch, Shield, Bell, FileText, CheckCircle2, Globe, ShoppingBag, Lock, Handshake } from "lucide-react";
+﻿import { useEffect, useState } from "react";
+import { Printer } from "lucide-react";
 import QRCode from "qrcode";
 import { ExportMenu } from "@/components/ExportMenu";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
-const NAVY = "#0f1e35";
-const EMERALD = "#1e7a4a";
-const EMERALD_LIGHT = "#22c55e";
-const SLATE = "#334155";
-const SLATE_LIGHT = "#64748b";
-const WHITE = "#ffffff";
-const CREAM = "#f8fafc";
-const BORDER = "#e2e8f0";
-
-const VALUE_PROPS = [
-  {
-    icon: Search,
-    label: "Discovery",
-    headline: "Find Assets Before the Market Does",
-    body: "Surface pre-clinical and discovery-stage assets from 300+ university TTOs the moment they go live — EDEN-enriched with target, modality, indication, and development stage.",
-  },
-  {
-    icon: BarChart3,
-    label: "Intelligence",
-    headline: "Scored, Structured BD Intelligence",
-    body: "Every asset is automatically scored for commercial potential, IP quality, and clinical viability. Stop reading through raw TTO pages — get pipeline-ready signals straight to your desk.",
-  },
-  {
-    icon: GitBranch,
-    label: "Pipeline",
-    headline: "Build Your Watchlist & Track Deals",
-    body: "Save assets to a private pipeline, set threshold alerts, generate portfolio dossiers, and export board-ready reports. Everything your BD team needs in one place.",
-  },
-];
-
-const STATS = [
-  { value: "300+", label: "Institutions" },
-  { value: "33,000+", label: "Assets Indexed" },
-  { value: "50+", label: "Live Sources" },
-  { value: "Daily", label: "Data Refresh" },
-];
-
-const FEATURES = [
-  { icon: Search, text: "Semantic full-text search across all TTO listings" },
-  { icon: BarChart3, text: "EDEN AI enrichment: target, modality, stage, IPC codes" },
-  { icon: Bell, text: "Threshold alerts for new assets matching your criteria" },
-  { icon: FileText, text: "One-click portfolio dossiers & pipeline CSV exports" },
-  { icon: Shield, text: "Institution profiles with deal history and researcher contacts" },
-  { icon: Globe, text: "Coverage across top-50 US research universities + key global TTOs" },
-  { icon: GitBranch, text: "Asset comparison and side-by-side scoring" },
-  { icon: CheckCircle2, text: "Share-ready reports formatted for BD and board review" },
-];
-
-const PRICING = [
-  {
-    tier: "Scout",
-    price: "$1,999",
-    period: "/mo",
-    desc: "Single user. Up to 500 saved assets. Monthly dossier exports.",
-    highlight: false,
-  },
-  {
-    tier: "Intelligence",
-    price: "$8,999",
-    period: "/mo",
-    desc: "Up to 5 seats. Unlimited pipeline. Custom alerts. API access.",
-    highlight: true,
-  },
-  {
-    tier: "Enterprise",
-    price: "$16,999",
-    period: "/mo",
-    desc: "Unlimited seats. White-glove onboarding. Dedicated account manager.",
-    highlight: false,
-  },
-];
-
 function useQrSvg(url: string) {
   const [svg, setSvg] = useState<string>("");
   useEffect(() => {
-    QRCode.toString(url, { type: "svg", margin: 1, color: { dark: NAVY, light: WHITE } })
+    QRCode.toString(url, {
+      type: "svg",
+      margin: 1,
+      color: { dark: "#0d1625", light: "#ffffff" },
+    })
       .then(setSvg)
       .catch(() => setSvg(""));
   }, [url]);
@@ -88,11 +20,24 @@ function useQrSvg(url: string) {
 
 export default function OnePager() {
   useDocumentMeta({
-    title: "EdenRadar One-Pager — Biotech Asset Discovery & Marketplace",
+    title: "EdenRadar: BD Intelligence Platform",
     description:
-      "Single-page overview of EdenRadar: AI-powered biotech asset discovery, EDEN scoring, and a confidential industry-research-concept marketplace.",
+      "EdenRadar monitors 350+ technology transfer offices in real time, scoring and enriching every asset before it reaches a patent database.",
   });
-  const qrSvg = useQrSvg("https://edenradar.com");
+
+  const qrSvg = useQrSvg("https://edenradar.com/demo");
+
+  useEffect(() => {
+    const id = "barlow-font-op";
+    if (!document.getElementById(id)) {
+      const link = document.createElement("link");
+      link.id = id;
+      link.rel = "stylesheet";
+      link.href =
+        "https://fonts.googleapis.com/css2?family=Barlow:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&family=Barlow+Semi+Condensed:wght@600;700;800&display=swap";
+      document.head.appendChild(link);
+    }
+  }, []);
 
   function handlePrint() {
     window.print();
@@ -101,280 +46,437 @@ export default function OnePager() {
   return (
     <>
       <style>{`
+        /* ── Shell ─────────────────────────────────────────────────── */
         .op-shell {
           min-height: 100vh;
-          background: #dde3ea;
+          background: hsl(210 25% 88%);
           display: flex;
           flex-direction: column;
           align-items: center;
-          padding-top: 32px;
-          padding-bottom: 48px;
-          font-family: 'Open Sans', sans-serif;
+          padding: 36px 16px 56px;
+          font-family: 'Barlow', system-ui, sans-serif;
         }
 
-        .op-document {
+        .op-controls {
+          position: fixed;
+          top: 20px;
+          right: 24px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          z-index: 100;
+        }
+
+        .op-dl-btn {
+          display: flex;
+          align-items: center;
+          gap: 7px;
+          padding: 9px 20px;
+          background: hsl(33 85% 44%);
+          color: #fff;
+          font-family: 'Barlow', system-ui, sans-serif;
+          font-size: 13px;
+          font-weight: 600;
+          border: none;
+          border-radius: 6px;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .op-dl-btn:hover { background: hsl(33 85% 38%); }
+
+        .op-hint {
+          margin-top: 16px;
+          font-size: 11px;
+          color: hsl(215 20% 42%);
+          text-align: center;
+          font-family: 'Barlow', system-ui, sans-serif;
+        }
+
+        /* ── Document ──────────────────────────────────────────────── */
+        .op-doc {
           width: 794px;
           max-width: 100%;
-          background: #ffffff;
-          box-shadow: 0 8px 40px rgba(0,0,0,0.18);
-          border-radius: 4px;
+          background: hsl(210 25% 97%);
+          box-shadow: 0 12px 48px hsl(222 40% 10% / 0.22);
           overflow: hidden;
         }
 
-        .op-header {
-          background: ${NAVY};
-          padding: 28px 40px 24px;
+        /* ── Header (light, emerald rule) ─────────────────────────── */
+        .op-hd {
+          background: hsl(210 25% 97%);
+          padding: 14px 40px;
+          border-bottom: 2px solid hsl(142 52% 36%);
           display: flex;
-          align-items: flex-start;
+          align-items: center;
           justify-content: space-between;
-          gap: 24px;
+          gap: 20px;
         }
 
+        .op-wordmark {
+          display: flex;
+          align-items: center;
+          gap: 9px;
+        }
+
+        .op-wordmark-text {
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 16px;
+          font-weight: 700;
+          letter-spacing: -0.02em;
+          color: hsl(222 40% 14%);
+        }
+
+        .op-wordmark-text em {
+          font-style: normal;
+          color: hsl(142 52% 36%);
+        }
+
+        .op-hd-right {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 3px;
+        }
+
+        .op-hd-url {
+          font-size: 11px;
+          font-weight: 600;
+          letter-spacing: 0.03em;
+          color: hsl(222 40% 22%);
+        }
+
+        .op-hd-date {
+          font-size: 9px;
+          color: hsl(215 18% 52%);
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+        }
+
+        /* ── Hero (light, emerald headline) ───────────────────────── */
         .op-hero {
-          padding: 32px 40px 26px;
-          background: linear-gradient(135deg, #0f1e35 0%, #112d1c 100%);
-          border-bottom: 3px solid ${EMERALD};
+          background: hsl(210 25% 97%);
+          padding: 36px 40px 34px;
+          border-bottom: 1px solid hsl(142 28% 89%);
+          position: relative;
+          overflow: hidden;
         }
 
-        .op-hero h1 {
-          color: ${WHITE};
-          font-size: 26px;
-          font-weight: 800;
-          line-height: 1.18;
-          letter-spacing: -0.4px;
-          margin-bottom: 10px;
+        /* Subtle emerald radial glow top-right — echoes landing page RadarBackground */
+        .op-hero::before {
+          content: '';
+          position: absolute;
+          top: -60px;
+          right: -60px;
+          width: 380px;
+          height: 380px;
+          background: radial-gradient(circle, hsl(142 55% 48% / 0.07) 0%, transparent 65%);
+          pointer-events: none;
+        }
+
+        .op-hero-hed {
+          position: relative;
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 32px;
+          line-height: 1.08;
+          letter-spacing: -0.025em;
+          color: hsl(142 52% 30%);
+          margin-bottom: 13px;
+          max-width: 590px;
+        }
+
+        .op-hero-hed-setup { font-weight: 600; }
+        .op-hero-hed-punch { font-weight: 800; }
+
+        .op-hero-kicker {
+          position: relative;
+          font-size: 13px;
+          font-weight: 600;
+          color: hsl(33 85% 40%);
+          margin-bottom: 14px;
+          letter-spacing: 0.01em;
+        }
+
+        .op-hero-body {
+          position: relative;
+          font-size: 13px;
+          font-weight: 400;
+          line-height: 1.72;
+          color: hsl(222 30% 32%);
           max-width: 560px;
         }
 
-        .op-hero p {
-          color: rgba(255,255,255,0.72);
-          font-size: 13px;
-          line-height: 1.65;
-          max-width: 540px;
+        /* ── Numbered sections ─────────────────────────────────────── */
+        .op-body {
+          background: hsl(210 25% 97%);
+          padding: 0 40px;
+          border-bottom: 1px solid hsl(142 28% 89%);
+        }
+
+        .op-section {
+          display: grid;
+          grid-template-columns: 64px 1fr;
+          gap: 0 20px;
+          padding: 26px 0;
+          border-bottom: 1px solid hsl(142 28% 90%);
+        }
+
+        .op-section:last-child { border-bottom: none; }
+
+        .op-sec-num {
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 48px;
+          font-weight: 800;
+          letter-spacing: -0.04em;
+          color: hsl(142 52% 36%);
+          line-height: 1;
+          padding-top: 1px;
+        }
+
+        .op-sec-hed {
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 15px;
+          font-weight: 700;
+          letter-spacing: -0.01em;
+          color: hsl(222 47% 12%);
+          margin-bottom: 8px;
+          line-height: 1.2;
+        }
+
+        .op-sec-body {
+          font-size: 12px;
+          font-weight: 400;
+          line-height: 1.74;
+          color: hsl(222 30% 24%);
           margin: 0;
         }
 
-        .op-value-grid {
+        .op-sec-body strong {
+          font-weight: 600;
+          color: hsl(33 85% 38%);
+        }
+
+        /* ── Coverage strip (dark forest green) ────────────────────── */
+        .op-cov {
+          background: hsl(142 38% 11%);
           display: grid;
-          grid-template-columns: 1fr 1fr 1fr;
-          background: ${CREAM};
-          border-bottom: 1px solid ${BORDER};
+          grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr;
         }
 
-        .op-value-cell {
-          padding: 22px 22px 20px;
+        .op-cov-divider {
+          background: hsl(142 40% 20% / 0.5);
         }
 
-        .op-value-cell + .op-value-cell {
-          border-left: 1px solid ${BORDER};
-        }
-
-        .op-stats-bar {
-          display: grid;
-          grid-template-columns: 1fr 1fr 1fr 1fr;
-          background: ${NAVY};
-        }
-
-        .op-stat-cell {
-          padding: 16px 20px;
+        .op-cov-cell {
+          padding: 20px 16px;
           text-align: center;
         }
 
-        .op-stat-cell + .op-stat-cell {
-          border-left: 1px solid rgba(255,255,255,0.08);
+        .op-cov-num {
+          display: block;
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 26px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          line-height: 1;
+          margin-bottom: 3px;
         }
 
-        .op-features-section {
-          padding: 26px 40px 22px;
-          background: ${WHITE};
-          border-bottom: 1px solid ${BORDER};
+        .op-cov-num.amber { color: hsl(33 85% 58%); }
+        .op-cov-num.emerald { color: hsl(142 65% 58%); }
+
+        .op-cov-label {
+          display: block;
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: hsl(142 32% 62%);
+          margin-bottom: 7px;
         }
 
-        .op-features-grid {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 8px 28px;
+        .op-cov-ex {
+          display: block;
+          font-size: 10.5px;
+          color: hsl(142 18% 58%);
+          line-height: 1.55;
         }
 
-        .op-pricing-section {
-          padding: 22px 40px 22px;
-          background: ${CREAM};
-          border-bottom: 1px solid ${BORDER};
+        /* ── Pricing ───────────────────────────────────────────────── */
+        .op-pricing {
+          background: hsl(142 15% 96%);
+          padding: 22px 40px;
+          border-bottom: 1px solid hsl(142 28% 89%);
         }
 
-        .op-pricing-grid {
+        .op-pricing-hed {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: hsl(215 20% 48%);
+          margin-bottom: 13px;
+        }
+
+        .op-pricing-table {
           display: grid;
           grid-template-columns: 1fr 1fr 1fr;
-          gap: 10px;
+          border: 1px solid hsl(142 28% 87%);
+          background: hsl(142 28% 87%);
+          gap: 1px;
         }
 
-        .op-footer {
-          padding: 18px 40px;
-          background: ${NAVY};
+        .op-tier {
+          padding: 15px 17px;
+          background: hsl(210 25% 97%);
+        }
+
+        .op-tier-featured {
+          background: hsl(142 42% 10%);
+        }
+
+        .op-tier-name {
+          font-size: 9px;
+          font-weight: 700;
+          letter-spacing: 0.16em;
+          text-transform: uppercase;
+          color: hsl(142 52% 36%);
+          margin-bottom: 7px;
+        }
+
+        .op-tier-featured .op-tier-name {
+          color: hsl(142 65% 55%);
+        }
+
+        .op-tier-price {
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 22px;
+          font-weight: 800;
+          letter-spacing: -0.03em;
+          color: hsl(222 47% 12%);
+          line-height: 1;
+          margin-bottom: 8px;
+        }
+
+        .op-tier-price span {
+          font-size: 12px;
+          font-weight: 500;
+          color: hsl(215 18% 52%);
+          letter-spacing: 0;
+        }
+
+        .op-tier-featured .op-tier-price { color: hsl(210 25% 95%); }
+        .op-tier-featured .op-tier-price span { color: hsl(142 22% 60%); }
+
+        .op-tier-desc {
+          font-size: 11px;
+          line-height: 1.6;
+          color: hsl(215 18% 44%);
+        }
+
+        .op-tier-featured .op-tier-desc { color: hsl(142 20% 64%); }
+
+        /* ── Footer ────────────────────────────────────────────────── */
+        .op-ft {
+          background: hsl(142 15% 95%);
+          border-top: 1px solid hsl(142 28% 88%);
+          padding: 22px 40px;
           display: flex;
           align-items: center;
           justify-content: space-between;
           gap: 24px;
         }
 
-        .op-section-label {
-          font-size: 10px;
+        .op-cta-btn {
+          display: inline-block;
+          padding: 10px 22px;
+          background: hsl(33 85% 44%);
+          color: #fff;
+          font-family: 'Barlow Semi Condensed', system-ui, sans-serif;
+          font-size: 12px;
           font-weight: 700;
-          letter-spacing: 0.12em;
+          letter-spacing: 0.04em;
+          text-decoration: none;
+          border-radius: 3px;
+          margin-bottom: 10px;
+          cursor: pointer;
+          border: none;
+          transition: background 0.15s;
+        }
+        .op-cta-btn:hover { background: hsl(33 85% 38%); }
+
+        .op-ft-contact {
+          font-size: 10px;
+          color: hsl(215 20% 44%);
+          line-height: 1.7;
+        }
+
+        .op-ft-right {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 5px;
+          flex-shrink: 0;
+        }
+
+        .op-qr-wrap {
+          width: 66px;
+          height: 66px;
+          background: #fff;
+          border-radius: 4px;
+          padding: 3px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .op-qr-wrap svg { width: 100%; height: 100%; }
+
+        .op-qr-label {
+          font-size: 9px;
+          letter-spacing: 0.06em;
+          color: hsl(215 16% 44%);
           text-transform: uppercase;
-          color: ${SLATE_LIGHT};
-          margin-bottom: 14px;
         }
 
-        /* ── MOBILE RESPONSIVE ── */
+        /* ── Responsive ────────────────────────────────────────────── */
         @media (max-width: 640px) {
-          .op-shell {
-            padding-top: 16px;
-            padding-bottom: 32px;
-          }
-
-          .op-header {
-            padding: 20px 20px 18px;
-            flex-direction: column;
-            gap: 10px;
-          }
-
-          .op-header-right {
-            display: none;
-          }
-
-          .op-hero {
-            padding: 24px 20px 20px;
-          }
-
-          .op-hero h1 {
-            font-size: 18px;
-          }
-
-          .op-hero p {
-            font-size: 12px;
-          }
-
-          .op-value-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .op-value-cell + .op-value-cell {
-            border-left: none;
-            border-top: 1px solid ${BORDER};
-          }
-
-          .op-value-cell {
-            padding: 18px 20px;
-          }
-
-          .op-stats-bar {
-            grid-template-columns: 1fr 1fr;
-          }
-
-          .op-stat-cell:nth-child(2) {
-            border-right: none;
-          }
-
-          .op-stat-cell:nth-child(3) {
-            border-left: none;
-            border-top: 1px solid rgba(255,255,255,0.08);
-          }
-
-          .op-stat-cell:nth-child(4) {
-            border-top: 1px solid rgba(255,255,255,0.08);
-          }
-
-          .op-features-section {
-            padding: 20px 20px 18px;
-          }
-
-          .op-features-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .op-pricing-section {
-            padding: 18px 20px;
-          }
-
-          .op-pricing-grid {
-            grid-template-columns: 1fr;
-          }
-
-          .op-footer {
-            padding: 16px 20px;
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 16px;
-          }
-
-          .op-section-label {
-            font-size: 9px;
-          }
+          .op-shell { padding: 16px 0 40px; }
+          .op-hd { padding: 14px 20px; }
+          .op-hd-right .op-badge { display: none; }
+          .op-hero { padding: 26px 20px 28px; }
+          .op-hero-hed { font-size: 23px; }
+          .op-body { padding: 0 20px; }
+          .op-section { grid-template-columns: 36px 1fr; gap: 0 14px; padding: 22px 0; }
+          .op-cov { grid-template-columns: 1fr 1fr; }
+          .op-cov-divider { display: none; }
+          .op-cov-cell { padding: 16px 20px; }
+          .op-pricing { padding: 18px 20px; }
+          .op-pricing-table { grid-template-columns: 1fr; }
+          .op-ft { padding: 20px 20px; flex-direction: column; align-items: flex-start; gap: 16px; }
         }
 
-        /* ── PRINT STYLES ── */
+        /* ── Print ─────────────────────────────────────────────────── */
         @media print {
           .op-shell {
-            background: #ffffff !important;
+            background: #fff !important;
             padding: 0 !important;
             min-height: unset !important;
             display: block !important;
           }
-
-          .op-document {
+          .op-doc {
             width: 100% !important;
             max-width: 100% !important;
             box-shadow: none !important;
-            border-radius: 0 !important;
           }
-
-          .op-value-grid {
-            grid-template-columns: 1fr 1fr 1fr !important;
-          }
-
-          .op-stats-bar {
-            grid-template-columns: 1fr 1fr 1fr 1fr !important;
-          }
-
-          .op-features-grid {
-            grid-template-columns: 1fr 1fr !important;
-          }
-
-          .op-pricing-grid {
-            grid-template-columns: 1fr 1fr 1fr !important;
-          }
-
-          .op-header-right {
-            display: block !important;
-          }
-
-          .op-stat-cell:nth-child(3) {
-            border-left: 1px solid rgba(255,255,255,0.08) !important;
-            border-top: none !important;
-          }
-
-          .op-value-cell + .op-value-cell {
-            border-left: 1px solid ${BORDER} !important;
-            border-top: none !important;
-          }
+          .op-cov { grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr !important; }
+          .op-pricing-table { grid-template-columns: 1fr 1fr 1fr !important; }
+          .op-hd-right { display: flex !important; }
         }
       `}</style>
 
       <div className="op-shell">
-        <div
-          className="no-print"
-          data-export-control
-          style={{
-            position: "fixed",
-            top: "20px",
-            right: "24px",
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            zIndex: 100,
-          }}
-        >
+        {/* ── Export controls (screen only) ── */}
+        <div className="no-print op-controls" data-export-control>
           <ExportMenu
             label="Save to Cloud"
             getContent={async () => {
@@ -390,282 +492,206 @@ export default function OnePager() {
           <button
             onClick={handlePrint}
             data-testid="button-download-pdf"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              padding: "10px 22px",
-              borderRadius: "8px",
-              background: EMERALD,
-              color: WHITE,
-              fontFamily: "'Open Sans', sans-serif",
-              fontSize: "14px",
-              fontWeight: 600,
-              border: "none",
-              cursor: "pointer",
-              boxShadow: "0 4px 14px rgba(30,122,74,0.35)",
-            }}
-            onMouseEnter={(e) => { (e.currentTarget.style.background = "#185e39"); }}
-            onMouseLeave={(e) => { (e.currentTarget.style.background = EMERALD); }}
+            className="op-dl-btn"
           >
-            <Printer size={15} />
+            <Printer size={14} />
             Download as PDF
           </button>
         </div>
 
-        <div className="op-document" data-testid="one-pager-document">
+        {/* ── Document ── */}
+        <div className="op-doc" data-testid="one-pager-document">
 
-          {/* ── HEADER ── */}
-          <div className="op-header">
-            <div>
-              <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }}>
-                <div style={{
-                  width: "34px", height: "34px", borderRadius: "7px", background: EMERALD,
-                  display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-                }}>
-                  <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="12" cy="12" r="10" />
-                    <circle cx="12" cy="12" r="6" />
-                    <circle cx="12" cy="12" r="2" />
-                    <line x1="2" y1="12" x2="4" y2="12" />
-                    <line x1="20" y1="12" x2="22" y2="12" />
-                    <line x1="12" y1="2" x2="12" y2="4" />
-                    <line x1="12" y1="20" x2="12" y2="22" />
-                  </svg>
-                </div>
-                <span style={{ color: WHITE, fontWeight: 700, fontSize: "19px", letterSpacing: "-0.3px" }}>
-                  Eden<span style={{ color: EMERALD_LIGHT }}>Radar</span>
-                </span>
-              </div>
-              <div style={{
-                display: "inline-block",
-                background: "rgba(34,197,94,0.12)",
-                border: "1px solid rgba(34,197,94,0.3)",
-                borderRadius: "4px",
-                padding: "3px 10px",
-                color: EMERALD_LIGHT,
-                fontSize: "10px",
-                fontWeight: 700,
-                letterSpacing: "0.12em",
-                textTransform: "uppercase",
-              }}>
-                EdenScout Intelligence Platform
-              </div>
+          {/* HEADER */}
+          <div className="op-hd">
+            <div className="op-wordmark">
+              <svg width="26" height="26" viewBox="0 0 28 28" fill="none" style={{ color: "hsl(142 52% 36%)" }}>
+                <circle cx="14" cy="14" r="12" stroke="currentColor" strokeWidth="1.4" />
+                <circle cx="14" cy="14" r="7.5" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.55" />
+                <circle cx="14" cy="14" r="3" stroke="currentColor" strokeWidth="1.2" strokeOpacity="0.35" />
+                <line x1="2" y1="14" x2="5" y2="14" stroke="currentColor" strokeWidth="1.2" />
+                <line x1="23" y1="14" x2="26" y2="14" stroke="currentColor" strokeWidth="1.2" />
+                <line x1="14" y1="2" x2="14" y2="5" stroke="currentColor" strokeWidth="1.2" />
+                <line x1="14" y1="23" x2="14" y2="26" stroke="currentColor" strokeWidth="1.2" />
+              </svg>
+              <span className="op-wordmark-text">Eden<em>Radar</em></span>
             </div>
-
-            <div className="op-header-right" style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ color: "rgba(255,255,255,0.5)", fontSize: "10px", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: "2px" }}>
-                For BD Teams
-              </div>
-              <div style={{ color: "rgba(255,255,255,0.75)", fontSize: "10px" }}>
-                edenradar.com
-              </div>
+            <div className="op-hd-right">
+              <span className="op-hd-url">edenradar.com</span>
+              <span className="op-hd-date">May 2026</span>
             </div>
           </div>
 
-          {/* ── HERO ── */}
+          {/* HERO */}
           <div className="op-hero">
-            <h1>
-              The BD Intelligence Platform Built for{" "}
-              <span style={{ color: EMERALD_LIGHT }}>Pharma & Biotech</span>
+            <h1 className="op-hero-hed">
+              <span className="op-hero-hed-setup">By the time an asset appears in a public filing,</span><br />
+              <span className="op-hero-hed-punch">the licensing window is already closing.</span>
             </h1>
-            <p>
-              EdenScout aggregates, enriches, and scores every technology transfer opportunity from 300+ leading research institutions — giving your BD team a structured, searchable, always-fresh view of the pre-clinical innovation landscape.
+            <p className="op-hero-kicker">Before the patent. Before the competition.</p>
+            <p className="op-hero-body">
+              EdenRadar monitors 350+ technology transfer offices in real time, surfacing
+              pre-clinical and discovery-stage assets before they reach patent databases.
+              Every result is scored, enriched by EDEN AI with 12 structured fields, and
+              delivered with the context your BD team needs to evaluate, engage, and move first.
             </p>
           </div>
 
-          {/* ── VALUE PROPS ── */}
-          <div className="op-value-grid">
-            {VALUE_PROPS.map((vp) => (
-              <div key={vp.label} className="op-value-cell">
-                <div style={{
-                  width: "30px", height: "30px", borderRadius: "6px",
-                  background: "rgba(30,122,74,0.1)", display: "flex",
-                  alignItems: "center", justifyContent: "center", marginBottom: "10px",
-                }}>
-                  <vp.icon size={15} color={EMERALD} />
-                </div>
-                <div style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: EMERALD, marginBottom: "5px" }}>
-                  {vp.label}
-                </div>
-                <div style={{ fontSize: "12px", fontWeight: 700, color: NAVY, marginBottom: "6px", lineHeight: 1.3 }}>
-                  {vp.headline}
-                </div>
-                <p style={{ fontSize: "11.5px", color: SLATE_LIGHT, lineHeight: 1.6, margin: 0 }}>
-                  {vp.body}
-                </p>
-              </div>
-            ))}
-          </div>
+          {/* NUMBERED SECTIONS */}
+          <div className="op-body">
 
-          {/* ── STATS BAR ── */}
-          <div className="op-stats-bar">
-            {STATS.map((s) => (
-              <div key={s.label} className="op-stat-cell">
-                <div style={{ fontSize: "22px", fontWeight: 800, color: EMERALD_LIGHT, letterSpacing: "-0.5px", lineHeight: 1, marginBottom: "4px" }}>
-                  {s.value}
-                </div>
-                <div style={{ fontSize: "10px", fontWeight: 600, color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  {s.label}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ── FEATURES ── */}
-          <div className="op-features-section">
-            <div className="op-section-label">What's Included</div>
-            <div className="op-features-grid">
-              {FEATURES.map((f) => (
-                <div key={f.text} style={{ display: "flex", alignItems: "flex-start", gap: "8px" }}>
-                  <div style={{
-                    flexShrink: 0, marginTop: "2px", width: "16px", height: "16px",
-                    borderRadius: "50%", background: "rgba(30,122,74,0.1)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <f.icon size={9} color={EMERALD} />
-                  </div>
-                  <span style={{ fontSize: "11.5px", color: SLATE, lineHeight: 1.5 }}>{f.text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── PRICING ── */}
-          <div className="op-pricing-section">
-            <div className="op-section-label">Pricing — Start with a Free Trial</div>
-            <div className="op-pricing-grid">
-              {PRICING.map((p) => (
-                <div
-                  key={p.tier}
-                  style={{
-                    padding: "14px 16px",
-                    borderRadius: "6px",
-                    background: p.highlight ? NAVY : WHITE,
-                    border: p.highlight ? `2px solid ${EMERALD}` : `1px solid ${BORDER}`,
-                    position: "relative",
-                  }}
-                >
-                  {p.highlight && (
-                    <div style={{
-                      position: "absolute", top: "-1px", right: "12px",
-                      background: EMERALD, color: WHITE,
-                      fontSize: "8px", fontWeight: 700, padding: "2px 7px",
-                      borderRadius: "0 0 4px 4px", letterSpacing: "0.08em", textTransform: "uppercase",
-                    }}>
-                      Most Popular
-                    </div>
-                  )}
-                  <div style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: p.highlight ? EMERALD_LIGHT : EMERALD, marginBottom: "5px" }}>
-                    {p.tier}
-                  </div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: "2px", marginBottom: "7px" }}>
-                    <span style={{ fontSize: "21px", fontWeight: 800, color: p.highlight ? WHITE : NAVY, letterSpacing: "-0.5px" }}>{p.price}</span>
-                    <span style={{ fontSize: "11px", color: p.highlight ? "rgba(255,255,255,0.5)" : SLATE_LIGHT, fontWeight: 500 }}>{p.period}</span>
-                  </div>
-                  <p style={{ fontSize: "10.5px", color: p.highlight ? "rgba(255,255,255,0.65)" : SLATE_LIGHT, lineHeight: 1.55, margin: 0 }}>
-                    {p.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* ── EDENMARKET ── */}
-          <div className="op-pricing-section" style={{ marginTop: "0", paddingTop: "0" }}>
-            <div className="op-section-label" style={{ color: "#7c3aed" }}>EdenMarket — The Blind Marketplace</div>
-            <div style={{
-              padding: "16px 18px",
-              borderRadius: "8px",
-              background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.02))",
-              border: "1px solid rgba(124,58,237,0.25)",
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: "16px",
-              alignItems: "start",
-            }}>
+            <div className="op-section">
+              <div className="op-sec-num">01</div>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-                  <ShoppingBag size={13} color="#7c3aed" />
-                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#7c3aed", letterSpacing: "0.08em", textTransform: "uppercase" }}>Buyers</span>
-                </div>
-                <p style={{ fontSize: "11.5px", color: SLATE, lineHeight: 1.55, margin: "0 0 8px 0" }}>
-                  Browse blind biotech listings — TA, modality, stage, IP — without seller identities. Engage anonymously and unlock the full asset only after NDA.
+                <h2 className="op-sec-hed">Monitor 350+ tech transfer offices in real time, scored against your deal profile.</h2>
+                <p className="op-sec-body">
+                  A single query scans <strong>350+ technology transfer office portals</strong> for pre-commercial,
+                  pre-patent assets alongside <strong>active clinical trial registries</strong>,{" "}
+                  <strong>published literature</strong>, and <strong>patent filings</strong>. Every TTO result
+                  is scored 1–100 against your saved deal profile: therapeutic area, modality, and development
+                  stage. Set your profile once; EdenRadar applies it to every search automatically. Filter by
+                  indication, stage, institution, or date, and sort by score or momentum to surface assets with
+                  the strongest and most recent signal.
                 </p>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "3px", marginTop: "8px" }}>
-                  <span style={{ fontSize: "18px", fontWeight: 800, color: NAVY, letterSpacing: "-0.5px" }}>$1,000</span>
-                  <span style={{ fontSize: "11px", color: SLATE_LIGHT }}>/mo · org-wide access</span>
-                </div>
               </div>
+            </div>
+
+            <div className="op-section">
+              <div className="op-sec-num">02</div>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-                  <Handshake size={13} color="#7c3aed" />
-                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#7c3aed", letterSpacing: "0.08em", textTransform: "uppercase" }}>Sellers</span>
-                </div>
-                <p style={{ fontSize: "11.5px", color: SLATE, lineHeight: 1.55, margin: "0 0 8px 0" }}>
-                  Free to list. Success fees only when a deal closes — incentives stay aligned with you from first listing to signed term sheet.
+                <h2 className="op-sec-hed">Track every asset from first signal to term sheet.</h2>
+                <p className="op-sec-body">
+                  Save any result to a private pipeline and move it across five tracked statuses:{" "}
+                  <strong>Watching, Evaluating, In Discussion, On Hold,</strong> and <strong>Passed</strong>.
+                  The kanban board updates in real time. Add <strong>timestamped team notes</strong>, generate
+                  a <strong>one-click executive brief</strong>, and export the full pipeline as a structured{" "}
+                  <strong>CSV</strong> for BD review. Set saved search alerts; when new assets match your
+                  criteria, EdenRadar surfaces them at the top of your feed.
                 </p>
-                <div style={{ display: "flex", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
-                  {[
-                    { label: "Pre-clin", fee: "$10k" },
-                    { label: "Clinical", fee: "$30k" },
-                    { label: "Late-stage", fee: "$50k" },
-                  ].map((t) => (
-                    <div key={t.label} style={{ flex: "1 1 0", minWidth: "60px" }}>
-                      <div style={{ fontSize: "9px", fontWeight: 700, color: "#7c3aed", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "2px" }}>{t.label}</div>
-                      <div style={{ fontSize: "13px", fontWeight: 800, color: NAVY }}>{t.fee}</div>
-                    </div>
-                  ))}
-                </div>
+              </div>
+            </div>
+
+            <div className="op-section">
+              <div className="op-sec-num">03</div>
+              <div>
+                <h2 className="op-sec-hed">A complete intelligence brief, not a database record.</h2>
+                <p className="op-sec-body">
+                  Every asset generates a structured dossier: target, modality, indication, development stage,{" "}
+                  <strong>mechanism of action</strong>, <strong>innovation claim</strong>,{" "}
+                  <strong>unmet need</strong>, <strong>comparable drugs</strong>,{" "}
+                  <strong>patent status</strong>, <strong>licensing readiness</strong>, and TTO contact.
+                  A streamed AI narrative synthesises the science, commercial rationale, and competitive
+                  landscape, closing with a <strong>suggested BD next step</strong>. Competing assets,
+                  active clinical trials, and supporting literature are included automatically. Share via{" "}
+                  <strong>permanent link</strong> or print for board presentation.
+                </p>
+              </div>
+            </div>
+
+            <div className="op-section">
+              <div className="op-sec-num">04</div>
+              <div>
+                <h2 className="op-sec-hed">Map the research landscape before targeting a single asset.</h2>
+                <p className="op-sec-body">
+                  The <strong>Intelligence</strong> tab provides a real-time view of the entire indexed corpus
+                  across all 350+ TTO portals. See which <strong>therapeutic mechanisms</strong> have the
+                  highest research activity, identify <strong>supply gaps</strong> where unmet need is high and
+                  competing assets are scarce, and monitor <strong>modality momentum</strong> to see which
+                  delivery platforms are gaining ground. <strong>Institution velocity</strong> shows which TTOs
+                  are adding assets fastest. Every data point is clickable: select a mechanism, modality, or
+                  institution and EdenRadar runs a pre-filtered search directly from the landscape view.
+                </p>
+              </div>
+            </div>
+
+          </div>
+
+          {/* COVERAGE STRIP */}
+          <div className="op-cov">
+            <div className="op-cov-cell">
+              <span className="op-cov-num amber">350+</span>
+              <span className="op-cov-label">TTO Portals</span>
+              <span className="op-cov-ex">
+                MIT &middot; Stanford &middot; Harvard &middot; Johns Hopkins &middot; UCSF &middot; Oxford &middot; Max Planck &middot; Broad Institute
+              </span>
+            </div>
+            <div className="op-cov-divider" />
+            <div className="op-cov-cell">
+              <span className="op-cov-num emerald">33,000+</span>
+              <span className="op-cov-label">Scored Assets</span>
+              <span className="op-cov-ex">
+                Pre-clinical &middot; Discovery &middot; Phase I/II &middot; Available for licensing
+              </span>
+            </div>
+            <div className="op-cov-divider" />
+            <div className="op-cov-cell">
+              <span className="op-cov-num emerald">12</span>
+              <span className="op-cov-label">Data Intelligence Layers</span>
+              <span className="op-cov-ex">Per asset &middot; Structured &middot; AI-synthesised</span>
+            </div>
+            <div className="op-cov-divider" />
+            <div className="op-cov-cell">
+              <span className="op-cov-num emerald">40+</span>
+              <span className="op-cov-label">Live Data Sources</span>
+              <span className="op-cov-ex">
+                Patents &middot; Clinical Trials &middot; Research
+              </span>
+            </div>
+          </div>
+
+          {/* PRICING */}
+          <div className="op-pricing">
+            <div className="op-pricing-hed">Pricing: Early Access Tiers</div>
+            <div className="op-pricing-table">
+              <div className="op-tier">
+                <div className="op-tier-name">Individual</div>
+                <div className="op-tier-price">$1,999<span>/mo</span></div>
+                <div className="op-tier-desc">Single seat. Pipeline tracking and saved asset lists. PDF and CSV export.</div>
+              </div>
+              <div className="op-tier op-tier-featured">
+                <div className="op-tier-name">Team</div>
+                <div className="op-tier-price">$8,999<span>/mo</span></div>
+                <div className="op-tier-desc">5 seats. Shared pipeline and watchlists. Org dashboard. Priority support.</div>
+              </div>
+              <div className="op-tier">
+                <div className="op-tier-name">Enterprise</div>
+                <div className="op-tier-price">$16,999<span>/mo</span></div>
+                <div className="op-tier-desc">10 seats. Dedicated account manager. Custom alert configurations.</div>
               </div>
             </div>
           </div>
 
-          {/* ── FOOTER ── */}
-          <div className="op-footer">
-            <div style={{ flex: 1 }}>
-              <div style={{
-                display: "inline-block", background: EMERALD, color: WHITE,
-                fontWeight: 700, fontSize: "12px", padding: "8px 18px",
-                borderRadius: "5px", letterSpacing: "0.02em", marginBottom: "12px",
-              }}>
-                Start your free trial → edenradar.com
-              </div>
-              <div style={{ color: "rgba(255,255,255,0.45)", fontSize: "10px", lineHeight: 1.6 }}>
-                <div>hello@edenradar.com</div>
-                <div style={{ marginTop: "2px" }}>© {new Date().getFullYear()} EdenRadar · All rights reserved</div>
+          {/* FOOTER */}
+          <div className="op-ft">
+            <div>
+              <a href="/demo" className="op-cta-btn">
+                Request early access at edenradar.com
+              </a>
+              <div className="op-ft-contact">
+                &copy; {new Date().getFullYear()} EdenRadar &middot; All rights reserved
               </div>
             </div>
-
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "6px", flexShrink: 0 }}>
+            <div className="op-ft-right">
               {qrSvg ? (
-                <div style={{
-                  width: "70px", height: "70px", background: WHITE, borderRadius: "6px",
-                  padding: "4px", display: "flex", alignItems: "center", justifyContent: "center",
-                }}
-                  dangerouslySetInnerHTML={{ __html: qrSvg }}
-                />
+                <div className="op-qr-wrap" dangerouslySetInnerHTML={{ __html: qrSvg }} />
               ) : (
-                <div style={{
-                  width: "70px", height: "70px", background: WHITE, borderRadius: "6px",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                }}>
-                  <Globe size={26} color={NAVY} />
-                </div>
+                <div className="op-qr-wrap" />
               )}
-              <div style={{ color: "rgba(255,255,255,0.4)", fontSize: "9px", textAlign: "center", letterSpacing: "0.05em" }}>
-                Scan to visit
-              </div>
+              <span className="op-qr-label">Scan to apply</span>
             </div>
           </div>
 
         </div>
 
-        <p className="no-print" style={{ marginTop: "18px", fontSize: "12px", color: "#64748b", textAlign: "center" }}>
-          Use the "Download as PDF" button above — or press{" "}
-          <kbd style={{ background: "#fff", border: "1px solid #cbd5e1", padding: "1px 5px", borderRadius: "3px" }}>Ctrl+P</kbd>
+        <p className="no-print op-hint">
+          Use "Download as PDF" above, or press{" "}
+          <kbd style={{ background: "#fff", border: "1px solid #c0c8d4", padding: "1px 5px", borderRadius: "3px", fontFamily: "monospace" }}>
+            Ctrl+P
+          </kbd>
           {" / "}
-          <kbd style={{ background: "#fff", border: "1px solid #cbd5e1", padding: "1px 5px", borderRadius: "3px" }}>⌘P</kbd>
+          <kbd style={{ background: "#fff", border: "1px solid #c0c8d4", padding: "1px 5px", borderRadius: "3px", fontFamily: "monospace" }}>
+            {"⌘"}P
+          </kbd>
           {" "}and choose "Save as PDF".
         </p>
       </div>

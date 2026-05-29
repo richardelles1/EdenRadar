@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { CheckCircle2, ArrowRight, Loader2, AlertTriangle, Sprout, UserPlus, Send, Mail, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -302,7 +302,7 @@ export default function BillingSuccess() {
                   <p className="text-sm text-muted-foreground">
                     {isTrial
                       ? `Full access for 3 days, free of charge${result.orgName ? ` — ${result.orgName}` : ""}.`
-                      : `Welcome to EdenScout${result.orgName ? ` — ${result.orgName}` : ""}.`}
+                      : `Welcome to EdenRadar${result.orgName ? ` — ${result.orgName}` : ""}.`}
                   </p>
                 </div>
 

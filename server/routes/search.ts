@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import fs from "fs";
 import path from "path";
 import type { Express } from "express";
@@ -2216,7 +2216,7 @@ export function registerSearchRoutes(app: Express): void {
         .replace(/[^a-z0-9]/gi, "_").replace(/_+/g, "_").slice(0, 60);
       const date = new Date().toISOString().slice(0, 10);
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="EdenScout_${safeName}_${date}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="EdenRadar_${safeName}_${date}.pdf"`);
       res.setHeader("Content-Length", pdf.length);
       return res.end(pdf);
     } catch (err: any) {
