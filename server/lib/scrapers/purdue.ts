@@ -5,12 +5,12 @@ const INST = "Purdue University";
 const API_BASE = "https://licensing.prf.org/client/products/search";
 const PRODUCT_BASE = "https://licensing.prf.org/product";
 
-// Cap on how many thin listings we send to detail-page enrichment per run.
-// The PRF site (~500+ products) will time out if we try all of them at once.
-const DETAIL_ENRICH_CAP = 200;
+// Raised from 200 — the old cap left most of the catalog unenriched when API descriptions
+// were thin. 500 aligns with detailFetcher's own DETAIL_BATCH_LIMIT.
+const DETAIL_ENRICH_CAP = 500;
 
 // Delay between listing-page API batches to avoid overwhelming the PRF server.
-const BATCH_DELAY_MS = 300;
+const BATCH_DELAY_MS = 500;
 
 interface PurdueProduct {
   name: string;
@@ -57,6 +57,22 @@ async function fetchListingPage(page: number): Promise<PurdueResponse> {
   return res.json() as Promise<PurdueResponse>;
 }
 
+// Retries up to maxAttempts with linear back-off (1 s, 2 s, …) so transient PRF
+// server blips don't silently drop entire pages of 100 products.
+async function fetchListingPageWithRetry(page: number, maxAttempts = 3): Promise<PurdueResponse> {
+  let lastErr: Error | undefined;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (attempt > 0) await sleep(1000 * attempt);
+    try {
+      return await fetchListingPage(page);
+    } catch (err) {
+      lastErr = err as Error;
+      console.warn(`[scraper] ${INST}: page ${page} attempt ${attempt + 1} failed — ${(err as Error).message}`);
+    }
+  }
+  throw lastErr!;
+}
+
 function productDescription(item: PurdueProduct): string {
   return (item.overview || item.short_description || item.description || "").slice(0, 2000);
 }
@@ -66,20 +82,30 @@ export const purdueRFScraper: InstitutionScraper = {
   async scrape(): Promise<ScrapedListing[]> {
     console.log(`[scraper] ${INST}: fetching products via REST API...`);
     try {
-      const first = await fetchListingPage(1);
+      const first = await fetchListingPageWithRetry(1);
       const totalPages = first.pages;
       console.log(`[scraper] ${INST}: ${first.total} total products across ${totalPages} pages`);
 
       const allItems: PurdueProduct[] = [...first.items];
 
       const remaining = Array.from({ length: totalPages - 1 }, (_, i) => i + 2);
+      let skipped = 0;
       for (let i = 0; i < remaining.length; i += 3) {
         await sleep(BATCH_DELAY_MS);
         const batch = remaining.slice(i, i + 3);
-        const settled = await Promise.allSettled(batch.map((p) => fetchListingPage(p)));
+        const settled = await Promise.allSettled(batch.map((p) => fetchListingPageWithRetry(p)));
         for (const result of settled) {
-          if (result.status === "fulfilled") allItems.push(...result.value.items);
+          if (result.status === "fulfilled") {
+            allItems.push(...result.value.items);
+          } else {
+            skipped++;
+            console.warn(`[scraper] ${INST}: page skipped after all retries — ${result.reason?.message}`);
+          }
         }
+      }
+
+      if (skipped > 0) {
+        console.warn(`[scraper] ${INST}: ${skipped} pages could not be fetched — results may be incomplete`);
       }
 
       const seen = new Set<string>();
@@ -109,7 +135,6 @@ export const purdueRFScraper: InstitutionScraper = {
               ".product-description-box .section",
               ".section",
               ".product-description-box",
-              // Fallback generic selectors
               ".description",
               "article .content",
               ".entry-content",

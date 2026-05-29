@@ -441,6 +441,12 @@ export const wsuScraper = createTechPublisherScraper(
 // University of Arizona uses Inteum + Algolia InstantSearch on arizona.technologypublisher.com
 // (public search-only key embedded in the site's own JS bundle).
 // Querying Algolia directly is cleaner than scraping the JS-rendered HTML.
+//
+// KNOWN LIMITATION: The index has more records than the Algolia search-only key can retrieve.
+// Algolia's default paginationLimitedTo=1000 caps the /query endpoint at 1000 records
+// regardless of total index size (currently ~1776). The /browse endpoint bypasses this
+// limit but requires a browse-capable API key (the embedded key has search ACL only).
+// To fix: request a browse-capable key from Arizona TTO or Inteum, then switch to /browse.
 export const arizonaScraper: InstitutionScraper = {
   institution: "University of Arizona",
   scraperType: "api",
@@ -450,8 +456,22 @@ export const arizonaScraper: InstitutionScraper = {
     const INDEX = "Prod_Inteum_TechnologyPublisher_arizona";
     const PAGE_SIZE = 100;
     const results: ScrapedListing[] = [];
+
+    type ArizonaHit = {
+      title?: string;
+      descriptionTruncated?: string;
+      descriptionFull?: string;
+      Url?: string;
+      finalPathCategories?: string;
+      finalPathInventors?: string;
+      techID?: string;
+      disclosureDate?: string;
+    };
+
     let page = 0;
     let nbPages = 1;
+    let nbHits = 0;
+
     do {
       const res = await fetch(
         `https://${APP_ID}-dsn.algolia.net/1/indexes/${INDEX}/query`,
@@ -466,20 +486,11 @@ export const arizonaScraper: InstitutionScraper = {
         }
       );
       if (!res.ok) throw new Error(`Algolia ${res.status}`);
-      const data = await res.json() as {
-        hits: Array<{
-          title?: string;
-          descriptionTruncated?: string;
-          descriptionFull?: string;
-          Url?: string;
-          finalPathCategories?: string;
-          finalPathInventors?: string;
-          techID?: string;
-          disclosureDate?: string;
-        }>;
-        nbPages: number;
-      };
+      const data = await res.json() as { hits: ArizonaHit[]; nbPages: number; nbHits: number };
+
       nbPages = data.nbPages;
+      nbHits = data.nbHits;
+
       for (const hit of data.hits) {
         if (!hit.title) continue;
         // Construct URL from title slug when Algolia omits hit.Url (older entries)
@@ -501,8 +512,19 @@ export const arizonaScraper: InstitutionScraper = {
           publishedDate: hit.disclosureDate,
         });
       }
+
       page++;
     } while (page < nbPages);
+
+    if (nbHits > results.length) {
+      console.warn(
+        `[scraper] University of Arizona: Algolia index has ${nbHits} records but search-only key ` +
+        `is capped at ${results.length} (paginationLimitedTo=1000). ` +
+        `To retrieve all records, a browse-capable API key is required.`
+      );
+    } else {
+      console.log(`[scraper] University of Arizona: ${results.length} records retrieved (${nbHits} in index)`);
+    }
 
     // Depth-fetch: for listings without full descriptions, fetch individual listing pages
     // and parse labeled content sections (Invention, Background, Applications, Advantages,

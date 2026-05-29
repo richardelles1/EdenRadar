@@ -6,10 +6,11 @@ const INST = "Ohio State University";
 const BASE = "https://innovate.osu.edu";
 const LISTING_BASE = `${BASE}/available_technologies/`;
 const DETAIL_CONCURRENCY = 8;
-const LARGE_LIMIT = 500;
-const FALLBACK_LIMIT = 1000;
 
-const CATEGORIES: { id: number; name: string }[] = [
+// Fallback category list used when dynamic discovery fails. Kept up-to-date
+// manually, but the scraper always tries discovery first so new categories
+// on the OSU site are picked up automatically.
+const FALLBACK_CATEGORIES: { id: number; name: string }[] = [
   { id: 61665, name: "Clinical Area" },
   { id: 61784, name: "Life & Health Sciences" },
   { id: 61816, name: "Research & Development Tools" },
@@ -27,14 +28,58 @@ function extractTechUrls($: CheerioAPI): { id: string; url: string }[] {
   return results;
 }
 
+// Fetches the main listing page and parses category filter links to discover all
+// active categories. Falls back to FALLBACK_CATEGORIES on failure so that a
+// temporary OSU outage doesn't permanently break the scraper.
+async function discoverCategories(): Promise<{ id: number; name: string }[]> {
+  const $ = await fetchHtml(LISTING_BASE, 20_000);
+  if (!$) {
+    console.warn(`[scraper] ${INST}: could not load listing page for category discovery — using fallback`);
+    return FALLBACK_CATEGORIES;
+  }
+
+  const cats: { id: number; name: string }[] = [];
+  const seen = new Set<number>();
+
+  $('a[href*="categoryId="]').each((_, el) => {
+    const href = $(el).attr('href') ?? '';
+    const idMatch = href.match(/categoryId=(\d+)/);
+    const nameMatch = href.match(/categoryName=([^&]+)/);
+    if (idMatch && nameMatch) {
+      const id = parseInt(idMatch[1], 10);
+      const name = decodeURIComponent(nameMatch[1].replace(/\+/g, ' '));
+      if (!seen.has(id) && name.length > 0) {
+        seen.add(id);
+        cats.push({ id, name });
+      }
+    }
+  });
+
+  if (cats.length === 0) {
+    console.warn(`[scraper] ${INST}: no category links found in page HTML — using fallback`);
+    return FALLBACK_CATEGORIES;
+  }
+
+  console.log(`[scraper] ${INST}: discovered ${cats.length} categories: ${cats.map((c) => c.name).join(', ')}`);
+  return cats;
+}
+
+// Fetches all listing URLs for a category using a doubling-limit strategy.
+// Starts at limit=500 and doubles on each full page until the server returns
+// fewer items than requested, meaning we have everything. Capped at 5 000 per
+// request to avoid server timeouts on very large categories.
 async function fetchCategoryListings(cat: { id: number; name: string }): Promise<string[]> {
   const seen = new Set<string>();
   const urls: string[] = [];
+  let limit = 500;
 
-  for (const limit of [LARGE_LIMIT, FALLBACK_LIMIT]) {
+  while (true) {
     const pageUrl = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}&limit=${limit}`;
     const $ = await fetchHtml(pageUrl, 20_000);
-    if (!$) break;
+    if (!$) {
+      console.warn(`[scraper] ${INST}: ${cat.name} — fetch failed at limit=${limit}, stopping`);
+      break;
+    }
 
     const found = extractTechUrls($);
     let newCount = 0;
@@ -48,8 +93,15 @@ async function fetchCategoryListings(cat: { id: number; name: string }): Promise
 
     console.log(`[scraper] ${INST}: ${cat.name} limit=${limit} → ${found.length} found, ${newCount} new`);
 
-    // If fewer items than the limit came back, we have everything
-    if (found.length < limit) break;
+    if (found.length < limit) break; // received fewer than requested — have everything
+
+    // Got a full page; double the limit and try again to capture any remaining items.
+    // Cap at 5 000 to avoid requesting an unreasonably large page from OSU's server.
+    if (limit >= 5000) {
+      console.warn(`[scraper] ${INST}: ${cat.name} — hit limit ceiling at ${limit}, some items may be missing`);
+      break;
+    }
+    limit = Math.min(limit * 2, 5000);
   }
 
   console.log(`[scraper] ${INST}: ${cat.name} → ${urls.length} total unique listings`);
@@ -172,10 +224,11 @@ export const osuScraper: InstitutionScraper = {
   scraperTimeoutMs: 20 * 60 * 1000, // 20 min — initial full sync fetches 400+ detail pages
 
   async scrape(_signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: collecting listings from ${CATEGORIES.length} categories...`);
+    const categories = await discoverCategories();
+    console.log(`[scraper] ${INST}: collecting listings from ${categories.length} categories...`);
 
     const allUrls = new Set<string>();
-    for (const cat of CATEGORIES) {
+    for (const cat of categories) {
       const urls = await fetchCategoryListings(cat);
       console.log(`[scraper] ${INST}: ${cat.name} → ${urls.length} listings`);
       for (const u of urls) allUrls.add(u);
@@ -224,8 +277,9 @@ export const osuScraper: InstitutionScraper = {
   },
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: probe — fetching first page of Clinical Area...`);
-    const urls = await fetchCategoryListings(CATEGORIES[0]);
+    console.log(`[scraper] ${INST}: probe — discovering categories and fetching first listings...`);
+    const categories = await discoverCategories();
+    const urls = await fetchCategoryListings(categories[0]);
     const subset = urls.slice(0, maxResults);
     const results = await Promise.all(subset.map(fetchDetail));
     return results.filter((r): r is ScrapedListing => r !== null);
