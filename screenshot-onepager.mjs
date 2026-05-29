@@ -102,9 +102,9 @@ body {
 }
 .sec-body strong { font-weight: 600; color: hsl(33 85% 38%); }
 
-/* COVERAGE — dark forest green, 4 columns */
+/* COVERAGE — 4 columns */
 .cov {
-  background: hsl(142 38% 11%);
+  background: hsl(142 65% 11%);
   display: grid; grid-template-columns: 1fr 1px 1fr 1px 1fr 1px 1fr;
 }
 .cov-div { background: hsl(142 40% 20% / 0.5); }
@@ -127,17 +127,13 @@ body {
   background: hsl(142 15% 96%); padding: 22px 40px;
   border-bottom: 1px solid hsl(142 28% 89%);
 }
-.pricing-hed {
-  font-size: 9px; font-weight: 700; letter-spacing: 0.18em;
-  text-transform: uppercase; color: hsl(215 20% 42%); margin-bottom: 13px;
-}
 .pricing-table {
   display: grid; grid-template-columns: 1fr 1fr 1fr;
   border: 1px solid hsl(142 28% 87%);
   background: hsl(142 28% 87%); gap: 1px;
 }
 .tier { padding: 15px 17px; background: hsl(210 25% 97%); }
-.tier-featured { background: hsl(142 42% 10%); }
+.tier-featured { background: hsl(142 65% 10%); }
 .tier-name {
   font-size: 9px; font-weight: 700; letter-spacing: 0.16em;
   text-transform: uppercase; color: hsl(142 52% 36%); margin-bottom: 7px;
@@ -208,7 +204,7 @@ body {
     </h1>
     <p class="hero-kicker" style="color: hsl(33 85% 40%); font-weight: 600;">Before the patent. Before the competition.</p>
     <p class="hero-body">
-      EdenScout monitors 350+ technology transfer offices in real time, surfacing pre-clinical and
+      EdenRadar monitors 350+ technology transfer offices in real time, surfacing pre-clinical and
       discovery-stage assets before they reach patent databases. Every result is scored, enriched
       by EDEN AI with 12 structured fields, and delivered with the context your BD team needs
       to evaluate, engage, and move first.
@@ -227,7 +223,7 @@ body {
           pre-patent assets alongside <strong>active clinical trial registries</strong>,
           <strong>published literature</strong>, and <strong>patent filings</strong>. Every TTO result
           is scored 1&ndash;100 against your saved deal profile: therapeutic area, modality, and development
-          stage. Set your profile once; EdenScout applies it to every search automatically. Filter by
+          stage. Set your profile once; EdenRadar applies it to every search automatically. Filter by
           indication, stage, institution, or date, and sort by score or momentum to surface assets with
           the strongest and most recent signal.
         </p>
@@ -244,7 +240,7 @@ body {
           The kanban board updates in real time. Add <strong>timestamped team notes</strong>, generate a
           <strong>one-click executive brief</strong>, and export the full pipeline as a structured
           <strong>CSV</strong> for BD review. Set saved search alerts; when new assets match your
-          criteria, EdenScout surfaces them at the top of your feed.
+          criteria, EdenRadar surfaces them at the top of your feed.
         </p>
       </div>
     </div>
@@ -276,7 +272,7 @@ body {
           competing assets are scarce, and monitor <strong>modality momentum</strong> to see which
           delivery platforms are gaining ground. <strong>Institution velocity</strong> shows which TTOs
           are adding assets fastest. Every data point is clickable: select a mechanism, modality, or
-          institution and EdenScout runs a pre-filtered search directly from the landscape view.
+          institution and EdenRadar runs a pre-filtered search directly from the landscape view.
         </p>
       </div>
     </div>
@@ -288,7 +284,7 @@ body {
     <div class="cov-cell">
       <span class="cov-num amber">350+</span>
       <span class="cov-label">TTO Portals</span>
-      <span class="cov-ex">MIT &middot; Stanford &middot; Harvard &middot; Johns Hopkins &middot; UCSF &middot; Oxford &middot; Max Planck &middot; Broad</span>
+      <span class="cov-ex">Global Coverage of<br>Tech Transfer Network</span>
     </div>
     <div class="cov-div"></div>
     <div class="cov-cell">
@@ -312,7 +308,6 @@ body {
 
   <!-- PRICING -->
   <div class="pricing">
-    <div class="pricing-hed">Pricing: Early Access Tiers</div>
     <div class="pricing-table">
       <div class="tier">
         <div class="tier-name">Individual</div>
