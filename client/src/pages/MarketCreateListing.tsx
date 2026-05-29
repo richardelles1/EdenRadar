@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
 import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -87,7 +87,7 @@ const BLIND_FIELD_OPTIONS: Array<{
 }> = [
   { key: "assetName", label: "Asset name", desc: "Hide the asset/program name in the marketplace." },
   { key: "institution", label: "Institution / company", desc: "Hide the institution shown in the Eden Intelligence panel." },
-  { key: "inventorNames", label: "Inventor names", desc: "Hide inventors surfaced from linked EdenScout records." },
+  { key: "inventorNames", label: "Inventor names", desc: "Hide inventors surfaced from linked EdenRadar records." },
   { key: "exactPatentIds", label: "Exact patent IDs", desc: "Hide IP status & patent numbers from the listing detail." },
   { key: "mechanismDetail", label: "Mechanism / target detail", desc: "Hide the mechanism narrative and linked target / MoA fields." },
 ];
@@ -190,7 +190,7 @@ function IntelligenceAssist({
             <div>
               <p className="text-xs font-semibold text-foreground">{linkedAsset.assetName}</p>
               {linkedAsset.institution && <p className="text-[10px] text-muted-foreground">{linkedAsset.institution}</p>}
-              <p className="text-[10px] text-indigo-500/80 mt-0.5">Linked to EdenScout record — intelligence enabled</p>
+              <p className="text-[10px] text-indigo-500/80 mt-0.5">Linked to EdenRadar record — intelligence enabled</p>
             </div>
           </div>
           <button onClick={onClear} className="p-1 rounded text-muted-foreground hover:text-foreground" data-testid="intel-assist-unlink">
@@ -213,11 +213,11 @@ function IntelligenceAssist({
     <div className="space-y-2" data-testid="intel-assist-panel">
       <div className="flex items-center gap-2">
         <Sparkles className="w-3.5 h-3.5 text-indigo-500 shrink-0" />
-        <p className="text-xs font-semibold text-foreground">Link to EdenScout</p>
+        <p className="text-xs font-semibold text-foreground">Link to EdenRadar</p>
         <span className="text-[10px] text-muted-foreground">(optional — unlocks Eden Intelligence for buyers)</span>
       </div>
       <Input
-        placeholder="Search EdenScout for this asset…"
+        placeholder="Search EdenRadar for this asset…"
         value={q}
         onChange={e => setQ(e.target.value)}
         className="h-8 text-xs"
@@ -252,7 +252,7 @@ function IntelligenceAssist({
         </div>
       )}
       {!isFetching && debouncedQ.length >= 2 && suggestions.length === 0 && (
-        <p className="text-[10px] text-muted-foreground pl-1">No EdenScout records found. You can still proceed without linking.</p>
+        <p className="text-[10px] text-muted-foreground pl-1">No EdenRadar records found. You can still proceed without linking.</p>
       )}
     </div>
   );
@@ -350,7 +350,7 @@ export default function MarketCreateListing() {
   // Snapshot of values at the moment of linking — used to detect seller overrides
   const [prefilledSnapshot, setPrefilledSnapshot] = useState<Partial<ListingFormData>>({});
 
-  // Auto-fill form fields from linked EdenScout asset, tracking which were prefilled
+  // Auto-fill form fields from linked EdenRadar asset, tracking which were prefilled
   function handleLinkAsset(a: SuggestedAsset) {
     setLinkedAsset(a);
     setOverriddenFields(new Set());
@@ -504,7 +504,7 @@ export default function MarketCreateListing() {
                 <div className="rounded-md border border-indigo-500/20 bg-indigo-500/5 px-3 py-2 space-y-1">
                   <div className="flex items-center gap-1.5">
                     <Link2 className="w-3 h-3 text-indigo-500 shrink-0" />
-                    <span className="text-[10px] text-muted-foreground">Linked to EdenScout: <strong className="text-foreground">{linkedAsset.assetName}</strong></span>
+                    <span className="text-[10px] text-muted-foreground">Linked to EdenRadar: <strong className="text-foreground">{linkedAsset.assetName}</strong></span>
                   </div>
                   {prefilledFields.length > 0 && (
                     <p className="text-[10px] text-indigo-600 dark:text-indigo-400 pl-4.5">
@@ -731,7 +731,7 @@ export default function MarketCreateListing() {
                 <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   An AI-generated one-paragraph summary will be created from your listing details and shown to buyers in the feed. It focuses on strategic value and deal fit.
-                  {linkedAsset && " Because you've linked an EdenScout record, buyers will also see an Eden Intelligence panel with market signals, related trials, and comparable deals."}
+                  {linkedAsset && " Because you've linked an EdenRadar record, buyers will also see an Eden Intelligence panel with market signals, related trials, and comparable deals."}
                 </p>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+﻿import React, { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -459,7 +459,7 @@ const HOW_IT_WORKS: { title: React.ReactNode; body: React.ReactNode }[] = [
   },
   {
     title: "From signal to term sheet.",
-    body: <>Build your pipeline, pull supporting literature, and construct your business case directly in <span className="text-primary font-semibold">EdenScout</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</>,
+    body: <>Build your pipeline, pull supporting literature, and construct your business case directly in <span className="text-primary font-semibold">EdenRadar</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</>,
   },
 ];
 
@@ -662,7 +662,7 @@ export default function HowItWorks() {
               </Button>
             </div>
             <p className="text-xs mt-6" style={{ color: "hsl(33 30% 48%)" }}>
-              3-day free trial on EdenScout · No card required for researcher tiers
+              3-day free trial on EdenRadar · No card required for researcher tiers
             </p>
           </div>
         </section>

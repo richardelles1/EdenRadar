@@ -1,4 +1,4 @@
-import { db } from "../db";
+﻿import { db } from "../db";
 import { eq } from "drizzle-orm";
 import { marketSavedSearches, marketAvailabilityNotifications, type MarketListing, type MarketSavedSearch, type MarketSavedSearchFilters } from "@shared/schema";
 
@@ -70,9 +70,9 @@ export function listingMatchesSavedSearch(
  * Fan out a freshly-activated listing to every saved search that matches.
  * Inserts at most one `market_availability_notifications` row per buyer
  * (the unique idx on (user_id, listing_id) also dedupes against the
- * EdenScout-link path).
+ * EdenRadar-link path).
  *
- * Returns one record per buyer who got a NEW notification (the EdenScout
+ * Returns one record per buyer who got a NEW notification (the EdenRadar
  * path may have already inserted one — those skip here so callers don't
  * double-send emails).
  */

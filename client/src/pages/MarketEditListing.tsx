@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+﻿import { useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
@@ -70,7 +70,7 @@ const BLIND_FIELD_OPTIONS: Array<{
 }> = [
   { key: "assetName", label: "Asset name", desc: "Hide the asset/program name in the marketplace." },
   { key: "institution", label: "Institution / company", desc: "Hide the institution shown in the Eden Intelligence panel." },
-  { key: "inventorNames", label: "Inventor names", desc: "Hide inventors surfaced from linked EdenScout records." },
+  { key: "inventorNames", label: "Inventor names", desc: "Hide inventors surfaced from linked EdenRadar records." },
   { key: "exactPatentIds", label: "Exact patent IDs", desc: "Hide IP status & patent numbers from the listing detail." },
   { key: "mechanismDetail", label: "Mechanism / target detail", desc: "Hide the mechanism narrative and linked target / MoA fields." },
 ];

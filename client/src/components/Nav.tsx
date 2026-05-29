@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+﻿import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Bookmark, Moon, Sun, Radar, Menu, X, ChevronDown,
@@ -69,7 +69,7 @@ const RESEARCHER_PORTALS: PortalEntry[] = [
 
 const INDUSTRY_PORTALS: PortalEntry[] = [
   {
-    name: "EdenScout",
+    name: "EdenRadar",
     blurb: "Licensable signals from 350+ TTOs, patents, and papers.",
     href: "/scout",
     Icon: Radar,

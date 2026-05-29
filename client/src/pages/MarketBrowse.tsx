@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+﻿import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
@@ -39,16 +39,16 @@ function priceLabel(l: ListingWithMeta) {
 }
 
 // NOTE: server-side formula is authoritative and uses intelligence-derived signals from the
-// linked EdenScout asset (enrichment completeness, patents, clinical-stage trials inference,
+// linked EdenRadar asset (enrichment completeness, patents, clinical-stage trials inference,
 // scientific specificity). Client fallback is a structural approximation only — it activates
 // only when the listing was fetched without server score (e.g. cached response).
 function getEdenSignalScore(l: ListingWithMeta): number {
   if (l.edenSignalScore != null) return l.edenSignalScore; // always prefer server value
   // Client-side structural fallback (no intelligence signals available):
-  // EdenScout link: +30 base; market completeness: price+10, aiSummary+5, mechanism+5,
+  // EdenRadar link: +30 base; market completeness: price+10, aiSummary+5, mechanism+5,
   // full TA/modality/stage classification: +10, active engagement: +5 → max 65 unlinked, 95 linked
   let s = 0;
-  if (l.ingestedAssetId) s += 30;    // EdenScout link (no enrichment bonus without server data)
+  if (l.ingestedAssetId) s += 30;    // EdenRadar link (no enrichment bonus without server data)
   if (l.priceRangeMin) s += 10;       // price signal
   if (l.aiSummary) s += 5;            // AI summary
   if (l.mechanism) s += 5;            // mechanism disclosed

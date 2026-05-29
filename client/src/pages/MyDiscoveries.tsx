@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -57,7 +57,7 @@ export default function MyDiscoveries() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/discoveries", researcherId] });
       toast({
-        title: "Published to EdenScout!",
+        title: "Published to EdenRadar!",
         description: "Your discovery is now visible to industry buyers in Scout.",
       });
     },
@@ -144,7 +144,7 @@ export default function MyDiscoveries() {
           <div>
             <h3 className="font-semibold text-foreground mb-1">No discoveries yet</h3>
             <p className="text-sm text-muted-foreground max-w-xs">
-              Create your first Discovery Card to share your research with industry partners through EdenScout.
+              Create your first Discovery Card to share your research with industry partners through EdenRadar.
             </p>
           </div>
           <Button
@@ -378,7 +378,7 @@ function DiscoveryCardItem({
               data-testid={`button-publish-discovery-${card.id}`}
             >
               <Send className="w-3 h-3" />
-              Publish to EdenScout
+              Publish to EdenRadar
             </Button>
           )}
         </div>

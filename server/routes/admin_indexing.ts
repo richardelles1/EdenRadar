@@ -1,4 +1,4 @@
-import type { Express } from "express";
+﻿import type { Express } from "express";
 import { z } from "zod";
 import { db } from "../db";
 import { eq, and, sql, desc, isNull } from "drizzle-orm";
@@ -490,7 +490,7 @@ export function registerIndexingRoutes(app: Express): void {
         .where(eq(researchProjects.id, projectId));
 
       // Bridge into ingested_assets so approved researcher submissions surface in
-      // EdenScout/Institutions alongside scraped tech-transfer assets.
+      // EdenRadar/Institutions alongside scraped tech-transfer assets.
       const fingerprint = `researcher-project-${projectId}`;
       if (adminStatus === "published") {
         const [project] = await db.select().from(researchProjects).where(eq(researchProjects.id, projectId)).limit(1);

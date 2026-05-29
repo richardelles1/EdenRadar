@@ -1,4 +1,4 @@
-import { useForm } from "react-hook-form";
+﻿import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useState, useRef } from "react";
@@ -156,7 +156,7 @@ export default function CreateDiscovery() {
           headers: researcherHeaders,
         });
         toast({
-          title: "Published to EdenScout!",
+          title: "Published to EdenRadar!",
           description: "Your discovery is now visible to industry buyers in the Scout portal.",
         });
       } else {
@@ -192,7 +192,7 @@ export default function CreateDiscovery() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Create Discovery Card</h1>
           <p className="text-sm text-muted-foreground">
-            Publish your research to reach industry partners through EdenScout.
+            Publish your research to reach industry partners through EdenRadar.
           </p>
         </div>
       </div>
@@ -458,7 +458,7 @@ export default function CreateDiscovery() {
               data-testid="button-publish-to-industry"
             >
               <Send className="w-4 h-4" />
-              Publish to EdenScout
+              Publish to EdenRadar
             </Button>
           </div>
         </form>

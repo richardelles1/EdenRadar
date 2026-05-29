@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS ?? "EdenRadar <noreply@edenradar.com>";
@@ -10,8 +10,8 @@ const BILLING_EMAIL = "billing@edenradar.com";
 const MARKET_EMAIL = "market@edenradar.com";
 
 const FROM_NOREPLY = "EdenRadar <noreply@edenradar.com>";
-const FROM_ONBOARDING = "EdenScout <onboarding@edenradar.com>";
-const FROM_BILLING = "EdenScout <billing@edenradar.com>";
+const FROM_ONBOARDING = "EdenRadar <onboarding@edenradar.com>";
+const FROM_BILLING = "EdenRadar <billing@edenradar.com>";
 const FROM_MARKET = "EdenMarket <market@edenradar.com>";
 export const FROM_DIGEST = "EdenRadar Alerts <digest@edenradar.com>";
 
@@ -34,10 +34,10 @@ if (!process.env.RESEND_FROM_ADDRESS) {
 }
 
 const PLAN_LABELS: Record<string, string> = {
-  individual: "EdenScout Individual",
-  team5: "EdenScout Team (5 seats)",
-  team10: "EdenScout Team (10 seats)",
-  enterprise: "EdenScout Enterprise",
+  individual: "EdenRadar Individual",
+  team5: "EdenRadar Team (5 seats)",
+  team10: "EdenRadar Team (10 seats)",
+  enterprise: "EdenRadar Enterprise",
 };
 
 function planLabel(tier: string): string {
@@ -312,7 +312,7 @@ export function sendWelcomeEmail(to: string, name: string): Promise<void> {
       </tr>
       <tr>
         <td style="padding:14px 16px;">
-          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">EdenScout</p>
+          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#111827;">EdenRadar</p>
           <p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">Set deal alerts and receive weekly pipeline recaps. Available on team plans.</p>
         </td>
       </tr>
@@ -361,7 +361,7 @@ export function sendTeamInviteEmail(
     <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">${headline}</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">${intro}</p>
     <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
-      You will have access to EdenScout, EdenDiscovery, and EdenLab once you set your password below.
+      You will have access to EdenRadar, EdenDiscovery, and EdenLab once you set your password below.
     </p>
     ${actionBlock}
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
@@ -382,7 +382,7 @@ export function sendSubscriptionWelcomeEmail(
 ): Promise<void> {
   const label = planLabel(planTier);
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome to EdenScout!</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome to EdenRadar!</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
       Thanks for subscribing${orgName ? `, ${orgName}` : ""}. Your <strong>${label}</strong> plan is now active.
     </p>
@@ -404,14 +404,14 @@ export function sendSubscriptionWelcomeEmail(
     </table>
     <a href="${APP_URL}"
        style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
-      Open EdenScout
+      Open EdenRadar
     </a>
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       Need help getting started? Reply to this email or reach us at
       <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
   `, { replyToHint: SUPPORT_EMAIL });
-  return sendEmail(to, "Welcome to EdenScout — your subscription is active.", html, {
+  return sendEmail(to, "Welcome to EdenRadar — your subscription is active.", html, {
     from: FROM_ONBOARDING,
     replyTo: SUPPORT_EMAIL,
   });
@@ -426,7 +426,7 @@ export function sendPaymentFailedEmail(
   const html = baseHtml(`
     <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Action required: payment failed</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-      ${greeting} we were unable to process your EdenScout subscription payment. To keep your
+      ${greeting} we were unable to process your EdenRadar subscription payment. To keep your
       access uninterrupted, please update your payment method as soon as possible.
     </p>
     <a href="${billingPortalUrl}"
@@ -439,7 +439,7 @@ export function sendPaymentFailedEmail(
       <a href="mailto:${BILLING_EMAIL}" style="color:#059669;text-decoration:none;">${BILLING_EMAIL}</a>.
     </p>
   `, { replyToHint: BILLING_EMAIL });
-  return sendEmail(to, "Your EdenScout payment failed — action required", html, {
+  return sendEmail(to, "Your EdenRadar payment failed — action required", html, {
     from: FROM_BILLING,
     replyTo: BILLING_EMAIL,
   });
@@ -452,21 +452,21 @@ export function sendRenewalConfirmationEmail(
 ): Promise<void> {
   const greeting = orgName ? `Hi ${orgName},` : "Hi,";
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout subscription has renewed</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenRadar subscription has renewed</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-      ${greeting} your EdenScout subscription has been successfully renewed. Your payment of
+      ${greeting} your EdenRadar subscription has been successfully renewed. Your payment of
       <strong>${amountFormatted}</strong> was processed and your access continues without interruption.
     </p>
     <a href="${APP_URL}"
        style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
-      Open EdenScout
+      Open EdenRadar
     </a>
     <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       You can manage your subscription and view invoices in your
       <a href="${APP_URL}/industry/settings" style="color:#059669;text-decoration:none;">billing settings</a>.
     </p>
   `, { replyToHint: BILLING_EMAIL });
-  return sendEmail(to, "EdenScout subscription renewed successfully", html, {
+  return sendEmail(to, "EdenRadar subscription renewed successfully", html, {
     from: FROM_BILLING,
     replyTo: BILLING_EMAIL,
   });
@@ -485,9 +485,9 @@ export function sendTrialEndingEmail(
     ? `<p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">Your current plan: <strong>${planName}</strong></p>`
     : "";
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout trial expires tomorrow</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenRadar trial expires tomorrow</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-      ${greeting} your EdenScout free trial expires on <strong>${trialEndDate}</strong>. After that date
+      ${greeting} your EdenRadar free trial expires on <strong>${trialEndDate}</strong>. After that date
       you will be charged automatically unless you cancel first. To stay on the plan or cancel,
       manage your subscription in Settings.
     </p>
@@ -501,7 +501,7 @@ export function sendTrialEndingEmail(
       <a href="mailto:${BILLING_EMAIL}" style="color:#059669;text-decoration:none;">${BILLING_EMAIL}</a>.
     </p>
   `, { replyToHint: BILLING_EMAIL });
-  return sendEmail(to, "Your EdenScout trial expires tomorrow", html, {
+  return sendEmail(to, "Your EdenRadar trial expires tomorrow", html, {
     from: FROM_BILLING,
     replyTo: BILLING_EMAIL,
   });

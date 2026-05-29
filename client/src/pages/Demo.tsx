@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+﻿import { useState, useEffect } from "react";
 import { Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
@@ -97,7 +97,7 @@ function SuccessState({ name }: { name: string }) {
         </p>
         {[
           { text: "Browse EdenMarket — our confidential deal marketplace", href: "/market" },
-          { text: "See how EdenScout works on the How It Works page", href: "/how-it-works" },
+          { text: "See how EdenRadar works on the How It Works page", href: "/how-it-works" },
           { text: "Forward this to a colleague on your BD team", href: null },
         ].map(({ text, href }) => (
           <div key={text} className="flex items-start gap-2 mb-2 last:mb-0">
@@ -129,7 +129,7 @@ export default function Demo() {
   useDocumentMeta({
     title: "Request Early Access — EdenRadar",
     description:
-      "Apply for early access to EdenScout: AI-powered biotech asset discovery across 400+ technology transfer offices. Tell us about your BD team and we'll be in touch.",
+      "Apply for early access to EdenRadar: AI-powered biotech asset discovery across 400+ technology transfer offices. Tell us about your BD team and we'll be in touch.",
   });
 
   const [form, setForm] = useState<FormData>({
@@ -252,7 +252,7 @@ export default function Demo() {
                   fontFamily: "'Barlow', system-ui, sans-serif",
                 }}
               >
-                EdenScout monitors 350+ university tech transfer offices and surfaces
+                EdenRadar monitors 350+ university tech transfer offices and surfaces
                 AI-enriched asset dossiers before they hit marketing channels. Your
                 deal flow, running ahead of the competition.
               </p>

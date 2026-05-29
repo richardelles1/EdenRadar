@@ -1,4 +1,4 @@
-import type { Express } from "express";
+﻿import type { Express } from "express";
 import { z } from "zod";
 import { db } from "../db";
 import { sql, and } from "drizzle-orm";
@@ -12,7 +12,7 @@ const supabaseUrl = process.env.VITE_SUPABASE_URL ?? "";
 const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 
 export function registerAuthRoutes(app: Express): void {
-  // Plan-check endpoint â€” returns the authenticated user's active EdenScout plan tier.
+  // Plan-check endpoint â€” returns the authenticated user's active EdenRadar plan tier.
   // Returns { plan: string | null, orgName: string | null }
   // plan is null when the user has no org or their org has no recognised paid tier.
   // planTier="none" is the canonical non-paid sentinel written by the Stripe webhook on

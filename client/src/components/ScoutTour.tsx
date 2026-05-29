@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+﻿import { useState, useEffect, useCallback } from "react";
 import { X, ChevronRight, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -14,8 +14,8 @@ interface TourStep {
 const STEPS: TourStep[] = [
   {
     testId: null,
-    title: "Welcome to EdenScout",
-    body: "EdenScout searches 33,000+ TTO assets across 350+ institutions — ranked by fit to your deal thesis in real time.",
+    title: "Welcome to EdenRadar",
+    body: "EdenRadar searches 33,000+ TTO assets across 350+ institutions — ranked by fit to your deal thesis in real time.",
   },
   {
     testId: "input-search",

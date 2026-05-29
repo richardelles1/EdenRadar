@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Plus, X, Save, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -197,7 +197,7 @@ export function EligibilityCriteriaSection({ project, onSave, saving }: Props) {
           )}
         </div>
         <p className="text-[10px] text-muted-foreground leading-relaxed">
-          Tag the biological mechanisms relevant to your PICO. Shared with EdenScout's canonical biology taxonomy for cross-platform discoverability.
+          Tag the biological mechanisms relevant to your PICO. Shared with EdenRadar's canonical biology taxonomy for cross-platform discoverability.
         </p>
         <div className="flex flex-wrap gap-1.5" data-testid="mechanism-tags">
           {MECHANISM_TAGS.map((tag) => {

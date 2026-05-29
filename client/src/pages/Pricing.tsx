@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+﻿import { Link, useLocation } from "wouter";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
@@ -520,7 +520,7 @@ function SubscriptionBanner({ isPastDue, session }: { isPastDue: boolean; sessio
             </>
           ) : (
             <>
-              <span className="font-semibold text-foreground">You have an active EdenScout subscription.</span>{" "}
+              <span className="font-semibold text-foreground">You have an active EdenRadar subscription.</span>{" "}
               Your current plan is highlighted below. Manage billing, upgrade, or cancel in your billing portal.
             </>
           )}
@@ -544,7 +544,7 @@ export default function Pricing() {
   useDocumentMeta({
     title: "Pricing — EdenRadar Plans for Industry, Research & Discovery",
     description:
-      "Transparent pricing for EdenScout, EdenLab, EdenDiscovery and EdenMarket. Start free, upgrade for unlimited assets, alerts, custom dashboards, and confidential deal flow.",
+      "Transparent pricing for EdenRadar, EdenLab, EdenDiscovery and EdenMarket. Start free, upgrade for unlimited assets, alerts, custom dashboards, and confidential deal flow.",
   });
   const { session } = useAuth();
   const { data: org } = useOrg();
@@ -583,7 +583,7 @@ export default function Pricing() {
 
   const scoutGrid = (
     <div className="space-y-4" data-testid="pricing-section-scout">
-      <h2 className="text-lg font-semibold text-foreground">EdenScout (Paid)</h2>
+      <h2 className="text-lg font-semibold text-foreground">EdenRadar (Paid)</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {SCOUT_PLANS.map((plan) => {
           const isCurrentPlan = org?.planTier === plan.id && (isSubscribed || isPastDue);
@@ -701,13 +701,13 @@ export default function Pricing() {
         <div className="space-y-4">
           <div className="space-y-2">
             <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-              EdenScout + EdenMarket
+              EdenRadar + EdenMarket
             </p>
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground" data-testid="text-pricing-title">
               Two ways to source your next deal
             </h1>
             <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
-              EdenScout surfaces licensable signals from 350+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
+              EdenRadar surfaces licensable signals from 350+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
             </p>
           </div>
 
@@ -732,7 +732,7 @@ export default function Pricing() {
               }
               data-testid="button-toggle-scout"
             >
-              EdenScout
+              EdenRadar
             </button>
             <button
               id="tab-market"

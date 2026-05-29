@@ -1,4 +1,4 @@
-import { useLocation } from "wouter";
+﻿import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -155,7 +155,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
         )}
       </div>
 
-      {/* EdenScout → EdenMarket notification alerts */}
+      {/* EdenRadar → EdenMarket notification alerts */}
       <NotificationBell />
 
       {/* Nav groups */}
@@ -179,11 +179,11 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           </div>
         ))}
 
-        {/* Cross-portal jump back to EdenScout — uses Scout accent.
+        {/* Cross-portal jump back to EdenRadar — uses Scout accent.
             Hidden for market-only (non-industry) users. */}
         {showScoutLink && (
           <div>
-            <SidebarGroupHeader>EdenScout</SidebarGroupHeader>
+            <SidebarGroupHeader>EdenRadar</SidebarGroupHeader>
             <div className="space-y-0.5">
               <SidebarNavButton
                 label="Scout"

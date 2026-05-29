@@ -1,5 +1,5 @@
-/**
- * Coalesces EdenScout → EdenMarket "asset is now listed" email notifications.
+﻿/**
+ * Coalesces EdenRadar → EdenMarket "asset is now listed" email notifications.
  *
  * When an admin batch-activates several listings at once, multiple per-listing
  * emails to the same user pile up in a single tick. This helper batches them
@@ -46,9 +46,9 @@ async function flush(userKey: string): Promise<void> {
       await sendMarketAdHocEmail(
         batch.email,
         `EdenMarket — ${it.assetLabel} is now listed`,
-        `<p>An asset you've been tracking in EdenScout — <strong>${escapeHtml(it.assetLabel)}</strong> — is now available for licensing in <strong>EdenMarket</strong>.</p>
+        `<p>An asset you've been tracking in EdenRadar — <strong>${escapeHtml(it.assetLabel)}</strong> — is now available for licensing in <strong>EdenMarket</strong>.</p>
          <p><a href="${APP_URL}/market/listing/${it.listingId}">View the listing</a></p>
-         <p style="font-size:12px;color:#9ca3af">This alert was triggered because you have this asset in your EdenScout portfolio.</p>`,
+         <p style="font-size:12px;color:#9ca3af">This alert was triggered because you have this asset in your EdenRadar portfolio.</p>`,
       );
     } else {
       const rows = uniq
@@ -60,9 +60,9 @@ async function flush(userKey: string): Promise<void> {
       await sendMarketAdHocEmail(
         batch.email,
         `EdenMarket — ${uniq.length} tracked assets are now listed`,
-        `<p><strong>${uniq.length} assets</strong> you've been tracking in EdenScout are now available for licensing in <strong>EdenMarket</strong>:</p>
+        `<p><strong>${uniq.length} assets</strong> you've been tracking in EdenRadar are now available for licensing in <strong>EdenMarket</strong>:</p>
          <ul style="padding-left:20px;margin:14px 0;">${rows}</ul>
-         <p style="font-size:12px;color:#9ca3af">These alerts were triggered because you have these assets in your EdenScout portfolio.</p>`,
+         <p style="font-size:12px;color:#9ca3af">These alerts were triggered because you have these assets in your EdenRadar portfolio.</p>`,
       );
     }
     console.log(`[marketEmailCoalescer] Sent batch to ${batch.email} — ${uniq.length} listing(s)`);

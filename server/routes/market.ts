@@ -1,4 +1,4 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import path from "path";
 import type { Express } from "express";
 import multer from "multer";
@@ -254,7 +254,7 @@ export function registerMarketRoutes(app: Express): void {
     }
   });
 
-  // Eden Signal Score â€” intelligence-derived: uses linked EdenScout asset enrichment quality,
+  // Eden Signal Score â€” intelligence-derived: uses linked EdenRadar asset enrichment quality,
   // patent/IP signals, and clinical-stage trials inference. Falls back to listing-field score
   // when no ingestedAsset link exists.
   type IngestedAssetSignals = {
@@ -271,7 +271,7 @@ export function registerMarketRoutes(app: Express): void {
   ): number {
     let s = 0;
     if (l.ingestedAssetId && linked) {
-      s += 30;  // EdenScout linkage base
+      s += 30;  // EdenRadar linkage base
       // EDEN enrichment completeness (proportional, up to 20 pts)
       if (linked.completenessScore != null) s += Math.round((linked.completenessScore / 100) * 20);
       // Patents signal: asset has known IP status
@@ -279,7 +279,7 @@ export function registerMarketRoutes(app: Express): void {
       // Trials signal: clinical stage implies registered trials
       const clinicalStages = ["phase 1", "phase 2", "phase 3", "approved", "phase i", "phase ii", "phase iii"];
       if (linked.developmentStage && clinicalStages.includes(linked.developmentStage.toLowerCase())) s += 10;
-      // Scientific specificity from EdenScout intelligence
+      // Scientific specificity from EdenRadar intelligence
       if (linked.mechanismOfAction || linked.target) s += 10;
     } else {
       if (l.ingestedAssetId) s += 30; // linked but asset not resolved yet
@@ -324,7 +324,7 @@ export function registerMarketRoutes(app: Express): void {
     out.blind = anyBlinded(bf);
     return out;
   }
-  // For the intelligence panel: linked EdenScout enrichment can re-leak fields
+  // For the intelligence panel: linked EdenRadar enrichment can re-leak fields
   // the seller has chosen to blind. Mask the corresponding sub-fields.
   function maskEdenEnrichment<T extends Record<string, unknown> | null>(enrichment: T, bf: BlindFields, isPrivileged: boolean): T {
     if (isPrivileged || !enrichment) return enrichment;
@@ -358,7 +358,7 @@ export function registerMarketRoutes(app: Express): void {
       const { therapeuticArea, modality, stage, engagementStatus } = req.query as Record<string, string | undefined>;
       const listings = await storage.getMarketListings({ status: "active", therapeuticArea, modality, stage, engagementStatus });
 
-      // Batch-fetch linked EdenScout assets for signal score computation
+      // Batch-fetch linked EdenRadar assets for signal score computation
       const linkedIds = [...new Set(listings.map(l => l.ingestedAssetId).filter((id): id is number => id != null))];
       const linkedAssets = linkedIds.length > 0
         ? await db.select({
@@ -458,7 +458,7 @@ export function registerMarketRoutes(app: Express): void {
       // Verify ingestedAssetId exists if provided
       if (data.ingestedAssetId != null) {
         const [linked] = await db.select({ id: ingestedAssets.id }).from(ingestedAssets).where(eq(ingestedAssets.id, data.ingestedAssetId)).limit(1);
-        if (!linked) return res.status(400).json({ error: "ingestedAssetId does not reference a valid EdenScout asset." });
+        if (!linked) return res.status(400).json({ error: "ingestedAssetId does not reference a valid EdenRadar asset." });
       }
 
       // Generate AI summary using GPT-4o-mini
@@ -726,7 +726,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       // Verify ingestedAssetId exists if provided
       if (data.ingestedAssetId != null) {
         const [linked] = await db.select({ id: ingestedAssets.id }).from(ingestedAssets).where(eq(ingestedAssets.id, data.ingestedAssetId)).limit(1);
-        if (!linked) return res.status(400).json({ error: "ingestedAssetId does not reference a valid EdenScout asset." });
+        if (!linked) return res.status(400).json({ error: "ingestedAssetId does not reference a valid EdenRadar asset." });
       }
 
       // Block self-activation from draft or pending (must go through admin review)
@@ -976,9 +976,9 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       const prevListing = await storage.getMarketListing(id);
       const updated = await storage.adminUpdateMarketListing(id, data);
 
-      // EdenScout â†’ EdenMarket availability signal:
+      // EdenRadar â†’ EdenMarket availability signal:
       // When a listing goes "active" for the first time and it's linked to an ingestedAsset,
-      // notify all users who have that asset saved in their EdenScout portfolio.
+      // notify all users who have that asset saved in their EdenRadar portfolio.
       if (data.status === "active" && prevListing?.status !== "active" && updated?.ingestedAssetId) {
         const assetId = updated.ingestedAssetId;
         try {
@@ -991,7 +991,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
             ? `a ${updated.therapeuticArea} ${updated.modality} asset`
             : (updated.assetName || `a ${updated.therapeuticArea} asset`);
 
-          const notifMessage = `An asset you track in EdenScout â€” ${assetLabel} â€” is now listed in EdenMarket.`;
+          const notifMessage = `An asset you track in EdenRadar â€” ${assetLabel} â€” is now listed in EdenMarket.`;
           const { enqueueListingAvailable } = await import("../lib/marketEmailCoalescer");
           await Promise.allSettled(saved.map(async uid => {
             // Insert in-app notification (deduplicated by user+listing via DB unique idx)
@@ -1015,7 +1015,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       // Saved-search fan-out (Task #713): on first activation, evaluate every
       // saved search against this listing and notify matching buyers â€” once
       // per (user, listing) regardless of how many of their searches matched
-      // and on top of the EdenScout-link path above.
+      // and on top of the EdenRadar-link path above.
       if (data.status === "active" && prevListing?.status !== "active" && updated) {
         try {
           const { fanOutSavedSearchesForListing } = await import("../lib/marketSavedSearchMatcher");
@@ -1121,7 +1121,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
     }
   });
 
-  // GET /api/market/notifications â€” unread EdenScoutâ†’EdenMarket availability alerts for current user
+  // GET /api/market/notifications â€” unread EdenRadarâ†’EdenMarket availability alerts for current user
   app.get("/api/market/notifications", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
