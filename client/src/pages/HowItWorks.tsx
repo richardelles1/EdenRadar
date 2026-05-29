@@ -556,34 +556,36 @@ export default function HowItWorks() {
             </div>
 
             {/* Subheader bridge */}
-            <div className="flex items-center justify-center gap-8 sm:gap-12 mt-8 mb-8 flex-wrap">
-              {[
-                { stat: "358", label: "TTOs monitored" },
-                { stat: "0–100", label: "EDEN scoring" },
-                { stat: "Real-time", label: "BD alerts" },
-              ].map(({ stat, label }, i) => (
-                <React.Fragment key={label}>
-                  {i > 0 && (
-                    <span className="hidden sm:block w-px h-6" style={{ background: "hsl(220 13% 88%)" }} />
-                  )}
-                  <div className="text-center">
-                    <p className="text-sm font-black text-foreground tracking-tight">{stat}</p>
-                    <p className="text-[11px] mt-0.5" style={{ color: "hsl(220 10% 52%)" }}>{label}</p>
-                  </div>
-                </React.Fragment>
-              ))}
-            </div>
-
-            <Button
-              size="lg"
-              onClick={() => navigate("/demo")}
-              data-testid="howitworks-cta-hero"
-              className="h-11 px-8 font-semibold gap-2 border-0"
-              style={{ background: "hsl(33 85% 44%)", color: "white" }}
+            <p
+              className="text-base sm:text-lg font-semibold tracking-tight text-center mt-7 mb-8"
+              style={{ color: "hsl(222 20% 22%)", letterSpacing: "-0.01em" }}
             >
-              Request Access
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Button>
+              Before the patent.{" "}
+              <span style={{ color: "hsl(142 52% 36%)" }}>Before the competition.</span>
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+              <Button
+                size="lg"
+                onClick={() => navigate("/demo")}
+                data-testid="howitworks-cta-hero"
+                className="h-11 px-8 font-semibold gap-2 border-0 w-full sm:w-auto"
+                style={{ background: "hsl(33 85% 44%)", color: "white" }}
+              >
+                Request Access
+                <ArrowRight className="w-3.5 h-3.5" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => navigate("/one-pager")}
+                data-testid="howitworks-cta-onepager"
+                className="h-11 px-8 font-semibold w-full sm:w-auto"
+                style={{ borderColor: "hsl(220 13% 82%)", color: "hsl(222 20% 32%)" }}
+              >
+                View One-Pager
+              </Button>
+            </div>
           </div>
 
           <div
