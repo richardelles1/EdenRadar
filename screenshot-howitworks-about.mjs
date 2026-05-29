@@ -79,7 +79,7 @@ const howItWorksHtml = `<!DOCTYPE html>
         <p style="font-size:11px;font-weight:700;color:hsl(222 20% 10%);line-height:1.3;">
           <span style="color:hsl(142 52% 36%);">E</span>ngine for <span style="color:hsl(142 52% 36%);">D</span>iscovery &amp; <span style="color:hsl(142 52% 36%);">E</span>merging <span style="color:hsl(142 52% 36%);">N</span>etworks
         </p>
-        <p style="font-size:9px;color:hsl(220 10% 52%);font-weight:500;margin-top:1px;">350+ institutions · 14,847 assets indexed</p>
+        <p style="font-size:9px;color:hsl(220 10% 52%);font-weight:500;margin-top:1px;">358 institutions · 14,847 assets indexed</p>
       </div>
       <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
         <span style="width:6px;height:6px;border-radius:50%;background:hsl(142 52% 36%);"></span>
@@ -88,12 +88,12 @@ const howItWorksHtml = `<!DOCTYPE html>
     </div>
 
     <!-- Message area — full conversation shown -->
-    <div style="flex:1;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;background:hsl(220 20% 98%);">
+    <div style="flex:1;overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;background:hsl(220 20% 98%);text-align:left;">
 
       <!-- User message 1 -->
       <div style="display:flex;justify-content:flex-end;">
-        <div style="max-width:82%;padding:9px 14px;font-size:12px;line-height:1.55;font-weight:500;color:white;background:hsl(33 85% 44%);border-radius:14px 14px 3px 14px;box-shadow:0 3px 12px hsl(33 85% 44% / 0.28);">
-          We're building out our oncology pipeline. What's moving at Hopkins right now?
+        <div style="max-width:82%;padding:9px 14px;font-size:12px;line-height:1.55;font-weight:500;color:white;background:hsl(33 85% 44%);border-radius:14px 14px 3px 14px;box-shadow:0 3px 12px hsl(33 85% 44% / 0.28);text-align:left;">
+          We're expanding our oncology pipeline. What's worth a look at Hopkins right now?
         </div>
       </div>
 
@@ -102,7 +102,7 @@ const howItWorksHtml = `<!DOCTYPE html>
         <div style="width:24px;height:24px;border-radius:50%;background:white;border:1.5px solid hsl(142 52% 36% / 0.3);flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px hsl(142 52% 36% / 0.08);margin-top:2px;">
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="hsl(142 52% 36%)" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
         </div>
-        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;">
+        <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;text-align:left;">
           <div style="background:hsl(142 52% 36% / 0.07);border-radius:4px 14px 14px 14px;padding:10px 14px;font-size:12px;line-height:1.6;color:hsl(222 15% 22%);">
             14 JHU programs indexed this week. Worth flagging: the HDAC inhibitor's target overlaps with Pfizer's Seagen territory, so deprioritize that one. The CAR-T scores 91, and the PI has two prior top-10 pharma licensings at this stage. I'd start there.
           </div>
@@ -115,14 +115,14 @@ const howItWorksHtml = `<!DOCTYPE html>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;height:52px;border-radius:10px;padding:0 14px;border:1px solid hsl(220 13% 91%);background:white;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-              <div style="width:34px;height:34px;border-radius:7px;background:hsl(38 92% 50% / 0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:700;color:hsl(38 85% 38%);">88</div>
+              <div style="width:34px;height:34px;border-radius:7px;background:hsl(142 65% 48% / 0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:700;color:hsl(142 65% 38%);">88</div>
               <div style="flex:1;min-width:0;text-align:left;">
                 <p style="font-size:11px;font-weight:600;color:hsl(222 20% 14%);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Bispecific Antibody Against PD-L1 and TIM-3 in Lymphoma</p>
                 <p style="font-size:10px;color:hsl(220 10% 52%);margin-top:1px;">Johns Hopkins · IND-Enabling · Antibody</p>
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:10px;height:52px;border-radius:10px;padding:0 14px;border:1px solid hsl(220 13% 91%);background:white;box-shadow:0 1px 4px rgba(0,0,0,0.05);">
-              <div style="width:34px;height:34px;border-radius:7px;background:hsl(265 60% 60% / 0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:700;color:hsl(265 55% 45%);">85</div>
+              <div style="width:34px;height:34px;border-radius:7px;background:hsl(142 65% 48% / 0.12);display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:12px;font-weight:700;color:hsl(142 65% 38%);">85</div>
               <div style="flex:1;min-width:0;text-align:left;">
                 <p style="font-size:11px;font-weight:600;color:hsl(222 20% 14%);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">HDAC Inhibitor Platform for Solid Tumor Microenvironment</p>
                 <p style="font-size:10px;color:hsl(220 10% 52%);margin-top:1px;">Johns Hopkins · Discovery · Small Molecule</p>
@@ -134,8 +134,8 @@ const howItWorksHtml = `<!DOCTYPE html>
 
       <!-- User message 2 -->
       <div style="display:flex;justify-content:flex-end;">
-        <div style="max-width:82%;padding:9px 14px;font-size:12px;line-height:1.55;font-weight:500;color:white;background:hsl(33 85% 44%);border-radius:14px 14px 3px 14px;box-shadow:0 3px 12px hsl(33 85% 44% / 0.28);">
-          Has the PI published recently? We want a partner, not just a licensor.
+        <div style="max-width:82%;padding:9px 14px;font-size:12px;line-height:1.55;font-weight:500;color:white;background:hsl(33 85% 44%);border-radius:14px 14px 3px 14px;box-shadow:0 3px 12px hsl(33 85% 44% / 0.28);text-align:left;">
+          Has the PI published lately? We want a real partner, not just someone looking for an upfront.
         </div>
       </div>
 
@@ -144,7 +144,7 @@ const howItWorksHtml = `<!DOCTYPE html>
         <div style="width:24px;height:24px;border-radius:50%;background:white;border:1.5px solid hsl(142 52% 36% / 0.3);flex-shrink:0;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px hsl(142 52% 36% / 0.08);margin-top:2px;">
           <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="hsl(142 52% 36%)" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3"/></svg>
         </div>
-        <div style="background:hsl(142 52% 36% / 0.07);border-radius:4px 14px 14px 14px;padding:10px 14px;font-size:12px;line-height:1.6;color:hsl(222 15% 22%);flex:1;">
+        <div style="background:hsl(142 52% 36% / 0.07);border-radius:4px 14px 14px 14px;padding:10px 14px;font-size:12px;line-height:1.6;color:hsl(222 15% 22%);flex:1;text-align:left;">
           Three publications in the last 18 months, including Nature Medicine. Prior records show two industry co-development arrangements, not straight licenses. The TTO has flagged this program as partnership-preferred.
         </div>
       </div>
@@ -152,30 +152,90 @@ const howItWorksHtml = `<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- Stats -->
-  <div style="display:flex;gap:48px;margin-bottom:36px;position:relative;z-index:1;">
-    <div style="text-align:center;">
-      <div style="font-size:24px;font-weight:700;color:hsl(142 52% 36%);line-height:1;">0–100</div>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:hsl(222 10% 52%);margin-top:4px;">EDEN readiness score</div>
-    </div>
-    <div style="text-align:center;">
-      <div style="font-size:24px;font-weight:700;color:hsl(142 52% 36%);line-height:1;">Daily</div>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:hsl(222 10% 52%);margin-top:4px;">Monitoring cadence</div>
-    </div>
-    <div style="text-align:center;">
-      <div style="font-size:24px;font-weight:700;color:hsl(142 52% 36%);line-height:1;">4</div>
-      <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:hsl(222 10% 52%);margin-top:4px;">Portals in ecosystem</div>
-    </div>
-  </div>
-
   <!-- CTA -->
   <button style="display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 28px;border-radius:8px;background:hsl(33 85% 44%);color:white;font-size:15px;font-weight:700;border:none;position:relative;z-index:1;">
-    Try EdenScout
+    Try EDEN
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
   </button>
 
   <!-- Bottom fade to white -->
   <div style="position:absolute;bottom:0;left:0;right:0;height:100px;background:linear-gradient(to bottom,transparent,white);pointer-events:none;"></div>
+</section>
+
+<!-- HOW IT WORKS: sticky photo right, steps scroll left -->
+<section style="max-width:1200px;margin:0 auto;padding:88px 48px 104px;">
+  <div style="display:flex;gap:72px;align-items:flex-start;">
+
+    <!-- Left: four steps -->
+    <div style="flex:1;min-width:0;">
+
+      <!-- Step 1 -->
+      <div style="display:flex;gap:0;padding:60px 0;min-height:240px;border-top:1px solid hsl(142 52% 36% / 0.22);border-bottom:1px solid rgba(210,218,228,0.38);align-items:center;">
+        <div style="width:88px;flex-shrink:0;display:flex;justify-content:flex-end;padding-right:32px;border-right:1px solid hsl(142 52% 36% / 0.15);">
+          <span style="font-size:68px;font-weight:900;line-height:0.88;color:hsl(142 52% 36%);opacity:0.55;font-variant-numeric:tabular-nums;letter-spacing:-0.04em;">01</span>
+        </div>
+        <div style="flex:1;min-width:0;padding-left:40px;">
+          <h3 style="font-size:26px;font-weight:700;color:hsl(222 20% 10%);margin-bottom:12px;line-height:1.25;">
+            You tell <span style="color:hsl(142 52% 36%);">EDEN</span> what matters most.
+          </h3>
+          <p style="font-size:16px;line-height:1.72;color:hsl(220 10% 48%);">Your therapeutic focus, target modalities, deal stage, geography. EDEN takes this as its operating brief and calibrates everything it surfaces around your priorities.</p>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div style="display:flex;gap:0;padding:60px 0;min-height:240px;border-bottom:1px solid rgba(210,218,228,0.38);align-items:center;">
+        <div style="width:88px;flex-shrink:0;display:flex;justify-content:flex-end;padding-right:32px;border-right:1px solid hsl(142 52% 36% / 0.15);">
+          <span style="font-size:68px;font-weight:900;line-height:0.88;color:hsl(142 52% 36%);opacity:0.55;font-variant-numeric:tabular-nums;letter-spacing:-0.04em;">02</span>
+        </div>
+        <div style="flex:1;min-width:0;padding-left:40px;">
+          <h3 style="font-size:26px;font-weight:700;color:hsl(222 20% 10%);margin-bottom:12px;line-height:1.25;">
+            The global tech transfer market, <span style="color:hsl(142 52% 36%);">under continuous watch</span>.
+          </h3>
+          <p style="font-size:16px;line-height:1.72;color:hsl(220 10% 48%);">Every major research institution worldwide, indexed as new programs emerge. Assets classified, scored 0–100, and cross-referenced against known market activity the moment they appear.</p>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div style="display:flex;gap:0;padding:60px 0;min-height:240px;border-bottom:1px solid rgba(210,218,228,0.38);align-items:center;">
+        <div style="width:88px;flex-shrink:0;display:flex;justify-content:flex-end;padding-right:32px;border-right:1px solid hsl(142 52% 36% / 0.15);">
+          <span style="font-size:68px;font-weight:900;line-height:0.88;color:hsl(142 52% 36%);opacity:0.55;font-variant-numeric:tabular-nums;letter-spacing:-0.04em;">03</span>
+        </div>
+        <div style="flex:1;min-width:0;padding-left:40px;">
+          <h3 style="font-size:26px;font-weight:700;color:hsl(222 20% 10%);margin-bottom:12px;line-height:1.25;">
+            Matches reach you and <span style="color:hsl(142 52% 36%);">your team</span> before you go looking.
+          </h3>
+          <p style="font-size:16px;line-height:1.72;color:hsl(220 10% 48%);">When a program fits your criteria, an alert goes out by email and in-product, in <span style="color:hsl(33 75% 38%);font-weight:600;">real time</span>, to everyone on your team. Some exclusivity windows close fast. EDEN makes sure you are never the last to know.</p>
+        </div>
+      </div>
+
+      <!-- Step 4 -->
+      <div style="display:flex;gap:0;padding:60px 0;min-height:240px;border-bottom:1px solid hsl(142 52% 36% / 0.22);align-items:center;">
+        <div style="width:88px;flex-shrink:0;display:flex;justify-content:flex-end;padding-right:32px;border-right:1px solid hsl(142 52% 36% / 0.15);">
+          <span style="font-size:68px;font-weight:900;line-height:0.88;color:hsl(142 52% 36%);opacity:0.55;font-variant-numeric:tabular-nums;letter-spacing:-0.04em;">04</span>
+        </div>
+        <div style="flex:1;min-width:0;padding-left:40px;">
+          <h3 style="font-size:26px;font-weight:700;color:hsl(222 20% 10%);margin-bottom:12px;line-height:1.25;">
+            From match to deal-ready.
+          </h3>
+          <p style="font-size:16px;line-height:1.72;color:hsl(220 10% 48%);">Build your pipeline, pull supporting literature, and construct your business case directly in <span style="color:hsl(142 52% 36%);font-weight:600;">EdenScout</span>. Every program arrives with competitive context, patent coverage, PI history, and a readiness score you can act on.</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right: sticky photo panel -->
+    <div style="width:360px;flex-shrink:0;position:sticky;top:88px;align-self:flex-start;">
+      <div style="position:relative;border-radius:20px;overflow:hidden;box-shadow:0 24px 64px rgba(0,0,0,0.12),0 8px 24px rgba(0,0,0,0.07);">
+        <img
+          src="C:/Users/richa/edenradar/client/public/images/bd-conversation.jpg"
+          style="width:100%;height:580px;object-fit:cover;object-position:50% 25%;display:block;"
+        />
+        <!-- Bottom fade to white -->
+        <div style="position:absolute;bottom:0;left:0;right:0;height:160px;background:linear-gradient(to bottom,transparent,rgba(255,255,255,0.92));"></div>
+      </div>
+    </div>
+
+  </div>
 </section>
 
 </body>
@@ -278,6 +338,12 @@ const aboutHtml = `<!DOCTYPE html>
   // Full HowItWorks
   await page.screenshot({ path: "screenshot_howitworks_full.png", fullPage: true });
   console.log("HowItWorks full screenshot saved.");
+
+  // Steps section — scroll past hero to show the four-step layout
+  await page.evaluate(() => window.scrollTo(0, 820));
+  await page.waitForTimeout(200);
+  await page.screenshot({ path: "screenshot_howitworks_steps.png" });
+  console.log("HowItWorks steps screenshot saved.");
 
   // About hero
   await page.setContent(aboutHtml, { waitUntil: "networkidle" });
