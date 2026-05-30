@@ -15,9 +15,6 @@ import {
   Bookmark,
   BookmarkCheck,
   ShoppingBag,
-  Lock,
-  Handshake,
-  Sparkles,
 } from "lucide-react";
 
 /* ─────────────────────────── helpers ─────────────────────────── */
@@ -395,131 +392,102 @@ function RecentFeed() {
   );
 }
 
-/* ─────────────────────────── EdenMarketSection ───────────────── */
+/* ─────────────────────────── IntelligenceSection ─────────────── */
 
-function EdenMarketSection() {
+function IntelligenceSection({ onLogin }: { onLogin: () => void }) {
   const ref = useReveal();
   return (
     <section ref={ref} className="reveal-section border-t border-border bg-background">
-      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-          <div className="space-y-5">
-            <p
-              className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
-              style={{ color: "hsl(var(--portal-market) / 0.7)" }}
-            >
-              EdenMarket
-            </p>
-            <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
-              The blind marketplace for{" "}
-              <span style={{ color: "hsl(var(--portal-market))" }}>licensable biotech assets</span>
+      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-24">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+
+          {/* Copy */}
+          <div className="space-y-6">
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight max-w-md">
+              See the{" "}
+              <span style={{ color: "hsl(142 52% 36%)" }}>full field</span>{" "}
+              before your first move.
             </h2>
-            <p className="text-base text-muted-foreground leading-relaxed">
-              Buyers see structured listings — therapeutic area, modality, stage, IP profile — without
-              seller identities. Engage anonymously, sign an NDA inside the deal room, and unlock the
-              full asset only when both sides agree.
+            <p className="text-base leading-relaxed" style={{ color: "hsl(220 18% 32%)" }}>
+              Every asset in EdenRadar sits inside a live competitive map. See how crowded the indication is, which modalities are gaining momentum, where white space still exists, and which institutions are most active in your target area.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-              <div className="flex items-start gap-2.5">
-                <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
+            <div className="space-y-4 pt-1">
+              <div className="flex items-start gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />
                 <div>
-                  <p className="text-xs font-semibold text-foreground">Blind by default</p>
-                  <p className="text-[11px] text-muted-foreground leading-snug">Identity hidden until NDA signed.</p>
+                  <p className="text-sm font-semibold text-foreground">Pre-commercial pipeline map</p>
+                  <p className="text-[13px] leading-snug" style={{ color: "hsl(220 15% 40%)" }}>Every asset plotted by stage, modality, and therapeutic area across the full university pipeline.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-2.5">
-                <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
+              <div className="flex items-start gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />
                 <div>
-                  <p className="text-xs font-semibold text-foreground">NDA-gated deal room</p>
-                  <p className="text-[11px] text-muted-foreground leading-snug">Documents, messages, audit trail.</p>
+                  <p className="text-sm font-semibold text-foreground">White space finder</p>
+                  <p className="text-[13px] leading-snug" style={{ color: "hsl(220 15% 40%)" }}>Identifies indication areas with limited competing assets: where first-mover advantage is still available.</p>
                 </div>
               </div>
-              <div className="flex items-start gap-2.5">
-                <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
+              <div className="flex items-start gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />
                 <div>
-                  <p className="text-xs font-semibold text-foreground">Success-fee aligned</p>
-                  <p className="text-[11px] text-muted-foreground leading-snug">Pay only when a deal closes.</p>
+                  <p className="text-sm font-semibold text-foreground">Modality momentum</p>
+                  <p className="text-[13px] leading-snug" style={{ color: "hsl(220 15% 40%)" }}>Tracks which technology platforms are accelerating across institutions, so you can follow the science.</p>
                 </div>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3 pt-3">
-              <Link href="/market">
-                <Button
-                  className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                  style={{ background: "hsl(var(--portal-market))", color: "white", border: "none" }}
-                  data-testid="button-landing-edenmarket-buyer"
-                >
-                  <ShoppingBag className="w-4 h-4" />
-                  Browse EdenMarket
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
-              <Link href="/market/list">
-                <Button
-                  variant="outline"
-                  className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                  style={{ borderColor: "hsl(var(--portal-market) / 0.4)", color: "hsl(var(--portal-market))" }}
-                  data-testid="button-landing-edenmarket-seller"
-                >
-                  List your assets
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Button>
-              </Link>
-            </div>
-            <p className="text-[11px] text-muted-foreground pt-1">
-              Already a buyer?{" "}
-              <Link
-                href="/market/login"
-                className="font-medium hover:underline"
-                style={{ color: "hsl(var(--portal-market))" }}
-                data-testid="link-landing-market-signin"
+            <div className="pt-2">
+              <button
+                onClick={onLogin}
+                className="inline-flex items-center gap-2 h-10 px-5 rounded-lg font-semibold text-sm text-primary border border-primary/30 bg-primary/5 hover:bg-primary/10 transition-colors duration-150"
+                data-testid="button-landing-intelligence"
               >
-                Sign in to EdenMarket
-              </Link>
-            </p>
+                Explore the intelligence layer
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
 
-          <div
-            className="rounded-2xl p-6 sm:p-8 space-y-4"
-            style={{
-              background: "linear-gradient(135deg, hsl(var(--portal-market) / 0.08), hsl(var(--portal-market) / 0.02))",
-              border: "1px solid hsl(var(--portal-market) / 0.20)",
-            }}
-          >
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sample listing</p>
-              <span
-                className="text-[10px] px-2 py-0.5 rounded-full"
-                style={{ background: "hsl(var(--portal-market) / 0.15)", color: "hsl(var(--portal-market))" }}
-              >
-                BLIND
-              </span>
+          {/* Staggered screenshot panels */}
+          <div className="relative" style={{ height: "480px" }}>
+            {/* Top panel — left-aligned, upper half of screenshot */}
+            <div
+              className="absolute top-0 left-0 rounded-xl overflow-hidden"
+              style={{
+                width: "82%",
+                height: "52%",
+                boxShadow: "0 6px 32px hsl(142 52% 36% / 0.12), 0 2px 8px hsl(0 0% 0% / 0.08)",
+                border: "1px solid hsl(var(--border))",
+                zIndex: 1,
+              }}
+            >
+              <img
+                src="/images/screenshot-intelligence.png"
+                alt="EdenRadar pipeline map and white space finder"
+                className="w-full block"
+                style={{ objectFit: "cover", objectPosition: "top", height: "200%" }}
+                loading="lazy"
+              />
             </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-bold text-foreground">Pre-clinical oncology asset · ADC platform</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Solid-tumor indication · IND-enabling studies underway</p>
-              </div>
-              <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/50">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Modality</p>
-                  <p className="text-xs font-semibold text-foreground mt-0.5">ADC</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Stage</p>
-                  <p className="text-xs font-semibold text-foreground mt-0.5">Pre-clinical</p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">IP</p>
-                  <p className="text-xs font-semibold text-foreground mt-0.5">PCT filed</p>
-                </div>
-              </div>
-              <div className="pt-3 border-t border-border/50 flex items-center justify-between">
-                <span className="text-[11px] text-muted-foreground">Seller identity revealed after NDA</span>
-                <Lock className="w-3.5 h-3.5" style={{ color: "hsl(var(--portal-market))" }} />
-              </div>
+            {/* Bottom panel — right-aligned, lower half of screenshot */}
+            <div
+              className="absolute bottom-0 right-0 rounded-xl overflow-hidden"
+              style={{
+                width: "82%",
+                height: "52%",
+                boxShadow: "0 6px 32px hsl(142 52% 36% / 0.10), 0 2px 8px hsl(0 0% 0% / 0.08)",
+                border: "1px solid hsl(var(--border))",
+                zIndex: 2,
+              }}
+            >
+              <img
+                src="/images/screenshot-intelligence.png"
+                alt="EdenRadar modality momentum and biology landscape"
+                className="w-full block"
+                style={{ objectFit: "cover", objectPosition: "bottom", height: "200%" }}
+                loading="lazy"
+              />
             </div>
           </div>
+
         </div>
       </div>
     </section>
@@ -534,32 +502,37 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
     <section
       ref={ref}
       className="reveal-section relative overflow-hidden"
-      style={{
-        background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 10%) 60%, hsl(155 40% 12%) 100%)",
-      }}
+      style={{ background: "hsl(33 55% 95%)" }}
     >
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{ background: "radial-gradient(ellipse at 30% 0%, hsl(142 65% 55% / 0.12) 0%, transparent 55%)" }}
+        style={{
+          background: [
+            "radial-gradient(ellipse 65% 60% at 50% 0%, hsl(33 70% 90%) 0%, transparent 65%)",
+            "radial-gradient(ellipse 40% 30% at 90% 110%, hsl(33 60% 88%) 0%, transparent 55%)",
+          ].join(", "),
+        }}
         aria-hidden
       />
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
         <p
           className="text-xs font-mono font-semibold uppercase tracking-[0.15em] mb-6"
-          style={{ color: "hsl(142 65% 55%)" }}
+          style={{ color: "hsl(33 65% 40%)" }}
         >
-          Join EdenRadar Today
+          Start for free. No credit card.
         </p>
-        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-5 leading-tight text-white">
-          Get started with{" "}
-          <span style={{ color: "hsl(142 65% 62%)" }}>EdenRadar</span>{" "}
-          today.
+        <h2
+          className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-5 leading-tight"
+          style={{ color: "hsl(220 30% 12%)" }}
+        >
+          The intelligence layer for{" "}
+          <span style={{ color: "hsl(33 70% 38%)" }}>biotech deal flow.</span>
         </h2>
         <p
           className="text-base sm:text-lg mb-10 max-w-xl mx-auto leading-relaxed"
-          style={{ color: "hsl(210 15% 70%)" }}
+          style={{ color: "hsl(220 18% 34%)" }}
         >
-          The platform where world-class university research meets the industry teams ready to build the next breakthrough therapy.
+          Every week, EdenRadar surfaces new pre-clinical and clinical assets from 400+ research institutions. Know what's available before anyone else does.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
@@ -567,19 +540,25 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             onClick={onLogin}
             data-testid="cta-bottom-industry"
             className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
+            style={{ background: "linear-gradient(148deg, hsl(33 70% 46%) 0%, hsl(33 62% 38%) 100%)", color: "hsl(33 40% 94%)", border: "none" }}
           >
             <Building2 className="w-4 h-4" />
-            EdenRadar
+            Get started
           </Button>
           <Link href="/market" className="w-full sm:w-auto">
             <Button
               size="lg"
+              variant="outline"
               data-testid="cta-bottom-edenmarket"
               className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
-              style={{ background: "hsl(var(--portal-market))", color: "white", border: "none" }}
+              style={{
+                borderColor: "hsl(33 55% 60%)",
+                color: "hsl(33 65% 35%)",
+                background: "hsl(33 60% 90%)",
+              }}
             >
               <ShoppingBag className="w-4 h-4" />
-              EdenMarket
+              Browse EdenMarket
             </Button>
           </Link>
         </div>
@@ -1054,7 +1033,7 @@ export default function Landing() {
   useDocumentMeta({
     title: "EdenRadar — Where Biotech Research Meets Industry Intelligence",
     description:
-      "AI-powered biotech asset discovery across 350+ tech transfer offices. EDEN queries 40+ live data sources — patents, clinical trials, literature — to score and surface licensable assets for industry BD teams.",
+      "AI-powered biotech asset discovery across 350+ tech transfer offices. EDEN queries 40+ live data sources (patents, clinical trials, literature) to score and surface licensable assets for industry BD teams.",
   });
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
@@ -1134,7 +1113,7 @@ export default function Landing() {
         <InstitutionMarquee />
 
         <RecentFeed />
-        <EdenMarketSection />
+        <IntelligenceSection onLogin={handleLogin} />
         <BottomCTA onLogin={handleLogin} />
       </main>
 
