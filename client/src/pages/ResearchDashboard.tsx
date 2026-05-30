@@ -288,15 +288,15 @@ export default function ResearchDashboard() {
   const latestSignal = alertData?.assets?.[0]?.signals?.[0];
   const grantSignals = grantData?.assets?.flatMap((a) => a.signals ?? []) ?? [];
 
-  const nextAction = (!projectsLoading && !discoveriesLoading)
-    ? getNextAction(projects.length, refCount, totalScreened, totalIncluded, discoveries.length, publishedCount)
-    : null;
-
   // Phase-level counts derived from projects
   const totalScreened = projects.reduce((sum, p) => sum + ((p as any).screeningPapers?.length ?? 0), 0);
   const totalIncluded = projects.reduce((sum, p) =>
     sum + ((p as any).screeningPapers as any[] ?? []).filter((sp: any) => sp.fullTextDecision === "include").length, 0
   );
+
+  const nextAction = (!projectsLoading && !discoveriesLoading)
+    ? getNextAction(projects.length, refCount, totalScreened, totalIncluded, discoveries.length, publishedCount)
+    : null;
 
   const pipelineStages: PipelineStage[] = [
     {
