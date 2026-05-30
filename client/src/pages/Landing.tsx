@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react";
+﻿import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
@@ -7,28 +7,17 @@ import { useAuth } from "@/hooks/use-auth";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { NumberTicker } from "@/components/ui/number-ticker";
 import { MovingBorder } from "@/components/ui/moving-border";
+import { useQuery } from "@tanstack/react-query";
 import {
   Building2,
-  FlaskConical,
   TrendingUp,
-  GitMerge,
-  FileBarChart2,
-  Users,
-  Layers,
-  Eye,
-  BookOpen,
-  Award,
   ArrowRight,
   Bookmark,
   BookmarkCheck,
-  Zap,
-  Lightbulb,
-  Sparkles,
-  Target,
-  Rocket,
   ShoppingBag,
   Lock,
   Handshake,
+  Sparkles,
 } from "lucide-react";
 
 /* ─────────────────────────── helpers ─────────────────────────── */
@@ -246,276 +235,293 @@ function RadarBackground() {
   );
 }
 
-/* ─────────────────────────── PortalToggle ────────────────────── */
+/* ─────────────────────────── RecentFeed ─────────────────────── */
 
-const INDUSTRY_TILES = [
-  {
-    icon: TrendingUp,
-    title: "Market Intelligence",
-    desc: "EDEN-enriched signals from 350+ TTOs, patent filings, and live academic publications, structured and scored.",
-  },
-  {
-    icon: GitMerge,
-    title: "Early-Stage Deal Flow",
-    desc: "Surface pre-clinical and discovery-phase assets before they hit the market with enriched target, modality, and stage data.",
-  },
-  {
-    icon: FileBarChart2,
-    title: "World-Class Reporting",
-    desc: "Portfolio-grade dossiers, pipeline CSVs, and scored asset breakdowns ready for BD and board-level review.",
-  },
-  {
-    icon: Users,
-    title: "Research Team Access",
-    desc: "Connect directly with university researchers behind the science to build relationships that convert into real pipeline.",
-  },
+type FeedAsset = {
+  id: number;
+  institution: string;
+  modality: string | null;
+  indication: string | null;
+  developmentStage: string | null;
+  summary: string | null;
+  mechanismOfAction: string | null;
+  firstSeenAt: string;
+};
+
+const FEED_FALLBACK: FeedAsset[] = [
+  { id: 1,  institution: "MIT",                               modality: "PROTAC",              indication: "Oncology",           developmentStage: "Pre-clinical",  summary: null, mechanismOfAction: "BRD4 protein degradation via targeted ubiquitination",          firstSeenAt: new Date(Date.now() - 2  * 3600000).toISOString() },
+  { id: 2,  institution: "University of Pennsylvania",        modality: "Gene Therapy",        indication: "Rare Disease",       developmentStage: "IND-enabling",  summary: null, mechanismOfAction: "AAV9 dystrophin construct delivery to muscle tissue",           firstSeenAt: new Date(Date.now() - 4  * 3600000).toISOString() },
+  { id: 3,  institution: "Stanford University",               modality: "Bispecific Antibody", indication: "Oncology",           developmentStage: "IND-enabling",  summary: null, mechanismOfAction: "HER2 × CD3 T-cell redirection in solid tumours",               firstSeenAt: new Date(Date.now() - 6  * 3600000).toISOString() },
+  { id: 4,  institution: "University of Guelph",              modality: "Peptide",             indication: "Metabolic Disease",  developmentStage: "Pre-clinical",  summary: null, mechanismOfAction: "GLP-1 receptor agonism with PEGylated half-life extension",    firstSeenAt: new Date(Date.now() - 8  * 3600000).toISOString() },
+  { id: 5,  institution: "Johns Hopkins University",          modality: "mRNA",                indication: "Infectious Disease", developmentStage: "Discovery",     summary: null, mechanismOfAction: "LNP-formulated spike antigen encoding for broad coronavirus coverage", firstSeenAt: new Date(Date.now() - 10 * 3600000).toISOString() },
+  { id: 6,  institution: "Indiana University",                modality: "CAR-T",               indication: "Hematology",         developmentStage: "Phase 1",       summary: null, mechanismOfAction: "Logic-gated CAR construct with integrated safety switch for AML", firstSeenAt: new Date(Date.now() - 13 * 3600000).toISOString() },
+  { id: 7,  institution: "Yale University",                   modality: "Small Molecule",      indication: "Oncology",           developmentStage: "Pre-clinical",  summary: null, mechanismOfAction: "Covalent KRAS G12C inhibition with >200-fold wild-type selectivity", firstSeenAt: new Date(Date.now() - 15 * 3600000).toISOString() },
+  { id: 8,  institution: "Duke University",                   modality: "siRNA",               indication: "Cardiovascular",     developmentStage: "Pre-clinical",  summary: null, mechanismOfAction: "GalNAc-conjugated PCSK9 hepatocyte silencing",                  firstSeenAt: new Date(Date.now() - 18 * 3600000).toISOString() },
+  { id: 9,  institution: "University of Pittsburgh",          modality: "Cell Therapy",        indication: "Neurology",          developmentStage: "Discovery",     summary: null, mechanismOfAction: "iPSC-derived dopaminergic neuron replacement with HLA silencing", firstSeenAt: new Date(Date.now() - 21 * 3600000).toISOString() },
+  { id: 10, institution: "MD Anderson Cancer Center",         modality: "ADC",                 indication: "Oncology",           developmentStage: "IND-enabling",  summary: null, mechanismOfAction: "TROP2-targeting ADC with topoisomerase I inhibitor payload",    firstSeenAt: new Date(Date.now() - 24 * 3600000).toISOString() },
+  { id: 11, institution: "Northwestern University",           modality: "Bispecific Antibody", indication: "Oncology",           developmentStage: "IND-enabling",  summary: null, mechanismOfAction: "PD-1 × TIGIT dual checkpoint co-blockade for NSCLC",           firstSeenAt: new Date(Date.now() - 27 * 3600000).toISOString() },
+  { id: 12, institution: "Boston Children's Hospital",        modality: "Gene Therapy",        indication: "Hematology",         developmentStage: "IND-enabling",  summary: null, mechanismOfAction: "CRISPR base-editing of E6V sickle cell mutation in autologous HSCs", firstSeenAt: new Date(Date.now() - 31 * 3600000).toISOString() },
+  { id: 13, institution: "Washington Univ. in St. Louis",     modality: "Small Molecule",      indication: "Immunology",         developmentStage: "Discovery",     summary: null, mechanismOfAction: "Oral IL-17A inhibition with biologic-comparable efficacy in plaque psoriasis", firstSeenAt: new Date(Date.now() - 34 * 3600000).toISOString() },
+  { id: 14, institution: "University of Pennsylvania",        modality: "ASO",                 indication: "Neurology",          developmentStage: "Pre-clinical",  summary: null, mechanismOfAction: "Intrathecal tau aggregation silencing for frontotemporal dementia", firstSeenAt: new Date(Date.now() - 37 * 3600000).toISOString() },
+  { id: 15, institution: "Vanderbilt University",             modality: "Cell Therapy",        indication: "Hematology",         developmentStage: "Phase 1",       summary: null, mechanismOfAction: "Off-the-shelf CAR-NK cells targeting BCMA in multiple myeloma", firstSeenAt: new Date(Date.now() - 40 * 3600000).toISOString() },
+  { id: 16, institution: "Cornell University",                modality: "Small Molecule",      indication: "Cardiovascular",     developmentStage: "Discovery",     summary: null, mechanismOfAction: "Factor XIa inhibition for thromboembolism with improved bleeding safety", firstSeenAt: new Date(Date.now() - 43 * 3600000).toISOString() },
 ];
 
-const EDENMARKET_TILES = [
-  {
-    icon: ShoppingBag,
-    title: "Blind Asset Marketplace",
-    desc: "Browse licensable biotech assets anonymously — therapeutic area, modality, stage, and IP profile visible upfront. Seller identity revealed only after NDA.",
-  },
-  {
-    icon: Lock,
-    title: "NDA-gated Deal Rooms",
-    desc: "Once both sides engage, a secure deal room opens: document vault, encrypted messaging, and a full audit trail inside EdenRadar.",
-  },
-  {
-    icon: Handshake,
-    title: "Success-fee Aligned",
-    desc: "Listing is free. EdenMarket earns only when a deal closes — our incentives stay perfectly aligned with your outcome.",
-  },
-];
+function buildNarrative(asset: FeedAsset): { parts: Array<{ text: string; bold: boolean }> } {
+  // If enriched summary exists and is substantive, use it
+  if (asset.summary && asset.summary.length > 80 && asset.summary !== "unknown") {
+    return { parts: [{ text: asset.summary, bold: false }] };
+  }
 
-const RESEARCH_TILES = [
-  {
-    icon: Layers,
-    title: "Structured Project Workspace",
-    desc: "An 11-section project canvas guiding your work from hypothesis through publication. Organized, versioned, and shareable.",
-  },
-  {
-    icon: Eye,
-    title: "Visibility to Industry",
-    desc: "Your research surfaces as scored asset signals to industry teams actively seeking your areas of expertise.",
-  },
-  {
-    icon: BookOpen,
-    title: "Literature Synthesis",
-    desc: "Query millions of papers and receive structured summaries, key findings, and citation-ready insights.",
-  },
-  {
-    icon: Award,
-    title: "Grants Discovery",
-    desc: "Track NIH, NSF, SBIR, and foundation grant opportunities matched to your research profile in real time.",
-  },
-];
+  const stage = asset.developmentStage && asset.developmentStage !== "unknown" ? asset.developmentStage : null;
+  const mod   = asset.modality && asset.modality !== "unknown" ? asset.modality : null;
+  const ind   = asset.indication && asset.indication !== "unknown" ? asset.indication : null;
+  const moa   = asset.mechanismOfAction && asset.mechanismOfAction !== "unknown" ? asset.mechanismOfAction : null;
 
-const DISCOVERY_TILES = [
-  {
-    icon: Lightbulb,
-    title: "Concept Registry",
-    desc: "Submit early-stage ideas before formal research begins. Capture the spark that could become the next breakthrough.",
-  },
-  {
-    icon: Sparkles,
-    title: "EDEN Credibility Scoring",
-    desc: "Every concept is automatically evaluated by EDEN for scientific plausibility, feasibility, and biotech relevance on a 0-100 scale.",
-  },
-  {
-    icon: Target,
-    title: "Signal to Industry & Labs",
-    desc: "Concepts that score well surface to industry scouts and research labs, creating early connections before the science starts.",
-  },
-  {
-    icon: Rocket,
-    title: "From Idea to Research",
-    desc: "Graduate promising concepts into structured EdenLab research projects with one click when you're ready to build.",
-  },
-];
+  const parts: Array<{ text: string; bold: boolean }> = [];
+  const article = mod && /^[aeiou]/i.test(mod) ? "An " : "A ";
 
-function PortalToggle({ onLogin }: { onLogin: () => void }) {
-  const [active, setActive] = useState<"discovery" | "research" | "industry">("industry");
-  const ref = useReveal();
+  parts.push({ text: article, bold: false });
+  if (stage) parts.push({ text: stage.toLowerCase(), bold: true });
+  if (mod)   parts.push({ text: (stage ? " " : "") + mod, bold: true });
+  if (ind)   parts.push({ text: " for ", bold: false }, { text: ind, bold: true });
+  if (moa)   parts.push({ text: ". " + moa.charAt(0).toUpperCase() + moa.slice(1) + ".", bold: false });
+  else       parts.push({ text: ".", bold: false });
 
-  const tiles = active === "discovery" ? DISCOVERY_TILES : active === "research" ? RESEARCH_TILES : INDUSTRY_TILES;
+  return { parts };
+}
 
-  const TAB_STYLE: Record<string, { bg: string; shadow: string }> = {
-    discovery: { bg: "hsl(var(--portal-discovery))", shadow: "0 2px 12px hsl(var(--portal-discovery) / 0.35)" },
-    research: { bg: "hsl(var(--portal-lab))", shadow: "0 2px 12px hsl(var(--portal-lab) / 0.35)" },
-    industry: { bg: "hsl(var(--portal-scout))", shadow: "0 2px 12px hsl(var(--portal-scout) / 0.35)" },
-  };
-
-  const TILE_ACCENT: Record<string, { hover: string; iconBg: string; iconBgHover: string; iconColor: string }> = {
-    discovery: { hover: "hover:border-amber-500/40", iconBg: "bg-amber-500/10", iconBgHover: "group-hover:bg-amber-500/20", iconColor: "text-amber-500" },
-    research: { hover: "hover:border-violet-500/40", iconBg: "bg-violet-500/10", iconBgHover: "group-hover:bg-violet-500/20", iconColor: "text-violet-500" },
-    industry: { hover: "hover:border-primary/40", iconBg: "bg-primary/10", iconBgHover: "group-hover:bg-primary/20", iconColor: "text-primary" },
-  };
-
-  const accent = TILE_ACCENT[active];
+function FeedRow({ asset }: { asset: FeedAsset }) {
+  const inst = asset.institution && asset.institution !== "unknown" ? asset.institution : "Unknown Institution";
+  const { parts } = buildNarrative(asset);
 
   return (
-    <section ref={ref} className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
-      <div className="text-center mb-10 sm:mb-14">
-        <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">
-          Built for Both Sides
-        </p>
-        <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 leading-tight">
-          One platform. Three powerful portals.
-        </h2>
-        <p className="text-muted-foreground max-w-lg mx-auto text-base">
-          Whether you're sourcing pipeline or building science, EdenRadar is engineered for you.
-        </p>
-
-        <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm" role="tablist" aria-label="Portal">
-          {(["discovery", "research", "industry"] as const).map((tab) => {
-            const label = tab === "discovery" ? "Discovery" : tab === "research" ? "Research" : "Industry";
-            const style = TAB_STYLE[tab];
-            return (
-              <button
-                key={tab}
-                id={`portal-tab-${tab}`}
-                role="tab"
-                aria-selected={active === tab}
-                aria-controls={`portal-panel-${tab}`}
-                onClick={() => setActive(tab)}
-                data-testid={`toggle-${tab}`}
-                className="relative px-4 sm:px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 min-h-[44px]"
-                style={active === tab ? { background: style.bg, color: "white", boxShadow: style.shadow } : { color: "hsl(var(--muted-foreground))" }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </div>
+    <div className="grid border-b border-border/60" style={{ gridTemplateColumns: "240px 1fr", minHeight: "72px" }}>
+      <div
+        className="flex items-center px-7 py-5 border-r border-primary/30"
+        style={{ background: "hsl(var(--primary))" }}
+      >
+        <span className="text-sm font-bold text-white leading-snug">{inst}</span>
       </div>
+      <div className="flex items-center px-8 py-5">
+        <p className="text-sm text-muted-foreground leading-relaxed">
+          {parts.map((p, i) =>
+            p.bold
+              ? <strong key={i} className="text-primary font-semibold">{p.text}</strong>
+              : <span key={i}>{p.text}</span>
+          )}
+        </p>
+      </div>
+    </div>
+  );
+}
 
-      {active === "industry" ? (
-        <div className="space-y-6" key="industry" id="portal-panel-industry" role="tabpanel" aria-labelledby="portal-tab-industry">
-          {/* EdenRadar sub-section */}
-          <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em] text-primary/60">
-              EdenRadar: Pipeline Intelligence
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {INDUSTRY_TILES.map((tile, i) => (
-                <div
-                  key={tile.title}
-                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-colors duration-200 hover:shadow-md hover:border-primary/40 stagger-item"
-                  style={{ animationDelay: `${i * 80}ms` }}
-                  data-testid={`tile-industry-scout-${i}`}
-                >
-                  <div className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 bg-primary/10 group-hover:bg-primary/20">
-                    <tile.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+function shuffleDedupe(raw: FeedAsset[]): FeedAsset[] {
+  // Fisher-Yates shuffle
+  const arr = [...raw];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  // Reorder so no two consecutive rows share an institution
+  const result: FeedAsset[] = [];
+  const pool = [...arr];
+  while (pool.length > 0) {
+    const lastInst = result.at(-1)?.institution ?? null;
+    const idx = pool.findIndex(a => a.institution !== lastInst);
+    result.push(...pool.splice(idx === -1 ? 0 : idx, 1));
+  }
+  return result;
+}
 
-          {/* EdenMarket sub-section */}
-          <div className="space-y-3">
-            <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
-              style={{ color: "hsl(var(--portal-market) / 0.7)" }}
-            >
-              EdenMarket: Blind Asset Marketplace
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {EDENMARKET_TILES.map((tile, i) => (
-                <div
-                  key={tile.title}
-                  className="group flex gap-4 p-5 rounded-xl border border-border bg-card transition-colors duration-200 hover:shadow-md stagger-item"
-                  style={{ borderColor: "hsl(var(--portal-market) / 0.15)", animationDelay: `${(i + 4) * 80}ms` }}
-                  data-testid={`tile-industry-market-${i}`}
-                >
-                  <div
-                    className="flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200"
-                    style={{ background: "hsl(var(--portal-market) / 0.10)" }}
-                  >
-                    <tile.icon className="w-5 h-5" style={{ color: "hsl(var(--portal-market))" }} />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
+function RecentFeed() {
+  const ref = useReveal();
+  const { data } = useQuery<{ assets: FeedAsset[]; total: number }>({
+    queryKey: ["/api/browse/new-arrivals?window=30d&limit=30"],
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  });
 
-          {/* Dual CTA */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 pt-2">
-            <button
-              onClick={onLogin}
-              className="text-sm text-primary hover:text-primary/80 font-semibold transition-colors duration-150 flex items-center gap-1"
-              data-testid="button-toggle-scout-cta"
-            >
-              Explore EdenRadar
-              <ArrowRight className="w-3.5 h-3.5" />
-            </button>
-            <span className="hidden sm:block text-border" aria-hidden="true">|</span>
-            <Link href="/market">
+  const assets = useMemo(
+    () => shuffleDedupe(data?.assets?.length ? data.assets : FEED_FALLBACK),
+    [data]
+  );
+  const doubled = [...assets, ...assets];
+
+  return (
+    <section ref={ref} id="explore" className="reveal-section border-b border-border bg-background">
+      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-8">
+          <div>
+            <div className="flex items-center gap-2 mb-2.5">
               <span
-                className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 cursor-pointer"
-                style={{ color: "hsl(var(--portal-market))" }}
-                data-testid="button-toggle-market-cta"
-              >
-                Browse EdenMarket
-                <ArrowRight className="w-3.5 h-3.5" />
-              </span>
-            </Link>
+                className="w-2 h-2 rounded-full bg-primary shrink-0"
+                style={{ animation: "eden-pulse 2s ease-in-out infinite" }}
+              />
+              <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                Live · Last 48 hours
+              </p>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">
+              EdenRadar users saw these assets in the past 48 hours.
+            </h2>
           </div>
+          <p className="text-sm text-muted-foreground pb-0.5 shrink-0">
+            Delivered to EdenRadar subscribers
+          </p>
         </div>
-      ) : (
-        <div id={`portal-panel-${active}`} role="tabpanel" aria-labelledby={`portal-tab-${active}`} key={active}>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
-            {tiles.map((tile, i) => (
-              <div
-                key={tile.title}
-                className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-colors duration-200 hover:shadow-md stagger-item ${accent.hover}`}
-                style={{ animationDelay: `${i * 80}ms` }}
-                data-testid={`tile-${active}-${i}`}
-              >
-                <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${accent.iconBg} ${accent.iconBgHover}`}>
-                  <tile.icon className={`w-5 h-5 ${accent.iconColor}`} />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
-                </div>
-              </div>
+
+        <div
+          className="border border-border rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm"
+          style={{ height: "420px", position: "relative" }}
+          aria-label="Recently indexed assets"
+        >
+          {/* Fade masks */}
+          <div className="absolute inset-x-0 top-0 h-14 pointer-events-none z-10"
+            style={{ background: "linear-gradient(to bottom, white, transparent)" }} />
+          <div className="absolute inset-x-0 bottom-0 h-14 pointer-events-none z-10"
+            style={{ background: "linear-gradient(to top, white, transparent)" }} />
+
+          <div
+            style={{ animation: "ticker-up 150s linear infinite", willChange: "transform" }}
+          >
+            {doubled.map((asset, i) => (
+              <FeedRow key={i} asset={asset} />
             ))}
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
 
-          <div className="text-center mt-10">
-            {active === "discovery" ? (
-              <a
-                href="/discovery"
-                className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 mx-auto w-fit"
-                style={{ color: "hsl(var(--portal-discovery))" }}
-                data-testid="button-discovery-cta"
+/* ─────────────────────────── EdenMarketSection ───────────────── */
+
+function EdenMarketSection() {
+  const ref = useReveal();
+  return (
+    <section ref={ref} className="reveal-section border-t border-border bg-background">
+      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+          <div className="space-y-5">
+            <p
+              className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
+              style={{ color: "hsl(var(--portal-market) / 0.7)" }}
+            >
+              EdenMarket
+            </p>
+            <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
+              The blind marketplace for{" "}
+              <span style={{ color: "hsl(var(--portal-market))" }}>licensable biotech assets</span>
+            </h2>
+            <p className="text-base text-muted-foreground leading-relaxed">
+              Buyers see structured listings — therapeutic area, modality, stage, IP profile — without
+              seller identities. Engage anonymously, sign an NDA inside the deal room, and unlock the
+              full asset only when both sides agree.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="flex items-start gap-2.5">
+                <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Blind by default</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">Identity hidden until NDA signed.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
+                <div>
+                  <p className="text-xs font-semibold text-foreground">NDA-gated deal room</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">Documents, messages, audit trail.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
+                <div>
+                  <p className="text-xs font-semibold text-foreground">Success-fee aligned</p>
+                  <p className="text-[11px] text-muted-foreground leading-snug">Pay only when a deal closes.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 pt-3">
+              <Link href="/market">
+                <Button
+                  className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
+                  style={{ background: "hsl(var(--portal-market))", color: "white", border: "none" }}
+                  data-testid="button-landing-edenmarket-buyer"
+                >
+                  <ShoppingBag className="w-4 h-4" />
+                  Browse EdenMarket
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+              <Link href="/market/list">
+                <Button
+                  variant="outline"
+                  className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
+                  style={{ borderColor: "hsl(var(--portal-market) / 0.4)", color: "hsl(var(--portal-market))" }}
+                  data-testid="button-landing-edenmarket-seller"
+                >
+                  List your assets
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Button>
+              </Link>
+            </div>
+            <p className="text-[11px] text-muted-foreground pt-1">
+              Already a buyer?{" "}
+              <Link
+                href="/market/login"
+                className="font-medium hover:underline"
+                style={{ color: "hsl(var(--portal-market))" }}
+                data-testid="link-landing-market-signin"
               >
-                Browse EdenDiscovery
-                <ArrowRight className="w-3.5 h-3.5" />
-              </a>
-            ) : (
-              <button
-                onClick={onLogin}
-                className="text-sm text-primary hover:text-primary/80 font-medium transition-colors duration-150 flex items-center gap-1 mx-auto"
-                data-testid="button-toggle-cta"
+                Sign in to EdenMarket
+              </Link>
+            </p>
+          </div>
+
+          <div
+            className="rounded-2xl p-6 sm:p-8 space-y-4"
+            style={{
+              background: "linear-gradient(135deg, hsl(var(--portal-market) / 0.08), hsl(var(--portal-market) / 0.02))",
+              border: "1px solid hsl(var(--portal-market) / 0.20)",
+            }}
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sample listing</p>
+              <span
+                className="text-[10px] px-2 py-0.5 rounded-full"
+                style={{ background: "hsl(var(--portal-market) / 0.15)", color: "hsl(var(--portal-market))" }}
               >
-                Explore the Research portal
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            )}
+                BLIND
+              </span>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-bold text-foreground">Pre-clinical oncology asset · ADC platform</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Solid-tumor indication · IND-enabling studies underway</p>
+              </div>
+              <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/50">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Modality</p>
+                  <p className="text-xs font-semibold text-foreground mt-0.5">ADC</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Stage</p>
+                  <p className="text-xs font-semibold text-foreground mt-0.5">Pre-clinical</p>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">IP</p>
+                  <p className="text-xs font-semibold text-foreground mt-0.5">PCT filed</p>
+                </div>
+              </div>
+              <div className="pt-3 border-t border-border/50 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">Seller identity revealed after NDA</span>
+                <Lock className="w-3.5 h-3.5" style={{ color: "hsl(var(--portal-market))" }} />
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </section>
   );
 }
@@ -532,24 +538,29 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
         background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 10%) 60%, hsl(155 40% 12%) 100%)",
       }}
     >
-      <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 30% 0%, hsl(142 65% 55% / 0.12) 0%, transparent 55%)" }} aria-hidden />
-
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: "radial-gradient(ellipse at 30% 0%, hsl(142 65% 55% / 0.12) 0%, transparent 55%)" }}
+        aria-hidden
+      />
       <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
-        <p className="text-xs font-mono font-semibold uppercase tracking-[0.15em] mb-6" style={{ color: "hsl(142 65% 55%)" }}>
+        <p
+          className="text-xs font-mono font-semibold uppercase tracking-[0.15em] mb-6"
+          style={{ color: "hsl(142 65% 55%)" }}
+        >
           Join EdenRadar Today
         </p>
-
         <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-5 leading-tight text-white">
           Get started with{" "}
-          <span style={{ color: "hsl(142 65% 62%)" }}>
-            EdenRadar
-          </span>{" "}
+          <span style={{ color: "hsl(142 65% 62%)" }}>EdenRadar</span>{" "}
           today.
         </h2>
-        <p className="text-base sm:text-lg mb-10 max-w-xl mx-auto leading-relaxed" style={{ color: "hsl(210 15% 70%)" }}>
+        <p
+          className="text-base sm:text-lg mb-10 max-w-xl mx-auto leading-relaxed"
+          style={{ color: "hsl(210 15% 70%)" }}
+        >
           The platform where world-class university research meets the industry teams ready to build the next breakthrough therapy.
         </p>
-
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Button
             size="lg"
@@ -572,7 +583,6 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             </Button>
           </Link>
         </div>
-
       </div>
     </section>
   );
@@ -1123,158 +1133,8 @@ export default function Landing() {
         {/* ── Institution marquee ── */}
         <InstitutionMarquee />
 
-        {/* ── What we do strip ── */}
-        <section className="border-y border-border bg-card/50">
-          <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-10">
-            <p className="text-[10px] font-bold uppercase tracking-widest text-primary text-center sm:text-left mb-6">How it works</p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
-              {[
-                {
-                  icon: TrendingUp,
-                  title: "Discover before the crowd",
-                  desc: "Surface pre-clinical assets from 350+ tech transfer offices the moment they're published, EDEN-enriched with target, modality, and stage.",
-                },
-                {
-                  icon: Layers,
-                  title: "Structure your science",
-                  desc: "EdenLab gives researchers an 11-section project workspace, grants tracker, and literature review tool, all in one place.",
-                },
-                {
-                  icon: Users,
-                  title: "Close the loop",
-                  desc: "Industry teams connect directly with research leads. Researchers gain visibility. The gap between lab and pipeline disappears.",
-                },
-              ].map((f) => (
-                <div
-                  key={f.title}
-                  className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4"
-                  data-testid={`feature-strip-${f.title.replace(/\s+/g, "-").toLowerCase()}`}
-                >
-                  <div className="flex-shrink-0 w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
-                    <f.icon className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="font-semibold text-foreground text-sm mb-1">{f.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        {/* ── Toggle value section ── */}
-        <div id="explore">
-          <PortalToggle onLogin={handleLogin} />
-        </div>
-
-        {/* ── EdenMarket section ── */}
-        <section className="border-t border-border bg-background">
-          <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
-              <div className="space-y-5">
-                <p className="text-[10px] font-mono font-bold uppercase tracking-[0.15em]"
-                  style={{ color: "hsl(var(--portal-market) / 0.7)" }}
-                >
-                  EdenMarket
-                </p>
-                <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
-                  The blind marketplace for{" "}
-                  <span style={{ color: "hsl(var(--portal-market))" }}>licensable biotech assets</span>
-                </h2>
-                <p className="text-base text-muted-foreground leading-relaxed">
-                  Buyers see structured listings — therapeutic area, modality, stage, IP profile — without seller identities. Engage anonymously, sign an NDA inside the deal room, and unlock the full asset only when both sides agree.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-                  <div className="flex items-start gap-2.5">
-                    <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Blind by default</p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">Identity hidden until NDA signed.</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">NDA-gated deal room</p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">Documents, messages, audit trail.</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-2.5">
-                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(var(--portal-market))" }} />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground">Success-fee aligned</p>
-                      <p className="text-[11px] text-muted-foreground leading-snug">Pay only when a deal closes — see pricing.</p>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-col sm:flex-row gap-3 pt-3">
-                  <Link href="/market">
-                    <Button
-                      className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                      style={{ background: "hsl(var(--portal-market))", color: "white", border: "none" }}
-                      data-testid="button-landing-edenmarket-buyer"
-                    >
-                      <ShoppingBag className="w-4 h-4" />
-                      Browse EdenMarket
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </Button>
-                  </Link>
-                  <Link href="/market/list">
-                    <Button
-                      variant="outline"
-                      className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
-                      style={{ borderColor: "hsl(var(--portal-market) / 0.4)", color: "hsl(var(--portal-market))" }}
-                      data-testid="button-landing-edenmarket-seller"
-                    >
-                      List your assets
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </Button>
-                  </Link>
-                </div>
-                <p className="text-[11px] text-muted-foreground pt-1">
-                  Already a buyer?{" "}
-                  <Link href="/market/login" className="font-medium hover:underline" style={{ color: "hsl(var(--portal-market))" }} data-testid="link-landing-market-signin">
-                    Sign in to EdenMarket
-                  </Link>
-                </p>
-              </div>
-
-              <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(var(--portal-market) / 0.08), hsl(var(--portal-market) / 0.02))", border: "1px solid hsl(var(--portal-market) / 0.20)" }}>
-                <div className="flex items-center justify-between">
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sample listing</p>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "hsl(var(--portal-market) / 0.15)", color: "hsl(var(--portal-market))" }}>BLIND</span>
-                </div>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-sm font-bold text-foreground">Pre-clinical oncology asset · ADC platform</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Solid-tumor indication · IND-enabling studies underway</p>
-                  </div>
-                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/50">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Modality</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5">ADC</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Stage</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5">Pre-clinical</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">IP</p>
-                      <p className="text-xs font-semibold text-foreground mt-0.5">PCT filed</p>
-                    </div>
-                  </div>
-                  <div className="pt-3 border-t border-border/50 flex items-center justify-between">
-                    <span className="text-[11px] text-muted-foreground">Seller identity revealed after NDA</span>
-                    <Lock className="w-3.5 h-3.5" style={{ color: "hsl(var(--portal-market))" }} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Bottom CTA ── */}
+        <RecentFeed />
+        <EdenMarketSection />
         <BottomCTA onLogin={handleLogin} />
       </main>
 

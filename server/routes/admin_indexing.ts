@@ -338,6 +338,9 @@ export function registerIndexingRoutes(app: Express): void {
           institution: ingestedAssets.institution,
           modality: ingestedAssets.modality,
           indication: ingestedAssets.indication,
+          developmentStage: ingestedAssets.developmentStage,
+          summary: ingestedAssets.summary,
+          mechanismOfAction: ingestedAssets.mechanismOfAction,
           completenessScore: ingestedAssets.completenessScore,
           firstSeenAt: ingestedAssets.firstSeenAt,
         })
