@@ -17,6 +17,7 @@ import {
   ingestedAssets,
 } from "@shared/schema";
 import { verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "../lib/supabaseAuth";
+import { backfillDefaultAlerts } from "../lib/alertMailer";
 import { requireApiKey } from "../lib/apiKeyAuth";
 import {
   verifyUnsubscribeToken,
@@ -186,6 +187,7 @@ export function registerMiscRoutes(app: Express): void {
       });
       if (error) return res.status(500).json({ error: "Internal server error" });
       await storage.setIndustryProfileSubscription(userId, subscribedToDigest).catch(() => {});
+      if (subscribedToDigest) backfillDefaultAlerts().catch(() => {});
       return res.json({ subscribedToDigest: data.user.user_metadata?.subscribedToDigest ?? false });
     } catch (err: any) {
       console.error("[users/subscribe]", err);
@@ -214,6 +216,7 @@ export function registerMiscRoutes(app: Express): void {
       const notificationPrefs = { matchAlerts: parsed.data.matchAlerts, weeklyRecap: parsed.data.weeklyRecap };
       const updated = await storage.upsertIndustryProfile(userId, { ...base, notificationPrefs });
       await storage.setIndustryProfileSubscription(userId, parsed.data.matchAlerts !== "off").catch(() => {});
+      if (parsed.data.matchAlerts !== "off") backfillDefaultAlerts().catch(() => {});
       return res.json({ notificationPrefs: updated.notificationPrefs });
     } catch (err: any) {
       console.error("[users/notification-prefs]", err);

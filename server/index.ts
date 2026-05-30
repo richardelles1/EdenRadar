@@ -17,7 +17,7 @@ import { loadAndRestoreScheduler, startScheduler, pauseScheduler, flushScheduler
 import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAccess";
 import { startWeeklyRecapScheduler, backfillLatestRecaps } from "./lib/weeklyRecap";
 import { sendTrialEndingEmail } from "./email";
-import { checkAndSendAlerts } from "./lib/alertMailer";
+import { checkAndSendAlerts, backfillDefaultAlerts } from "./lib/alertMailer";
 import { syncRegulatoryDesignations, getRegulatoryDesignationCount } from "./lib/regulatorySync";
 import pg from "pg";
 import rateLimit from "express-rate-limit";
@@ -2011,6 +2011,8 @@ async function migrateAssetStatusValues() {
       ensureScoutSearchIndexes().catch(() => {});
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
       syncSubscribersFromSupabase().catch(() => {});
+      // ── Ensure every subscribed user has a user_alerts row ───────────────
+      backfillDefaultAlerts().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
       // ── Backfill source_name for unlabeled patent/trial saved assets ────

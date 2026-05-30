@@ -378,3 +378,46 @@ async function evaluateAlerts(): Promise<void> {
     `[alertMailer] Cycle complete — sent: ${sentCount}, skipped: ${skippedCount}, total alerts: ${alerts.length}`
   );
 }
+
+/**
+ * Create a default "All New Assets" alert for every subscribed_to_digest=true
+ * user who has no user_alerts rows. Idempotent — safe to call on every boot.
+ *
+ * This bridges the gap for users who opted into digest emails before the
+ * user_alerts-based system required an explicit saved alert to receive emails.
+ */
+export async function backfillDefaultAlerts(): Promise<void> {
+  try {
+    const subscribers = await db
+      .select({ userId: industryProfiles.userId })
+      .from(industryProfiles)
+      .where(eq(industryProfiles.subscribedToDigest, true));
+
+    if (subscribers.length === 0) return;
+
+    const subscriberIds = subscribers.map((s) => s.userId);
+
+    const withAlerts = await db
+      .select({ userId: userAlerts.userId })
+      .from(userAlerts)
+      .where(and(isNotNull(userAlerts.userId), inArray(userAlerts.userId, subscriberIds)));
+
+    const alreadyHasAlert = new Set(withAlerts.map((r) => r.userId));
+    const needsAlert = subscriberIds.filter((id) => !alreadyHasAlert.has(id));
+
+    if (needsAlert.length === 0) return;
+
+    for (const userId of needsAlert) {
+      await db.insert(userAlerts).values({
+        userId,
+        name: "All New Assets",
+        criteriaType: "all_new",
+        enabled: true,
+      });
+    }
+
+    console.log(`[alertMailer] Backfilled default "All New Assets" alert for ${needsAlert.length} subscriber(s)`);
+  } catch (err: any) {
+    console.error("[alertMailer] backfillDefaultAlerts failed:", err?.message);
+  }
+}
