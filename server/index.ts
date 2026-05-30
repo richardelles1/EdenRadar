@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
-import { loadAndRestoreScheduler, startScheduler, pauseScheduler, flushSchedulerState, startStalenessFirstScan, getSchedulerStatus } from "./lib/scheduler";
+import { loadAndRestoreScheduler, startScheduler, pauseScheduler, flushSchedulerState, startStalenessFirstScan, startAutoSweep, getSchedulerStatus } from "./lib/scheduler";
 import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAccess";
 import { startWeeklyRecapScheduler, backfillLatestRecaps } from "./lib/weeklyRecap";
 import { sendTrialEndingEmail } from "./email";
@@ -1427,8 +1427,9 @@ function scheduleAutoSweep() {
         break;
       }
 
-      log(`[autoSweep] ${target.hour}:${String(target.minute).padStart(2, "0")} PST — starting staleness-first scan`, "startup");
-      startStalenessFirstScan().then((r) => {
+      const triggerLabel = `${target.hour}:${String(target.minute).padStart(2, "0")} PST`;
+      log(`[autoSweep] ${triggerLabel} — starting staleness-first scan`, "startup");
+      startAutoSweep(triggerLabel).then((r) => {
         log(`[autoSweep] ${r.message}`, "startup");
       }).catch((err: any) => {
         log(`[autoSweep] Failed to start: ${err?.message}`, "startup");
