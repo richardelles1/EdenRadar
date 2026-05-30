@@ -1079,9 +1079,10 @@ export default function Landing() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-center">
               {/* Left: copy + stats */}
               <div className="flex flex-col items-start text-left">
-                <h1 className="mb-6 font-black tracking-tight leading-[1.0] text-primary"
+                <h1 className="mb-6 font-black tracking-tight leading-[1.0] text-foreground"
                   style={{ fontSize: "clamp(2.25rem, 5vw, 4.5rem)", textWrap: "balance" } as React.CSSProperties}>
-                  The next biotech breakthrough is already published.
+                  The next biotech breakthrough is{" "}
+                  <span className="text-emerald-600">already published.</span>
                 </h1>
                 <p className="text-base sm:text-lg max-w-lg leading-relaxed mb-10 text-foreground/65 dark:text-white/65">
                   Published assets sit undiscovered for months. Being first isn't about searching harder. Real-time institutional monitoring means the right assets find you first.
