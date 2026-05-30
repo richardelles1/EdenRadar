@@ -165,7 +165,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   useEffect(() => {
     if (loading) return;
     if (!session) {
-      navigate("/login", { replace: true });
+      const dest = window.location.pathname + window.location.search;
+      navigate(`/login?redirect=${encodeURIComponent(dest)}`, { replace: true });
     } else if (role === "researcher") {
       navigate("/research", { replace: true });
     } else if (role === "concept") {
