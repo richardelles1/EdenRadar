@@ -113,30 +113,6 @@ export function Nav({ onOpenSaved }: NavProps) {
                     About
                   </button>
                 </Link>
-                <Link href="/research">
-                  <button
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
-                      normalizedLocation === "/research"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                    }`}
-                    data-testid="link-nav-research"
-                  >
-                    Research
-                  </button>
-                </Link>
-                <Link href="/market">
-                  <button
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
-                      normalizedLocation === "/market"
-                        ? "bg-accent text-foreground"
-                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                    }`}
-                    data-testid="link-nav-market"
-                  >
-                    Market
-                  </button>
-                </Link>
                 <Link href="/how-it-works">
                   <button
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
@@ -159,6 +135,30 @@ export function Nav({ onOpenSaved }: NavProps) {
                     data-testid="link-nav-pricing"
                   >
                     Pricing
+                  </button>
+                </Link>
+                <Link href="/market">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/market"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-market"
+                  >
+                    Market
+                  </button>
+                </Link>
+                <Link href="/research">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/research"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-research"
+                  >
+                    Research
                   </button>
                 </Link>
                 <Link href="/one-pager">
@@ -304,27 +304,9 @@ export function Nav({ onOpenSaved }: NavProps) {
               About
             </button>
           </Link>
-          <Link href="/research">
-            <button
-              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
-              onClick={() => setMobileOpen(false)}
-              data-testid="link-nav-mobile-research"
-            >
-              Research
-            </button>
-          </Link>
-          <Link href="/market">
-            <button
-              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
-              onClick={() => setMobileOpen(false)}
-              data-testid="link-nav-mobile-market"
-            >
-              Market
-            </button>
-          </Link>
           <Link href="/how-it-works">
             <button
-              className="w-full text-left mt-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
               onClick={() => setMobileOpen(false)}
               data-testid="link-nav-mobile-how-it-works"
             >
@@ -338,6 +320,24 @@ export function Nav({ onOpenSaved }: NavProps) {
               data-testid="link-nav-mobile-pricing"
             >
               Pricing
+            </button>
+          </Link>
+          <Link href="/market">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-market"
+            >
+              Market
+            </button>
+          </Link>
+          <Link href="/research">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-research"
+            >
+              Research
             </button>
           </Link>
           <Link href="/one-pager">
