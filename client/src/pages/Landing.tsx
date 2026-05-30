@@ -974,7 +974,7 @@ function HeroCardDeck() {
 
                   {/* Content */}
                   <div className="absolute inset-0 z-[4] flex flex-col pl-6 pr-5 pt-[84px] pb-5">
-                    <h3 className="text-[20px] font-semibold text-foreground leading-snug line-clamp-3 mt-2">
+                    <h3 className="text-[20px] font-semibold text-zinc-900 leading-snug line-clamp-3 mt-2">
                       {card.name}
                     </h3>
                     <p className="text-[15px] text-zinc-500 leading-snug mt-3 line-clamp-1">
