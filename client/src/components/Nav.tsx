@@ -1,99 +1,21 @@
 ﻿import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import {
-  Bookmark, Moon, Sun, Radar, Menu, X, ChevronDown,
-  FlaskConical, Lightbulb, ShoppingBag,
-  Layers, BookOpen, Award, Sparkles, Target, Rocket,
-  TrendingUp, FileBarChart2, Bell, Briefcase,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Bookmark, Moon, Sun, Radar, Menu, X } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import type { SavedAsset } from "@shared/schema";
 
 type NavProps = {
   onOpenSaved?: () => void;
 };
 
-const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo", "/one-pager"];
+const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo", "/one-pager", "/research", "/market"];
 
 function normalizePath(path: string) {
   const stripped = path.split("?")[0].split("#")[0];
   return stripped.length > 1 ? stripped.replace(/\/+$/, "") : stripped;
 }
-
-type PreviewItem = { Icon: LucideIcon; label: string };
-
-type PortalEntry = {
-  name: string;
-  blurb: string;
-  href: string;
-  Icon: LucideIcon;
-  accent: string;
-  preview: PreviewItem[];
-};
-
-const RESEARCHER_PORTALS: PortalEntry[] = [
-  {
-    name: "EdenLab",
-    blurb: "Project workspace, literature, and grants.",
-    href: "/research",
-    Icon: FlaskConical,
-    accent: "262 80% 60%",
-    preview: [
-      { Icon: Layers, label: "Projects" },
-      { Icon: BookOpen, label: "Library" },
-      { Icon: Award, label: "Grants" },
-      { Icon: Bell, label: "Alerts" },
-    ],
-  },
-  {
-    name: "EdenDiscovery",
-    blurb: "Score and surface early-stage concepts.",
-    href: "/discovery",
-    Icon: Lightbulb,
-    accent: "38 92% 50%",
-    preview: [
-      { Icon: Sparkles, label: "Scoring" },
-      { Icon: Target, label: "Signal" },
-      { Icon: Rocket, label: "Graduate" },
-    ],
-  },
-];
-
-const INDUSTRY_PORTALS: PortalEntry[] = [
-  {
-    name: "EdenRadar",
-    blurb: "Licensable signals from 350+ TTOs, patents, and papers.",
-    href: "/scout",
-    Icon: Radar,
-    accent: "142 52% 36%",
-    preview: [
-      { Icon: TrendingUp, label: "Signals" },
-      { Icon: Layers, label: "Assets" },
-      { Icon: FileBarChart2, label: "Reports" },
-      { Icon: Bell, label: "Alerts" },
-    ],
-  },
-  {
-    name: "EdenMarket",
-    blurb: "Confidential biotech deal flow.",
-    href: "/market/preview",
-    Icon: ShoppingBag,
-    accent: "234 80% 58%",
-    preview: [
-      { Icon: ShoppingBag, label: "Browse" },
-      { Icon: Briefcase, label: "Deals" },
-      { Icon: FileBarChart2, label: "EOIs" },
-    ],
-  },
-];
 
 type PortalContext = "scout" | "market" | "lab" | "discovery" | null;
 
@@ -127,7 +49,7 @@ const PORTAL_NAV: Record<NonNullable<PortalContext>, { label: string; href: stri
     { label: "Seller", href: "/market/seller" },
   ],
   lab: [
-    { label: "Dashboard", href: "/research" },
+    { label: "Dashboard", href: "/research/dashboard" },
     { label: "Projects", href: "/research/projects" },
     { label: "Library", href: "/research/library" },
     { label: "Grants", href: "/research/grants" },
@@ -140,67 +62,6 @@ const PORTAL_NAV: Record<NonNullable<PortalContext>, { label: string; href: stri
   ],
 };
 
-function PortalItem({ entry }: { entry: PortalEntry }) {
-  return (
-    <Link href={entry.href}>
-      <a
-        className="group block px-2 py-2 rounded-md hover:bg-accent/60 transition-colors"
-        data-testid={`link-portal-${entry.name.toLowerCase()}`}
-      >
-        <div className="flex items-center gap-3">
-          <div
-            className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
-            style={{ background: `hsl(${entry.accent} / 0.12)`, color: `hsl(${entry.accent})` }}
-          >
-            <entry.Icon className="w-4 h-4" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm font-semibold leading-tight" style={{ color: `hsl(${entry.accent})` }}>
-              {entry.name}
-            </div>
-            <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">{entry.blurb}</div>
-          </div>
-        </div>
-      </a>
-    </Link>
-  );
-}
-
-function PlatformDropdown() {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button
-          className="px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-all duration-150 inline-flex items-center gap-1"
-          data-testid="link-nav-platform"
-        >
-          Platform
-          <ChevronDown className="w-3.5 h-3.5 opacity-70" />
-        </button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[300px] p-1.5">
-        <p className="px-2 pt-1 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Free
-        </p>
-        {RESEARCHER_PORTALS.map((e) => <PortalItem key={e.href} entry={e} />)}
-        <div className="my-1.5 border-t border-border" />
-        <p className="px-2 pt-0.5 pb-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-          Paid
-        </p>
-        {INDUSTRY_PORTALS.map((e) => <PortalItem key={e.href} entry={e} />)}
-        <div className="my-1.5 border-t border-border" />
-        <Link href="/pricing">
-          <a
-            className="block px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="link-portal-pricing-platform"
-          >
-            See pricing →
-          </a>
-        </Link>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
 
 export function Nav({ onOpenSaved }: NavProps) {
   const { theme, toggleTheme } = useTheme();
@@ -252,7 +113,30 @@ export function Nav({ onOpenSaved }: NavProps) {
                     About
                   </button>
                 </Link>
-                <PlatformDropdown />
+                <Link href="/research">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/research"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-research"
+                  >
+                    Research
+                  </button>
+                </Link>
+                <Link href="/market">
+                  <button
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
+                      normalizedLocation === "/market"
+                        ? "bg-accent text-foreground"
+                        : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                    }`}
+                    data-testid="link-nav-market"
+                  >
+                    Market
+                  </button>
+                </Link>
                 <Link href="/how-it-works">
                   <button
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
@@ -420,36 +304,24 @@ export function Nav({ onOpenSaved }: NavProps) {
               About
             </button>
           </Link>
-          <div className="px-3 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Free
-          </div>
-          {RESEARCHER_PORTALS.map((e) => (
-            <Link key={e.href} href={e.href}>
-              <button
-                className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                onClick={() => setMobileOpen(false)}
-                data-testid={`link-nav-mobile-${e.name.toLowerCase()}`}
-              >
-                <span style={{ color: `hsl(${e.accent})` }}>{e.name}</span>
-                <span className="block text-[11px] text-muted-foreground/80 leading-snug mt-0.5">{e.blurb}</span>
-              </button>
-            </Link>
-          ))}
-          <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
-            Paid
-          </div>
-          {INDUSTRY_PORTALS.map((e) => (
-            <Link key={e.href} href={e.href}>
-              <button
-                className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                onClick={() => setMobileOpen(false)}
-                data-testid={`link-nav-mobile-${e.name.toLowerCase()}`}
-              >
-                <span style={{ color: `hsl(${e.accent})` }}>{e.name}</span>
-                <span className="block text-[11px] text-muted-foreground/80 leading-snug mt-0.5">{e.blurb}</span>
-              </button>
-            </Link>
-          ))}
+          <Link href="/research">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-research"
+            >
+              Research
+            </button>
+          </Link>
+          <Link href="/market">
+            <button
+              className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              onClick={() => setMobileOpen(false)}
+              data-testid="link-nav-mobile-market"
+            >
+              Market
+            </button>
+          </Link>
           <Link href="/how-it-works">
             <button
               className="w-full text-left mt-2 px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"

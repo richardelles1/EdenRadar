@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import { useLocation } from "wouter";
 import { ResearchSidebar } from "@/components/ResearchSidebar";
 import { ResearcherOnboarding } from "@/components/ResearcherOnboarding";
@@ -14,7 +15,7 @@ type ResearchLayoutProps = {
 
 export function ResearchLayout({ children }: ResearchLayoutProps) {
   useDocumentMeta({ title: "EdenLab — Research Workspace | EdenRadar", noindex: true });
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   useResearcherInit();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -47,9 +48,15 @@ export function ResearchLayout({ children }: ResearchLayoutProps) {
         <div className="h-12 flex items-center justify-end px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">
           <AppSwitcher active="lab" />
         </div>
-        <main className="flex-1 overflow-y-auto">
+        <motion.main
+          key={location}
+          className="flex-1 overflow-y-auto"
+          initial={{ opacity: 0, y: 4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+        >
           {children}
-        </main>
+        </motion.main>
       </div>
       <ResearcherOnboarding
         open={onboardingOpen}

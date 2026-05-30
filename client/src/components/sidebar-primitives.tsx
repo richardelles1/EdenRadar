@@ -1,11 +1,12 @@
 import { motion } from "framer-motion";
 import { useSidebar } from "@/components/ui/aceternity-sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 export type PortalKey = "lab" | "scout" | "market" | "discovery";
 
 export const PORTAL_ACCENT: Record<PortalKey, string> = {
-  lab: "hsl(262 80% 60%)",
+  lab: "hsl(var(--portal-lab))",
   scout: "hsl(142 52% 36%)",
   market: "hsl(234 80% 58%)",
   discovery: "hsl(38 92% 50%)",
@@ -80,8 +81,9 @@ export function SidebarNavButton({
   tintInactive,
 }: NavButtonProps) {
   const { open, animate } = useSidebar();
+  const collapsed = animate && !open;
 
-  return (
+  const btn = (
     <button
       onClick={onClick}
       className={cn(
@@ -137,6 +139,21 @@ export function SidebarNavButton({
       </motion.span>
     </button>
   );
+
+  if (!collapsed) return btn;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{btn}</TooltipTrigger>
+      <TooltipContent
+        side="right"
+        className="text-xs font-semibold border-0 px-2.5 py-1.5"
+        style={{ background: accent, color: "#fff" }}
+      >
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 type BottomButtonProps = {
@@ -158,7 +175,10 @@ export function SidebarBottomButton({
   testId,
   danger,
 }: BottomButtonProps) {
-  return (
+  const { open, animate } = useSidebar();
+  const collapsed = animate && !open;
+
+  const btn = (
     <button
       onClick={onClick}
       className={cn(
@@ -180,5 +200,16 @@ export function SidebarBottomButton({
       <Icon className="w-4 h-4 shrink-0" />
       <AnimatedLabel>{label}</AnimatedLabel>
     </button>
+  );
+
+  if (!collapsed) return btn;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{btn}</TooltipTrigger>
+      <TooltipContent side="right" className="text-xs font-semibold border-0 px-2.5 py-1.5">
+        {label}
+      </TooltipContent>
+    </Tooltip>
   );
 }
