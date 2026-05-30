@@ -59,6 +59,7 @@ export type SessionFocusContext = {
   biology?: string;
   _summary?: string;
   _crossSessionMemory?: CrossSessionMemory;
+  _lastDocType?: string;
 };
 
 export function buildCrossSessionMemory(
@@ -1169,7 +1170,7 @@ INTENTS:
 - definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
 - pipeline: user asks about their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio")
 - synthesis: user wants a cross-cutting analysis of their entire saved pipeline ("analyze my pipeline", "portfolio review", "summarize what I have", "what do I have in evaluation", "give me an overview", "what are my top assets", "pipeline assessment")
-- document: user wants a structured deliverable ("draft a diligence checklist", "generate a memo", "write a term sheet outline", "create a brief for", "give me a checklist", "write up a summary for")
+- document: user wants a structured deliverable OR is revising one ("draft a diligence checklist", "generate a memo", "write a term sheet outline", "create a brief for", "give me a checklist", "write up a summary for") — when hasRecentDocument is present, also classify as document: "make it shorter", "focus on X section", "revise the", "expand", "adjust the tone", "add more detail"
 - conversational: greeting, thanks, out-of-scope chat with no biotech search intent
 
 FILTER EXTRACTION (null if not mentioned in the message):
@@ -1205,6 +1206,7 @@ export async function classifyIntent(
     if (focusContext?.indication) focusParts.push(`indication: ${focusContext.indication}`);
     if (focusContext?.institution) focusParts.push(`institution: ${focusContext.institution}`);
     if (focusContext?.stage) focusParts.push(`stage: ${focusContext.stage}`);
+    if (focusContext?._lastDocType) focusParts.push(`hasRecentDocument: ${focusContext._lastDocType}`);
     const focusLine = focusParts.length > 0 ? `\nSessionFocus: ${focusParts.join(", ")}` : "";
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
@@ -1774,6 +1776,12 @@ After the table, write 3–4 sentences of direct professional opinion: which ass
 // ── Pipeline synthesis query ────────────────────────────────────────────────
 // Cross-cutting analysis of a user's entire saved pipeline. Accepts SavedAsset-
 // shaped objects (no embedding needed — uses stored summaries + metadata).
+export type SynthesisSnapshot = {
+  ts: string;
+  totalCount: number;
+  statusGroups: Record<string, number>;
+};
+
 export type PipelineSavedAsset = {
   assetName: string; modality: string; developmentStage: string;
   diseaseIndication: string; status?: string | null; summary?: string;
@@ -1786,7 +1794,8 @@ export async function* synthesisQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  priorSnapshot?: SynthesisSnapshot | null,
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1800,6 +1809,21 @@ export async function* synthesisQuery(
     in_discussion: "In Discussion", evaluating: "Evaluating",
     watching: "Watching", on_hold: "On Hold", passed: "Passed", unsorted: "Unsorted",
   };
+
+  let deltaBlock = "";
+  if (priorSnapshot) {
+    const daysSince = Math.round((Date.now() - new Date(priorSnapshot.ts).getTime()) / (1000 * 60 * 60 * 24));
+    if (daysSince <= 60) {
+      const delta = assets.length - priorSnapshot.totalCount;
+      const changes: string[] = [];
+      for (const [st, group] of Object.entries(byStatus)) {
+        const prev = priorSnapshot.statusGroups[st] ?? 0;
+        const diff = group.length - prev;
+        if (diff !== 0) changes.push(`${statusLabel[st] ?? st}: ${diff > 0 ? `+${diff}` : diff}`);
+      }
+      deltaBlock = `\n\nDELTA SINCE LAST ANALYSIS (${daysSince} day${daysSince !== 1 ? "s" : ""} ago): total ${delta >= 0 ? `+${delta}` : delta} assets${changes.length ? `; ${changes.join("; ")}` : ""}`;
+    }
+  }
 
   const assetBlock = statusOrder
     .filter((s) => byStatus[s]?.length)
@@ -1815,7 +1839,7 @@ export async function* synthesisQuery(
   const synthesisPrompt = `You are reviewing the user's full saved pipeline for a BD intelligence briefing. These are all the assets they've bookmarked — not search results.
 
 SAVED PIPELINE (${assets.length} assets total):
-${assetBlock}
+${assetBlock}${deltaBlock}
 
 USER QUESTION: ${question}
 
@@ -1838,7 +1862,7 @@ Be direct and specific. Name real patterns. This is a briefing, not a descriptio
     messages,
     stream: true,
     temperature: 0.4,
-    max_tokens: 800,
+    max_tokens: 1400,
   });
 
   for await (const chunk of stream) {

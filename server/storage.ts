@@ -411,7 +411,7 @@ export interface IStorage {
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
   appendEdenMessage(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
   getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
-  listEdenSessions(limit?: number): Promise<EdenSession[]>;
+  listEdenSessions(userId: string, limit?: number): Promise<EdenSession[]>;
   getRecentSessionsForUser(userId: string, limit?: number): Promise<EdenSession[]>;
   createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void>;
   getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
@@ -3886,10 +3886,11 @@ export class DatabaseStorage implements IStorage {
     return session;
   }
 
-  async listEdenSessions(limit = 50): Promise<EdenSession[]> {
+  async listEdenSessions(userId: string, limit = 50): Promise<EdenSession[]> {
     return db
       .select()
       .from(edenSessions)
+      .where(and(eq(edenSessions.userId, userId), sql`jsonb_array_length(${edenSessions.messages}) > 0`))
       .orderBy(desc(edenSessions.updatedAt))
       .limit(limit);
   }

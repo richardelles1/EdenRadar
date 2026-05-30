@@ -15,7 +15,7 @@ import {
   extractBackRefPosition, extractBackRefInstitution,
   synthesisQuery, documentQuery,
   type UserContext, type SessionFocusContext, type IntentClassification, type LiveSource,
-  type CrossSessionMemory, type RankedAsset, type PipelineSavedAsset, type DocumentType, buildCrossSessionMemory,
+  type CrossSessionMemory, type RankedAsset, type PipelineSavedAsset, type DocumentType, type SynthesisSnapshot, buildCrossSessionMemory,
 } from "../lib/eden/rag";
 import { searchClinicalTrials } from "../lib/sources/clinicaltrials";
 import { searchLens } from "../lib/sources/lens";
@@ -179,11 +179,25 @@ function detectCadence(message: string): "daily" | "weekly" {
   return "weekly";
 }
 
+async function updateEdenAcceptedSignals(userId: string, asset: { modality?: string | null; diseaseIndication?: string | null }): Promise<void> {
+  const prof = await storage.getIndustryProfileByUserId(userId).catch(() => null);
+  if (!prof) return;
+  const bp = (prof.buyerProfile as Record<string, unknown>) ?? {};
+  const sigs = (bp._edenAcceptedSignals as { modalities: Record<string, number>; indications: Record<string, number> }) ?? { modalities: {}, indications: {} };
+  const mods = { ...sigs.modalities };
+  const inds = { ...sigs.indications };
+  if (asset.modality && asset.modality !== "unknown") mods[asset.modality] = (mods[asset.modality] ?? 0) + 1;
+  if (asset.diseaseIndication && asset.diseaseIndication !== "unknown") inds[asset.diseaseIndication] = (inds[asset.diseaseIndication] ?? 0) + 1;
+  await storage.saveBuyerProfile(userId, { ...bp, _edenAcceptedSignals: { modalities: mods, indications: inds } });
+}
+
 function buildActionOffers(
   message: string,
   intent: string,
   retrieved: ActionOfferAsset[],
   filters: { modality?: string | null; stage?: string | null; indication?: string | null; institution?: string | null },
+  acceptedSignals?: { modalities: Record<string, number>; indications: Record<string, number> } | null,
+  crossSessionMemory?: CrossSessionMemory | null,
 ): ActionOffer[] {
   const offers: ActionOffer[] = [];
   const lower = message.toLowerCase();
@@ -226,6 +240,30 @@ function buildActionOffers(
         cadence: detectCadence(message),
       },
     });
+  }
+
+  // Proactive alert: user hasn't asked but has shown repeated interest via prior actions or sessions
+  if (!hasAlertIntent && (intent === "search" || intent === "back_ref") && (filters.modality || filters.indication)) {
+    const acceptedMod = filters.modality ? (acceptedSignals?.modalities[filters.modality] ?? 0) : 0;
+    const acceptedInd = filters.indication ? (acceptedSignals?.indications[filters.indication] ?? 0) : 0;
+    const isFrequentTopic = (crossSessionMemory?.sessionCount ?? 0) >= 3 &&
+      (crossSessionMemory?.topModalities[0] === filters.modality || crossSessionMemory?.topIndications[0] === filters.indication);
+    if (acceptedMod >= 2 || acceptedInd >= 2 || isFrequentTopic) {
+      const topic = filters.modality ?? filters.indication ?? "this area";
+      offers.push({
+        type: "alert",
+        label: `${topic} (recommended)`,
+        config: {
+          name: `${filters.modality ?? filters.indication ?? "My"} Alert`,
+          query: filters.modality ? null : (filters.indication ?? null),
+          modalities: filters.modality ? [filters.modality] : null,
+          stages: null,
+          institutions: null,
+          criteriaType: "custom",
+          cadence: "weekly",
+        },
+      });
+    }
   }
 
   // Write actions: status update, note addition, pipeline move
@@ -327,6 +365,11 @@ export function registerEdenRoutes(app: Express): void {
             dealStages: userProfile.dealStages?.length ? userProfile.dealStages : ctx?.dealStages,
           }
         : ctx;
+      const acceptedSignals: { modalities: Record<string, number>; indications: Record<string, number> } | null = (() => {
+        const bp = userProfile?.buyerProfile as Record<string, unknown> | null | undefined;
+        return (bp?._edenAcceptedSignals as { modalities: Record<string, number>; indications: Record<string, number> } | undefined) ?? null;
+      })();
+
       const allMessages = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
 
       // ── Session summarization: at turn 8, compress older turns into a context note ──
@@ -388,7 +431,7 @@ export function registerEdenRoutes(app: Express): void {
               queryParts.push("assets from the last 30 days");
               newArrivalsHint = { count: newCount, label, query: queryParts.join(" ") };
             }
-          } catch { /* non-fatal */ }
+          } catch (err) { console.warn("[eden] new arrivals hint failed:", (err as Error)?.message ?? err); }
         }
       } else if (!isFirstTurn) {
         // On subsequent turns, preserve the memory already attached to focusContext
@@ -443,6 +486,16 @@ export function registerEdenRoutes(app: Express): void {
         }
         for (const bio of crossSessionMemory.topBiologies) {
           if (!engagementSignals.biologies[bio]) engagementSignals.biologies[bio] = 1;
+        }
+      }
+
+      // Accepted action signals: weight 3 — concrete prior engagement beats passive browsing
+      if (acceptedSignals) {
+        for (const [m, count] of Object.entries(acceptedSignals.modalities)) {
+          engagementSignals.modalities[m] = Math.max(engagementSignals.modalities[m] ?? 0, Math.min(count * 3, 9));
+        }
+        for (const [ind, count] of Object.entries(acceptedSignals.indications)) {
+          engagementSignals.indications[ind] = Math.max(engagementSignals.indications[ind] ?? 0, Math.min(count * 3, 9));
         }
       }
 
@@ -589,7 +642,7 @@ export function registerEdenRoutes(app: Express): void {
           role: "assistant", content: fullResponse,
           assetIds: targeted.map((a) => a.id), assets: assetPayload,
         });
-        const backRefOffers = buildActionOffers(message.trim(), "back_ref", targeted.map((a) => ({ ...a, similarity: 1.0 })), filters);
+        const backRefOffers = buildActionOffers(message.trim(), "back_ref", targeted.map((a) => ({ ...a, similarity: 1.0 })), filters, acceptedSignals, crossSessionMemory);
         if (backRefOffers.length > 0) sendEvent("action_offer", { offers: backRefOffers });
         sendEvent("done", donePayload());
         return;
@@ -823,7 +876,7 @@ export function registerEdenRoutes(app: Express): void {
             const compareOffers = buildActionOffers(
               message.trim(), "comparative",
               fetchedForCompare.map((a) => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, sourceUrl: a.sourceUrl, similarity: 1.0 })),
-              filters,
+              filters, acceptedSignals, crossSessionMemory,
             );
             if (compareOffers.length > 0) sendEvent("action_offer", { offers: compareOffers });
             sendEvent("done", donePayload());
@@ -891,7 +944,7 @@ export function registerEdenRoutes(app: Express): void {
           const defOffers = buildActionOffers(
             message.trim(), "definitional",
             relatedAssets.slice(0, 3).map((a) => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, sourceUrl: a.sourceUrl, similarity: a.similarity ?? 0.8 })),
-            filters,
+            filters, acceptedSignals, crossSessionMemory,
           );
           if (defOffers.length > 0) sendEvent("action_offer", { offers: defOffers });
         } else {
@@ -990,19 +1043,32 @@ export function registerEdenRoutes(app: Express): void {
         const lists = await storage.getPipelineLists(requestUserId).catch(() => []);
         const listMap = new Map(lists.map((l) => [l.id, l.name]));
 
-        const synthAssets: PipelineSavedAsset[] = savedList.map((s) => ({
+        const synthAssets: PipelineSavedAsset[] = savedList.slice(0, 150).map((s) => ({
           assetName: s.assetName, modality: s.modality, developmentStage: s.developmentStage,
           diseaseIndication: s.diseaseIndication, status: s.status ?? undefined,
           summary: s.summary, pipelineListName: s.pipelineListId ? (listMap.get(s.pipelineListId) ?? undefined) : undefined,
         }));
 
+        const synthBP = userProfile?.buyerProfile as Record<string, unknown> | null | undefined;
+        const synthPriorSnapshot = (synthBP?._lastSynthesisSnapshot as SynthesisSnapshot | undefined) ?? null;
+
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
-        for await (const token of synthesisQuery(message.trim(), synthAssets, history, resolvedCtx, portfolioStats, focusContext)) {
+        for await (const token of synthesisQuery(message.trim(), synthAssets, history, resolvedCtx, portfolioStats, focusContext, synthPriorSnapshot)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
         await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        if (requestUserId) {
+          const newSnap: SynthesisSnapshot = {
+            ts: new Date().toISOString(),
+            totalCount: synthAssets.length,
+            statusGroups: synthAssets.reduce<Record<string, number>>((acc, a) => {
+              const k = a.status ?? "unsorted"; acc[k] = (acc[k] ?? 0) + 1; return acc;
+            }, {}),
+          };
+          storage.saveBuyerProfile(requestUserId, { ...(synthBP ?? {}), _lastSynthesisSnapshot: newSnap }).catch(() => {});
+        }
         sendEvent("done", donePayload());
         return;
       }
@@ -1044,6 +1110,7 @@ export function registerEdenRoutes(app: Express): void {
           sendEvent("token", { text: token });
         }
         await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [targetAsset.id], assets: docPayload });
+        focusContext._lastDocType = docType;
         sendEvent("done", donePayload());
         return;
       }
@@ -1132,9 +1199,19 @@ export function registerEdenRoutes(app: Express): void {
 
       const externalResults = await liveResultsPromise;
       sendEvent("context", { sessionId: sid, assets: assetPayload, externalResults, activeSource: liveSource ?? "tto" });
-      const ragQuestion = filters.trending
+      let crossRefNote = "";
+      if (externalResults.length > 0 && liveSource) {
+        const srcLabel = liveSource === "clinicaltrials" ? "ClinicalTrials" : liveSource === "patents" ? "Patent Landscape" : "Harvard Research";
+        const extLines = externalResults.slice(0, 6).map((r, i) =>
+          `${i + 1}. ${r.title}${r.sponsor ? ` — ${r.sponsor}` : ""}${r.status ? ` (${r.status})` : ""}`
+        ).join("\n");
+        crossRefNote = `\n\n[SUPPLEMENTAL ${srcLabel.toUpperCase()} CONTEXT — do not present as TTO assets]:
+${extLines}
+After covering TTO assets, note in one sentence whether any of these external results connect thematically to the TTO assets (shared institution, indication, or mechanism). Skip if no connection exists.`;
+      }
+      const ragQuestion = (filters.trending
         ? `${message.trim()}\n\n[CONTEXT FOR EDEN: These assets were indexed in the last 90 days and are well-documented. After presenting them, add 2–3 sentences of genuine market context from your industry intelligence — what deal dynamics, funding trends, or mechanism enthusiasm makes this area compelling right now. Do NOT fabricate market data; only reference what you know from your training.]`
-        : message.trim();
+        : message.trim()) + crossRefNote;
       let fullResponse = "";
       for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
         fullResponse += token;
@@ -1145,7 +1222,7 @@ export function registerEdenRoutes(app: Express): void {
         assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
       });
 
-      const searchOffers = buildActionOffers(message.trim(), "search", retrieved, filters);
+      const searchOffers = buildActionOffers(message.trim(), "search", retrieved, filters, acceptedSignals, crossSessionMemory);
       if (searchOffers.length > 0) sendEvent("action_offer", { offers: searchOffers });
       sendEvent("done", donePayload());
     } catch (err: unknown) {
@@ -1230,6 +1307,9 @@ export function registerEdenRoutes(app: Express): void {
       const target = saved.find((s) => s.ingestedAssetId === ingestedAssetId);
       if (!target) return res.status(404).json({ error: "Asset not found in your pipeline — save it first" });
 
+      // Fire-and-forget: record this engagement for future ranking and proactive alerts
+      updateEdenAcceptedSignals(userId, target).catch(() => {});
+
       if (type === "status_update") {
         if (!payload.status) return res.status(400).json({ error: "status required" });
         await storage.updateSavedAssetStatus(target.id, payload.status);
@@ -1237,7 +1317,9 @@ export function registerEdenRoutes(app: Express): void {
       }
       if (type === "note_add") {
         if (!payload.content) return res.status(400).json({ error: "content required" });
-        await storage.createAssetNote({ savedAssetId: target.id, userId, content: payload.content, authorName: userId });
+        const profile = await storage.getIndustryProfileByUserId(userId).catch(() => undefined);
+        const authorName = profile?.userName?.trim() || "Via Eden";
+        await storage.createAssetNote({ savedAssetId: target.id, userId, content: payload.content, authorName });
         return res.json({ ok: true, action: "note_add" });
       }
       if (type === "move_pipeline") {
@@ -1285,9 +1367,11 @@ export function registerEdenRoutes(app: Express): void {
   });
 
   app.get("/api/eden/sessions", verifyAnyAuth, async (req, res) => {
+    const userId = (req as any).userId as string | undefined;
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
     try {
       const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
-      const sessions = await storage.listEdenSessions(limit);
+      const sessions = await storage.listEdenSessions(userId, limit);
       res.json(sessions);
     } catch (err: unknown) {
       const msg = "Failed";
