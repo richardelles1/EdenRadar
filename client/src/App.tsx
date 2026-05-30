@@ -61,6 +61,7 @@ import Tos from "@/pages/Tos";
 import Privacy from "@/pages/Privacy";
 import Pricing from "@/pages/Pricing";
 import Demo from "@/pages/Demo";
+import ResearchPage from "@/pages/ResearchPage";
 import BillingSuccess from "@/pages/BillingSuccess";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
@@ -281,7 +282,8 @@ function Router() {
       <Route path="/admin/mobile" component={AdminMobile} />
       <Route path="/admin/reset-password" component={AdminResetPassword} />
 
-      <Route path="/research">
+      <Route path="/research" component={ResearchPage} />
+      <Route path="/research/dashboard">
         <ResearchLayout>
           <ResearchDashboard />
         </ResearchLayout>
