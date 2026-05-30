@@ -586,8 +586,19 @@ export function EdenChatThread({
               )}
 
               {/* Follow-up pills */}
-              {followUps.length > 0 && (
+              {(followUps.length > 0 || msg.newArrivalsHint) && (
                 <div className={`flex flex-wrap gap-1.5 mt-2 ml-0.5`} data-testid={`follow-up-pills-${i}`}>
+                  {msg.newArrivalsHint && (
+                    <button
+                      onClick={() => onSend(msg.newArrivalsHint!.query)}
+                      disabled={streaming}
+                      className={`${compact ? "text-[10px] px-2 py-0.5" : "text-[11px] px-2.5 py-1"} rounded-full border border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-400 font-medium hover:bg-amber-500/15 transition-all disabled:opacity-40`}
+                      style={{ animation: `em-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both` }}
+                      data-testid={`pill-new-arrivals-${i}`}
+                    >
+                      ✦ {msg.newArrivalsHint.count} new {msg.newArrivalsHint.label}
+                    </button>
+                  )}
                   {followUps.map((pill, pi) => (
                     <button
                       key={pill}

@@ -32,6 +32,8 @@ const SOURCE_DISPLAY: Record<ActiveSource, { label: string; Icon: React.Componen
 };
 
 // ── Empty state with personalized prompt cards ────────────────────────────
+const CAPABILITY_CHIPS = ["Search TTO assets", "Compare institutions", "Analyze your pipeline", "Draft term sheets", "Set smart alerts"];
+
 function EmptyState({
   onSend,
   streaming,
@@ -39,6 +41,7 @@ function EmptyState({
   profile,
   introPlayed,
   onIntroDone,
+  isFirstVisit,
 }: {
   onSend: (q: string) => void;
   streaming: boolean;
@@ -46,6 +49,7 @@ function EmptyState({
   profile: ReturnType<typeof getIndustryProfile>;
   introPlayed: boolean;
   onIntroDone: () => void;
+  isFirstVisit: boolean;
 }) {
   if (!introPlayed) {
     return <EdenIntro onDone={onIntroDone} />;
@@ -76,16 +80,24 @@ function EmptyState({
             E · D · E · N
           </span>
         </h1>
-        <p className="text-[11px] text-muted-foreground mt-1 tracking-widest uppercase">
-          Engine for Discovery &amp; Emerging Networks
-        </p>
-        {greetName && (
-          <p className="text-xs text-muted-foreground mt-2" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "80ms" }}>
-            Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
-            {profile.therapeuticAreas.length > 0 && (
-              <> · focused on <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
-            )}
+        {isFirstVisit ? (
+          <p className="text-xs text-muted-foreground mt-2 text-center max-w-xs" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "60ms" }}>
+            Your biotech BD intelligence layer — search 400k+ TTO assets, compare institutions, analyze your pipeline, and draft deal documents.
           </p>
+        ) : (
+          <>
+            <p className="text-[11px] text-muted-foreground mt-1 tracking-widest uppercase">
+              Engine for Discovery &amp; Emerging Networks
+            </p>
+            {greetName && (
+              <p className="text-xs text-muted-foreground mt-2" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "80ms" }}>
+                Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
+                {profile.therapeuticAreas.length > 0 && (
+                  <> · focused on <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
+                )}
+              </p>
+            )}
+          </>
         )}
         {totalIndexed > 0 && (
           <p className="text-[11px] text-muted-foreground/60 mt-1">
@@ -115,6 +127,22 @@ function EmptyState({
           );
         })}
       </div>
+
+      {isFirstVisit && (
+        <div
+          className="flex flex-wrap items-center justify-center gap-1.5 mt-4 max-w-xl"
+          style={{ animation: "ie-fade-up 360ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "460ms" }}
+        >
+          {CAPABILITY_CHIPS.map((chip) => (
+            <span
+              key={chip}
+              className="text-[10px] text-muted-foreground/70 bg-muted/50 border border-border/50 rounded-full px-2.5 py-1"
+            >
+              {chip}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -214,9 +242,10 @@ export default function IndustryEden() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: sidebarOpen,
     staleTime: 10000,
   });
+
+  const isFirstVisit = !sessionsData || sessionsData.length === 0;
 
   function handleNewChat() {
     clearChat();
@@ -314,10 +343,10 @@ export default function IndustryEden() {
       .catch(() => {});
   }, [sessionId]);
 
-  // Refetch sessions when sidebar opens and a new message was sent
+  // Refetch sessions when sidebar opens or a new session completes
   useEffect(() => {
-    if (sidebarOpen) refetchSessions();
-  }, [sidebarOpen, sessionId]);
+    refetchSessions();
+  }, [sessionId]);
 
   const { isListening, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechRecognition(
     (transcript) => setInput(input ? `${input} ${transcript}` : transcript)
@@ -477,18 +506,20 @@ export default function IndustryEden() {
                     const firstQ = s.messages?.find((m) => m.role === "user")?.content ?? "Untitled session";
                     const date = new Date(s.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
                     const msgCount = s.messages?.length ?? 0;
+                    const isActive = s.sessionId === sessionId;
                     return (
                       <button
                         key={s.sessionId}
                         onClick={() => handleLoadSession(s)}
-                        className="w-full text-left rounded-md px-2 py-2 hover:bg-muted transition-colors flex items-center gap-1.5 group"
+                        className={`w-full text-left rounded-md px-2 py-2 transition-colors flex items-center gap-1.5 group ${isActive ? "bg-emerald-500/10 border border-emerald-500/20" : "hover:bg-muted"}`}
                         data-testid={`session-item-${s.id}`}
                       >
+                        {isActive && <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 shrink-0" />}
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground truncate">{firstQ.slice(0, 55)}{firstQ.length > 55 ? "…" : ""}</p>
+                          <p className={`text-xs font-medium truncate ${isActive ? "text-emerald-700 dark:text-emerald-400" : "text-foreground"}`}>{firstQ.slice(0, 55)}{firstQ.length > 55 ? "…" : ""}</p>
                           <p className="text-[10px] text-muted-foreground mt-0.5 whitespace-nowrap">{date} · {msgCount} msg{msgCount !== 1 ? "s" : ""}</p>
                         </div>
-                        <ChevronRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
+                        {!isActive && <ChevronRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />}
                       </button>
                     );
                   })}
@@ -539,6 +570,7 @@ export default function IndustryEden() {
                 profile={profile}
                 introPlayed={introPlayed}
                 onIntroDone={handleIntroDone}
+                isFirstVisit={isFirstVisit}
               />
             )}
 

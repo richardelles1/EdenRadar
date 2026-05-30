@@ -35,6 +35,7 @@ export type ChatMessage = {
   activeSource?: ActiveSource;
   isStreaming?: boolean;
   actionOffers?: ActionOffer[];
+  newArrivalsHint?: { count: number; label: string; query: string };
 };
 
 export type AlertOfferConfig = {
@@ -74,7 +75,7 @@ export type StreamingStage = "idle" | "searching" | "ranking" | "generating";
 
 type SseContextPayload = { sessionId?: string; assets: ChatAsset[]; externalResults?: ExternalResult[]; activeSource?: ActiveSource };
 type SseTokenPayload = { text: string };
-type SseDonePayload = { sessionId?: string };
+type SseDonePayload = { sessionId?: string; newArrivalsHint?: { count: number; label: string; query: string } };
 type SseErrorPayload = { message: string };
 type SseActionOfferPayload = { offers: ActionOffer[] };
 
@@ -221,7 +222,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
             setMessages((prev) => {
               const upd = [...prev];
               const last = upd[upd.length - 1];
-              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, isStreaming: false };
+              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, isStreaming: false, newArrivalsHint: d.newArrivalsHint };
               return upd;
             });
           } else if (dispatched.type === "error") {
