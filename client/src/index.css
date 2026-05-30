@@ -329,6 +329,25 @@
   animation: stagger-in 0.38s ease-out forwards;
 }
 
+.intel-panel-top,
+.intel-panel-bottom {
+  opacity: 0;
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.intel-panel-top   { transform: translateY(-18px); }
+.intel-panel-bottom { transform: translateY(18px); }
+
+.reveal-section.is-visible .intel-panel-top {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.1s;
+}
+.reveal-section.is-visible .intel-panel-bottom {
+  opacity: 1;
+  transform: translateY(0);
+  transition-delay: 0.28s;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .reveal-section, .reveal-section.is-visible,
   .radar-sweep, .garden-scroll, .eden-node, .glow-pulse,
@@ -336,6 +355,12 @@
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;
+  }
+  .intel-panel-top,
+  .intel-panel-bottom {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
   }
   .stagger-item {
     opacity: 1 !important;

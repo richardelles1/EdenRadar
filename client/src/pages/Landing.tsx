@@ -14,7 +14,6 @@ import {
   ArrowRight,
   Bookmark,
   BookmarkCheck,
-  ShoppingBag,
 } from "lucide-react";
 
 /* ─────────────────────────── helpers ─────────────────────────── */
@@ -264,12 +263,17 @@ const FEED_FALLBACK: FeedAsset[] = [
   { id: 16, institution: "Cornell University",                modality: "Small Molecule",      indication: "Cardiovascular",     developmentStage: "Discovery",     summary: null, mechanismOfAction: "Factor XIa inhibition for thromboembolism with improved bleeding safety", firstSeenAt: new Date(Date.now() - 43 * 3600000).toISOString() },
 ];
 
-function buildNarrative(asset: FeedAsset): { parts: Array<{ text: string; bold: boolean }> } {
-  // If enriched summary exists and is substantive, use it
-  if (asset.summary && asset.summary.length > 80 && asset.summary !== "unknown") {
-    return { parts: [{ text: asset.summary, bold: false }] };
-  }
+function pickConnector(mod: string | null): string {
+  if (!mod) return "for";
+  const m = mod.toLowerCase();
+  if (m.includes("bispecific") || m.includes("antibody")) return "against";
+  if (m.includes("car-t") || m.includes("car t") || m.includes("nk cell") || m.includes("cell therapy")) return "in";
+  if (m.includes("adc")) return "targeting";
+  if (m.includes("vaccine")) return "against";
+  return "for";
+}
 
+function buildNarrative(asset: FeedAsset): Array<{ text: string; bold: boolean }> {
   const stage = asset.developmentStage && asset.developmentStage !== "unknown" ? asset.developmentStage : null;
   const mod   = asset.modality && asset.modality !== "unknown" ? asset.modality : null;
   const ind   = asset.indication && asset.indication !== "unknown" ? asset.indication : null;
@@ -277,34 +281,39 @@ function buildNarrative(asset: FeedAsset): { parts: Array<{ text: string; bold: 
 
   const parts: Array<{ text: string; bold: boolean }> = [];
   const article = mod && /^[aeiou]/i.test(mod) ? "An " : "A ";
+  const connector = pickConnector(mod);
 
   parts.push({ text: article, bold: false });
   if (stage) parts.push({ text: stage.toLowerCase(), bold: true });
   if (mod)   parts.push({ text: (stage ? " " : "") + mod, bold: true });
-  if (ind)   parts.push({ text: " for ", bold: false }, { text: ind, bold: true });
-  if (moa)   parts.push({ text: ". " + moa.charAt(0).toUpperCase() + moa.slice(1) + ".", bold: false });
-  else       parts.push({ text: ".", bold: false });
+  if (ind)   parts.push({ text: ` ${connector} `, bold: false }, { text: ind, bold: true });
+  parts.push({ text: ".", bold: false });
 
-  return { parts };
+  if (moa) {
+    const trimmed = moa.length > 80 ? moa.slice(0, 77).trimEnd() + "…" : moa;
+    parts.push({ text: " " + trimmed.charAt(0).toUpperCase() + trimmed.slice(1) + ".", bold: false });
+  }
+
+  return parts;
 }
 
 function FeedRow({ asset }: { asset: FeedAsset }) {
   const inst = asset.institution && asset.institution !== "unknown" ? asset.institution : "Unknown Institution";
-  const { parts } = buildNarrative(asset);
+  const parts = buildNarrative(asset);
 
   return (
-    <div className="grid border-b border-border/60" style={{ gridTemplateColumns: "240px 1fr", minHeight: "72px" }}>
+    <div className="grid border-b border-border/60" style={{ gridTemplateColumns: "240px 1fr", minHeight: "64px" }}>
       <div
-        className="flex items-center px-7 py-5 border-r border-primary/30"
+        className="flex items-center px-7 py-4 border-r border-primary/30"
         style={{ background: "hsl(var(--primary))" }}
       >
         <span className="text-sm font-bold text-white leading-snug">{inst}</span>
       </div>
-      <div className="flex items-center px-8 py-5">
-        <p className="text-sm text-muted-foreground leading-relaxed">
+      <div className="flex items-center px-8 py-4">
+        <p className="text-sm leading-snug" style={{ color: "hsl(220 18% 35%)" }}>
           {parts.map((p, i) =>
             p.bold
-              ? <strong key={i} className="text-primary font-semibold">{p.text}</strong>
+              ? <strong key={i} style={{ color: "hsl(142 52% 32%)", fontWeight: 600 }}>{p.text}</strong>
               : <span key={i}>{p.text}</span>
           )}
         </p>
@@ -380,7 +389,7 @@ function RecentFeed() {
             style={{ background: "linear-gradient(to top, white, transparent)" }} />
 
           <div
-            style={{ animation: "ticker-up 150s linear infinite", willChange: "transform" }}
+            style={{ animation: "ticker-up 600s linear infinite", willChange: "transform" }}
           >
             {doubled.map((asset, i) => (
               <FeedRow key={i} asset={asset} />
@@ -409,30 +418,22 @@ function IntelligenceSection({ onLogin }: { onLogin: () => void }) {
               before your first move.
             </h2>
             <p className="text-base leading-relaxed" style={{ color: "hsl(220 18% 32%)" }}>
-              Every asset in EdenRadar sits inside a live competitive map. See how crowded the indication is, which modalities are gaining momentum, where white space still exists, and which institutions are most active in your target area.
+              EdenRadar doesn't just surface assets. It maps the landscape around them: how crowded each indication is, which modalities are gaining traction, and where the field is still open.
             </p>
-            <div className="space-y-4 pt-1">
-              <div className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Pre-commercial pipeline map</p>
-                  <p className="text-[13px] leading-snug" style={{ color: "hsl(220 15% 40%)" }}>Every asset plotted by stage, modality, and therapeutic area across the full university pipeline.</p>
+            <div className="space-y-0 pt-1 border-t border-border">
+              {[
+                { n: "01", title: "Pre-commercial pipeline map", desc: "Every asset plotted by stage, modality, and therapeutic area across the full university pipeline." },
+                { n: "02", title: "White space finder", desc: "Indication areas with limited competing assets, where first-mover advantage is still available." },
+                { n: "03", title: "Modality momentum", desc: "The technology platforms accelerating across institutions right now, so you can follow the science." },
+              ].map(({ n, title, desc }) => (
+                <div key={n} className="flex gap-5 py-5 border-b border-border">
+                  <span className="text-2xl font-bold shrink-0 leading-none mt-0.5" style={{ color: "hsl(142 52% 36% / 0.25)", fontVariantNumeric: "tabular-nums" }}>{n}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-foreground mb-1">{title}</p>
+                    <p className="text-[13px] leading-relaxed" style={{ color: "hsl(220 15% 42%)" }}>{desc}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">White space finder</p>
-                  <p className="text-[13px] leading-snug" style={{ color: "hsl(220 15% 40%)" }}>Identifies indication areas with limited competing assets: where first-mover advantage is still available.</p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0 mt-2" />
-                <div>
-                  <p className="text-sm font-semibold text-foreground">Modality momentum</p>
-                  <p className="text-[13px] leading-snug" style={{ color: "hsl(220 15% 40%)" }}>Tracks which technology platforms are accelerating across institutions, so you can follow the science.</p>
-                </div>
-              </div>
+              ))}
             </div>
             <div className="pt-2">
               <button
@@ -450,7 +451,7 @@ function IntelligenceSection({ onLogin }: { onLogin: () => void }) {
           <div className="relative" style={{ height: "480px" }}>
             {/* Top panel — left-aligned, upper half of screenshot */}
             <div
-              className="absolute top-0 left-0 rounded-xl overflow-hidden"
+              className="intel-panel-top absolute top-0 left-0 rounded-xl overflow-hidden"
               style={{
                 width: "82%",
                 height: "52%",
@@ -469,7 +470,7 @@ function IntelligenceSection({ onLogin }: { onLogin: () => void }) {
             </div>
             {/* Bottom panel — right-aligned, lower half of screenshot */}
             <div
-              className="absolute bottom-0 right-0 rounded-xl overflow-hidden"
+              className="intel-panel-bottom absolute bottom-0 right-0 rounded-xl overflow-hidden"
               style={{
                 width: "82%",
                 height: "52%",
@@ -532,24 +533,25 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
           className="text-base sm:text-lg mb-10 max-w-xl mx-auto leading-relaxed"
           style={{ color: "hsl(220 18% 34%)" }}
         >
-          Every week, EdenRadar surfaces new pre-clinical and clinical assets from 400+ research institutions. Know what's available before anyone else does.
+          EdenRadar tracks pre-clinical and clinical assets across hundreds of research institutions. Know what's available before your competitors do.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button
-            size="lg"
-            onClick={onLogin}
-            data-testid="cta-bottom-industry"
-            className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
-            style={{ background: "linear-gradient(148deg, hsl(33 70% 46%) 0%, hsl(33 62% 38%) 100%)", color: "hsl(33 40% 94%)", border: "none" }}
-          >
-            <Building2 className="w-4 h-4" />
-            Get started
-          </Button>
-          <Link href="/market" className="w-full sm:w-auto">
+          <Link href="/demo" className="w-full sm:w-auto">
+            <Button
+              size="lg"
+              data-testid="cta-bottom-demo"
+              className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
+              style={{ background: "linear-gradient(148deg, hsl(33 70% 46%) 0%, hsl(33 62% 38%) 100%)", color: "hsl(33 40% 94%)", border: "none" }}
+            >
+              See the demo
+              <ArrowRight className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Link href="/one-pager" className="w-full sm:w-auto">
             <Button
               size="lg"
               variant="outline"
-              data-testid="cta-bottom-edenmarket"
+              data-testid="cta-bottom-onepager"
               className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
               style={{
                 borderColor: "hsl(33 55% 60%)",
@@ -557,8 +559,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
                 background: "hsl(33 60% 90%)",
               }}
             >
-              <ShoppingBag className="w-4 h-4" />
-              Browse EdenMarket
+              Download one-pager
             </Button>
           </Link>
         </div>

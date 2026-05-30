@@ -307,7 +307,9 @@ export function registerIndexingRoutes(app: Express): void {
         : sql`first_seen_at >= NOW() - INTERVAL '7 days'`;
       const windowCondition = and(
         eq(ingestedAssets.relevant, true),
-        intervalSql
+        intervalSql,
+        sql`${ingestedAssets.modality} IS NOT NULL AND ${ingestedAssets.modality} != 'unknown'`,
+        sql`${ingestedAssets.indication} IS NOT NULL AND ${ingestedAssets.indication} != 'unknown'`
       );
 
       // Full-window count and institution grouping (no limit)
