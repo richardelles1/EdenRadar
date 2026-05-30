@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/lib/supabase";
-import { Sprout, Loader2, Lightbulb, FlaskConical, ShoppingBag, ArrowLeft, CheckCircle2, Mail, X, Lock } from "lucide-react";
+import { Loader2, ArrowLeft, CheckCircle2, Mail, X, Lock } from "lucide-react";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 
 function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string } {
@@ -19,20 +19,6 @@ function getPasswordStrength(pwd: string): { score: 0 | 1 | 2; label: string } {
 
 const STRENGTH_COLORS = ["#ef4444", "#f59e0b", "#10b981"] as const;
 
-const PORTAL_STYLES = {
-  amber:   { iconBg: "bg-amber-500",   text: "text-amber-500 dark:text-amber-400"   },
-  violet:  { iconBg: "bg-violet-500",  text: "text-violet-500 dark:text-violet-400"  },
-  emerald: { iconBg: "bg-emerald-500", text: "text-emerald-600 dark:text-emerald-400" },
-  indigo:  { iconBg: "bg-indigo-500",  text: "text-indigo-500 dark:text-indigo-400"  },
-} as const;
-type PortalColor = keyof typeof PORTAL_STYLES;
-
-const PORTALS: { icon: React.ElementType; color: PortalColor; label: string }[] = [
-  { icon: Lightbulb,    color: "amber",   label: "Discovery" },
-  { icon: FlaskConical, color: "violet",  label: "Lab"       },
-  { icon: Sprout,       color: "emerald", label: "Scout"     },
-  { icon: ShoppingBag,  color: "indigo",  label: "Market"    },
-];
 
 function GoogleIcon() {
   return (
@@ -388,23 +374,6 @@ export default function Login() {
             </p>
           </div>
 
-          {/* Portal badges */}
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {PORTALS.map(({ icon: Icon, color, label }) => {
-              const s = PORTAL_STYLES[color];
-              return (
-                <div key={label} className="flex items-center gap-1.5">
-                  <div className={`w-5 h-5 rounded ${s.iconBg} flex items-center justify-center`}>
-                    <Icon className="w-3 h-3 text-white" />
-                  </div>
-                  <span className={`font-bold text-xs ${isDark ? "text-white/80" : "text-gray-800"}`}>
-                    Eden<span className={s.text}>{label}</span>
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
           {/* ── Forgot password form ── */}
           {view === "forgot" && (
             <div className="space-y-5">
@@ -645,8 +614,8 @@ export default function Login() {
                 </h1>
                 <p className={`text-sm ${sub}`}>
                   {mode === "signin"
-                    ? "Welcome back! Please sign in to continue"
-                    : "Sign up for an EdenRadar account"}
+                    ? "Enter your credentials to continue."
+                    : "Create your account to get started."}
                 </p>
               </div>
 
@@ -921,30 +890,6 @@ export default function Login() {
                     >
                       <X className="w-3 h-3" />
                     </button>
-                  </div>
-                )}
-
-                {/* Role selector (sign up only) */}
-                {mode === "signup" && (
-                  <div className="space-y-1.5">
-                    <p className={`text-xs font-medium ${isDark ? "text-white/50" : "text-gray-500"}`}>I am</p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {([
-                        { value: "industry"   as const, label: "Industry",   active: "border-emerald-500/55 bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" },
-                        { value: "researcher" as const, label: "Researcher", active: "border-violet-500/55 bg-violet-500/12 text-violet-600 dark:text-violet-400"   },
-                        { value: "concept"    as const, label: "Concept",    active: "border-amber-500/55 bg-amber-500/12 text-amber-600 dark:text-amber-400"        },
-                      ]).map(({ value, label, active }) => (
-                        <button
-                          key={value}
-                          type="button"
-                          className={`p-2.5 rounded-lg border text-xs font-medium transition-all ${selectedRole === value ? active : roleOff}`}
-                          onClick={() => setSelectedRole(value)}
-                          data-testid={`role-${value}`}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
                   </div>
                 )}
 
