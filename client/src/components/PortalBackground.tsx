@@ -137,42 +137,47 @@ function RadarPortalBg({ reduced }: { reduced: boolean }) {
   );
 }
 
+function HexLattice({ color }: { color: string }) {
+  const S = 34;
+  const W = S * Math.sqrt(3);
+  const H = S * 2;
+  const cols = 6, rows = 5;
+  const hexes: { cx: number; cy: number }[] = [];
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      hexes.push({
+        cx: c * W + (r % 2 === 1 ? W / 2 : 0),
+        cy: r * H * 0.75,
+      });
+    }
+  }
+  const pts = (cx: number, cy: number) =>
+    Array.from({ length: 6 }, (_, i) => {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      return `${cx + S * Math.cos(a)},${cy + S * Math.sin(a)}`;
+    }).join(" ");
+  const vw = cols * W + W / 2 + 10;
+  const vh = rows * H * 0.75 + H * 0.25 + 10;
+  return (
+    <svg
+      aria-hidden
+      className="absolute pointer-events-none"
+      style={{ right: -20, top: 10, width: vw, height: vh, opacity: 0.07 }}
+      viewBox={`0 0 ${vw} ${vh}`}
+    >
+      {hexes.map((h, i) => (
+        <polygon key={i} points={pts(h.cx, h.cy)} stroke={`hsl(${color})`} strokeWidth="1" fill="none" />
+      ))}
+    </svg>
+  );
+}
+
 function LabPortalBg({ reduced }: { reduced: boolean }) {
   const color = "262 80% 65%";
   return (
     <>
-      <DotGrid color={color} opacity={0.09} />
-      {!reduced && [0, 3, 6].map((delay, i) => (
-        <div
-          key={i}
-          className="absolute portal-bg-anim"
-          style={{
-            left: "60%",
-            top: "28%",
-            width: 200,
-            height: 200,
-            marginLeft: -100,
-            marginTop: -100,
-            borderRadius: "50%",
-            border: `1.5px solid hsl(${color} / 0.22)`,
-            animation: `lab-ring-expand 9s ease-out ${delay}s infinite`,
-          }}
-        />
-      ))}
-      {[280, 460, 640].map((r, i) => (
-        <div
-          key={r}
-          className="absolute rounded-full border"
-          style={{
-            left: "60%",
-            top: "28%",
-            width: r,
-            height: r,
-            transform: "translate(-50%, -50%)",
-            borderColor: `hsl(${color} / ${0.14 - i * 0.03})`,
-          }}
-        />
-      ))}
+      <DotGrid color={color} opacity={0.07} />
+      <HexLattice color={color} />
       {!reduced && LAB_PARTICLES.map((p, i) => (
         <div
           key={i}
@@ -308,8 +313,7 @@ export function PortalBackground({ variant }: Props) {
   return (
     <div
       aria-hidden
-      className="fixed inset-0 overflow-hidden pointer-events-none"
-      style={{ zIndex: 0 }}
+      className="fixed inset-0 overflow-hidden pointer-events-none z-0"
     >
       {variant === "radar"     && <RadarPortalBg     reduced={reduced} />}
       {variant === "lab"       && <LabPortalBg       reduced={reduced} />}

@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -28,6 +30,7 @@ import type { ResearchProject, SavedReference } from "@shared/schema";
 import { ProjectCard } from "@/pages/ResearchProjects";
 
 const ACCENT = PORTAL_ACCENT.lab;
+const FUNNEL_FLEX = [1.45, 1.25, 1.05, 0.95, 0.83, 0.72];
 
 type ProjectsResponse = { projects: ResearchProject[] };
 type SearchResult = {
@@ -64,8 +67,8 @@ function SectionLabel({
   onAction?: () => void;
 }) {
   return (
-    <div className="flex items-center justify-between mb-3">
-      <div className="flex items-center gap-2.5 pl-3 border-l-2" style={{ borderColor: accent }}>
+    <div className="flex items-center justify-between pb-2 mb-4 border-b border-border/50">
+      <div className="flex items-center gap-2">
         <Icon className="w-3.5 h-3.5" style={{ color: accent }} />
         <span className="text-sm font-semibold text-foreground">{label}</span>
       </div>
@@ -96,48 +99,70 @@ function PipelineStageCard({
   stage,
   isLast,
   navigate,
+  delay = 0,
+  reducedMotion,
+  flexWeight = 1,
 }: {
   stage: PipelineStage;
   isLast: boolean;
   navigate: (href: string) => void;
+  delay?: number;
+  reducedMotion: boolean;
+  flexWeight?: number;
 }) {
+  const target = typeof stage.value === "number" ? stage.value : null;
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    if (reducedMotion || target === null || target === 0) {
+      setCount(target ?? 0);
+      return;
+    }
+    let cancelled = false;
+    const startTime = Date.now();
+    const duration = 550;
+    const endValue = target;
+    function tick() {
+      if (cancelled) return;
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setCount(Math.round(eased * endValue));
+      if (progress < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    return () => { cancelled = true; };
+  }, [target, reducedMotion]);
+
+  const displayValue = target !== null ? (reducedMotion ? target : count) : stage.value;
+
   return (
-    <div className="flex items-center flex-1 min-w-0">
+    <motion.div
+      className="flex items-center min-w-0"
+      style={{ flex: flexWeight }}
+      initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1], delay }}
+    >
       <button
         onClick={() => navigate(stage.href)}
-        className="flex-1 min-w-0 rounded-lg border border-border bg-card p-3.5 flex flex-col gap-1.5 hover:border-opacity-60 transition-all group relative overflow-hidden text-left cursor-pointer"
-        style={{ ["--hover-border" as string]: stage.accentColor }}
-        onMouseEnter={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.borderColor = `${stage.accentColor}50`;
-          (e.currentTarget as HTMLButtonElement).style.transform = "translateY(-1px)";
-          (e.currentTarget as HTMLButtonElement).style.boxShadow = `0 4px 16px ${stage.accentColor}18`;
-        }}
-        onMouseLeave={(e) => {
-          (e.currentTarget as HTMLButtonElement).style.borderColor = "";
-          (e.currentTarget as HTMLButtonElement).style.transform = "";
-          (e.currentTarget as HTMLButtonElement).style.boxShadow = "";
-        }}
+        className="flex-1 min-w-0 rounded-lg border border-border bg-card p-3.5 flex flex-col gap-1.5 transition-all hover:-translate-y-px hover:shadow-sm text-left cursor-pointer"
       >
-        {/* Left accent strip */}
-        <div
-          className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg"
-          style={{ backgroundColor: stage.accentColor }}
-        />
         <div className="flex items-center justify-between">
           <stage.icon className="w-3.5 h-3.5" style={{ color: stage.accentColor }} />
-          <span className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground/60">
             {stage.label}
           </span>
         </div>
-        <div className="text-2xl font-bold tabular-nums" style={{ color: stage.accentColor }}>
-          {stage.value}
+        <div className="text-3xl font-black tabular-nums" style={{ color: stage.accentColor }}>
+          {displayValue}
         </div>
         <div className="text-[10px] text-muted-foreground truncate">{stage.sublabel}</div>
       </button>
       {!isLast && (
         <ChevronRight className="w-4 h-4 text-muted-foreground/30 shrink-0 mx-1.5" />
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -163,11 +188,29 @@ function DiscoveryStatusBadge({ card }: { card: DiscoveryCard }) {
   );
 }
 
+function getNextAction(
+  projectCount: number,
+  refCount: number,
+  totalScreened: number,
+  totalIncluded: number,
+  discoveryCount: number,
+  publishedCount: number,
+): { message: string; cta: string; href: string; accent: string } | null {
+  if (projectCount === 0) return { message: "Start by defining a research question to track.", cta: "Create a project", href: "/research/projects", accent: ACCENT };
+  if (refCount === 0) return { message: `${projectCount} project${projectCount > 1 ? "s" : ""} defined — time to search the literature.`, cta: "Search databases", href: "/research/data-sources", accent: "hsl(217 91% 60%)" };
+  if (totalScreened === 0) return { message: `${refCount} reference${refCount > 1 ? "s" : ""} saved. Import papers to begin screening.`, cta: "Go to projects", href: "/research/projects", accent: "hsl(188 85% 35%)" };
+  if (totalIncluded === 0) return { message: `${totalScreened} paper${totalScreened > 1 ? "s" : ""} imported. Mark the strongest evidence as included.`, cta: "Screen papers", href: "/research/projects", accent: "hsl(142 52% 36%)" };
+  if (discoveryCount === 0) return { message: `${totalIncluded} paper${totalIncluded > 1 ? "s" : ""} included. Ready to package your findings?`, cta: "Draft a discovery", href: "/research/my-discoveries", accent: "hsl(38 92% 50%)" };
+  if (publishedCount === 0) return { message: `${discoveryCount} discovery${discoveryCount > 1 ? " drafts" : " draft"} ready to submit to EdenMarket.`, cta: "Publish now", href: "/research/my-discoveries", accent: "hsl(142 52% 36%)" };
+  return null;
+}
+
 export default function ResearchDashboard() {
   const researcherId = useResearcherId();
   const researcherHeaders = useResearcherHeaders();
   const profile = getResearcherProfile();
   const [, navigate] = useLocation();
+  const reducedMotion = useReducedMotion() ?? false;
 
   const allAreas = profile.researchAreas.length > 0 ? profile.researchAreas : ["CRISPR gene editing"];
   const spotlightQuery = allAreas.join(" OR ");
@@ -245,6 +288,10 @@ export default function ResearchDashboard() {
   const latestSignal = alertData?.assets?.[0]?.signals?.[0];
   const grantSignals = grantData?.assets?.flatMap((a) => a.signals ?? []) ?? [];
 
+  const nextAction = (!projectsLoading && !discoveriesLoading)
+    ? getNextAction(projects.length, refCount, totalScreened, totalIncluded, discoveries.length, publishedCount)
+    : null;
+
   // Phase-level counts derived from projects
   const totalScreened = projects.reduce((sum, p) => sum + ((p as any).screeningPapers?.length ?? 0), 0);
   const totalIncluded = projects.reduce((sum, p) =>
@@ -309,12 +356,17 @@ export default function ResearchDashboard() {
   ];
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-7">
+    <motion.div
+      className="p-6 max-w-5xl mx-auto space-y-7"
+      initial={{ opacity: reducedMotion ? 1 : 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.25 }}
+    >
 
       {/* Command header */}
       <div
         className="rounded-xl border border-border p-4 flex items-center justify-between gap-4"
-        style={{ background: accentMix(ACCENT, 4) }}
+        style={{ background: accentMix(ACCENT, 7) }}
       >
         <div className="flex items-center gap-3">
           <div
@@ -325,7 +377,7 @@ export default function ResearchDashboard() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-sm font-bold text-foreground" data-testid="text-welcome">
+              <h1 className="text-base font-bold text-foreground" data-testid="text-welcome">
                 {profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : "EdenLab"}
               </h1>
               <span
@@ -384,17 +436,51 @@ export default function ResearchDashboard() {
         <p className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground mb-2.5">
           Research Workflow
         </p>
-        <div className="flex items-center gap-0">
-          {pipelineStages.map((stage, i) => (
-            <PipelineStageCard
-              key={stage.key}
-              stage={stage}
-              isLast={i === pipelineStages.length - 1}
-              navigate={navigate}
-            />
-          ))}
+        <div className="overflow-x-auto">
+          <div className="flex items-center gap-0 min-w-[620px]">
+            {pipelineStages.map((stage, i) => (
+              <PipelineStageCard
+                key={stage.key}
+                stage={stage}
+                isLast={i === pipelineStages.length - 1}
+                navigate={navigate}
+                delay={i * 0.05}
+                reducedMotion={reducedMotion}
+                flexWeight={FUNNEL_FLEX[i]}
+              />
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* Next action nudge */}
+      {nextAction && (
+        <motion.div
+          initial={reducedMotion ? false : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1], delay: 0.38 }}
+          className="flex items-center gap-3.5 rounded-lg border p-3.5"
+          style={{
+            background: accentMix(nextAction.accent, 6),
+            borderColor: accentMix(nextAction.accent, 28),
+          }}
+        >
+          <div
+            className="w-7 h-7 rounded-md flex items-center justify-center shrink-0"
+            style={{ background: accentMix(nextAction.accent, 18) }}
+          >
+            <ArrowRight className="w-4 h-4" style={{ color: nextAction.accent }} />
+          </div>
+          <p className="text-sm text-foreground flex-1 leading-snug">{nextAction.message}</p>
+          <button
+            onClick={() => navigate(nextAction.href)}
+            className="text-xs font-semibold px-3 py-1.5 rounded-md shrink-0 transition-all hover:-translate-y-px active:translate-y-0 whitespace-nowrap"
+            style={{ background: nextAction.accent, color: "#fff" }}
+          >
+            {nextAction.cta} →
+          </button>
+        </motion.div>
+      )}
 
       {/* Recent Projects */}
       <section>
@@ -414,8 +500,14 @@ export default function ResearchDashboard() {
             className="rounded-lg border border-dashed border-border p-8 text-center"
             style={{ background: accentMix(ACCENT, 3) }}
           >
-            <FolderOpen className="w-8 h-8 mx-auto mb-2.5" style={{ color: accentMix(ACCENT, 80) }} />
-            <p className="text-sm text-muted-foreground mb-3">No projects yet.</p>
+            <motion.div
+              className="mx-auto mb-2.5 w-fit"
+              animate={reducedMotion ? undefined : { y: [0, -5, 0] }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <FolderOpen className="w-8 h-8" style={{ color: accentMix(ACCENT, 80) }} />
+            </motion.div>
+            <p className="text-sm text-muted-foreground mb-3">Start a systematic review to track evidence and document your methodology.</p>
             <button
               className="text-xs font-medium px-3 py-1.5 rounded-md border transition-colors"
               style={{
@@ -459,8 +551,14 @@ export default function ResearchDashboard() {
           </div>
         ) : recentDiscoveries.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border p-8 text-center" style={{ background: "color-mix(in srgb, hsl(38 92% 50%) 4%, transparent)" }}>
-            <Sparkles className="w-8 h-8 mx-auto mb-2.5 text-amber-400/60" />
-            <p className="text-sm text-muted-foreground mb-3">No discoveries yet.</p>
+            <motion.div
+              className="mx-auto mb-2.5 w-fit"
+              animate={reducedMotion ? undefined : { y: [0, -5, 0] }}
+              transition={{ duration: 2.8, repeat: Infinity, ease: "easeInOut" }}
+            >
+              <Sparkles className="w-8 h-8 text-amber-400/60" />
+            </motion.div>
+            <p className="text-sm text-muted-foreground mb-3">Package a finding for EdenMarket when you're ready to share it.</p>
             <button
               className="text-xs font-medium px-3 py-1.5 rounded-md border border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/8 transition-colors hover:bg-amber-500/15"
               onClick={() => navigate("/research/my-discoveries")}
@@ -471,22 +569,13 @@ export default function ResearchDashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {recentDiscoveries.map((d) => (
-              <div
+              <button
                 key={d.id}
-                className="relative rounded-lg border border-border bg-card p-4 flex flex-col gap-2 cursor-pointer overflow-hidden transition-all"
+                className="rounded-lg border border-border p-4 flex flex-col gap-2 transition-all hover:-translate-y-px hover:shadow-sm text-left w-full"
                 style={{ background: "color-mix(in srgb, hsl(38 92% 50%) 4%, var(--card))" }}
                 onClick={() => navigate("/research/my-discoveries")}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "hsl(38 92% 50% / 0.4)";
-                  (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "";
-                  (e.currentTarget as HTMLDivElement).style.transform = "";
-                }}
                 data-testid={`discovery-card-${d.id}`}
               >
-                <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg bg-amber-500" />
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-semibold text-foreground line-clamp-2 leading-snug flex-1">
                     {d.title}
@@ -499,7 +588,7 @@ export default function ResearchDashboard() {
                 {d.summary && (
                   <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">{d.summary}</p>
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -508,7 +597,7 @@ export default function ResearchDashboard() {
       {/* Grants Spotlight */}
       <section>
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2.5 pl-3 border-l-2 border-emerald-500">
+          <div className="flex items-center gap-2">
             <BadgeDollarSign className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="text-sm font-semibold text-foreground">Grants Spotlight</span>
             <div className="flex items-center gap-1">
@@ -544,19 +633,13 @@ export default function ResearchDashboard() {
             {grantSignals.slice(0, 3).map((g, i) => (
               <div
                 key={g.id ?? i}
-                className="relative rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-col gap-1.5 cursor-pointer transition-all overflow-hidden"
+                role="button"
+                tabIndex={0}
+                className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-4 flex flex-col gap-1.5 transition-all hover:-translate-y-px hover:shadow-sm cursor-pointer"
                 onClick={() => navigate("/research/grants")}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "hsl(142 52% 36% / 0.4)";
-                  (e.currentTarget as HTMLDivElement).style.transform = "translateY(-1px)";
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLDivElement).style.borderColor = "";
-                  (e.currentTarget as HTMLDivElement).style.transform = "";
-                }}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("/research/grants"); } }}
                 data-testid={`grants-spotlight-${i}`}
               >
-                <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg bg-emerald-500" />
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{g.title}</h3>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -571,6 +654,7 @@ export default function ResearchDashboard() {
                         target="_blank"
                         rel="noopener noreferrer"
                         className="shrink-0"
+                        aria-label={`Open ${g.title} in new tab`}
                         onClick={(e) => e.stopPropagation()}
                       >
                         <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
@@ -613,7 +697,7 @@ export default function ResearchDashboard() {
 
       {/* Breaking Alert */}
       <section>
-        <div className="flex items-center gap-2.5 pl-3 border-l-2 border-amber-500 mb-3">
+        <div className="flex items-center gap-2 mb-3">
           <Bell className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
           <span className="text-sm font-semibold text-foreground">Breaking Alert</span>
           {primaryArea && (
@@ -634,16 +718,21 @@ export default function ResearchDashboard() {
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : latestSignal ? (
           <div
-            className="relative rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col gap-1.5 overflow-hidden"
+            className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col gap-1.5"
             data-testid="breaking-alert"
           >
-            <div className="absolute left-0 inset-y-0 w-[3px] rounded-l-lg bg-amber-500" />
             <div className="flex items-start justify-between gap-3">
               <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">
                 {latestSignal.title}
               </h3>
               {latestSignal.url && (
-                <a href={latestSignal.url} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                <a
+                  href={latestSignal.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="shrink-0"
+                  aria-label={`Open ${latestSignal.title} in new tab`}
+                >
                   <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
                 </a>
               )}
@@ -673,6 +762,6 @@ export default function ResearchDashboard() {
         )}
       </section>
 
-    </div>
+    </motion.div>
   );
 }

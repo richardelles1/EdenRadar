@@ -28,6 +28,7 @@ import {
   AceternitySidebarBody,
   useSidebar,
 } from "@/components/ui/aceternity-sidebar";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   AnimatedLabel,
   SidebarGroupHeader,
@@ -101,7 +102,7 @@ function ResearcherIdentityBlock({ navigate }: { navigate: (href: string) => voi
         style={{ borderColor: accentMix(ACCENT, 40) }}
       >
         {profile.photoUrl ? (
-          <img src={profile.photoUrl} alt="" className="w-full h-full object-cover rounded-md" />
+          <img src={profile.photoUrl} alt={profile.name || "Profile photo"} className="w-full h-full object-cover rounded-md" />
         ) : (
           <span className="text-[11px] font-bold" style={{ color: ACCENT }}>
             {initials}
@@ -176,6 +177,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const profileActive = location === "/research/profile";
 
   return (
+    <TooltipProvider delayDuration={400}>
     <div className="flex flex-col h-full overflow-hidden">
       {/* Logo header */}
       <div className="h-12 flex items-center px-3.5 border-b border-border shrink-0">
@@ -184,12 +186,12 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           onClick={() => navigate("/research")}
           data-testid="research-sidebar-logo"
         >
-          <div className="relative w-7 h-7 rounded-md bg-violet-600 flex items-center justify-center shrink-0">
+          <div className="relative w-7 h-7 rounded-md flex items-center justify-center shrink-0" style={{ background: ACCENT }}>
             <Microscope className="w-4 h-4 text-white" />
           </div>
           <AnimatedLabel>
             <span className="font-bold text-foreground text-base tracking-tight">
-              Eden<span className="text-violet-500">Lab</span>
+              Eden<span style={{ color: ACCENT }}>Lab</span>
             </span>
           </AnimatedLabel>
         </button>
@@ -201,7 +203,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
       </div>
 
       {/* Nav groups */}
-      <nav className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">
+      <nav aria-label="EdenLab navigation" className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">
         {NAV_GROUPS.map(({ groupLabel, items }) => (
           <div key={groupLabel}>
             <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>
@@ -254,6 +256,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
         />
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 

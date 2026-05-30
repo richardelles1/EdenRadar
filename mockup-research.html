@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Research — EdenRadar</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        hsl(36 40% 97%);
+  --bg-warm:   hsl(36 30% 94%);
+  --fg:        hsl(25 25% 12%);
+  --muted:     hsl(25 18% 30%);
+  --border:    hsl(30 20% 88%);
+  --discovery: hsl(38 85% 44%);
+  --lab:       hsl(262 65% 52%);
+  --radar:     hsl(142 52% 36%);
+  --market:    hsl(234 80% 55%);
+  --card:      hsl(0 0% 100%);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Nav ── */
+.nav {
+  height: 56px;
+  border-bottom: 1px solid var(--border);
+  background: hsl(36 40% 98% / 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 48px;
+  position: sticky; top: 0; z-index: 100;
+  backdrop-filter: blur(8px);
+}
+.nav-logo { font-size: 15px; font-weight: 700; color: var(--fg); letter-spacing: -0.02em; }
+.nav-logo span { color: var(--radar); }
+.nav-links { display: flex; gap: 4px; }
+.nav-link { font-size: 13px; font-weight: 500; color: var(--muted); padding: 6px 12px; border-radius: 6px; }
+.nav-link.active { color: var(--fg); background: hsl(30 20% 88%); }
+.nav-ctas { display: flex; gap: 8px; align-items: center; }
+.btn-outline-sm { font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 7px; border: 1px solid hsl(142 52% 36% / 0.35); color: var(--radar); background: transparent; cursor: pointer; }
+.btn-sm { font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 7px; border: none; color: white; background: var(--radar); cursor: pointer; }
+
+/* ── Hero ── */
+.hero-wrap {
+  position: relative; overflow: hidden;
+}
+.hero-aurora {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(-45deg,
+    hsl(38 85% 88% / 0.45),
+    hsl(36 40% 97%),
+    hsl(262 65% 90% / 0.35),
+    hsl(36 40% 97%)
+  );
+  background-size: 400% 400%;
+  animation: heroAurora 14s ease infinite;
+}
+@keyframes heroAurora {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+.hero {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 96px 48px 88px;
+  text-align: center;
+  position: relative;
+}
+.hero h1 {
+  font-size: 54px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--fg);
+  margin-bottom: 24px;
+}
+.col-discovery { color: var(--discovery); }
+.col-lab       { color: var(--lab); }
+.hero p {
+  font-size: 17px;
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 500px;
+  margin: 0 auto 40px;
+}
+.hero-ctas { display: inline-flex; gap: 12px; }
+.btn-discovery {
+  font-size: 13px; font-weight: 600; padding: 11px 22px; border-radius: 9px;
+  border: none; background: var(--discovery); color: white; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 8px;
+  transition: opacity 0.2s;
+}
+.btn-discovery:hover { opacity: 0.88; }
+.btn-lab {
+  font-size: 13px; font-weight: 600; padding: 11px 22px; border-radius: 9px;
+  border: 1.5px solid hsl(262 65% 52% / 0.4); background: hsl(262 65% 52% / 0.07);
+  color: hsl(262 65% 38%); cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  transition: background 0.2s;
+}
+.btn-lab:hover { background: hsl(262 65% 52% / 0.13); }
+
+/* ── Product badge (Login-style: colored square + "Eden[Color]Name") ── */
+.product-badge {
+  display: inline-flex; align-items: center; gap: 9px;
+  margin-bottom: 20px;
+}
+.product-badge-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+}
+.product-badge-icon svg { width: 16px; height: 16px; }
+.product-badge-text {
+  font-size: 14px; font-weight: 700; color: hsl(25 25% 18%); letter-spacing: -0.01em;
+}
+
+/* ── Pathway ── */
+.pathway {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 80px 64px;
+}
+.pathway-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 56px; text-align: center;
+}
+.pathway-steps {
+  display: grid;
+  grid-template-columns: 1fr 44px 1fr 44px 1fr 44px 1fr;
+  align-items: start;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+.step { text-align: center; }
+.step-icon-wrap {
+  width: 60px; height: 60px; border-radius: 15px;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 16px;
+}
+.step-icon-wrap svg { width: 28px; height: 28px; }
+.step-num {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.14em;
+  text-transform: uppercase; margin-bottom: 8px;
+}
+.step-title { font-size: 15px; font-weight: 700; color: var(--fg); margin-bottom: 9px; }
+.step-desc { font-size: 12.5px; color: var(--muted); line-height: 1.6; max-width: 186px; margin: 0 auto 14px; min-height: 60px; }
+.step-link {
+  font-size: 11px; font-weight: 700; padding: 4px 12px;
+  border-radius: 100px; display: inline-block; text-decoration: none;
+  transition: opacity 0.15s;
+}
+.step-link:hover { opacity: 0.75; }
+.arrow {
+  display: flex; align-items: flex-start; justify-content: center;
+  padding-top: 30px; color: hsl(30 15% 72%);
+  animation: arrowPulse 2.8s ease-in-out infinite;
+}
+.arrow svg { width: 18px; height: 18px; }
+@keyframes arrowPulse {
+  0%,100% { transform: translateX(0); opacity: 0.7; }
+  50%      { transform: translateX(5px); opacity: 1; }
+}
+
+/* ── Sections ── */
+.section {
+  max-width: 1080px; margin: 0 auto;
+  padding: 96px 48px;
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 80px; align-items: center;
+}
+.section.flipped { direction: rtl; }
+.section.flipped > * { direction: ltr; }
+.section h2 {
+  font-size: 32px; font-weight: 700; line-height: 1.2;
+  letter-spacing: -0.02em; color: var(--fg); margin-bottom: 18px;
+}
+.section p {
+  font-size: 15px; color: var(--muted); line-height: 1.72; margin-bottom: 28px;
+}
+.features { display: flex; flex-direction: column; border-top: 1px solid var(--border); }
+.feature { display: flex; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+.feature-num { font-size: 22px; font-weight: 800; line-height: 1; min-width: 30px; padding-top: 1px; }
+.feature-title { font-size: 13px; font-weight: 600; color: var(--fg); margin-bottom: 4px; }
+.feature-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.section-cta {
+  margin-top: 28px; display: inline-flex; align-items: center; gap: 6px;
+  font-size: 13px; font-weight: 600; padding: 10px 20px; border-radius: 8px;
+  cursor: pointer; text-decoration: none; transition: opacity 0.2s;
+}
+.section-cta:hover { opacity: 0.85; }
+
+/* ── Discovery mock ── */
+.discovery-visual {
+  background: hsl(38 50% 97%);
+  border: 1px solid hsl(38 40% 88%);
+  border-radius: 16px; padding: 28px;
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), box-shadow 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+.discovery-visual:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 52px hsl(38 30% 20% / 0.09);
+}
+.concept-card {
+  background: white; border: 1px solid hsl(38 40% 88%);
+  border-radius: 11px; padding: 20px; margin-bottom: 14px;
+}
+.concept-tag { font-size: 9px; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: hsl(38 85% 36%); margin-bottom: 10px; }
+.concept-title { font-size: 14px; font-weight: 700; color: var(--fg); margin-bottom: 14px; line-height: 1.35; }
+.score-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-top: 1px solid hsl(38 30% 92%); }
+.score-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 600; color: var(--muted); }
+.score-badge { font-size: 24px; font-weight: 800; color: var(--discovery); letter-spacing: -0.03em; }
+.score-badge span { font-size: 13px; font-weight: 500; color: hsl(38 40% 58%); }
+.score-bar-wrap { height: 5px; background: hsl(38 40% 90%); border-radius: 100px; margin-top: 8px; overflow: hidden; }
+.score-bar {
+  height: 100%; border-radius: 100px;
+  background: linear-gradient(90deg, hsl(38 85% 55%), hsl(38 85% 44%));
+  width: 0;
+  transition: width 1.4s cubic-bezier(0.16,1,0.3,1);
+}
+.score-bar.animated { width: 78%; }
+.signal-row {
+  display: flex; align-items: center; gap: 6px; margin-top: 14px;
+  font-size: 11px; color: hsl(38 65% 34%); font-weight: 600;
+  background: hsl(38 85% 48% / 0.09); border-radius: 7px; padding: 8px 12px;
+}
+.signal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--discovery); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.4)} }
+.pending-concepts { display: flex; flex-direction: column; gap: 8px; }
+.pending-row {
+  display: flex; justify-content: space-between; align-items: center;
+  background: white; border: 1px solid hsl(38 30% 90%);
+  border-radius: 8px; padding: 10px 14px; font-size: 12px;
+}
+.pending-name { font-weight: 600; color: var(--fg); }
+.pending-score { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 100px; }
+
+/* ── Lab mock ── */
+.lab-visual {
+  background: hsl(262 40% 97%);
+  border: 1px solid hsl(262 30% 88%);
+  border-radius: 16px; padding: 28px;
+  transition: transform 0.35s cubic-bezier(0.16,1,0.3,1), box-shadow 0.35s cubic-bezier(0.16,1,0.3,1);
+}
+.lab-visual:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 52px hsl(262 30% 20% / 0.09);
+}
+.project-name { font-size: 13px; font-weight: 700; color: var(--fg); margin-bottom: 4px; }
+.project-meta { font-size: 11px; color: var(--muted); margin-bottom: 18px; }
+.canvas-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7px; }
+.canvas-cell { background: white; border: 1px solid hsl(262 25% 90%); border-radius: 8px; padding: 10px 11px; }
+.canvas-cell-num { font-size: 8px; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 4px; }
+.canvas-cell-title { font-size: 11px; font-weight: 600; color: var(--fg); line-height: 1.3; }
+.canvas-cell.filled { border-color: hsl(262 40% 82%); background: hsl(262 40% 98%); }
+.canvas-cell.filled .canvas-cell-title { color: hsl(262 50% 36%); }
+.progress-row { margin-top: 14px; display: flex; align-items: center; gap: 10px; }
+.progress-label { font-size: 11px; color: var(--muted); font-weight: 500; }
+.progress-bar-wrap { flex: 1; height: 4px; background: hsl(262 25% 88%); border-radius: 100px; overflow: hidden; }
+.progress-bar {
+  height: 100%; border-radius: 100px;
+  background: linear-gradient(90deg, hsl(262 65% 65%), hsl(262 65% 50%));
+  width: 0; transition: width 1.4s cubic-bezier(0.16,1,0.3,1);
+}
+.progress-bar.animated { width: 45%; }
+.progress-pct { font-size: 11px; font-weight: 700; color: hsl(262 60% 46%); }
+
+/* ── Closing loop ── */
+.loop {
+  background: var(--card);
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 80px 48px; text-align: center;
+}
+.loop-inner { max-width: 560px; margin: 0 auto; }
+.loop h3 { font-size: 24px; font-weight: 700; color: var(--fg); margin-bottom: 14px; letter-spacing: -0.015em; line-height: 1.25; }
+.loop p { font-size: 15px; color: var(--muted); line-height: 1.72; }
+.loop-chain {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 32px;
+  background: hsl(36 30% 93%); border: 1px solid var(--border);
+  border-radius: 100px; padding: 8px 20px; font-size: 12px; font-weight: 600;
+}
+.chain-item { padding: 3px 10px; border-radius: 100px; font-size: 11px; font-weight: 700; }
+.chain-arrow { color: var(--muted); font-size: 10px; }
+
+/* ── Bottom CTA ── */
+.bottom-cta { padding: 96px 48px; text-align: center; background: var(--bg); }
+.bottom-cta h2 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; color: var(--fg); margin-bottom: 14px; line-height: 1.2; }
+.bottom-cta p { font-size: 15px; color: var(--muted); margin-bottom: 36px; }
+.bottom-ctas { display: inline-flex; gap: 12px; }
+
+/* ── Scroll reveal ── */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1);
+}
+.reveal.visible { opacity: 1; transform: translateY(0); }
+.reveal.d1 { transition-delay: 0.08s; }
+.reveal.d2 { transition-delay: 0.18s; }
+.reveal.d3 { transition-delay: 0.28s; }
+.reveal.d4 { transition-delay: 0.38s; }
+</style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-logo">Eden<span>Radar</span></div>
+  <div class="nav-links">
+    <div class="nav-link">About</div>
+    <div class="nav-link">Platform</div>
+    <div class="nav-link active">Research</div>
+    <div class="nav-link">How It Works</div>
+    <div class="nav-link">Pricing</div>
+  </div>
+  <div class="nav-ctas">
+    <button class="btn-outline-sm">Request Access</button>
+    <button class="btn-sm">Sign In</button>
+  </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero-wrap">
+  <div class="hero-aurora"></div>
+  <div class="hero reveal">
+    <h1>The tools researchers use<br>to <span class="col-lab">build</span> and be <span class="col-discovery">discovered.</span></h1>
+    <p>Two free tools for every stage of your research journey. From first idea through active project to industry partnership.</p>
+    <div class="hero-ctas">
+      <button class="btn-discovery">
+        <!-- Lightbulb -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><path d="M15 14c.2-1 .7-1.5 1.5-2.5a7 7 0 10-11 0C6.3 12.5 6.8 13 7 14"/><path d="M9 18h6M10 22h4"/></svg>
+        Submit a concept
+      </button>
+      <button class="btn-lab">
+        <!-- FlaskConical -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><path d="M10 2v7.527a2 2 0 01-.211.896L4.72 20.55a1 1 0 00.9 1.45h12.76a1 1 0 00.9-1.45l-5.069-10.127A2 2 0 0114 9.527V2"/><path d="M8.5 2h7M7 16h10"/></svg>
+        Start a project
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Pathway -->
+<div class="pathway">
+  <p class="pathway-label reveal">How your research reaches industry</p>
+  <div class="pathway-steps">
+
+    <div class="step reveal">
+      <div class="step-icon-wrap" style="background:hsl(38 85% 48% / 0.12);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="hsl(38 85% 40%)" stroke-width="2"><path d="M15 14c.2-1 .7-1.5 1.5-2.5a7 7 0 10-11 0C6.3 12.5 6.8 13 7 14"/><path d="M9 18h6M10 22h4"/></svg>
+      </div>
+      <div class="step-num" style="color:hsl(38 85% 40%);">Step 01</div>
+      <div class="step-title">Register your idea</div>
+      <div class="step-desc">Score your concept before the science starts. Timestamp your idea and put it on the map.</div>
+      <a href="/" class="step-link" style="background:hsl(38 85%48%/0.12);color:hsl(38 75%32%);">EdenDiscovery</a>
+    </div>
+
+    <div class="arrow reveal d1">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <div class="step reveal d1">
+      <div class="step-icon-wrap" style="background:hsl(262 65% 58% / 0.12);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="hsl(262 65% 46%)" stroke-width="2"><path d="M10 2v7.527a2 2 0 01-.211.896L4.72 20.55a1 1 0 00.9 1.45h12.76a1 1 0 00.9-1.45l-5.069-10.127A2 2 0 0114 9.527V2"/><path d="M8.5 2h7M7 16h10"/></svg>
+      </div>
+      <div class="step-num" style="color:hsl(262 65% 46%);">Step 02</div>
+      <div class="step-title">Build your project</div>
+      <div class="step-desc">Structured workspace for translational research. Hypothesis, grants, and IP all in one place.</div>
+      <a href="/research" class="step-link" style="background:hsl(262 65%58%/0.12);color:hsl(262 55%36%);">EdenLab</a>
+    </div>
+
+    <div class="arrow reveal d2">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <div class="step reveal d2">
+      <div class="step-icon-wrap" style="background:hsl(142 52% 36% / 0.12);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="hsl(142 52% 32%)" stroke-width="2"><path d="M7 20h10M10 20c5.5-2.5.8-6.4 3-10"/><path d="M9.5 9.4c1.1.8 1.8 2.1 2 3.7.5-3.7 3-6.2 6.5-6.1"/><path d="M14.1 6a7 7 0 00-4.8 1.9 8 8 0 000 11.5"/></svg>
+      </div>
+      <div class="step-num" style="color:hsl(142 45% 32%);">Step 03</div>
+      <div class="step-title">Get discovered</div>
+      <div class="step-desc">Your asset surfaces to BD teams searching in your indication and modality. No pitch required.</div>
+      <a href="/" class="step-link" style="background:hsl(142 52%36%/0.12);color:hsl(142 45%28%);">EdenRadar</a>
+    </div>
+
+    <div class="arrow reveal d3">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+    </div>
+
+    <div class="step reveal d3">
+      <div class="step-icon-wrap" style="background:hsl(234 80% 58% / 0.12);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="hsl(234 70% 48%)" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+      </div>
+      <div class="step-num" style="color:hsl(234 70% 46%);">Step 04</div>
+      <div class="step-title">Control the deal</div>
+      <div class="step-desc">List on EdenMarket when ready. Blind by default, identity revealed only when you agree.</div>
+      <a href="/market" class="step-link" style="background:hsl(234 80%58%/0.12);color:hsl(234 65%38%);">EdenMarket</a>
+    </div>
+
+  </div>
+</div>
+
+<!-- EdenDiscovery section -->
+<div style="background:var(--bg);">
+  <div class="section">
+    <div class="reveal">
+      <!-- Login-style product badge: colored square + white icon + "Eden[Color]Name" -->
+      <div class="product-badge">
+        <div class="product-badge-icon" style="background:hsl(38 85% 44%);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M15 14c.2-1 .7-1.5 1.5-2.5a7 7 0 10-11 0C6.3 12.5 6.8 13 7 14"/><path d="M9 18h6M10 22h4"/></svg>
+        </div>
+        <span class="product-badge-text">Eden<span style="color:hsl(38 85% 40%);">Discovery</span></span>
+      </div>
+      <h2>Score your <span style="color:var(--discovery);">idea</span> before the science starts.</h2>
+      <p>Most research begins long before there is funding, a lab, or a team. EdenDiscovery gives your concept a home from day one. EDEN evaluates scientific plausibility and surfaces strong concepts to the industry teams looking for exactly your kind of science.</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-num" style="color:hsl(38 85% 48% / 0.25);">01</div>
+          <div>
+            <div class="feature-title">Concept registry</div>
+            <div class="feature-desc">Submit and timestamp your idea before formal research begins. Establishes priority without filing a patent.</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-num" style="color:hsl(38 85% 48% / 0.25);">02</div>
+          <div>
+            <div class="feature-title">EDEN credibility score</div>
+            <div class="feature-desc">Every concept is evaluated on scientific plausibility, feasibility, and biotech relevance on a 0 to 100 scale.</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-num" style="color:hsl(38 85% 48% / 0.25);">03</div>
+          <div>
+            <div class="feature-title">Signal to industry</div>
+            <div class="feature-desc">High-scoring concepts surface to industry scouts and research labs before the science even begins.</div>
+          </div>
+        </div>
+      </div>
+      <a class="section-cta" style="background:var(--discovery);color:white;">
+        Submit a concept
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+
+    <div class="reveal d1 discovery-visual">
+      <div class="concept-card">
+        <div class="concept-tag">Concept #247 · Oncology</div>
+        <div class="concept-title">Orally bioavailable KRAS G12D degrader for pancreatic adenocarcinoma</div>
+        <div class="score-row">
+          <div>
+            <div class="score-label">EDEN Score</div>
+            <div class="score-badge">78 <span>/ 100</span></div>
+            <div class="score-bar-wrap"><div class="score-bar"></div></div>
+          </div>
+          <div style="text-align:right;">
+            <div class="score-label" style="margin-bottom:6px;">Dimensions</div>
+            <div style="font-size:11px;color:var(--muted);line-height:1.9;">
+              Novelty · <strong style="color:hsl(38 85% 36%);">High</strong><br>
+              Feasibility · <strong style="color:hsl(38 85% 36%);">Moderate</strong><br>
+              Relevance · <strong style="color:hsl(38 85% 36%);">High</strong>
+            </div>
+          </div>
+        </div>
+        <div class="signal-row">
+          <div class="signal-dot"></div>
+          Surfaced to 14 industry scouts this week
+        </div>
+      </div>
+      <div class="pending-concepts">
+        <div class="pending-row">
+          <span class="pending-name">AAV-delivered CRISPR for Friedreich's ataxia</span>
+          <span class="pending-score" style="background:hsl(38 85%48%/0.12);color:hsl(38 75%34%);">84</span>
+        </div>
+        <div class="pending-row">
+          <span class="pending-name">Bispecific NK engager targeting GD2</span>
+          <span class="pending-score" style="background:hsl(38 85%48%/0.12);color:hsl(38 75%34%);">71</span>
+        </div>
+        <div class="pending-row" style="opacity:0.5;">
+          <span class="pending-name">mRNA encoding anti-inflammatory cytokines</span>
+          <span class="pending-score" style="background:hsl(220 10%93%);color:var(--muted);">Scoring</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EdenLab section -->
+<div style="background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);">
+  <div class="section flipped">
+
+    <div class="reveal lab-visual">
+      <div class="project-name">KRAS G12D Degrader Project</div>
+      <div class="project-meta">EdenLab · Started March 2026 · 5 of 11 sections complete</div>
+      <div class="canvas-grid">
+        <div class="canvas-cell filled"><div class="canvas-cell-num" style="color:hsl(262 55%50%);">01</div><div class="canvas-cell-title">Hypothesis</div></div>
+        <div class="canvas-cell filled"><div class="canvas-cell-num" style="color:hsl(262 55%50%);">02</div><div class="canvas-cell-title">Prior Art</div></div>
+        <div class="canvas-cell filled"><div class="canvas-cell-num" style="color:hsl(262 55%50%);">03</div><div class="canvas-cell-title">Mechanism</div></div>
+        <div class="canvas-cell filled"><div class="canvas-cell-num" style="color:hsl(262 55%50%);">04</div><div class="canvas-cell-title">Study Design</div></div>
+        <div class="canvas-cell filled"><div class="canvas-cell-num" style="color:hsl(262 55%50%);">05</div><div class="canvas-cell-title">Literature</div></div>
+        <div class="canvas-cell"><div class="canvas-cell-num" style="color:hsl(262 25%65%);">06</div><div class="canvas-cell-title" style="color:var(--muted);">IP Strategy</div></div>
+        <div class="canvas-cell"><div class="canvas-cell-num" style="color:hsl(262 25%65%);">07</div><div class="canvas-cell-title" style="color:var(--muted);">Grants</div></div>
+        <div class="canvas-cell"><div class="canvas-cell-num" style="color:hsl(262 25%65%);">08</div><div class="canvas-cell-title" style="color:var(--muted);">Collaborators</div></div>
+        <div class="canvas-cell"><div class="canvas-cell-num" style="color:hsl(262 25%65%);">09</div><div class="canvas-cell-title" style="color:var(--muted);">Timeline</div></div>
+        <div class="canvas-cell"><div class="canvas-cell-num" style="color:hsl(262 25%65%);">10</div><div class="canvas-cell-title" style="color:var(--muted);">Industry Signal</div></div>
+        <div class="canvas-cell"><div class="canvas-cell-num" style="color:hsl(262 25%65%);">11</div><div class="canvas-cell-title" style="color:var(--muted);">Licensing Notes</div></div>
+        <div class="canvas-cell" style="background:hsl(262 40%97%);border-style:dashed;display:flex;align-items:center;justify-content:center;">
+          <div style="font-size:20px;color:hsl(262 30%75%);">+</div>
+        </div>
+      </div>
+      <div class="progress-row">
+        <div class="progress-label">Project completeness</div>
+        <div class="progress-bar-wrap"><div class="progress-bar"></div></div>
+        <div class="progress-pct">45%</div>
+      </div>
+    </div>
+
+    <div class="reveal d1">
+      <!-- Login-style product badge -->
+      <div class="product-badge">
+        <div class="product-badge-icon" style="background:hsl(262 65% 52%);">
+          <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2"><path d="M10 2v7.527a2 2 0 01-.211.896L4.72 20.55a1 1 0 00.9 1.45h12.76a1 1 0 00.9-1.45l-5.069-10.127A2 2 0 0114 9.527V2"/><path d="M8.5 2h7M7 16h10"/></svg>
+        </div>
+        <span class="product-badge-text">Eden<span style="color:hsl(262 65% 46%);">Lab</span></span>
+      </div>
+      <h2>The workspace built for <span style="color:var(--lab);">translational science.</span></h2>
+      <p>Research is non-linear but funding is not. EdenLab gives you a structured canvas for everything a translational project needs to track, from hypothesis through licensing. As your project matures, it builds visibility with industry teams looking for what you are building.</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-num" style="color:hsl(262 65% 58% / 0.25);">01</div>
+          <div>
+            <div class="feature-title">11-section project canvas</div>
+            <div class="feature-desc">Hypothesis through licensing notes. Structured, versioned, and shareable with collaborators.</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-num" style="color:hsl(262 65% 58% / 0.25);">02</div>
+          <div>
+            <div class="feature-title">Literature and grants</div>
+            <div class="feature-desc">Query millions of papers and track NIH, NSF, SBIR, and foundation opportunities matched to your research profile.</div>
+          </div>
+        </div>
+        <div class="feature">
+          <div class="feature-num" style="color:hsl(262 65% 58% / 0.25);">03</div>
+          <div>
+            <div class="feature-title">Industry visibility as you build</div>
+            <div class="feature-desc">Your project score rises with completeness. Strong projects surface to industry scouts without you having to pitch.</div>
+          </div>
+        </div>
+      </div>
+      <a class="section-cta" style="background:hsl(262 65%52%/0.1);color:hsl(262 55%38%);border:1.5px solid hsl(262 65%52%/0.35);">
+        Start a project
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="13" height="13"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+      </a>
+    </div>
+
+  </div>
+</div>
+
+<!-- Closing loop -->
+<div class="loop">
+  <div class="loop-inner reveal">
+    <h3>You build. EdenRadar makes sure<br>the right people notice.</h3>
+    <p>Every project and concept on the platform is scored, structured, and surfaced to the industry BD teams who are actively searching for licensable science. You do not need to pitch. You do not need a broker. You just need to build.</p>
+    <div class="loop-chain">
+      <span class="chain-item" style="background:hsl(38 85%48%/0.12);color:hsl(38 75%32%);">EdenDiscovery</span>
+      <span class="chain-arrow">&#8594;</span>
+      <span class="chain-item" style="background:hsl(262 65%52%/0.12);color:hsl(262 55%38%);">EdenLab</span>
+      <span class="chain-arrow">&#8594;</span>
+      <span class="chain-item" style="background:hsl(142 52%36%/0.12);color:hsl(142 45%28%);">EdenRadar</span>
+      <span class="chain-arrow">&#8594;</span>
+      <span class="chain-item" style="background:hsl(234 80%55%/0.12);color:hsl(234 65%38%);">EdenMarket</span>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom CTA -->
+<div class="bottom-cta">
+  <h2 class="reveal">Start with an <span class="col-discovery">idea.</span><br>End with a <span class="col-lab">partnership.</span></h2>
+  <p class="reveal d1">Both tools are free. No credit card, no institution sign-off. Just your science and a place to build it.</p>
+  <div class="bottom-ctas reveal d2">
+    <button class="btn-discovery">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><path d="M15 14c.2-1 .7-1.5 1.5-2.5a7 7 0 10-11 0C6.3 12.5 6.8 13 7 14"/><path d="M9 18h6M10 22h4"/></svg>
+      Submit a concept
+    </button>
+    <button class="btn-lab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" width="15" height="15"><path d="M10 2v7.527a2 2 0 01-.211.896L4.72 20.55a1 1 0 00.9 1.45h12.76a1 1 0 00.9-1.45l-5.069-10.127A2 2 0 0114 9.527V2"/><path d="M8.5 2h7M7 16h10"/></svg>
+      Start a project
+    </button>
+  </div>
+</div>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('visible');
+      // Trigger bar animations when the discovery or lab visual becomes visible
+      if (e.target.classList.contains('discovery-visual')) {
+        setTimeout(() => {
+          const bar = e.target.querySelector('.score-bar');
+          if (bar) bar.classList.add('animated');
+        }, 400);
+      }
+      if (e.target.classList.contains('lab-visual')) {
+        setTimeout(() => {
+          const bar = e.target.querySelector('.progress-bar');
+          if (bar) bar.classList.add('animated');
+        }, 400);
+      }
+    }
+  });
+}, { threshold: 0.15 });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Force visible for screenshot (Playwright force-shows all)
+if (window.__forceVisible) {
+  document.querySelectorAll('.reveal').forEach(el => el.classList.add('visible'));
+  document.querySelectorAll('.score-bar, .progress-bar').forEach(el => el.classList.add('animated'));
+}
+</script>
+</body>
+</html>
