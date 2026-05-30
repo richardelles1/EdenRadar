@@ -2,9 +2,9 @@ import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Search, Building2, Bell,
-  Layers, User, Moon, Sun, LogOut, Menu, X, Radar,
-  LayoutDashboard, Settings, Newspaper, ShoppingBag, BarChart2, Sparkles, Code2,
+  Search, Building2, Bell, Layers,
+  Moon, Sun, LogOut, Menu, X, Radar,
+  LayoutDashboard, Settings, Newspaper, ShoppingBag, BarChart2, Sparkles,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
@@ -70,12 +70,6 @@ const NAV_GROUPS: NavGroup[] = [
     groupLabel: "EdenMarket",
     items: [
       { href: "/market", label: "Deal Marketplace", icon: ShoppingBag, exact: true },
-    ],
-  },
-  {
-    groupLabel: "Developers",
-    items: [
-      { href: "/developers", label: "API Docs", icon: Code2, exact: true },
     ],
   },
 ];
@@ -198,8 +192,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
       : location === item.href || location.startsWith(item.href + "/");
   }
 
-  const profileActive = location === "/industry/profile";
-  const settingsActive = location === "/settings" || location === "/industry/settings";
+  const settingsActive = location === "/settings" || location === "/industry/settings" || location === "/industry/profile";
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -288,14 +281,6 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
       <div className="px-2 pb-3 pt-2 border-t border-border space-y-0.5 shrink-0 overflow-x-hidden">
         <OrgIdentityBlock navigate={navigate} />
 
-        <SidebarBottomButton
-          label="Profile"
-          icon={User}
-          onClick={() => navigate("/industry/profile")}
-          isActive={profileActive}
-          accent={ACCENT}
-          testId="industry-sidebar-link-profile"
-        />
         <SidebarBottomButton
           label="Settings"
           icon={Settings}

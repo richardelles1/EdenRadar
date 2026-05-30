@@ -112,6 +112,15 @@ interface SweepStats {
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 let sweepStats: SweepStats | null = null;
 
+interface AutoSweepStats {
+  startedAt: Date;
+  triggerLabel: string;
+  newAssetsByInstitution: Map<string, number>;
+  failed: string[];
+}
+let autoSweepStats: AutoSweepStats | null = null;
+let autoSweepActive = false;
+
 // Stamp complexity: "high" on scrapers in the COMPLEX_INSTITUTIONS set at module load.
 // Uses the startup-stamp pattern (same as tier assignment in index.ts) to avoid
 // mutating scraper definition files or adding build-time complexity.
@@ -1025,6 +1034,14 @@ function scheduleNext(): void {
         // Manual tier-only, staleness-first, or daily-sweep phase 1 complete — go idle.
         schedulerState = "idle";
         persistState(true).catch(() => {});
+        if (autoSweepActive && autoSweepStats) {
+          const capturedAutoStats = autoSweepStats;
+          autoSweepStats = null;
+          autoSweepActive = false;
+          sendAutoSweepReport(capturedAutoStats).catch((err: any) => {
+            console.error(`[scheduler] Auto-sweep report email failed: ${err?.message}`);
+          });
+        }
       }
     } else {
       // ── Full T1-T3 cycle complete — trigger auto T4 pass, then next cycle ─
@@ -1176,6 +1193,94 @@ async function sendDailySweepReport(stats: SweepStats): Promise<void> {
   console.log(`[scheduler] Daily Sweep report sent to ${recipients.length} admin(s)`);
 }
 
+async function sendAutoSweepReport(stats: AutoSweepStats): Promise<void> {
+  const AUTO_SWEEP_EMAIL = process.env.AUTO_SWEEP_REPORT_EMAIL ?? "richardelles@gmail.com";
+  const durationMs = Date.now() - stats.startedAt.getTime();
+  const durationHours = Math.floor(durationMs / 3_600_000);
+  const durationMins = Math.floor((durationMs % 3_600_000) / 60_000);
+  const durationLabel = durationHours > 0 ? `${durationHours}h ${durationMins}m` : `${durationMins}m`;
+
+  const totalNew = [...stats.newAssetsByInstitution.values()].reduce((a, b) => a + b, 0);
+  const succeeded = completedThisCycle;
+  const failed = stats.failed.length;
+
+  const subject = `EdenRadar sweep done (${stats.triggerLabel}) — ${totalNew} new asset${totalNew !== 1 ? "s" : ""}, ${succeeded} synced, ${failed} failed`;
+
+  const newRows = stats.newAssetsByInstitution.size > 0
+    ? [...stats.newAssetsByInstitution.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .map(([inst, count]) =>
+          `<tr>
+            <td style="padding:5px 12px;font-size:13px;color:#111827">${inst}</td>
+            <td style="padding:5px 12px;font-size:13px;font-weight:700;color:#059669;text-align:right">+${count}</td>
+          </tr>`
+        ).join("")
+    : `<tr><td colspan="2" style="padding:5px 12px;font-size:13px;color:#6b7280">No new assets this sweep</td></tr>`;
+
+  const failedRows = stats.failed.length > 0
+    ? stats.failed.map((inst) =>
+        `<tr><td style="padding:4px 12px;font-size:13px;color:#dc2626">✗ ${inst}</td></tr>`
+      ).join("")
+    : `<tr><td style="padding:4px 12px;font-size:13px;color:#6b7280">None</td></tr>`;
+
+  const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;color:#111827">
+  <div style="background:#f0fdf4;border:1px solid #a7f3d0;border-radius:10px;padding:20px 24px;margin-bottom:20px">
+    <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:0.06em">EdenRadar Auto-Sweep</p>
+    <h2 style="margin:0 0 4px;font-size:22px;font-weight:800;color:#111827">${stats.triggerLabel} scan complete</h2>
+    <p style="margin:0;font-size:13px;color:#6b7280">Finished in ${durationLabel} &middot; ${new Date().toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric", hour:"2-digit", minute:"2-digit", timeZone:"America/Los_Angeles" })} PT</p>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:20px">
+    <tr>
+      <td style="padding:14px 16px;text-align:center">
+        <div style="font-size:28px;font-weight:800;color:#059669">${succeeded}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">Synced</div>
+      </td>
+      <td style="padding:14px 16px;text-align:center;border-left:1px solid #e5e7eb">
+        <div style="font-size:28px;font-weight:800;color:#dc2626">${failed}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">Failed</div>
+      </td>
+      <td style="padding:14px 16px;text-align:center;border-left:1px solid #e5e7eb">
+        <div style="font-size:28px;font-weight:800;color:#7c3aed">${totalNew.toLocaleString()}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:2px">New assets</div>
+      </td>
+    </tr>
+  </table>
+
+  ${totalNew > 0 ? `
+  <h3 style="font-size:13px;font-weight:700;color:#374151;margin:0 0 8px">New assets by institution</h3>
+  <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:20px">
+    ${newRows}
+  </table>` : ""}
+
+  ${stats.failed.length > 0 ? `
+  <h3 style="font-size:13px;font-weight:700;color:#374151;margin:0 0 8px">Failed institutions</h3>
+  <table style="width:100%;border-collapse:collapse;border:1px solid #fee2e2;border-radius:8px;overflow:hidden;margin-bottom:20px">
+    ${failedRows}
+  </table>` : ""}
+
+  <p style="font-size:11px;color:#9ca3af;margin:0">Skipped (fresh): ${freshSkippedThisCycle} &middot; Skipped (backoff): ${skippedThisCycle}</p>
+</div>`;
+
+  await sendEmail(AUTO_SWEEP_EMAIL, subject, html, FROM_DIGEST);
+  console.log(`[scheduler] Auto-sweep report sent to ${AUTO_SWEEP_EMAIL} (${totalNew} new assets, ${succeeded} synced, ${failed} failed)`);
+}
+
+/** Starts a staleness-first scan and sends a completion report email when done. */
+export async function startAutoSweep(triggerLabel: string): Promise<{ ok: boolean; message: string }> {
+  const result = await startStalenessFirstScan();
+  if (!result.ok) return result;
+  autoSweepActive = true;
+  autoSweepStats = {
+    startedAt: cycleStartedAt ?? new Date(),
+    triggerLabel,
+    newAssetsByInstitution: new Map(),
+    failed: [],
+  };
+  return result;
+}
+
 async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
@@ -1244,6 +1349,9 @@ async function runOne(institution: string, gen: number): Promise<void> {
       } else {
         console.log(`[scheduler] ${institution} complete — ${result.rawCount} scraped, ${result.newCount} new, ${result.relevantCount} relevant`);
         if (sweepStats) sweepStats.newAssets += result.newCount;
+        if (autoSweepActive && autoSweepStats && result.newCount > 0) {
+          autoSweepStats.newAssetsByInstitution.set(institution, result.newCount);
+        }
       }
     }
     await updateScraperHealth(institution, true, undefined, result.newCount, result.rawCount);
@@ -1286,6 +1394,9 @@ async function runOne(institution: string, gen: number): Promise<void> {
         console.log(`[scheduler] ${institution} failed after ${maxRetries + 1} attempt(s): ${msg}`);
         if (sweepStats && !sweepStats.failed.includes(institution)) {
           sweepStats.failed.push(institution);
+        }
+        if (autoSweepActive && autoSweepStats && !autoSweepStats.failed.includes(institution)) {
+          autoSweepStats.failed.push(institution);
         }
       }
     }

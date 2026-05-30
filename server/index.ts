@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
-import { loadAndRestoreScheduler, startScheduler, pauseScheduler, flushSchedulerState } from "./lib/scheduler";
+import { loadAndRestoreScheduler, startScheduler, pauseScheduler, flushSchedulerState, startStalenessFirstScan, startAutoSweep, getSchedulerStatus } from "./lib/scheduler";
 import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAccess";
 import { startWeeklyRecapScheduler, backfillLatestRecaps } from "./lib/weeklyRecap";
 import { sendTrialEndingEmail } from "./email";
@@ -1378,6 +1378,69 @@ function schedulePeriodicAlertCheck() {
   }, 30_000);
 }
 
+/**
+ * Auto-starts a staleness-first scan at 7:30am and 5:00pm PST/PDT.
+ * Skips silently if the scheduler is already running so a slow morning
+ * sweep never gets reset by the evening trigger.
+ */
+function scheduleAutoSweep() {
+  const TARGETS_PST = [
+    { hour: 7, minute: 30 },
+    { hour: 17, minute: 0 },
+  ];
+  const CHECK_INTERVAL_MS = 60_000;
+
+  let lastFiredDateHour = "";
+
+  setInterval(() => {
+    const now = new Date();
+    const pstHour = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Los_Angeles",
+        hour: "numeric",
+        hour12: false,
+      }).format(now),
+      10,
+    );
+    const pstMinute = parseInt(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/Los_Angeles",
+        minute: "numeric",
+        hour12: false,
+      }).format(now),
+      10,
+    );
+    const dateStr = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/Los_Angeles",
+      year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(now);
+
+    for (const target of TARGETS_PST) {
+      if (pstHour !== target.hour || pstMinute !== target.minute) continue;
+      const key = `${dateStr}-${target.hour}:${target.minute}`;
+      if (lastFiredDateHour === key) break; // already fired this window
+
+      lastFiredDateHour = key;
+      const status = getSchedulerStatus();
+      if (status.state !== "idle") {
+        log(`[autoSweep] ${target.hour}:${String(target.minute).padStart(2, "0")} PST trigger — scheduler already ${status.state}, skipping`, "startup");
+        break;
+      }
+
+      const triggerLabel = `${target.hour}:${String(target.minute).padStart(2, "0")} PST`;
+      log(`[autoSweep] ${triggerLabel} — starting staleness-first scan`, "startup");
+      startAutoSweep(triggerLabel).then((r) => {
+        log(`[autoSweep] ${r.message}`, "startup");
+      }).catch((err: any) => {
+        log(`[autoSweep] Failed to start: ${err?.message}`, "startup");
+      });
+      break;
+    }
+  }, CHECK_INTERVAL_MS);
+
+  log("[autoSweep] Scheduled staleness-first scans at 7:30am and 5:00pm PST", "startup");
+}
+
 // ── Scout FTS + trigram indexes (Task #760, Tier 1) ──────────────────────────
 // Replaces the brute-force `LIKE '%token%'` keyword search in
 // keywordSearchIngestedAssets() with Postgres full-text search. Adds:
@@ -2001,6 +2064,8 @@ async function migrateAssetStatusValues() {
       scheduleTrialReminderCheck();
       // ── Periodic alert evaluation (every 5 min by default) ─────────────
       schedulePeriodicAlertCheck();
+      // ── Auto staleness-first sweep at 7:30am and 5:00pm PST ─────────────
+      scheduleAutoSweep();
       // ── Weekly relevance-metrics aggregation (Task #694) ─────────────────
       scheduleRelevanceMetricsAggregation();
       // ── Index for alertMailer's matchAssetsForAlert query ──────────────

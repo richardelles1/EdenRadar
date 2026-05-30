@@ -64,7 +64,6 @@ import Demo from "@/pages/Demo";
 import BillingSuccess from "@/pages/BillingSuccess";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
-import IndustryProfile from "@/pages/IndustryProfile";
 import IndustrySettings, { SimplifiedSettings } from "@/pages/IndustrySettings";
 import IndustryEden from "@/pages/IndustryEden";
 import Developers from "@/pages/Developers";
@@ -255,11 +254,7 @@ function Router() {
         </DashboardLayout>
       </Route>
       <Route path="/industry/profile">
-        <DashboardLayout>
-          <ScoutGate>
-            <IndustryProfile />
-          </ScoutGate>
-        </DashboardLayout>
+        <Redirect to="/industry/settings" />
       </Route>
       {/* Settings is intentionally exempt from ScoutGate — users need it to connect
           their org context (the mechanism by which they gain paid-plan access). */}
