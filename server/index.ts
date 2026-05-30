@@ -1422,8 +1422,8 @@ function scheduleAutoSweep() {
 
       lastFiredDateHour = key;
       const status = getSchedulerStatus();
-      if (status.state !== "idle") {
-        log(`[autoSweep] ${target.hour}:${String(target.minute).padStart(2, "0")} PST trigger — scheduler already ${status.state}, skipping`, "startup");
+      if (status.state === "running") {
+        log(`[autoSweep] ${target.hour}:${String(target.minute).padStart(2, "0")} PST trigger — scheduler already running, skipping`, "startup");
         break;
       }
 

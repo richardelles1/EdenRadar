@@ -35,10 +35,10 @@ export async function handleListInstitutions(
         .where(
           continent
             ? and(
-                sql`slug = ANY(${names}::text[])`,
+                sql`slug = ANY(ARRAY[${sql.join(names.map(n => sql`${n}`), sql`, `)}])`,
                 ilike(institutionMetadata.continent, `%${continent}%`),
               )
-            : sql`slug = ANY(${names}::text[])`,
+            : sql`slug = ANY(ARRAY[${sql.join(names.map(n => sql`${n}`), sql`, `)}])`,
         )
     : [];
 
