@@ -96,7 +96,7 @@ export function registerMiscRoutes(app: Express): void {
 
     // DB latency + pipeline data — single query, uses the new partial indexes
     const [dbResult, alertResult] = await Promise.allSettled([
-      (async () => {
+      (async (): Promise<{ latencyMs: number; total_assets: number | null; last_indexed_at: string | null; indexed_7d: number | null }> => {
         const t = Date.now();
         const row = await db.execute(sql`
           SELECT
@@ -105,7 +105,13 @@ export function registerMiscRoutes(app: Express): void {
             COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '7 days')::int AS indexed_7d
           FROM ingested_assets WHERE relevant = true
         `);
-        return { latencyMs: Date.now() - t, ...(row.rows[0] as Record<string, unknown>) };
+        const r = row.rows[0] as Record<string, unknown>;
+        return {
+          latencyMs: Date.now() - t,
+          total_assets: r.total_assets != null ? Number(r.total_assets) : null,
+          last_indexed_at: r.last_indexed_at ? String(r.last_indexed_at) : null,
+          indexed_7d: r.indexed_7d != null ? Number(r.indexed_7d) : null,
+        };
       })(),
       (async () => {
         const row = await db.execute(sql`

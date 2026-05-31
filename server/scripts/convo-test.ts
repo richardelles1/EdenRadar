@@ -6,6 +6,8 @@
  *   EDEN_TOKEN="eyJ..." tsx server/scripts/convo-test.ts
  */
 
+export {};
+
 const BASE_URL = "https://helix-radar.replit.app";
 
 // Read token from env var, or from .eden-token file in project root
