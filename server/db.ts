@@ -28,11 +28,15 @@ export const pool = new Pool({
   options: "-c statement_timeout=15000",
 });
 
-// Without this, a FATAL error from Supabase on any background connection
-// propagates as an uncaught exception and permanently kills the pool.
-// With this, pg silently removes the bad connection and creates a replacement.
 pool.on("error", (err) => {
   console.error("[db] Pool connection error (connection auto-removed):", err.message);
+});
+
+// Set ivfflat.probes on every new connection so all vector searches scan
+// 10 of 183 index lists instead of the default 1 — materially better recall
+// at negligible latency cost.
+pool.on("connect", (client) => {
+  client.query("SET ivfflat.probes = 10").catch(() => {});
 });
 
 export const db = drizzle(pool, { schema });

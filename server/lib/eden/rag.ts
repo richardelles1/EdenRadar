@@ -7,12 +7,20 @@ import { sql, desc, eq } from "drizzle-orm";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const EMBED_MODEL = "text-embedding-3-small";
 
-// ── Embedding LRU cache ──────────────────────────────────────────────────────
-// Embeddings are deterministic — same text always produces the same vector.
-// Caching eliminates repeat API calls for follow-up questions and re-sends.
-const _embedCache = new Map<string, { vec: number[]; ts: number }>();
+// ── Embedding cache (Promise-based to eliminate concurrent duplicate calls) ──
+// Stores the in-flight or resolved Promise so two identical queries arriving
+// before the first resolves share one API call instead of making two.
+// Failures delete their own cache entry so the next caller retries cleanly.
+const _embedCache = new Map<string, { promise: Promise<number[]>; ts: number }>();
 const EMBED_CACHE_TTL = 5 * 60 * 1000;
 const EMBED_CACHE_MAX = 200;
+
+// ── Intent classification cache ──────────────────────────────────────────────
+// classifyIntent is deterministic for same (message, hasPriorAssets, focus).
+// Avoids a GPT-4o-mini round-trip for repeated or near-identical follow-ups.
+const _intentCache = new Map<string, { result: IntentClassification; ts: number }>();
+const INTENT_CACHE_TTL = 3 * 60 * 1000;
+const INTENT_CACHE_MAX = 500;
 
 export { type RetrievedAsset };
 
@@ -1207,14 +1215,20 @@ export async function classifyIntent(
   focusContext?: SessionFocusContext,
 ): Promise<IntentClassification> {
   const fallback: IntentClassification = { intent: "search", filters: {}, backRefPosition: null, liveSource: null };
+
+  const focusParts: string[] = [];
+  if (focusContext?.modality) focusParts.push(`modality: ${focusContext.modality}`);
+  if (focusContext?.indication) focusParts.push(`indication: ${focusContext.indication}`);
+  if (focusContext?.institution) focusParts.push(`institution: ${focusContext.institution}`);
+  if (focusContext?.stage) focusParts.push(`stage: ${focusContext.stage}`);
+  if (focusContext?._lastDocType) focusParts.push(`hasRecentDocument: ${focusContext._lastDocType}`);
+  const focusLine = focusParts.length > 0 ? `\nSessionFocus: ${focusParts.join(", ")}` : "";
+
+  const intentCacheKey = `${message.slice(0, 200)}|${hasPriorAssets}|${focusLine}`;
+  const cachedIntent = _intentCache.get(intentCacheKey);
+  if (cachedIntent && Date.now() - cachedIntent.ts < INTENT_CACHE_TTL) return cachedIntent.result;
+
   try {
-    const focusParts: string[] = [];
-    if (focusContext?.modality) focusParts.push(`modality: ${focusContext.modality}`);
-    if (focusContext?.indication) focusParts.push(`indication: ${focusContext.indication}`);
-    if (focusContext?.institution) focusParts.push(`institution: ${focusContext.institution}`);
-    if (focusContext?.stage) focusParts.push(`stage: ${focusContext.stage}`);
-    if (focusContext?._lastDocType) focusParts.push(`hasRecentDocument: ${focusContext._lastDocType}`);
-    const focusLine = focusParts.length > 0 ? `\nSessionFocus: ${focusParts.join(", ")}` : "";
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       response_format: { type: "json_object" },
@@ -1239,7 +1253,7 @@ export async function classifyIntent(
     const liveSource: LiveSource | null = validLiveSources.includes(rawLiveSource as LiveSource)
       ? (rawLiveSource as LiveSource)
       : null;
-    return {
+    const result: IntentClassification = {
       intent: (parsed.intent as IntentClassification["intent"]) ?? "search",
       filters: {
         modality: (f.modality as string) || undefined,
@@ -1254,6 +1268,12 @@ export async function classifyIntent(
       backRefPosition: typeof parsed.back_ref_position === "number" ? parsed.back_ref_position : null,
       liveSource,
     };
+    if (_intentCache.size >= INTENT_CACHE_MAX) {
+      const oldest = [..._intentCache.entries()].reduce((a, b) => a[1].ts < b[1].ts ? a : b)[0];
+      _intentCache.delete(oldest);
+    }
+    _intentCache.set(intentCacheKey, { result, ts: Date.now() });
+    return result;
   } catch (err) {
     console.warn("[eden/router] classifyIntent failed, using search fallback:", (err as Error)?.message);
     return fallback;
@@ -1261,24 +1281,23 @@ export async function classifyIntent(
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-export async function embedQuery(query: string): Promise<number[]> {
+export function embedQuery(query: string): Promise<number[]> {
   const key = query.slice(0, 300);
   const cached = _embedCache.get(key);
-  if (cached && Date.now() - cached.ts < EMBED_CACHE_TTL) return cached.vec;
+  if (cached && Date.now() - cached.ts < EMBED_CACHE_TTL) return cached.promise;
 
-  const response = await client.embeddings.create({
-    model: EMBED_MODEL,
-    input: query.slice(0, 8000),
-  });
-  const vec = response.data[0].embedding;
+  // Cache the Promise before it resolves so concurrent callers share one API call.
+  // On failure, delete the entry so the next caller retries rather than re-throwing the cached rejection.
+  const promise = client.embeddings.create({ model: EMBED_MODEL, input: query.slice(0, 8000) })
+    .then((r) => r.data[0].embedding)
+    .catch((err) => { _embedCache.delete(key); throw err; });
 
   if (_embedCache.size >= EMBED_CACHE_MAX) {
-    // Evict oldest entry
     const oldest = [..._embedCache.entries()].reduce((a, b) => a[1].ts < b[1].ts ? a : b)[0];
     _embedCache.delete(oldest);
   }
-  _embedCache.set(key, { vec, ts: Date.now() });
-  return vec;
+  _embedCache.set(key, { promise, ts: Date.now() });
+  return promise;
 }
 
 function buildUserContextBlock(ctx: UserContext): string {
