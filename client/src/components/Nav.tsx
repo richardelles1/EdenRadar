@@ -10,7 +10,7 @@ type NavProps = {
   onOpenSaved?: () => void;
 };
 
-const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo", "/one-pager", "/research", "/market"];
+const PUBLIC_PATHS = ["/", "/about", "/how-it-works", "/pricing", "/market/preview", "/market/list", "/demo", "/one-pager", "/research"];
 
 function normalizePath(path: string) {
   const stripped = path.split("?")[0].split("#")[0];
@@ -137,10 +137,10 @@ export function Nav({ onOpenSaved }: NavProps) {
                     Pricing
                   </button>
                 </Link>
-                <Link href="/market">
+                <Link href="/market/preview">
                   <button
                     className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-150 ${
-                      normalizedLocation === "/market"
+                      normalizedLocation === "/market/preview"
                         ? "bg-accent text-foreground"
                         : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
                     }`}
@@ -322,7 +322,7 @@ export function Nav({ onOpenSaved }: NavProps) {
               Pricing
             </button>
           </Link>
-          <Link href="/market">
+          <Link href="/market/preview">
             <button
               className="w-full text-left px-3 py-2 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60"
               onClick={() => setMobileOpen(false)}
