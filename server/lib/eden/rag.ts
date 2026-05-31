@@ -1617,7 +1617,7 @@ export async function* ragQuery(
       role: "user",
       content: assets.length > 0
         ? `Based on the following retrieved TTO assets, answer the question.\n\nRETRIEVED ASSETS:\n${context}\n\nQUESTION: ${question}`
-        : `NO ASSETS RETRIEVED: The database search returned no results for this query. Do NOT invent, fabricate, or suggest any specific asset names, institution names, or technology descriptions. Either ask a clarifying question to narrow the search, or explain that you couldn't find a match and offer an alternative angle.\n\nQUESTION: ${question}`,
+        : `NO EXACT MATCH: The vector search returned no assets for this specific query — the phrasing may be too narrow or use terminology the corpus doesn't index under.\n\nCRITICAL: Do NOT confirm that "nothing exists" in this area. The TTO corpus is large and indexes hundreds of institutions; a zero result means the query phrasing didn't match, not that the science doesn't exist. Do NOT invent or fabricate any specific asset names, institution names, or technology descriptions.\n\nInstead: (1) Acknowledge the search didn't surface an exact match, (2) Suggest 2-3 broader or adjacent terms the user should try — e.g. if they asked about "pediatric oncology" suggest trying "oncology", "leukemia", "neuroblastoma", or "childhood cancer"; (3) Note that TTO portfolios at major research institutions typically cover this space. End with a specific alternative search suggestion.\n\nQUESTION: ${question}`,
     },
   ];
 

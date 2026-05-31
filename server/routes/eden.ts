@@ -1213,6 +1213,40 @@ export function registerEdenRoutes(app: Express): void {
         merged = kwFallback.map((a) => ({ ...a, similarity: 0.5 }));
       }
 
+      // ── Last-resort query broadening ──────────────────────────────────────────
+      // When all searches fail, retry with stripped-down core terms so EDEN
+      // never falsely confirms "no assets exist" for a well-populated area.
+      // "pediatric oncology" → try "oncology"; "childhood leukemia" → try "leukemia".
+      if (merged.length === 0 && cachedEmbedding) {
+        const coreTerms: string[] = [];
+        if (filters.indication?.includes(" ")) {
+          const words = filters.indication.split(" ");
+          // Strip first word (often a qualifier like "pediatric", "advanced", "rare")
+          coreTerms.push(words.slice(1).join(" "));
+          // Also try the last word alone as the core therapeutic term
+          if (words.length > 2) coreTerms.push(words[words.length - 1]);
+        }
+        if (filters.modality && !coreTerms.includes(filters.modality)) {
+          coreTerms.push(filters.modality);
+        }
+
+        for (const term of [...new Set(coreTerms)]) {
+          if (!term || term.length < 3) continue;
+          try {
+            const broaderEmbedding = await embedQuery(term);
+            const hits = await storage.filteredSemanticSearch(
+              broaderEmbedding, undefined, filters.modality, undefined, undefined, undefined,
+              8, filters.biology, undefined, undefined, true
+            );
+            const passing = hits.filter((a) => a.similarity > 0.35).slice(0, 5);
+            if (passing.length > 0) {
+              merged = passing;
+              break;
+            }
+          } catch { /* try next term */ }
+        }
+      }
+
       // Rerank with profile + adaptive + biology tiers using pre-derived engagement signals.
       const retrieved = rerankAssets(merged, resolvedCtx, engagementSignals, focusContext?.biology);
 
@@ -1240,7 +1274,7 @@ After covering TTO assets, note in one sentence whether any of these external re
       const ragQuestion = (filters.trending
         ? `${message.trim()}\n\n[CONTEXT FOR EDEN: These assets were indexed in the last 90 days and are well-documented. After presenting them, add 2–3 sentences of genuine market context from your industry intelligence — what deal dynamics, funding trends, or mechanism enthusiasm makes this area compelling right now. Do NOT fabricate market data; only reference what you know from your training.]`
         : message.trim()) + crossRefNote;
-      const ragModel = retrieved.length === 0 ? "gpt-4o-mini" : "gpt-4o";
+      const ragModel = "gpt-4o";
       let fullResponse = "";
       for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal, ragModel)) {
         fullResponse += token;
