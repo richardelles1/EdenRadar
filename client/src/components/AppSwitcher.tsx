@@ -57,6 +57,10 @@ export function AppSwitcher({ active }: { active: AppKey }) {
 
   function go(p: PortalDef) {
     if (p.key === active) return;
+    if (p.key === "market" && !marketAccess?.access) {
+      setLocation("/market/preview");
+      return;
+    }
     setLocation(p.href);
   }
 
