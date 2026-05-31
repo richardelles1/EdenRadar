@@ -194,7 +194,27 @@
       "message": "I'm building a company",
       "hasPriorAssets": false,
       "expect": { "intent": "conversational" }
-    }
+    },
+
+    { "id": "i29", "label": "informal search — surface", "message": "surface some gene editing assets for me", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "modality": "Gene Editing" } } },
+    { "id": "i30", "label": "informal search — anything on", "message": "anything on autoimmune?", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "indication": "autoimmune" } } },
+    { "id": "i31", "label": "informal search — pull up", "message": "pull up what MIT has in oncology", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "institution": "MIT", "indication": "oncology" } } },
+    { "id": "i32", "label": "informal back_ref — go deeper", "message": "go deeper on that one", "hasPriorAssets": true, "expect": { "intent": "back_ref" } },
+    { "id": "i33", "label": "informal back_ref — dig into", "message": "can you dig into the third one?", "hasPriorAssets": true, "expect": { "intent": "back_ref", "backRefPosition": 2 } },
+    { "id": "i34", "label": "informal comparative — stack up", "message": "stack them up against each other", "hasPriorAssets": true, "expect": { "intent": "comparative" } },
+    { "id": "i35", "label": "informal comparative — weigh", "message": "weigh these against each other", "hasPriorAssets": true, "expect": { "intent": "comparative" } },
+    { "id": "i36", "label": "informal pipeline view — what am I tracking", "message": "what am I tracking right now?", "hasPriorAssets": false, "expect": { "intent": "pipeline" } },
+    { "id": "i37", "label": "informal synthesis — what gaps do I have", "message": "what gaps do I have in my pipeline?", "hasPriorAssets": false, "expect": { "intent": "synthesis" } },
+    { "id": "i38", "label": "informal synthesis — how balanced", "message": "how balanced is my pipeline across modalities?", "hasPriorAssets": false, "expect": { "intent": "synthesis" } },
+    { "id": "i39", "label": "informal document — one-pager", "message": "write me a one-pager on this asset", "hasPriorAssets": true, "expect": { "intent": "document" } },
+    { "id": "i40", "label": "informal document — investment memo", "message": "give me an investment memo", "hasPriorAssets": true, "expect": { "intent": "document" } },
+    { "id": "i41", "label": "informal aggregation — which institution has most", "message": "which institution has the most gene therapy assets?", "hasPriorAssets": false, "expect": { "intent": "aggregation" } },
+    { "id": "i42", "label": "informal definitional — walk me through", "message": "walk me through how CAR-T actually works", "hasPriorAssets": false, "expect": { "intent": "definitional" } },
+    { "id": "i43", "label": "informal trials — what trials are running", "message": "what trials are running for PD-1 right now?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "clinicaltrials" } },
+    { "id": "i44", "label": "informal patents — who owns the IP", "message": "who owns the IP on CRISPR-Cas9?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "patents" } },
+    { "id": "i45", "label": "informal research — what does the science say", "message": "what does the science say about mRNA vaccines for cancer?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "harvard" } },
+    { "id": "i46", "label": "stage shorthand — early stage", "message": "early stage antibody assets for autoimmune", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "modality": "Antibody", "indication": "autoimmune" } } },
+    { "id": "i47", "label": "institution shorthand — Hopkins", "message": "what does Hopkins have in neurology?", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "indication": "neurology" } } }
   ],
 
   "response_expectations": [
