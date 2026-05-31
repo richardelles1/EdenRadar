@@ -329,7 +329,7 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState("");
   const profile = getIndustryProfile();
 
-  const { data, isLoading } = useQuery<DashboardData>({
+  const { data, isLoading, isError } = useQuery<DashboardData>({
     queryKey: ["/api/dashboard/stats"],
     staleTime: 5 * 60 * 1000,
   });
@@ -395,7 +395,17 @@ export default function Dashboard() {
           </Button>
         </form>
 
-        {isLoading ? (
+        {isError ? (
+          <div className="rounded-xl border border-destructive/20 bg-destructive/5 px-5 py-4 flex items-center justify-between gap-4">
+            <p className="text-sm text-destructive">Could not load dashboard stats. Please refresh the page.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="text-xs font-semibold text-destructive hover:text-destructive/80 underline underline-offset-2 shrink-0"
+            >
+              Refresh
+            </button>
+          </div>
+        ) : isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="rounded-xl border border-border bg-card p-5 animate-pulse h-24" />

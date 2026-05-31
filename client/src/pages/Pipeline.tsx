@@ -29,9 +29,10 @@ import { PipelineBriefDialog, type BriefData } from "@/components/PipelineBriefD
 type AssetNote = { id: number; authorName: string; content: string; createdAt: string; isSystemEvent: boolean };
 type NotesResponse = { notes: AssetNote[]; limit: number; offset: number };
 type SavedAssetsResponse = {
-  assets: (SavedAsset & { noteCount?: number; lastNoteAt?: string | null })[];
+  assets: (SavedAsset & { noteCount?: number; lastNoteAt?: string | null; saverName?: string | null })[];
+  members?: { userId: string; displayName: string | null }[];
 };
-type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | null };
+type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | null; saverName?: string | null };
 type DeckAsset = PipelineAsset & { signals: PipelineAsset[] };
 type ViewMode = "grid" | "board";
 type GridFilterType = "all" | "tto" | "trial" | "patent" | "research";
@@ -1073,6 +1074,9 @@ export default function Pipeline() {
   const { user } = useAuth();
   const { data: org } = useOrg();
   const isViewer = org?.members?.some((m: any) => m.userId === user?.id && m.role === "viewer") ?? false;
+  const hasTeamPlan = !!org?.planTier && org.planTier !== "individual";
+  const [teamScope, setTeamScope] = useState<"personal" | "team">("personal");
+  const isTeamView = hasTeamPlan && teamScope === "team";
 
   const [viewMode, setViewMode] = useState<ViewMode>("grid");
   const [filterPipeline, setFilterPipeline] = useState<"all" | number | null>("all");
@@ -1095,8 +1099,9 @@ export default function Pipeline() {
   useEffect(() => { setActiveAssetId(null); }, [filterPipeline]);
   useEffect(() => { setFilterType("all"); }, [viewMode, filterPipeline]);
 
-  // Viewers get a near-infinite drag distance so DnD is effectively disabled
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: isViewer ? 999999 : 8 } }));
+  // Viewers and team-view users get a near-infinite drag distance so DnD is effectively disabled
+  const readOnly = isViewer || isTeamView;
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: readOnly ? 999999 : 8 } }));
 
   const briefMutation = useMutation({
     mutationFn: async (listId: number) => {
@@ -1123,7 +1128,14 @@ export default function Pipeline() {
   };
 
   const { data, isLoading, isError } = useQuery<SavedAssetsResponse>({
-    queryKey: ["/api/saved-assets"],
+    queryKey: ["/api/saved-assets", teamScope],
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const url = isTeamView ? "/api/saved-assets?scope=team" : "/api/saved-assets";
+      const res = await fetch(url, { headers: authHeaders });
+      if (!res.ok) throw new Error("Failed to load pipeline");
+      return res.json();
+    },
     refetchInterval: 30000,
     refetchOnWindowFocus: false,
   });
@@ -1428,6 +1440,24 @@ export default function Pipeline() {
             </div>
             {totalAssets > 0 && (
               <div className="flex items-center gap-2">
+                {hasTeamPlan && (
+                  <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card">
+                    <button
+                      onClick={() => setTeamScope("personal")}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${teamScope === "personal" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="button-scope-personal"
+                    >
+                      Mine
+                    </button>
+                    <button
+                      onClick={() => setTeamScope("team")}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${teamScope === "team" ? "bg-primary text-primary-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="button-scope-team"
+                    >
+                      <Building2 className="w-3 h-3" /> Team
+                    </button>
+                  </div>
+                )}
                 <div className="flex items-center gap-0.5 border border-border rounded-lg p-0.5 bg-card">
                   <button
                     onClick={() => setViewMode("grid")}
@@ -1496,7 +1526,7 @@ export default function Pipeline() {
                 </div>
 
                 {/* New pipeline — pinned below header so it's always visible */}
-                {!isViewer && (
+                {!readOnly && (
                   <div className="px-2 pt-2 pb-1 border-b border-border shrink-0">
                     {creatingPipeline ? (
                       <div className="flex gap-1.5">
@@ -1712,16 +1742,22 @@ export default function Pipeline() {
                                 ? pipelinesMap.get(card.pipelineListId)
                                 : undefined;
                               return (
-                                <PipelineCard
-                                  key={card.id}
-                                  asset={card}
-                                  signals={deck?.signals ?? []}
-                                  onDelete={(id) => { if (!isViewer) deleteMutation.mutate(id); }}
-                                  onDetachSignal={!isViewer ? handleDetachSignal : undefined}
-                                  onClick={() => setActiveAssetId(card.id)}
-                                  pipelineName={cardPipelineName}
-                                  highlightType={filterType}
-                                />
+                                <div key={card.id}>
+                                  <PipelineCard
+                                    asset={card}
+                                    signals={deck?.signals ?? []}
+                                    onDelete={(id) => { if (!readOnly) deleteMutation.mutate(id); }}
+                                    onDetachSignal={!readOnly ? handleDetachSignal : undefined}
+                                    onClick={() => setActiveAssetId(card.id)}
+                                    pipelineName={cardPipelineName}
+                                    highlightType={filterType}
+                                  />
+                                  {isTeamView && card.saverName && (
+                                    <p className="text-[9px] text-muted-foreground mt-1 truncate px-1 flex items-center gap-1">
+                                      <Building2 className="w-2.5 h-2.5 shrink-0" />{card.saverName}
+                                    </p>
+                                  )}
+                                </div>
                               );
                             })}
                           </div>

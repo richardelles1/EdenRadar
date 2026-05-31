@@ -7,11 +7,19 @@
  */
 
 const BASE_URL = "https://helix-radar.replit.app";
-const TOKEN = process.env.EDEN_TOKEN ?? "";
 
+// Read token from env var, or from .eden-token file in project root
+let TOKEN = process.env.EDEN_TOKEN ?? "";
 if (!TOKEN) {
-  console.error("Set EDEN_TOKEN env var");
-  process.exit(1);
+  try {
+    const { readFileSync } = await import("fs");
+    TOKEN = readFileSync(".eden-token", "utf-8").trim();
+  } catch {
+    console.error("No token found. Either:");
+    console.error("  1. Create a file called .eden-token in the project root and paste your token there");
+    console.error("  2. Set EDEN_TOKEN env var");
+    process.exit(1);
+  }
 }
 
 const GREEN  = "\x1b[32m";
@@ -98,7 +106,6 @@ function grade(response: string, assetCount: number, expectAssets: boolean): "PA
 function printResult(label: string, result: "PASS" | "WARN" | "FAIL", assetCount: number, response: string) {
   const icon = result === "PASS" ? `${GREEN}✓` : result === "WARN" ? `${YELLOW}~` : `${RED}✗`;
   console.log(`\n${icon} ${BOLD}${label}${RESET} ${DIM}(${assetCount} assets)${RESET}`);
-  // Print first 400 chars of response
   const preview = response.slice(0, 400).replace(/\n+/g, " ");
   console.log(`  ${DIM}${preview}${response.length > 400 ? "…" : ""}${RESET}`);
   if (result === "FAIL") {
@@ -202,7 +209,6 @@ async function main() {
         worstResult = "FAIL";
       }
 
-      // Small pause between turns
       await new Promise((r) => setTimeout(r, 1500));
     }
 
