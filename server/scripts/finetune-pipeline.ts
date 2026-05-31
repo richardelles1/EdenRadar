@@ -31,7 +31,7 @@ import { writeFileSync, existsSync, mkdirSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { db } from "../db.js";
-import { edenSessions, edenFeedback } from "../../shared/schema.js";
+import { edenSessions, edenMessageFeedback } from "../../shared/schema.js";
 import { eq, inArray, sql } from "drizzle-orm";
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -113,9 +113,9 @@ async function extractDataset(): Promise<string[]> {
 
   // Get all session IDs that have at least one thumbs-up
   const positiveFeedback = await db
-    .select({ sessionId: edenFeedback.sessionId, messageIndex: edenFeedback.messageIndex })
-    .from(edenFeedback)
-    .where(eq(edenFeedback.sentiment, "up"));
+    .select({ sessionId: edenMessageFeedback.sessionId, messageIndex: edenMessageFeedback.messageIndex })
+    .from(edenMessageFeedback)
+    .where(eq(edenMessageFeedback.sentiment, "up"));
 
   if (positiveFeedback.length === 0) {
     console.log("No thumbs-up feedback found. Collect more user feedback before fine-tuning.");
