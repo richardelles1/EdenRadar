@@ -1,0 +1,210 @@
+{
+  "version": "1.1",
+  "description": "Canonical EDEN eval suite. Intent cases test classifyIntent() in isolation. Response cases test full end-to-end behavior expectations.",
+
+  "intent_cases": [
+    {
+      "id": "i01", "label": "basic modality + indication search",
+      "message": "antibody therapies for breast cancer",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "modality": "Antibody", "indication": "breast cancer" } }
+    },
+    {
+      "id": "i02", "label": "pediatric qualifier should still be search",
+      "message": "pediatric oncology",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "indication": "pediatric oncology" } }
+    },
+    {
+      "id": "i03", "label": "stage filter",
+      "message": "phase 2 gene therapy assets",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "modality": "Gene Therapy", "stage": "phase 2" } }
+    },
+    {
+      "id": "i04", "label": "institution filter",
+      "message": "show me what Stanford has in oncology",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "institution": "Stanford", "indication": "oncology" } }
+    },
+    {
+      "id": "i05", "label": "trending / hot signal",
+      "message": "what's hot in GLP-1 right now",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "trending": true } }
+    },
+    {
+      "id": "i06", "label": "recency filter — last 30 days",
+      "message": "new CAR-T assets added this month",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "modality": "CAR-T", "recency": "last30" } }
+    },
+    {
+      "id": "i07", "label": "aggregation — count query",
+      "message": "how many gene therapy assets do you have?",
+      "hasPriorAssets": false,
+      "expect": { "intent": "aggregation" }
+    },
+    {
+      "id": "i08", "label": "aggregation — breakdown",
+      "message": "break down assets by modality",
+      "hasPriorAssets": false,
+      "expect": { "intent": "aggregation" }
+    },
+    {
+      "id": "i09", "label": "back_ref — second asset",
+      "message": "tell me more about the second one",
+      "hasPriorAssets": true,
+      "expect": { "intent": "back_ref", "backRefPosition": 1 }
+    },
+    {
+      "id": "i10", "label": "back_ref — it / this one",
+      "message": "what's the IP situation on this one?",
+      "hasPriorAssets": true,
+      "expect": { "intent": "back_ref" }
+    },
+    {
+      "id": "i11", "label": "back_ref requires prior assets — should fall back to search without",
+      "message": "tell me more about the second one",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search" }
+    },
+    {
+      "id": "i12", "label": "comparative — vs",
+      "message": "compare the MIT one to the Harvard one",
+      "hasPriorAssets": true,
+      "expect": { "intent": "comparative" }
+    },
+    {
+      "id": "i13", "label": "comparative — which is better",
+      "message": "which of these assets is further along in development?",
+      "hasPriorAssets": true,
+      "expect": { "intent": "comparative" }
+    },
+    {
+      "id": "i14", "label": "definitional — what is",
+      "message": "what is a PROTAC?",
+      "hasPriorAssets": false,
+      "expect": { "intent": "definitional" }
+    },
+    {
+      "id": "i15", "label": "definitional — explain mechanism",
+      "message": "explain how CAR-T cell therapy works",
+      "hasPriorAssets": false,
+      "expect": { "intent": "definitional" }
+    },
+    {
+      "id": "i16", "label": "pipeline — my saved assets",
+      "message": "show me my saved pipeline",
+      "hasPriorAssets": false,
+      "expect": { "intent": "pipeline" }
+    },
+    {
+      "id": "i17", "label": "synthesis — portfolio review",
+      "message": "analyze everything I have saved and give me a summary",
+      "hasPriorAssets": false,
+      "expect": { "intent": "synthesis" }
+    },
+    {
+      "id": "i18", "label": "document generation",
+      "message": "draft a due diligence checklist for this asset",
+      "hasPriorAssets": true,
+      "expect": { "intent": "document" }
+    },
+    {
+      "id": "i19", "label": "pure greeting — should be conversational",
+      "message": "good evening",
+      "hasPriorAssets": false,
+      "expect": { "intent": "conversational" }
+    },
+    {
+      "id": "i20", "label": "thanks — should be conversational",
+      "message": "thanks, that's helpful",
+      "hasPriorAssets": false,
+      "expect": { "intent": "conversational" }
+    },
+    {
+      "id": "i21", "label": "company context opener — should trigger search",
+      "message": "I'm building a company focused on pediatric oncology",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "indication": "pediatric oncology" } }
+    },
+    {
+      "id": "i22", "label": "pushback on no results — should re-trigger search not confirm empty",
+      "message": "you're saying there's not a single asset focused on childhood cancer?",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "indication": "childhood cancer" } }
+    },
+    {
+      "id": "i23", "label": "live source — clinical trials explicit",
+      "message": "show me currently enrolling trials for PD-1 inhibitors",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "liveSource": "clinicaltrials" }
+    },
+    {
+      "id": "i24", "label": "live source — patents explicit",
+      "message": "who holds the patents in the CRISPR space?",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "liveSource": "patents" }
+    },
+    {
+      "id": "i25", "label": "geography filter",
+      "message": "European university gene editing assets",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "geography": "eu" } }
+    },
+    {
+      "id": "i26", "label": "biology / mechanism filter",
+      "message": "assets targeting kinase signaling in solid tumors",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "biology": "kinase signaling" } }
+    },
+    {
+      "id": "i27", "label": "short disease name alone — search not conversational",
+      "message": "leukemia",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "indication": "leukemia" } }
+    },
+    {
+      "id": "i28", "label": "vague company intro — conversational, not search",
+      "message": "I'm building a company",
+      "hasPriorAssets": false,
+      "expect": { "intent": "conversational" }
+    }
+  ],
+
+  "response_expectations": [
+    {
+      "id": "r01", "label": "zero results must not confirm nothing exists",
+      "message": "pediatric oncology",
+      "mustNotContain": [
+        "no assets",
+        "no results",
+        "couldn't find any",
+        "that's correct",
+        "there are no",
+        "no specific assets",
+        "returned no"
+      ],
+      "mustContain": ["oncology", "try"]
+    },
+    {
+      "id": "r02", "label": "result response should include asset names",
+      "message": "antibody therapies for breast cancer",
+      "mustContain": ["**"],
+      "mustNotContain": ["no results", "no assets found"]
+    },
+    {
+      "id": "r03", "label": "follow-up pushback should search not confirm",
+      "message": "you're saying there's not a single asset focused on childhood cancer?",
+      "mustNotContain": ["that's correct", "no assets", "you are correct", "there are no"],
+      "mustContain": []
+    },
+    {
+      "id": "r04", "label": "greeting should not trigger asset search",
+      "message": "good evening",
+      "mustNotContain": ["retrieved assets", "indication", "modality"],
+      "mustContain": []
+    }
+  ]
+}
