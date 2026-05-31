@@ -1,10 +1,12 @@
-﻿/**
+/**
  * EDEN Conversation Tester
  * Fires real conversations at the live API and prints full responses.
  *
  * Usage (run on Replit):
  *   EDEN_TOKEN="eyJ..." tsx server/scripts/convo-test.ts
  */
+
+export {};
 
 const BASE_URL = "https://helix-radar.replit.app";
 
@@ -106,7 +108,6 @@ function grade(response: string, assetCount: number, expectAssets: boolean): "PA
 function printResult(label: string, result: "PASS" | "WARN" | "FAIL", assetCount: number, response: string) {
   const icon = result === "PASS" ? `${GREEN}✓` : result === "WARN" ? `${YELLOW}~` : `${RED}✗`;
   console.log(`\n${icon} ${BOLD}${label}${RESET} ${DIM}(${assetCount} assets)${RESET}`);
-  // Print first 400 chars of response
   const preview = response.slice(0, 400).replace(/\n+/g, " ");
   console.log(`  ${DIM}${preview}${response.length > 400 ? "…" : ""}${RESET}`);
   if (result === "FAIL") {
@@ -210,7 +211,6 @@ async function main() {
         worstResult = "FAIL";
       }
 
-      // Small pause between turns
       await new Promise((r) => setTimeout(r, 1500));
     }
 

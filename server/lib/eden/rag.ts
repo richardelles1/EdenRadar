@@ -1235,6 +1235,11 @@ Message: "tell me more about the second one"
 hasPriorAssets: true
 → {"intent":"back_ref","filters":{},"back_ref_position":1,"live_source":null}
 
+Message: "what's the IP situation on this one?"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: asking about IP/patents for a specific already-shown asset is back_ref, NOT a patents live search. live_source:"patents" is only for broad patent landscape queries like "who holds patents in CRISPR?"
+
 Message: "tell me more about the second one"
 hasPriorAssets: false
 → {"intent":"search","filters":{},"back_ref_position":null,"live_source":null}
