@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from "react";
+import { useRef, useEffect } from "react";
 import { Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
@@ -9,15 +9,22 @@ import {
 } from "lucide-react";
 
 const C = {
-  bg:        "hsl(36 30% 98%)",
-  card:      "hsl(0 0% 100%)",
-  fg:        "hsl(230 25% 10%)",
-  muted:     "hsl(230 15% 30%)",
-  border:    "hsl(230 18% 90%)",
-  borderDim: "hsl(230 18% 93%)",
-  indigo:    "hsl(234 80% 58%)",
-  indigoDk:  "hsl(234 70% 44%)",
-  emerald:   "hsl(142 52% 36%)",
+  bg:                "hsl(36 30% 98%)",
+  card:              "hsl(0 0% 100%)",
+  fg:                "hsl(230 25% 10%)",
+  muted:             "hsl(230 15% 30%)",
+  border:            "hsl(230 18% 90%)",
+  borderDim:         "hsl(230 18% 93%)",
+  indigo:            "hsl(234 80% 58%)",
+  indigoDk:          "hsl(234 70% 44%)",
+  emerald:           "hsl(142 52% 36%)",
+  surfaceBlue:       "hsl(234 40% 97%)",
+  surfaceIndigo:     "hsl(234 50% 97%)",
+  sectionBlueBg:     "hsl(234 60% 97%)",
+  sectionBlueBorder: "hsl(234 40% 90%)",
+  msgReceived:       "hsl(230 15% 96%)",
+  cellBg:            "hsl(234 30% 97%)",
+  divider:           "hsl(234 20% 94%)",
 };
 
 const LISTINGS = [
@@ -61,11 +68,18 @@ const SCORE_FACTORS = [
 ];
 
 const BLIND_FIELDS = [
-  { name: "Asset name",                hidden: true  },
+  { name: "Asset name",                 hidden: true  },
   { name: "Institution / organization", hidden: true  },
-  { name: "Inventor names",            hidden: true  },
-  { name: "Mechanism detail",          hidden: false },
-  { name: "Patent numbers",            hidden: true  },
+  { name: "Inventor names",             hidden: true  },
+  { name: "Mechanism detail",           hidden: false },
+  { name: "Patent numbers",             hidden: true  },
+];
+
+const TTO_FEATURES = [
+  "TRL fields + patent number tracking",
+  "Inventor affiliation support",
+  "TTO reference number fields",
+  "Admin-reviewed before going live",
 ];
 
 const SELLER_TYPES = [
@@ -89,15 +103,15 @@ const MESSAGES = [
 ];
 
 const BLIND_ROWS = [
-  { key: "Asset",            val: "KRAS G12D Degrader IND-Ready",       blurred: true  },
-  { key: "Institution",      val: "University of Michigan TTO",          blurred: true  },
-  { key: "Therapeutic Area", val: "Oncology",                            blurred: false },
-  { key: "Modality",         val: "Small Molecule",                      blurred: false },
-  { key: "Stage",            val: "IND-Ready",                           blurred: false },
+  { key: "Asset",            val: "KRAS G12D Degrader IND-Ready",           blurred: true  },
+  { key: "Institution",      val: "University of Michigan TTO",              blurred: true  },
+  { key: "Therapeutic Area", val: "Oncology",                                blurred: false },
+  { key: "Modality",         val: "Small Molecule",                          blurred: false },
+  { key: "Stage",            val: "IND-Ready",                               blurred: false },
   { key: "Mechanism",        val: "Targeted protein degradation via PROTAC", blurred: false },
-  { key: "Asking Price",     val: "$8M – $20M upfront",                  blurred: false },
-  { key: "Inventors",        val: "Dr. Sarah Kwan et al.",               blurred: true  },
-  { key: "Patent #",         val: "US 11,234,567 B2",                    blurred: true  },
+  { key: "Asking Price",     val: "$8M – $20M upfront",                      blurred: false },
+  { key: "Inventors",        val: "Dr. Sarah Kwan et al.",                   blurred: true  },
+  { key: "Patent #",         val: "US 11,234,567 B2",                        blurred: true  },
 ];
 
 export default function MarketPreview() {
@@ -108,11 +122,11 @@ export default function MarketPreview() {
   });
   const { subscribe, isLoading } = useMarketSubscribe();
 
-  const pageRef   = useRef<HTMLDivElement>(null);
-  const scoreRef  = useRef<HTMLDivElement>(null);
-  const arcRef    = useRef<SVGCircleElement>(null);
-  const barRefs   = useRef<(HTMLDivElement | null)[]>([]);
-  const [scoreCount, setScoreCount] = useState(0);
+  const pageRef       = useRef<HTMLDivElement>(null);
+  const scoreRef      = useRef<HTMLDivElement>(null);
+  const arcRef        = useRef<SVGCircleElement>(null);
+  const barRefs       = useRef<(HTMLDivElement | null)[]>([]);
+  const scoreNumRef   = useRef<HTMLSpanElement>(null);
   const scoreFiredRef = useRef(false);
 
   useEffect(() => {
@@ -143,7 +157,8 @@ export default function MarketPreview() {
         const target = 91, dur = 1800, t0 = performance.now();
         const tick = (now: number) => {
           const p = Math.min((now - t0) / dur, 1);
-          setScoreCount(Math.round((1 - Math.pow(1 - p, 4)) * target));
+          const val = Math.round((1 - Math.pow(1 - p, 4)) * target);
+          if (scoreNumRef.current) scoreNumRef.current.textContent = String(val);
           if (p < 1) requestAnimationFrame(tick);
         };
         setTimeout(() => requestAnimationFrame(tick), 300);
@@ -155,22 +170,22 @@ export default function MarketPreview() {
   }, []);
 
   const badge = (label: string, style: React.CSSProperties) => (
-    <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 5, border: "1px solid", ...style }}>{label}</span>
+    <span style={{ fontSize: 11, fontWeight: 600, padding: "2px 8px", borderRadius: 5, border: "1px solid", ...style }}>{label}</span>
   );
 
   return (
-    <div ref={pageRef} style={{ background: C.bg, color: C.fg }}>
+    <main ref={pageRef} style={{ background: C.bg, color: C.fg }}>
       <Nav />
 
       {/* ── Hero ── */}
       <div style={{ position: "relative", overflow: "hidden" }}>
-        <div className="market-aurora" aria-hidden />
+        <div className="market-aurora" aria-hidden="true" />
         <div className="mkt-hero-grid" style={{ position: "relative", maxWidth: 1200, margin: "0 auto", padding: "88px 48px 80px" }}>
 
           {/* Copy */}
           <div className="mkt-reveal">
             <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 500, color: C.muted, marginBottom: 24 }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.indigo, display: "inline-block", flexShrink: 0 }} />
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: C.indigo, display: "inline-block", flexShrink: 0 }} aria-hidden="true" />
               EdenMarket · Confidential Deal Marketplace
             </div>
             <h1 style={{ fontSize: "clamp(38px, 4.8vw, 56px)", fontWeight: 800, lineHeight: 1.07, letterSpacing: "-0.035em", color: C.fg, marginBottom: 24 }}>
@@ -185,32 +200,31 @@ export default function MarketPreview() {
                 onClick={() => subscribe({ redirectTo: "/market" })}
                 disabled={isLoading}
                 data-testid="market-preview-subscribe-hero"
-                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 9, border: "none", background: C.indigo, color: "white", fontSize: 13, fontWeight: 700, cursor: "pointer", boxShadow: "0 4px 20px hsl(234 80% 58% / 0.28)" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 28px", borderRadius: 9, border: "none", background: C.indigo, color: "white", fontSize: 13, fontWeight: 700, cursor: isLoading ? "default" : "pointer", boxShadow: "0 4px 20px hsl(234 80% 58% / 0.28)" }}
               >
-                {isLoading ? <Loader2 size={15} className="animate-spin" /> : null}
+                {isLoading ? <Loader2 size={15} className="animate-spin" aria-hidden /> : null}
                 {isLoading ? "Redirecting…" : "Browse Listings"}
               </button>
-              <Link href="/market/list">
-                <button
-                  data-testid="market-preview-list-cta"
-                  style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "12px 24px", borderRadius: 9, border: "1.5px solid hsl(234 80% 58% / 0.35)", background: "hsl(234 80% 58% / 0.06)", color: C.indigoDk, fontSize: 13, fontWeight: 700, cursor: "pointer" }}
-                >
-                  List an Asset <ArrowRight size={13} />
-                </button>
+              <Link
+                href="/market/list"
+                data-testid="market-preview-list-cta"
+                style={{ display: "inline-flex", alignItems: "center", gap: 8, padding: "14px 24px", borderRadius: 9, border: "1.5px solid hsl(234 80% 58% / 0.35)", background: "hsl(234 80% 58% / 0.06)", color: C.indigoDk, fontSize: 13, fontWeight: 700, textDecoration: "none" }}
+              >
+                List an Asset <ArrowRight size={13} aria-hidden />
               </Link>
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 36 }}>
               {["NDA before any identity is shared", "No broker fees", "Admin-reviewed", "Free to browse"].map((s, i) => (
                 <span key={s} style={{ fontSize: 12, fontWeight: 500, color: C.muted }}>
-                  {i > 0 && <span style={{ color: "hsl(230 15% 78%)", marginRight: 6 }}>·</span>}
+                  {i > 0 && <span style={{ color: "hsl(230 15% 78%)", marginRight: 6 }} aria-hidden="true">·</span>}
                   {s}
                 </span>
               ))}
             </div>
           </div>
 
-          {/* Floating cards */}
-          <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 12 }}>
+          {/* Floating cards — decorative, excluded from screen reader flow */}
+          <div style={{ position: "relative", display: "flex", flexDirection: "column", gap: 12 }} aria-hidden="true">
             <div style={{ position: "absolute", top: -18, right: -16, background: "hsl(142 50% 50% / 0.1)", border: "1px solid hsl(142 52% 36% / 0.3)", borderRadius: 8, padding: "6px 10px", display: "flex", alignItems: "center", gap: 5, fontSize: 10, fontWeight: 700, color: "hsl(142 52% 30%)", boxShadow: "0 2px 12px hsl(142 40% 30% / 0.12)", whiteSpace: "nowrap", zIndex: 2 }}>
               <Zap size={10} /> High Signal · 91
             </div>
@@ -236,7 +250,7 @@ export default function MarketPreview() {
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "hsl(142 50% 50% / 0.08)", color: "hsl(142 52% 32%)", border: "1px solid hsl(142 52% 36% / 0.3)" }}><Zap size={9} /> 91</span>
-                  <button style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 6, border: "none", background: C.indigo, color: "white", cursor: "default" }}>Submit EOI</button>
+                  <div style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 6, background: C.indigo, color: "white" }}>Submit EOI</div>
                 </div>
               </div>
             </div>
@@ -254,7 +268,7 @@ export default function MarketPreview() {
                 <div style={{ fontSize: 12, fontWeight: 700, color: C.fg }}>Price on request</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, background: "hsl(38 85% 48% / 0.08)", color: "hsl(38 75% 34%)", border: "1px solid hsl(38 85% 44% / 0.3)" }}><Zap size={9} /> 72</span>
-                  <button style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 6, border: "none", background: C.indigo, color: "white", cursor: "default" }}>Submit EOI</button>
+                  <div style={{ fontSize: 10, fontWeight: 700, padding: "4px 10px", borderRadius: 6, background: C.indigo, color: "white" }}>Submit EOI</div>
                 </div>
               </div>
             </div>
@@ -264,22 +278,26 @@ export default function MarketPreview() {
 
       {/* ── Listings ── */}
       <div style={{ background: C.card, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ padding: "72px 48px" }}>
+        <div className="mkt-pad-md">
           <div style={{ maxWidth: 1100, margin: "0 auto" }}>
             <div className="mkt-reveal" style={{ textAlign: "center", maxWidth: 600, margin: "0 auto 48px" }}>
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>Sample listings</p>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: C.muted, marginBottom: 10 }}>Sample listings</p>
               <h2 style={{ fontSize: 32, fontWeight: 700, letterSpacing: "-0.025em", color: C.fg, marginBottom: 12, lineHeight: 1.2 }}>The quality we curate for.</h2>
               <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.65 }}>Every asset on EdenMarket is admin-reviewed and scored by EDEN before going live. This is what qualified deal flow looks like.</p>
             </div>
 
-            {/* Filter bar (decorative) */}
-            <div className="mkt-reveal" style={{ display: "flex", alignItems: "center", gap: 8, background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 16px", marginBottom: 24 }}>
+            {/* Filter bar — decorative illustration, not interactive */}
+            <div
+              className="mkt-reveal"
+              aria-hidden="true"
+              style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: C.card, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 16px", marginBottom: 24 }}
+            >
               <span style={{ fontSize: 11, fontWeight: 600, color: C.muted, whiteSpace: "nowrap" }}>Filter:</span>
               {["All", "Oncology", "Neurology", "Cell Therapy", "Phase 1+"].map((label, i) => (
-                <button key={label} style={{ fontSize: 11, fontWeight: 600, padding: "4px 12px", borderRadius: 100, border: `1px solid ${i === 0 ? C.indigo : C.border}`, background: i === 0 ? C.indigo : "transparent", color: i === 0 ? "white" : C.muted, cursor: "default" }}>{label}</button>
+                <div key={label} style={{ fontSize: 11, fontWeight: 600, padding: "4px 12px", borderRadius: 100, border: `1px solid ${i === 0 ? C.indigo : C.border}`, background: i === 0 ? C.indigo : "transparent", color: i === 0 ? "white" : C.muted }}>{label}</div>
               ))}
               <div style={{ width: 1, height: 20, background: C.border, flexShrink: 0 }} />
-              <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: C.muted }}>
                 <Search size={14} style={{ color: "hsl(230 15% 60%)", flexShrink: 0 }} />
                 <span>Search by keyword, mechanism, target…</span>
               </div>
@@ -291,11 +309,11 @@ export default function MarketPreview() {
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {l.confidential
-                        ? <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: 6 }}><EyeOff size={13} /> Confidential Listing</div>
+                        ? <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: C.muted, fontStyle: "italic", marginBottom: 6 }}><EyeOff size={13} aria-hidden /> Confidential Listing</div>
                         : <div style={{ fontSize: 13, fontWeight: 700, color: C.fg, marginBottom: 6, lineHeight: 1.3 }}>{l.name}</div>
                       }
                       <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                        {l.badges.map(b => <span key={b} style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: `1px solid ${C.border}`, color: C.muted }}>{b}</span>)}
+                        {l.badges.map(b => <span key={b} style={{ fontSize: 11, fontWeight: 600, padding: "2px 7px", borderRadius: 5, border: `1px solid ${C.border}`, color: C.muted }}>{b}</span>)}
                       </div>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5, flexShrink: 0 }}>
@@ -303,15 +321,19 @@ export default function MarketPreview() {
                       {badge(l.engagement, { background: l.engStyle.background, color: l.engStyle.color, borderColor: l.engStyle.borderColor })}
                     </div>
                   </div>
-                  <p style={{ fontSize: 11.5, color: C.muted, lineHeight: 1.62, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{l.summary}</p>
+                  <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.62, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" } as React.CSSProperties}>{l.summary}</p>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, paddingTop: 12, borderTop: "1px solid hsl(230 18% 92%)", marginTop: "auto" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       <span style={{ fontSize: 12, fontWeight: 700, color: C.fg }}>{l.price}</span>
-                      <span style={{ fontSize: 10, color: C.muted }}>{l.eois} EOIs</span>
-                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 4, border: `1px solid ${l.scoreStyle.borderColor}`, background: l.scoreStyle.background, color: l.scoreStyle.color }}><Zap size={9} /> {l.score}</span>
+                      <span style={{ fontSize: 11, color: C.muted }}>{l.eois} EOIs</span>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 11, fontWeight: 700, padding: "2px 6px", borderRadius: 4, border: `1px solid ${l.scoreStyle.borderColor}`, background: l.scoreStyle.background, color: l.scoreStyle.color }}><Zap size={9} aria-hidden /> {l.score}</span>
                     </div>
-                    <button data-testid={`market-preview-eoi-btn-${l.id}`} style={{ fontSize: 11, fontWeight: 700, padding: "5px 12px", borderRadius: 7, border: "none", background: C.indigo, color: "white", cursor: "default", display: "inline-flex", alignItems: "center", gap: 4 }}>
-                      <Send size={11} /> Submit EOI
+                    <button
+                      data-testid={`market-preview-eoi-btn-${l.id}`}
+                      onClick={() => subscribe({ redirectTo: "/market" })}
+                      style={{ fontSize: 12, fontWeight: 700, padding: "14px 16px", borderRadius: 7, border: "none", background: C.indigo, color: "white", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}
+                    >
+                      <Send size={12} aria-hidden /> Submit EOI
                     </button>
                   </div>
                 </div>
@@ -322,11 +344,11 @@ export default function MarketPreview() {
       </div>
 
       {/* ── Blind listing ── */}
-      <div style={{ background: "hsl(234 60% 97%)", borderTop: "1px solid hsl(234 40% 90%)", borderBottom: "1px solid hsl(234 40% 90%)" }}>
-        <div style={{ padding: "88px 48px" }}>
+      <div style={{ background: C.sectionBlueBg, borderTop: `1px solid ${C.sectionBlueBorder}`, borderBottom: `1px solid ${C.sectionBlueBorder}` }}>
+        <div className="mkt-pad-lg">
           <div className="mkt-section-grid" style={{ maxWidth: 1080, margin: "0 auto" }}>
             <div className="mkt-reveal">
-              <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: C.indigo, marginBottom: 14 }}>Privacy by default</p>
+              <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: C.indigo, marginBottom: 14 }}>Privacy by default</p>
               <h2 style={{ fontSize: 34, fontWeight: 700, lineHeight: 1.18, letterSpacing: "-0.025em", color: C.fg, marginBottom: 20 }}>
                 Your identity is yours.<br />
                 <strong style={{ color: C.indigo, fontWeight: 800 }}>Reveal it on your terms.</strong>
@@ -338,7 +360,7 @@ export default function MarketPreview() {
                 {BLIND_FIELDS.map(f => (
                   <div key={f.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: C.card, border: `1px solid ${C.border}`, borderRadius: 9, padding: "12px 16px" }}>
                     <span style={{ fontSize: 13, fontWeight: 600, color: C.fg }}>{f.name}</span>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }} aria-hidden="true">
                       <div style={{ width: 28, height: 16, borderRadius: 100, background: f.hidden ? C.indigo : "hsl(230 15% 88%)", display: "flex", alignItems: "center", padding: 2, justifyContent: f.hidden ? "flex-end" : "flex-start" }}>
                         <div style={{ width: 12, height: 12, borderRadius: "50%", background: "white" }} />
                       </div>
@@ -351,17 +373,17 @@ export default function MarketPreview() {
 
             <div className="mkt-reveal d1">
               <div style={{ background: C.card, border: "1px solid hsl(234 30% 86%)", borderRadius: 16, padding: 28, boxShadow: "0 4px 24px hsl(234 40% 20% / 0.08)" }}>
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 14 }}>What buyers see before NDA</p>
-                <div style={{ background: "hsl(234 50% 99%)", border: "1px solid hsl(234 25% 90%)", borderRadius: 11, padding: 18, marginBottom: 12 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 14 }}>What buyers see before NDA</p>
+                <div style={{ background: C.surfaceIndigo, border: "1px solid hsl(234 25% 90%)", borderRadius: 11, padding: 18, marginBottom: 12 }}>
                   {BLIND_ROWS.map((row, ri) => (
-                    <div key={row.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: ri < BLIND_ROWS.length - 1 ? "1px solid hsl(234 20% 94%)" : "none" }}>
-                      <span style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, color: C.muted }}>{row.key}</span>
+                    <div key={row.key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: ri < BLIND_ROWS.length - 1 ? `1px solid ${C.divider}` : "none" }}>
+                      <span style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.08em", fontWeight: 700, color: C.muted }}>{row.key}</span>
                       <span style={{ fontSize: 12, fontWeight: 600, color: C.fg, filter: row.blurred ? "blur(4px)" : "none", userSelect: row.blurred ? "none" : "auto" } as React.CSSProperties}>{row.val}</span>
                     </div>
                   ))}
                 </div>
-                <div style={{ background: "hsl(234 80% 58% / 0.08)", border: "1px solid hsl(234 80% 58% / 0.2)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 11, color: C.indigoDk, fontWeight: 600 }}>
-                  <Lock size={13} /> Blurred fields unlock after mutual NDA execution
+                <div style={{ background: "hsl(234 80% 58% / 0.08)", border: "1px solid hsl(234 80% 58% / 0.2)", borderRadius: 8, padding: "10px 14px", display: "flex", alignItems: "center", gap: 8, fontSize: 12, color: C.indigoDk, fontWeight: 600 }}>
+                  <Lock size={13} aria-hidden /> Blurred fields unlock after mutual NDA execution
                 </div>
               </div>
             </div>
@@ -371,7 +393,7 @@ export default function MarketPreview() {
 
       {/* ── Deal Room ── */}
       <div style={{ background: C.card, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ padding: "88px 48px" }}>
+        <div className="mkt-pad-lg">
           <div className="mkt-reveal" style={{ textAlign: "center", maxWidth: 760, margin: "0 auto 52px" }}>
             <h2 style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.025em", color: C.fg, marginBottom: 14, lineHeight: 1.2 }}>One room. Every stage of the deal.</h2>
             <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.65, maxWidth: 560, margin: "0 auto" }}>
@@ -379,62 +401,62 @@ export default function MarketPreview() {
             </p>
           </div>
           <div className="mkt-reveal" style={{ maxWidth: 760, margin: "0 auto", background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 32px hsl(234 30% 15% / 0.08)" }}>
-            <div style={{ background: "hsl(234 40% 97%)", borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ background: C.surfaceBlue, borderBottom: `1px solid ${C.border}`, padding: "16px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: C.fg, display: "flex", alignItems: "center", gap: 8 }}>
-                  <Lock size={15} style={{ color: C.indigo }} /> KRAS G12D Degrader / Deal #14
+                  <Lock size={15} style={{ color: C.indigo }} aria-hidden /> KRAS G12D Degrader / Deal #14
                 </div>
                 <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>University of Michigan TTO · Novartis BD · Started May 2026</div>
               </div>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, background: "hsl(234 80% 58% / 0.1)", color: C.indigoDk, border: "1px solid hsl(234 80% 58% / 0.25)", borderRadius: 100, padding: "4px 12px" }}>
-                <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.indigo, display: "inline-block" }} /> NDA Signed
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: C.indigo, display: "inline-block" }} aria-hidden="true" /> NDA Signed
               </span>
             </div>
             <div className="mkt-deal-body">
               <div style={{ padding: 20, borderRight: `1px solid ${C.border}`, maxHeight: 380, overflow: "hidden", position: "relative" }}>
-                <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 14 }}>Messages</p>
+                <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 14 }}>Messages</p>
                 {MESSAGES.map((m, i) => (
                   <div key={i} className="market-msg" style={{ display: "flex", gap: 10, marginBottom: 10, flexDirection: m.side === "mine" ? "row-reverse" : "row", animationDelay: `${i * 0.2}s` }}>
-                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: m.color, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "white" }}>{m.initials}</div>
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: m.color, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "white" }} aria-hidden="true">{m.initials}</div>
                     <div>
-                      <div style={{ maxWidth: 260, fontSize: 12, lineHeight: 1.55, padding: "10px 13px", ...(m.side === "mine" ? { background: C.indigo, color: "white", borderRadius: "11px 3px 11px 11px" } : { background: "hsl(230 15% 96%)", color: C.fg, borderRadius: "3px 11px 11px 11px" }) }}>{m.text}</div>
-                      <div style={{ fontSize: 10, color: C.muted, marginTop: 4, textAlign: m.side === "mine" ? "right" : "left" }}>{m.time}</div>
+                      <div style={{ maxWidth: 260, fontSize: 12, lineHeight: 1.55, padding: "10px 13px", ...(m.side === "mine" ? { background: C.indigo, color: "white", borderRadius: "11px 3px 11px 11px" } : { background: C.msgReceived, color: C.fg, borderRadius: "3px 11px 11px 11px" }) }}>{m.text}</div>
+                      <div style={{ fontSize: 11, color: C.muted, marginTop: 4, textAlign: m.side === "mine" ? "right" : "left" }}>{m.time}</div>
                     </div>
                   </div>
                 ))}
-                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 60, background: "linear-gradient(to bottom, transparent, white)", pointerEvents: "none" }} />
+                <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 60, background: "linear-gradient(to bottom, transparent, white)", pointerEvents: "none" }} aria-hidden="true" />
               </div>
               <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 20 }}>
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 12 }}>Documents</p>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 12 }}>Documents</p>
                   {[
-                    { name: "Executed NDA.pdf",     date: "May 18", note: "Opened by both parties",    noteColor: C.emerald },
-                    { name: "Full Data Package.zip", date: "May 20", note: "Viewed 3× by counterparty", noteColor: C.emerald },
-                    { name: "IP Summary.pdf",         date: "May 21", note: "Not yet viewed",            noteColor: C.muted   },
+                    { name: "Executed NDA.pdf",      date: "May 18", note: "Opened by both parties",    noteColor: C.emerald },
+                    { name: "Full Data Package.zip",  date: "May 20", note: "Viewed 3× by counterparty", noteColor: C.emerald },
+                    { name: "IP Summary.pdf",          date: "May 21", note: "Not yet viewed",            noteColor: C.muted   },
                   ].map((doc, di) => (
                     <div key={di} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: di < 2 ? "1px solid hsl(230 15% 94%)" : "none" }}>
-                      <div style={{ width: 28, height: 28, borderRadius: 6, background: "hsl(234 40% 96%)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <FileText size={13} style={{ color: C.indigo }} />
+                      <div style={{ width: 28, height: 28, borderRadius: 6, background: C.surfaceBlue, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                        <FileText size={13} style={{ color: C.indigo }} aria-hidden />
                       </div>
                       <div>
                         <div style={{ fontSize: 12, fontWeight: 600, color: C.fg }}>{doc.name}</div>
-                        <div style={{ fontSize: 10, color: C.muted }}>{doc.date} · <span style={{ color: doc.noteColor, fontWeight: 600 }}>{doc.note}</span></div>
+                        <div style={{ fontSize: 11, color: C.muted }}>{doc.date} · <span style={{ color: doc.noteColor, fontWeight: 600 }}>{doc.note}</span></div>
                       </div>
                     </div>
                   ))}
                 </div>
                 <div>
-                  <p style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 12 }}>Term Sheet: Draft</p>
+                  <p style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.12em", color: C.muted, marginBottom: 12 }}>Term Sheet: Draft</p>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                     {[{ k: "Upfront", v: "$8M", accent: true }, { k: "Milestones", v: "$15M", accent: true }, { k: "Royalty", v: "4.5%", accent: true }, { k: "Territory", v: "US + EU excl.", accent: false }].map(t => (
-                      <div key={t.k} style={{ background: "hsl(234 30% 97%)", border: "1px solid hsl(234 25% 90%)", borderRadius: 7, padding: "8px 10px" }}>
-                        <div style={{ fontSize: 9, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700, color: C.muted, marginBottom: 3 }}>{t.k}</div>
-                        <div style={{ fontSize: t.k === "Territory" ? 11 : 13, fontWeight: 700, color: t.accent ? C.indigoDk : C.fg }}>{t.v}</div>
+                      <div key={t.k} style={{ background: C.cellBg, border: "1px solid hsl(234 25% 90%)", borderRadius: 7, padding: "8px 10px" }}>
+                        <div style={{ fontSize: 10, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 700, color: C.muted, marginBottom: 3 }}>{t.k}</div>
+                        <div style={{ fontSize: t.k === "Territory" ? 12 : 14, fontWeight: 700, color: t.accent ? C.indigoDk : C.fg }}>{t.v}</div>
                       </div>
                     ))}
                   </div>
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 10, fontWeight: 700, color: "hsl(142 52% 32%)", marginTop: 10 }}>
-                    <CheckCircle2 size={12} /> Seller agreed · Buyer review pending
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "hsl(142 52% 32%)", marginTop: 10 }}>
+                    <CheckCircle2 size={12} aria-hidden /> Seller agreed · Buyer review pending
                   </div>
                 </div>
               </div>
@@ -445,7 +467,7 @@ export default function MarketPreview() {
 
       {/* ── Signal Score ── */}
       <div ref={scoreRef} style={{ background: C.card, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
-        <div style={{ padding: "88px 48px" }}>
+        <div className="mkt-pad-lg">
           <div className="mkt-section-grid" style={{ maxWidth: 1080, margin: "0 auto" }}>
             <div className="mkt-reveal">
               <h2 style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.025em", color: C.fg, marginBottom: 18, lineHeight: 1.18 }}>
@@ -460,7 +482,11 @@ export default function MarketPreview() {
                   <div key={f.label} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
                     <span style={{ fontSize: 12, fontWeight: 600, color: C.fg, minWidth: 170 }}>{f.label}</span>
                     <div style={{ flex: 1, height: 6, background: "hsl(234 30% 92%)", borderRadius: 100, overflow: "hidden" }}>
-                      <div ref={el => { barRefs.current[fi] = el; }} className="market-score-bar" style={{ "--mw": `${f.pct}%` } as React.CSSProperties} />
+                      <div
+                        ref={el => { barRefs.current[fi] = el; }}
+                        className="market-score-bar"
+                        style={{ "--mw-scale": f.pct / 100 } as React.CSSProperties}
+                      />
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 700, color: C.indigoDk, minWidth: 32, textAlign: "right" }}>{f.pts}</span>
                   </div>
@@ -469,14 +495,21 @@ export default function MarketPreview() {
             </div>
 
             <div className="mkt-reveal d1">
-              <div style={{ background: "hsl(234 40% 97%)", border: "1px solid hsl(234 30% 88%)", borderRadius: 16, padding: 28 }}>
+              <div style={{ background: C.surfaceBlue, border: "1px solid hsl(234 30% 88%)", borderRadius: 16, padding: 28 }}>
                 <div style={{ position: "relative", width: 128, height: 128, margin: "0 auto 24px" }}>
-                  <svg viewBox="0 0 128 128" fill="none" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+                  <svg
+                    viewBox="0 0 128 128"
+                    fill="none"
+                    role="img"
+                    aria-labelledby="score-arc-title"
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}
+                  >
+                    <title id="score-arc-title">Eden Signal Score: 91 out of 100</title>
                     <circle cx="64" cy="64" r="52" stroke="hsl(234 30% 88%)" strokeWidth="9" />
                     <circle ref={arcRef} className="market-score-arc" cx="64" cy="64" r="52" stroke={C.indigo} strokeWidth="9" strokeLinecap="round" transform="rotate(-90 64 64)" />
                   </svg>
-                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }}>
-                    <span style={{ fontSize: 28, fontWeight: 800, color: C.fg, letterSpacing: "-0.03em", lineHeight: 1 }}>{scoreCount}</span>
+                  <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column" }} aria-hidden="true">
+                    <span ref={scoreNumRef} style={{ fontSize: 28, fontWeight: 800, color: C.fg, letterSpacing: "-0.03em", lineHeight: 1 }}>0</span>
                     <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>/ 100</span>
                   </div>
                 </div>
@@ -491,7 +524,7 @@ export default function MarketPreview() {
                 <div style={{ marginTop: 18, paddingTop: 14, borderTop: "1px solid hsl(234 25% 90%)" }}>
                   <div style={{ fontSize: 11, color: C.muted, marginBottom: 6, fontWeight: 600 }}>Signal tier</div>
                   <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, fontWeight: 700, padding: "4px 12px", borderRadius: 4, background: "hsl(142 50% 50% / 0.08)", color: "hsl(142 52% 32%)", border: "1px solid hsl(142 52% 36% / 0.3)" }}>
-                    <Zap size={11} /> High Signal
+                    <Zap size={11} aria-hidden /> High Signal
                   </span>
                 </div>
               </div>
@@ -501,30 +534,57 @@ export default function MarketPreview() {
       </div>
 
       {/* ── For Sellers ── */}
-      <div style={{ background: "hsl(234 60% 97%)", borderTop: "1px solid hsl(234 40% 90%)", borderBottom: "1px solid hsl(234 40% 90%)" }}>
-        <div style={{ padding: "88px 48px" }}>
+      <div style={{ background: C.sectionBlueBg, borderTop: `1px solid ${C.sectionBlueBorder}`, borderBottom: `1px solid ${C.sectionBlueBorder}` }}>
+        <div className="mkt-pad-lg">
           <div style={{ maxWidth: 1080, margin: "0 auto" }}>
-            <div className="mkt-reveal" style={{ textAlign: "center", marginBottom: 56 }}>
+            <div className="mkt-reveal" style={{ textAlign: "center", marginBottom: 48 }}>
               <h2 style={{ fontSize: 34, fontWeight: 700, letterSpacing: "-0.025em", color: C.fg, marginBottom: 14, lineHeight: 1.2 }}>Built for every kind of seller.</h2>
               <p style={{ fontSize: 15, color: C.muted, lineHeight: 1.65, maxWidth: 560, margin: "0 auto" }}>
                 Whether you're licensing out of a TTO, spinning out a deprioritized program, or a solo inventor with a validated idea: EdenMarket is free to list and curated to qualify buyers before they reach you.
               </p>
             </div>
-            <div className="mkt-seller-grid" style={{ marginBottom: 56 }}>
-              {SELLER_TYPES.map((s, i) => (
-                <div key={i} className={`mkt-reveal${i > 0 ? ` d${i}` : ""}`} style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 13, padding: 24 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "hsl(234 80% 58% / 0.1)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
-                    <s.Icon size={20} style={{ color: C.indigo }} />
-                  </div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: C.fg, marginBottom: 8 }}>{s.title}</div>
-                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{s.body}</div>
+
+            {/* Featured layout: TTO primary (left), Biotech + Inventor stacked (right) */}
+            <div className="mkt-seller-featured" style={{ marginBottom: 48 }}>
+              <div className="mkt-reveal" style={{ background: C.surfaceIndigo, border: "1px solid hsl(234 40% 88%)", borderRadius: 13, padding: 28, display: "flex", flexDirection: "column" }}>
+                <div style={{ width: 44, height: 44, borderRadius: 11, background: C.indigo, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 18, flexShrink: 0 }}>
+                  <Layers size={22} style={{ color: "white" }} aria-hidden />
                 </div>
-              ))}
+                <div style={{ fontSize: 17, fontWeight: 700, color: C.fg, marginBottom: 10 }}>{SELLER_TYPES[0].title}</div>
+                <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.65, marginBottom: 24 }}>{SELLER_TYPES[0].body}</div>
+                <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 9 }}>
+                  {TTO_FEATURES.map(f => (
+                    <div key={f} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12, color: C.fg }}>
+                      <CheckCircle2 size={13} style={{ color: C.indigo, flexShrink: 0 }} aria-hidden />
+                      {f}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                <div className="mkt-reveal d1" style={{ background: "hsl(38 85% 97%)", border: "1px solid hsl(38 70% 86%)", borderRadius: 13, padding: 24, flex: 1 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "hsl(38 85% 48% / 0.15)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+                    <Activity size={20} style={{ color: "hsl(38 70% 38%)" }} aria-hidden />
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.fg, marginBottom: 8 }}>{SELLER_TYPES[1].title}</div>
+                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{SELLER_TYPES[1].body}</div>
+                </div>
+                <div className="mkt-reveal d2" style={{ background: "hsl(142 50% 97%)", border: "1px solid hsl(142 40% 84%)", borderRadius: 13, padding: 24, flex: 1 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: "hsl(142 50% 50% / 0.15)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 14 }}>
+                    <Heart size={20} style={{ color: C.emerald }} aria-hidden />
+                  </div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: C.fg, marginBottom: 8 }}>{SELLER_TYPES[2].title}</div>
+                  <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6 }}>{SELLER_TYPES[2].body}</div>
+                </div>
+              </div>
             </div>
+
+            {/* Steps — typographic numbers break the SaaS template feel */}
             <div className="mkt-reveal mkt-steps-grid" style={{ border: `1px solid ${C.border}`, borderRadius: 13, overflow: "hidden" }}>
               {LISTING_STEPS.map((s, si) => (
-                <div key={si} style={{ padding: 24, borderRight: si < 3 ? `1px solid ${C.border}` : "none", background: C.card }}>
-                  <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", textTransform: "uppercase", color: C.indigo, marginBottom: 10 }}>{s.num}</div>
+                <div key={si} style={{ padding: 24, background: C.card }}>
+                  <div style={{ fontSize: 48, fontWeight: 900, letterSpacing: "-0.05em", color: "hsl(234 80% 58% / 0.14)", lineHeight: 0.9, marginBottom: 16 }}>{s.num}</div>
                   <div style={{ fontSize: 14, fontWeight: 700, color: C.fg, marginBottom: 8 }}>{s.title}</div>
                   <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>{s.body}</div>
                 </div>
@@ -535,52 +595,41 @@ export default function MarketPreview() {
       </div>
 
       {/* ── Bottom CTA ── */}
-      <div style={{ padding: "100px 48px", background: C.indigo, textAlign: "center" }}>
+      <div className="mkt-pad-xl" style={{ background: C.indigo, textAlign: "center" }}>
         <h2 className="mkt-reveal" style={{ fontSize: 38, fontWeight: 800, letterSpacing: "-0.03em", color: "white", marginBottom: 16, lineHeight: 1.1 }}>
           The <span style={{ color: "hsl(38 90% 78%)" }}>quiet room</span><br />
           where biotech deals happen.
         </h2>
-        <p className="mkt-reveal" style={{ fontSize: 16, color: "hsl(234 60% 85%)", marginBottom: 44, lineHeight: 1.65, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+        <p className="mkt-reveal" style={{ fontSize: 16, color: "hsl(220 60% 96%)", marginBottom: 44, lineHeight: 1.65, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           Both sides of every deal are protected from first click to signed term sheet.
         </p>
         <div className="mkt-reveal mkt-cta-grid" style={{ maxWidth: 640, margin: "0 auto" }}>
-          {[
-            {
-              title: "Find your next program",
-              body: "Search curated deal flow by modality, stage, and TA. Eden Signal Scores tell you where to focus before you submit a single EOI.",
-              action: () => subscribe({ redirectTo: "/market" }),
-              label: isLoading ? "Redirecting…" : "Browse Listings",
-              testId: "market-preview-subscribe-footer",
-              btnStyle: { background: C.indigo, color: "white", border: "none" },
-            },
-            {
-              title: "List your asset",
-              body: "Submit in minutes. We review it within two business days. Your identity stays blind until you say otherwise. No broker, no cold intros.",
-              href: "/market/list",
-              label: "List an Asset",
-              testId: "market-preview-list-footer",
-              btnStyle: { background: "transparent", color: C.indigoDk, border: `1.5px solid ${C.border}` },
-            },
-          ].map((card, ci) => (
-            <div key={ci} style={{ background: "white", border: "1px solid hsl(230 20% 92%)", borderRadius: 13, padding: "28px 24px", textAlign: "left", boxShadow: "0 4px 24px hsl(234 80% 20% / 0.18)" }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: C.fg, marginBottom: 8 }}>{card.title}</div>
-              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>{card.body}</div>
-              {card.href ? (
-                <Link href={card.href}>
-                  <button data-testid={card.testId} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, padding: "10px 20px", borderRadius: 8, cursor: "pointer", ...card.btnStyle }}>
-                    {card.label} <ArrowRight size={12} />
-                  </button>
-                </Link>
-              ) : (
-                <button onClick={card.action} disabled={isLoading} data-testid={card.testId} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, padding: "10px 20px", borderRadius: 8, cursor: "pointer", ...card.btnStyle }}>
-                  {isLoading && <Loader2 size={12} className="animate-spin" />}
-                  {card.label} <ArrowRight size={12} />
-                </button>
-              )}
-            </div>
-          ))}
+          <div style={{ background: "white", border: "1px solid hsl(230 20% 92%)", borderRadius: 13, padding: "28px 24px", textAlign: "left", boxShadow: "0 4px 24px hsl(234 80% 20% / 0.18)" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.fg, marginBottom: 8 }}>Find your next program</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>Search curated deal flow by modality, stage, and TA. Eden Signal Scores tell you where to focus before you submit a single EOI.</div>
+            <button
+              onClick={() => subscribe({ redirectTo: "/market" })}
+              disabled={isLoading}
+              data-testid="market-preview-subscribe-footer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, padding: "12px 20px", borderRadius: 8, cursor: isLoading ? "default" : "pointer", background: C.indigo, color: "white", border: "none" }}
+            >
+              {isLoading && <Loader2 size={12} className="animate-spin" aria-hidden />}
+              {isLoading ? "Redirecting…" : "Browse Listings"} <ArrowRight size={12} aria-hidden />
+            </button>
+          </div>
+          <div style={{ background: "white", border: "1px solid hsl(230 20% 92%)", borderRadius: 13, padding: "28px 24px", textAlign: "left", boxShadow: "0 4px 24px hsl(234 80% 20% / 0.18)" }}>
+            <div style={{ fontSize: 17, fontWeight: 700, color: C.fg, marginBottom: 8 }}>List your asset</div>
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>Submit in minutes. We review it within two business days. Your identity stays blind until you say otherwise. No broker, no cold intros.</div>
+            <Link
+              href="/market/list"
+              data-testid="market-preview-list-footer"
+              style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, padding: "12px 20px", borderRadius: 8, background: "transparent", color: C.indigoDk, border: `1.5px solid ${C.border}`, textDecoration: "none" }}
+            >
+              List an Asset <ArrowRight size={12} aria-hidden />
+            </Link>
+          </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }
