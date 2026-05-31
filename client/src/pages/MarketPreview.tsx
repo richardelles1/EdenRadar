@@ -537,10 +537,10 @@ export default function MarketPreview() {
       {/* ── Bottom CTA ── */}
       <div style={{ padding: "100px 48px", background: C.indigo, textAlign: "center" }}>
         <h2 className="mkt-reveal" style={{ fontSize: 38, fontWeight: 800, letterSpacing: "-0.03em", color: "white", marginBottom: 16, lineHeight: 1.1 }}>
-          The <span style={{ color: "hsl(234 80% 82%)" }}>quiet room</span><br />
+          The <span style={{ color: "hsl(38 90% 78%)" }}>quiet room</span><br />
           where biotech deals happen.
         </h2>
-        <p className="mkt-reveal" style={{ fontSize: 16, color: "hsl(234 50% 78%)", marginBottom: 44, lineHeight: 1.65, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
+        <p className="mkt-reveal" style={{ fontSize: 16, color: "hsl(234 60% 85%)", marginBottom: 44, lineHeight: 1.65, maxWidth: 480, marginLeft: "auto", marginRight: "auto" }}>
           Both sides of every deal are protected from first click to signed term sheet.
         </p>
         <div className="mkt-reveal mkt-cta-grid" style={{ maxWidth: 640, margin: "0 auto" }}>
@@ -551,7 +551,7 @@ export default function MarketPreview() {
               action: () => subscribe({ redirectTo: "/market" }),
               label: isLoading ? "Redirecting…" : "Browse Listings",
               testId: "market-preview-subscribe-footer",
-              btnStyle: { background: "white", color: C.indigoDk, border: "none" },
+              btnStyle: { background: C.indigo, color: "white", border: "none" },
             },
             {
               title: "List your asset",
@@ -559,12 +559,12 @@ export default function MarketPreview() {
               href: "/market/list",
               label: "List an Asset",
               testId: "market-preview-list-footer",
-              btnStyle: { background: "hsl(234 65% 62%)", color: "white", border: "1.5px solid hsl(234 65% 68%)" },
+              btnStyle: { background: "transparent", color: C.indigoDk, border: `1.5px solid ${C.border}` },
             },
           ].map((card, ci) => (
-            <div key={ci} style={{ background: "hsl(234 72% 52%)", border: "1px solid hsl(234 65% 62%)", borderRadius: 13, padding: "28px 24px", textAlign: "left" }}>
-              <div style={{ fontSize: 17, fontWeight: 700, color: "white", marginBottom: 8 }}>{card.title}</div>
-              <div style={{ fontSize: 13, color: "hsl(234 40% 78%)", lineHeight: 1.6, marginBottom: 20 }}>{card.body}</div>
+            <div key={ci} style={{ background: "white", border: "1px solid hsl(230 20% 92%)", borderRadius: 13, padding: "28px 24px", textAlign: "left", boxShadow: "0 4px 24px hsl(234 80% 20% / 0.18)" }}>
+              <div style={{ fontSize: 17, fontWeight: 700, color: C.fg, marginBottom: 8 }}>{card.title}</div>
+              <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.6, marginBottom: 20 }}>{card.body}</div>
               {card.href ? (
                 <Link href={card.href}>
                   <button data-testid={card.testId} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 700, padding: "10px 20px", borderRadius: 8, cursor: "pointer", ...card.btnStyle }}>
