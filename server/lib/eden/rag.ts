@@ -1565,7 +1565,8 @@ export async function* ragQuery(
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
   focusContext?: SessionFocusContext,
-  engagementSignals?: EngagementSignals
+  engagementSignals?: EngagementSignals,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const context = buildContext(assets);
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext, engagementSignals);
@@ -1587,7 +1588,7 @@ export async function* ragQuery(
     stream: true,
     temperature: 0.5,
     max_tokens: 900,
-  });
+  }, { signal });
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
@@ -1600,7 +1601,8 @@ export async function* directQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1616,7 +1618,7 @@ export async function* directQuery(
     stream: true,
     temperature: 0.7,
     max_tokens: 280,
-  });
+  }, { signal });
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
@@ -1631,7 +1633,8 @@ export async function* aggregationQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1656,7 +1659,7 @@ export async function* aggregationQuery(
     stream: true,
     temperature: 0.4,
     max_tokens: 300,
-  });
+  }, { signal });
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
@@ -1698,7 +1701,8 @@ export async function* compareQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1765,7 +1769,7 @@ After the table, write 3–4 sentences of direct professional opinion: which ass
     stream: true,
     temperature: 0.5,
     max_tokens: 1200,
-  });
+  }, { signal });
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
@@ -1796,6 +1800,7 @@ export async function* synthesisQuery(
   portfolioStats?: PortfolioStats,
   focusContext?: SessionFocusContext,
   priorSnapshot?: SynthesisSnapshot | null,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1863,7 +1868,7 @@ Be direct and specific. Name real patterns. This is a briefing, not a descriptio
     stream: true,
     temperature: 0.4,
     max_tokens: 1400,
-  });
+  }, { signal });
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
@@ -1882,7 +1887,8 @@ export async function* documentQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1922,7 +1928,7 @@ export async function* documentQuery(
     stream: true,
     temperature: 0.3,
     max_tokens: 1500,
-  });
+  }, { signal });
 
   for await (const chunk of stream) {
     const delta = chunk.choices[0]?.delta?.content;
@@ -1966,7 +1972,8 @@ export async function* conceptQuery(
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
   portfolioStats?: PortfolioStats,
-  focusContext?: SessionFocusContext
+  focusContext?: SessionFocusContext,
+  signal?: AbortSignal
 ): AsyncGenerator<string> {
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
@@ -1985,7 +1992,7 @@ export async function* conceptQuery(
     stream: true,
     temperature: 0.4,
     max_tokens: 500,
-  });
+  }, { signal });
 
   for await (const chunk of conceptStream) {
     const delta = chunk.choices[0]?.delta?.content;
