@@ -214,7 +214,31 @@
     { "id": "i44", "label": "informal patents — who owns the IP", "message": "who owns the IP on CRISPR-Cas9?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "patents" } },
     { "id": "i45", "label": "informal research — what does the science say", "message": "what does the science say about mRNA vaccines for cancer?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "harvard" } },
     { "id": "i46", "label": "stage shorthand — early stage", "message": "early stage antibody assets for autoimmune", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "modality": "Antibody", "indication": "autoimmune" } } },
-    { "id": "i47", "label": "institution shorthand — Hopkins", "message": "what does Hopkins have in neurology?", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "indication": "neurology" } } }
+    { "id": "i47", "label": "institution shorthand — Hopkins", "message": "what does Hopkins have in neurology?", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "indication": "neurology" } } },
+
+    { "id": "i48", "label": "BD language — in-license", "message": "we're looking to in-license something in the metabolic space", "hasPriorAssets": false, "expect": { "intent": "search" } },
+    { "id": "i49", "label": "BD language — scouting", "message": "scouting for CAR-T opportunities", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "modality": "CAR-T" } } },
+    { "id": "i50", "label": "BD language — complement our portfolio", "message": "something to complement our portfolio in rare disease", "hasPriorAssets": false, "expect": { "intent": "search" } },
+    { "id": "i51", "label": "BD language — fill a gap", "message": "what could fill a gap in our CNS pipeline?", "hasPriorAssets": false, "expect": { "intent": "search" } },
+    { "id": "i52", "label": "back_ref — licensing status", "message": "is it exclusive or non-exclusive?", "hasPriorAssets": true, "expect": { "intent": "back_ref" } },
+    { "id": "i53", "label": "back_ref — who do I contact", "message": "who do I contact about this one?", "hasPriorAssets": true, "expect": { "intent": "back_ref" } },
+    { "id": "i54", "label": "back_ref — clinical data question", "message": "is there clinical data on this one?", "hasPriorAssets": true, "expect": { "intent": "back_ref" } },
+    { "id": "i55", "label": "synthesis — what's my coverage", "message": "what's my coverage in oncology vs rare disease?", "hasPriorAssets": false, "expect": { "intent": "synthesis" } },
+    { "id": "i56", "label": "synthesis — am I too concentrated", "message": "am I too concentrated in gene therapy?", "hasPriorAssets": false, "expect": { "intent": "synthesis" } },
+    { "id": "i57", "label": "document — talking points", "message": "give me talking points on this asset for my BD team", "hasPriorAssets": true, "expect": { "intent": "document" } },
+    { "id": "i58", "label": "document — pitch", "message": "draft a pitch on why we should pursue this", "hasPriorAssets": true, "expect": { "intent": "document" } },
+    { "id": "i59", "label": "aggregation — market map", "message": "give me a market map of the CAR-T space", "hasPriorAssets": false, "expect": { "intent": "aggregation" } },
+    { "id": "i60", "label": "aggregation — how saturated", "message": "how saturated is the PD-1 space?", "hasPriorAssets": false, "expect": { "intent": "aggregation" } },
+    { "id": "i61", "label": "comparative — which to pursue", "message": "which of these should I pursue first?", "hasPriorAssets": true, "expect": { "intent": "comparative" } },
+    { "id": "i62", "label": "comparative — more de-risked", "message": "which is more de-risked?", "hasPriorAssets": true, "expect": { "intent": "comparative" } },
+    { "id": "i63", "label": "definitional — I'm not familiar", "message": "I'm not familiar with PROTAC — can you explain?", "hasPriorAssets": false, "expect": { "intent": "definitional" } },
+    { "id": "i64", "label": "clinicaltrials — who's in the clinic", "message": "who's in the clinic for NASH right now?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "clinicaltrials" } },
+    { "id": "i65", "label": "patents — FTO", "message": "what's the freedom to operate situation in base editing?", "hasPriorAssets": false, "expect": { "intent": "search", "liveSource": "patents" } },
+    { "id": "i66", "label": "research — evidence base", "message": "what's the evidence base for targeting this pathway?", "hasPriorAssets": true, "expect": { "intent": "search", "liveSource": "harvard" } },
+    { "id": "i67", "label": "indication shorthand — NSCLC", "message": "any antibody assets for NSCLC?", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "modality": "Antibody" } } },
+    { "id": "i68", "label": "indication shorthand — GBM", "message": "what's available for GBM?", "hasPriorAssets": false, "expect": { "intent": "search" } },
+    { "id": "i69", "label": "modality shorthand — mAb", "message": "any mAb assets for autoimmune?", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "indication": "autoimmune" } } },
+    { "id": "i70", "label": "stage shorthand — IND-ready", "message": "show me IND-ready gene therapy assets", "hasPriorAssets": false, "expect": { "intent": "search", "filters": { "modality": "Gene Therapy" } } }
   ],
 
   "response_expectations": [
