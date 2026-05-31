@@ -7,6 +7,11 @@ import { sql, desc, eq } from "drizzle-orm";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const EMBED_MODEL = "text-embedding-3-small";
 
+// When a fine-tuned model is ready, set EDEN_FINETUNE_MODEL_ID to deploy it.
+// The fine-tuned model replaces gpt-4o for all ragQuery calls.
+// Leave unset to use the base gpt-4o.
+export const EDEN_RAG_MODEL = process.env.EDEN_FINETUNE_MODEL_ID ?? "gpt-4o";
+
 // ── Embedding cache (Promise-based to eliminate concurrent duplicate calls) ──
 // Stores the in-flight or resolved Promise so two identical queries arriving
 // before the first resolves share one API call instead of making two.
@@ -1207,7 +1212,36 @@ live_source: ONLY non-null when user EXPLICITLY asks for live external data (not
 null for ALL general biotech/TTO searches, stage filters, indication searches, institution queries, comparisons
 
 Return exactly this shape:
-{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}`;
+{"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+EXAMPLES (these show the correct output for tricky cases):
+
+Message: "pediatric oncology"
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"pediatric oncology","institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "you're saying there's not a single asset focused on childhood cancer?"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"childhood cancer","institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "I'm building a company"
+hasPriorAssets: false
+→ {"intent":"conversational","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "I'm building a company focused on pediatric oncology"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"pediatric oncology","institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "tell me more about the second one"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":1,"live_source":null}
+
+Message: "tell me more about the second one"
+hasPriorAssets: false
+→ {"intent":"search","filters":{},"back_ref_position":null,"live_source":null}
+
+Message: "what's hot in GLP-1 right now"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"GLP-1","institution":null,"geography":null,"biology":null,"recency":"last90","trending":true},"back_ref_position":null,"live_source":null}`;
 
 export async function classifyIntent(
   message: string,
@@ -1605,7 +1639,7 @@ export async function* ragQuery(
   focusContext?: SessionFocusContext,
   engagementSignals?: EngagementSignals,
   signal?: AbortSignal,
-  model = "gpt-4o"
+  model = EDEN_RAG_MODEL
 ): AsyncGenerator<string> {
   const context = buildContext(assets);
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext, engagementSignals);
@@ -1617,7 +1651,7 @@ export async function* ragQuery(
       role: "user",
       content: assets.length > 0
         ? `Based on the following retrieved TTO assets, answer the question.\n\nRETRIEVED ASSETS:\n${context}\n\nQUESTION: ${question}`
-        : `NO ASSETS RETRIEVED: The database search returned no results for this query. Do NOT invent, fabricate, or suggest any specific asset names, institution names, or technology descriptions. Either ask a clarifying question to narrow the search, or explain that you couldn't find a match and offer an alternative angle.\n\nQUESTION: ${question}`,
+        : `NO EXACT MATCH: The vector search returned no assets for this specific query — the phrasing may be too narrow or use terminology the corpus doesn't index under.\n\nCRITICAL: Do NOT confirm that "nothing exists" in this area. The TTO corpus is large and indexes hundreds of institutions; a zero result means the query phrasing didn't match, not that the science doesn't exist. Do NOT invent or fabricate any specific asset names, institution names, or technology descriptions.\n\nInstead: (1) Acknowledge the search didn't surface an exact match, (2) Suggest 2-3 broader or adjacent terms the user should try — e.g. if they asked about "pediatric oncology" suggest trying "oncology", "leukemia", "neuroblastoma", or "childhood cancer"; (3) Note that TTO portfolios at major research institutions typically cover this space. End with a specific alternative search suggestion.\n\nQUESTION: ${question}`,
     },
   ];
 
