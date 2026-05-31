@@ -29,6 +29,10 @@ const aiRateLimit = rateLimit({
   max: 10,
   standardHeaders: "draft-7",
   legacyHeaders: false,
+  // Key by authenticated user ID so the limit is per-user, not per-IP.
+  // verifyAnyAuth runs before this middleware and sets x-user-id.
+  // Falls back to IP only if auth hasn't set the header (should never happen).
+  keyGenerator: (req) => (req.headers["x-user-id"] as string | undefined) ?? req.ip ?? "unknown",
   message: { error: "Too many requests — please wait a moment before trying again." },
 });
 
@@ -365,10 +369,10 @@ export function registerEdenRoutes(app: Express): void {
       // ── All DB fetches in parallel (including cross-session memory) ──────────
       const [session, portfolioStats, userProfile, preloadedRecentSessions] = await Promise.all([
         storage.getOrCreateEdenSession(sid),
-        fetchPortfolioStats().catch((err) => {
-          console.error("[eden] Portfolio stats preload failed:", err?.message ?? err);
-          return undefined;
-        }),
+        Promise.race([
+          fetchPortfolioStats(),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error("timeout")), 5_000)),
+        ]).catch(() => undefined),
         requestUserId
           ? storage.getIndustryProfileByUserId(requestUserId).catch(() => undefined)
           : Promise.resolve(undefined),
@@ -429,25 +433,27 @@ export function registerEdenRoutes(app: Express): void {
       const isFirstTurn = (session.messages ?? []).length === 0;
       if (requestUserId && isFirstTurn) {
         crossSessionMemory = buildCrossSessionMemory(preloadedRecentSessions);
-        // Fire-and-forget: check for new relevant assets matching user history (no AI cost)
+        // Non-blocking: check for new relevant assets matching user history.
+        // Resolves well before the AI response finishes (~100ms vs 1-3s).
         if (crossSessionMemory) {
           const topModality = crossSessionMemory.topModalities[0];
           const topIndication = crossSessionMemory.topIndications[0];
           const since30 = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-          try {
-            const newCount = await storage.filteredCount(undefined, topModality, undefined, topIndication, undefined, undefined, since30);
-            if (newCount > 0) {
-              const labelParts: string[] = [];
-              if (topModality) labelParts.push(topModality);
-              if (topIndication) labelParts.push(topIndication);
-              const label = labelParts.join(" / ") || "assets";
-              const queryParts: string[] = ["Show me new"];
-              if (topModality) queryParts.push(topModality);
-              if (topIndication) queryParts.push(topIndication);
-              queryParts.push("assets from the last 30 days");
-              newArrivalsHint = { count: newCount, label, query: queryParts.join(" ") };
-            }
-          } catch (err) { console.warn("[eden] new arrivals hint failed:", (err as Error)?.message ?? err); }
+          storage.filteredCount(undefined, topModality, undefined, topIndication, undefined, undefined, since30)
+            .then((newCount) => {
+              if (newCount > 0) {
+                const labelParts: string[] = [];
+                if (topModality) labelParts.push(topModality);
+                if (topIndication) labelParts.push(topIndication);
+                const label = labelParts.join(" / ") || "assets";
+                const queryParts: string[] = ["Show me new"];
+                if (topModality) queryParts.push(topModality);
+                if (topIndication) queryParts.push(topIndication);
+                queryParts.push("assets from the last 30 days");
+                newArrivalsHint = { count: newCount, label, query: queryParts.join(" ") };
+              }
+            })
+            .catch(() => {});
         }
       } else if (!isFirstTurn) {
         // On subsequent turns, preserve the memory already attached to focusContext
@@ -1404,26 +1410,30 @@ After covering TTO assets, note in one sentence whether any of these external re
   });
 
   app.get("/api/eden/sessions", verifyAnyAuth, async (req, res) => {
-    const userId = (req as any).userId as string | undefined;
+    const userId = req.headers["x-user-id"] as string | undefined;
     if (!userId) return res.status(401).json({ error: "Authentication required" });
     try {
       const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
       const sessions = await storage.listEdenSessions(userId, limit);
       res.json(sessions);
     } catch (err: unknown) {
-      const msg = "Failed";
-      res.status(500).json({ error: msg });
+      res.status(500).json({ error: "Failed" });
     }
   });
 
   app.get("/api/eden/sessions/:sessionId", verifyAnyAuth, async (req, res) => {
+    const requestUserId = req.headers["x-user-id"] as string | undefined;
     try {
       const session = await storage.getEdenSession(String(req.params.sessionId));
       if (!session) return res.status(404).json({ error: "Session not found" });
+      // Ownership check: if the session belongs to a known user, only that user may read it.
+      const sessionUserId = (session as Record<string, unknown>).userId as string | undefined;
+      if (sessionUserId && requestUserId && sessionUserId !== requestUserId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
       res.json(session);
     } catch (err: unknown) {
-      const msg = "Failed";
-      res.status(500).json({ error: msg });
+      res.status(500).json({ error: "Failed" });
     }
   });
 

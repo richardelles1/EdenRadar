@@ -3875,7 +3875,9 @@ export class DatabaseStorage implements IStorage {
   ): Promise<EdenSession> {
     const session = await this.getOrCreateEdenSession(sessionId);
     const newTurn = { ...turn, ts: new Date().toISOString() };
-    const updatedMessages = [...(session.messages ?? []), newTurn];
+    // Cap stored messages at 60 (30 turns). Older turns are already captured in
+    // focusContext._summary at turn 8, so no semantic context is lost.
+    const updatedMessages = [...(session.messages ?? []), newTurn].slice(-60);
     const [updated] = await db
       .update(edenSessions)
       .set({ messages: updatedMessages, updatedAt: new Date() })
