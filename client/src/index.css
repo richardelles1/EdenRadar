@@ -877,6 +877,76 @@
 .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1); }
 .reveal.is-visible { opacity: 1; transform: translateY(0); }
 
+/* ══════════════════════════════════════════════════════════
+   Market preview page — /market/preview
+   ══════════════════════════════════════════════════════════ */
+
+@keyframes mktAurora {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes mktFloat  { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+@keyframes mktFloatS { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+@keyframes mktMsgIn  { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes mktDotPulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.5)} }
+
+.market-aurora {
+  position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(-45deg, hsl(234 80% 82% / 0.72), hsl(36 30% 98%), hsl(234 70% 90% / 0.6), hsl(220 40% 94% / 0.5), hsl(36 30% 98%));
+  background-size: 400% 400%;
+  animation: mktAurora 13s ease infinite;
+}
+.market-hero-card-1 { animation: mktFloat  5s ease-in-out infinite; }
+.market-hero-card-2 { animation: mktFloatS 6s ease-in-out infinite 0.8s; }
+
+.market-msg { opacity: 0; animation: mktMsgIn 0.5s cubic-bezier(0.16,1,0.3,1) forwards; }
+.market-msg:nth-child(2) { animation-delay: 0.2s; }
+.market-msg:nth-child(3) { animation-delay: 0.4s; }
+.market-msg:nth-child(4) { animation-delay: 0.6s; }
+
+.market-score-bar { height: 100%; border-radius: 100px; background: hsl(234 80% 58%); width: 0; transition: width 1.3s cubic-bezier(0.16,1,0.3,1); }
+.market-score-bar.go { width: var(--mw, 0%); }
+.market-score-arc { stroke-dasharray: 326.73; stroke-dashoffset: 326.73; transition: stroke-dashoffset 1.9s cubic-bezier(0.16,1,0.3,1) 0.2s; }
+.market-score-arc.go { stroke-dashoffset: 29.41; }
+
+.mkt-reveal { opacity: 0; transform: translateY(28px); transition: opacity 0.9s cubic-bezier(0.16,1,0.3,1), transform 0.9s cubic-bezier(0.16,1,0.3,1); }
+.mkt-reveal.is-visible { opacity: 1; transform: translateY(0); }
+.mkt-reveal.d1 { transition-delay: 0.1s; }
+.mkt-reveal.d2 { transition-delay: 0.2s; }
+
+/* Layout grids with responsive overrides */
+.mkt-hero-grid {
+  display: grid; grid-template-columns: 1fr min(420px, 45%);
+  gap: clamp(32px, 5vw, 72px); align-items: center;
+}
+.mkt-section-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 80px; align-items: center;
+}
+.mkt-seller-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.mkt-steps-grid  { display: grid; grid-template-columns: repeat(4, 1fr); }
+.mkt-cta-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.mkt-deal-body   { display: grid; grid-template-columns: 1fr 1fr; }
+
+@media (max-width: 1024px) {
+  .mkt-hero-grid    { grid-template-columns: 1fr; }
+  .mkt-section-grid { grid-template-columns: 1fr; gap: 40px; }
+  .mkt-seller-grid  { grid-template-columns: 1fr 1fr; }
+  .mkt-steps-grid   { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .mkt-hero-grid    { padding: 56px 20px 48px !important; }
+  .mkt-seller-grid  { grid-template-columns: 1fr; }
+  .mkt-steps-grid   { grid-template-columns: 1fr; }
+  .mkt-cta-grid     { grid-template-columns: 1fr; }
+  .mkt-deal-body    { grid-template-columns: 1fr; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   Research page — /research marketing
+   ══════════════════════════════════════════════════════════ */
+
 @media (max-width: 640px) {
   .research-hero { padding: 56px 20px 48px; }
   .research-hero-ctas { flex-direction: column; align-items: stretch; }
