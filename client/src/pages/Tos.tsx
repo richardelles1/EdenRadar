@@ -1,8 +1,8 @@
-﻿import { Link } from "wouter";
+import { Link } from "wouter";
 import { Sprout, ArrowLeft } from "lucide-react";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
-const EFFECTIVE_DATE = "April 17, 2026";
+const EFFECTIVE_DATE = "May 31, 2026";
 const COMPANY = "EdenRadar, Inc.";
 const CONTACT_EMAIL = "legal@edenradar.com";
 const GOVERNING_LAW = "Delaware";
@@ -61,18 +61,19 @@ export default function Tos() {
               These Terms of Service ("Terms") form a binding agreement between you and {COMPANY} ("EdenRadar," "we," "us," or "our"). By accessing or using EdenRadar's platform, applications, or related services (collectively, the "Service"), you confirm that you have read, understood, and agree to these Terms and our Privacy Policy.
             </p>
             <p>
-              If you are using the Service on behalf of a company or other legal entity, you represent that you have authority to bind that entity to these Terms. If you do not have such authority, or if you do not agree with these Terms, you may not use the Service.
+              If you are using the Service on behalf of a company or other legal entity, you represent that you have authority to bind that entity to these Terms. In that case, "you" and "your" refer to that entity. If you do not have such authority, or if you do not agree with these Terms, you may not use the Service.
             </p>
           </Section>
 
           <Section title="2. Description of Service">
             <p>
-              EdenRadar is a biotech intelligence platform that helps industry buyers discover and evaluate licensable technology transfer office assets. The Service includes three portals:
+              EdenRadar is a biotech intelligence platform that helps industry buyers discover and evaluate licensable technology transfer office assets. The Service includes multiple portals:
             </p>
             <ul className="list-disc pl-5 space-y-1">
-              <li><strong className="text-foreground">EdenDiscovery</strong> - a free concept exploration feed for early-stage researchers.</li>
-              <li><strong className="text-foreground">EdenLab</strong> - a free research workspace for academic and institutional users.</li>
-              <li><strong className="text-foreground">EdenRadar</strong> - a paid intelligence and pipeline management tool for industry buyers.</li>
+              <li><strong className="text-foreground">EdenDiscovery</strong> — a free concept exploration feed for early-stage researchers.</li>
+              <li><strong className="text-foreground">EdenLab</strong> — a free research workspace for academic and institutional users.</li>
+              <li><strong className="text-foreground">EdenRadar</strong> — a paid intelligence and pipeline management tool for industry buyers.</li>
+              <li><strong className="text-foreground">EdenMarket</strong> — a deal marketplace connecting technology transfer offices with industry buyers.</li>
             </ul>
             <p>
               We reserve the right to modify, suspend, or discontinue any part of the Service at any time with reasonable notice where practicable.
@@ -88,7 +89,21 @@ export default function Tos() {
             </p>
           </Section>
 
-          <Section title="4. Permitted Use">
+          <Section title="4. Organization Accounts">
+            <p>
+              Team and Enterprise subscriptions create an organization account administered by one or more designated account owners. The following terms apply to organization accounts:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong className="text-foreground">Authority:</strong> By accepting these Terms on behalf of an organization, you represent that you have authority to bind the organization and that the organization agrees to these Terms.</li>
+              <li><strong className="text-foreground">Data ownership:</strong> All data created within the organization account — including saved assets, pipeline configurations, alerts, notes, and activity history — is owned by the subscribing organization, not by individual member accounts.</li>
+              <li><strong className="text-foreground">Administrator controls:</strong> Account owners and administrators may add or remove member access, view member activity within the platform, and manage billing and subscription settings.</li>
+              <li><strong className="text-foreground">Member departure:</strong> When a member's access is removed, their contributions (saved assets, notes, pipeline items) remain part of the organization account and are not deleted. The departing member loses access to the platform but retains no claim to the organization's data.</li>
+              <li><strong className="text-foreground">Account owner transfer:</strong> The account owner role may be transferred to another member by contacting us at {CONTACT_EMAIL}. We will process transfer requests within 5 business days upon verification.</li>
+              <li><strong className="text-foreground">Seat limits:</strong> Each subscription tier includes a defined number of user seats. Adding seats beyond your plan limit requires an upgrade. Unauthorized sharing of login credentials to circumvent seat limits is a material breach of these Terms.</li>
+            </ul>
+          </Section>
+
+          <Section title="5. Permitted Use">
             <p>
               You may use the Service only for lawful purposes and in accordance with these Terms. You agree not to:
             </p>
@@ -99,31 +114,38 @@ export default function Tos() {
               <li>Use the Service to transmit spam, malware, or other harmful content.</li>
               <li>Resell or sublicense access to the Service without written authorization from EdenRadar.</li>
               <li>Reverse engineer or attempt to extract the source code of the Service.</li>
+              <li>Use automated means to access the Service (including bots, scrapers, or crawlers) without prior written consent.</li>
             </ul>
           </Section>
 
-          <Section title="5. Subscriptions and Payments">
+          <Section title="6. Subscriptions and Payments">
             <p>
               EdenRadar is a paid service available on the following plans: Individual ($1,999/month), Team-5 ($8,999/month), Team-10 ($16,999/month), and Enterprise (custom pricing). Free tiers (EdenDiscovery, EdenLab) are provided at no charge and may be modified or discontinued at our discretion.
             </p>
             <p>
               Paid plans are billed in advance on a monthly or annual basis. All fees are non-refundable except as required by law or as expressly stated in your order. We may adjust pricing with at least 30 days' written notice to active subscribers.
             </p>
+            <p>
+              Enterprise customers may negotiate custom pricing, SLAs, and contract terms by contacting {CONTACT_EMAIL}.
+            </p>
           </Section>
 
-          <Section title="6. Intellectual Property">
+          <Section title="7. Intellectual Property">
             <p>
-              All content, features, and functionality of the Service - including but not limited to software, text, graphics, data compilations, AI-generated summaries, and scoring models - are the exclusive property of {COMPANY} or its licensors and are protected by applicable intellectual property laws.
+              All content, features, and functionality of the Service — including but not limited to software, text, graphics, data compilations, AI-generated summaries, and scoring models — are the exclusive property of {COMPANY} or its licensors and are protected by applicable intellectual property laws.
             </p>
             <p>
-              You retain ownership of any content you submit to the Service (such as research concepts or pipeline notes). By submitting content, you grant EdenRadar a non-exclusive, worldwide, royalty-free license to host, display, and process that content as necessary to provide the Service.
+              You retain ownership of any content you submit to the Service (such as research concepts, notes, or pipeline configurations). By submitting content, you grant EdenRadar a non-exclusive, worldwide, royalty-free license to host, display, and process that content as necessary to provide the Service.
             </p>
             <p>
               Technology transfer listings displayed on the Service are sourced from publicly available institutional disclosures. EdenRadar does not claim ownership of those underlying technologies and makes no representation regarding their licensing status or availability.
             </p>
+            <p>
+              <strong className="text-foreground">No AI training:</strong> We do not use the content you submit — including your search queries, saved assets, notes, or pipeline configurations — to train, fine-tune, or improve any AI or machine learning model, whether operated by EdenRadar or a third party.
+            </p>
           </Section>
 
-          <Section title="7. Data and Privacy">
+          <Section title="8. Data and Privacy">
             <p>
               Our collection and use of personal data is governed by our{" "}
               <Link href="/privacy">
@@ -132,11 +154,30 @@ export default function Tos() {
               , which is incorporated into these Terms by reference. By using the Service, you consent to the data practices described in the Privacy Policy.
             </p>
             <p>
-              We implement reasonable technical and organizational measures to protect your data. However, no method of transmission over the internet is completely secure, and we cannot guarantee absolute security.
+              Enterprise and Team customers may execute a Data Processing Agreement (DPA) with EdenRadar. Our standard DPA is available at{" "}
+              <Link href="/dpa">
+                <span className="text-emerald-600 hover:text-emerald-500 underline cursor-pointer">edenradar.com/dpa</span>
+              </Link>
+              . Custom DPAs can be requested by contacting {CONTACT_EMAIL}.
+            </p>
+            <p>
+              We implement reasonable technical and organizational measures to protect your data. Customer organization data is logically isolated — no organization can access another organization's data through any feature of the Service.
             </p>
           </Section>
 
-          <Section title="8. Third-Party Content and Links">
+          <Section title="9. Confidentiality">
+            <p>
+              Each party agrees to keep confidential any non-public information disclosed by the other party in connection with the Service that is designated as confidential or that should reasonably be understood to be confidential given the circumstances of disclosure.
+            </p>
+            <p>
+              EdenRadar treats your search queries, pipeline contents, and organizational usage patterns as your confidential information. We will not disclose this information to any third party except as described in our Privacy Policy or as required by law.
+            </p>
+            <p>
+              You agree to keep confidential any non-public information about EdenRadar's technology, pricing, or roadmap that we share with you in connection with evaluating or using the Service.
+            </p>
+          </Section>
+
+          <Section title="10. Third-Party Content and Links">
             <p>
               The Service may display content sourced from third-party institutions and databases. EdenRadar does not endorse or verify the accuracy of third-party content and is not responsible for errors or omissions in data sourced from external institutions.
             </p>
@@ -145,7 +186,7 @@ export default function Tos() {
             </p>
           </Section>
 
-          <Section title="9. Disclaimer of Warranties">
+          <Section title="11. Disclaimer of Warranties">
             <p>
               The Service is provided "as is" and "as available" without warranties of any kind, either express or implied, including but not limited to implied warranties of merchantability, fitness for a particular purpose, or non-infringement. EdenRadar does not warrant that the Service will be uninterrupted, error-free, or that any content is accurate, complete, or current.
             </p>
@@ -154,7 +195,7 @@ export default function Tos() {
             </p>
           </Section>
 
-          <Section title="10. Limitation of Liability">
+          <Section title="12. Limitation of Liability">
             <p>
               To the maximum extent permitted by law, {COMPANY} and its officers, directors, employees, and agents will not be liable for any indirect, incidental, special, consequential, or punitive damages, including loss of profits, data, or business opportunities, arising from your use of or inability to use the Service.
             </p>
@@ -163,22 +204,25 @@ export default function Tos() {
             </p>
           </Section>
 
-          <Section title="11. Indemnification">
+          <Section title="13. Indemnification">
             <p>
               You agree to indemnify and hold harmless {COMPANY} and its affiliates from any claims, losses, damages, liabilities, costs, and expenses (including reasonable attorneys' fees) arising from your use of the Service, your violation of these Terms, or your infringement of any third-party rights.
             </p>
           </Section>
 
-          <Section title="12. Termination">
+          <Section title="14. Termination">
             <p>
               Either party may terminate the agreement at any time. You may close your account from your account settings or by contacting us. We may suspend or terminate your access if you violate these Terms, fail to pay applicable fees, or if we discontinue the Service.
             </p>
             <p>
-              Upon termination, your right to access the Service ends immediately. Provisions that by their nature should survive termination (including IP ownership, limitation of liability, and dispute resolution) will remain in effect.
+              <strong className="text-foreground">Data export before termination:</strong> Prior to terminating a paid subscription, you may request a full export of your organization's data (saved assets, pipeline contents, notes, and alerts) by contacting {CONTACT_EMAIL}. We will fulfill export requests within 5 business days. Following subscription termination, your data will be retained for 90 days to allow for export, after which it will be permanently deleted.
+            </p>
+            <p>
+              Upon termination, your right to access the Service ends immediately. Provisions that by their nature should survive termination (including IP ownership, confidentiality, limitation of liability, and dispute resolution) will remain in effect.
             </p>
           </Section>
 
-          <Section title="13. Governing Law and Disputes">
+          <Section title="15. Governing Law and Disputes">
             <p>
               These Terms are governed by the laws of the State of {GOVERNING_LAW}, without regard to its conflict of law provisions. Any dispute arising from these Terms or your use of the Service will be resolved exclusively in the state or federal courts located in {GOVERNING_LAW}, and you consent to personal jurisdiction in those courts.
             </p>
@@ -187,13 +231,13 @@ export default function Tos() {
             </p>
           </Section>
 
-          <Section title="14. Changes to These Terms">
+          <Section title="16. Changes to These Terms">
             <p>
-              We may update these Terms from time to time. When we do, we will revise the effective date at the top of this page. For material changes, we will provide notice through the Service or by email. Your continued use of the Service after any changes constitutes acceptance of the updated Terms.
+              We may update these Terms from time to time. When we do, we will revise the effective date at the top of this page. For material changes, we will provide notice through the Service or by email at least 14 days before the changes take effect. Your continued use of the Service after any changes constitutes acceptance of the updated Terms.
             </p>
           </Section>
 
-          <Section title="15. Contact">
+          <Section title="17. Contact">
             <p>
               If you have questions about these Terms, please contact us at{" "}
               <a
