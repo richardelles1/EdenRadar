@@ -707,7 +707,7 @@ export default function Pricing() {
               Two ways to source your next deal
             </h1>
             <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
-              EdenRadar surfaces licensable signals from 350+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
+              Continuous intelligence across 350+ TTOs for BD teams that move first. A confidential marketplace for assets that never hit the open market. Free for researchers, always.
             </p>
             <Link href="/one-pager" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-pricing-one-pager">
               <FileText className="w-3.5 h-3.5" />
