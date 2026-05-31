@@ -876,3 +876,26 @@
 
 .reveal { opacity: 0; transform: translateY(22px); transition: opacity 0.8s cubic-bezier(0.16,1,0.3,1), transform 0.8s cubic-bezier(0.16,1,0.3,1); }
 .reveal.is-visible { opacity: 1; transform: translateY(0); }
+
+@media (max-width: 640px) {
+  .research-hero { padding: 56px 20px 48px; }
+  .research-hero-ctas { flex-direction: column; align-items: stretch; }
+  .btn-discovery-lg, .btn-lab-lg { justify-content: center; }
+
+  .research-pathway { padding: 48px 20px; }
+  .pathway-grid { grid-template-columns: 1fr 1fr; gap: 20px; }
+  .pathway-arrow { display: none; }
+  .step-desc { min-height: unset; }
+
+  .research-section { grid-template-columns: 1fr; gap: 32px; padding: 52px 20px; }
+  .research-section-flipped { direction: ltr; }
+  .discovery-visual-wrap, .lab-visual-wrap { padding: 16px; }
+  .mock-queue-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 180px; }
+
+  .research-loop { padding: 56px 20px; }
+  .loop-chain { flex-wrap: wrap; gap: 6px; }
+
+  .research-bottom-cta { padding: 56px 20px; }
+  .bottom-cta-h2 { font-size: 26px; }
+  .bottom-cta-ctas { flex-direction: column; align-items: stretch; }
+}

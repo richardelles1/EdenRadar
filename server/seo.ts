@@ -108,6 +108,20 @@ export const PUBLIC_PAGES: PublicPage[] = [
       "List deprioritized programs, TTO spin-outs, and non-core biopharma assets on EdenMarket. Confidential blind listings, NDA-gated deal rooms, success-fee pricing.",
     changefreq: "weekly",
   },
+  {
+    path: "/research",
+    title: "Research Tools for Scientists — EdenDiscovery & EdenLab | EdenRadar",
+    description:
+      "Free research tools for scientists and academic teams. EdenDiscovery scores early-stage hypotheses and connects ideas to industry. EdenLab structures projects, synthesises literature, and tracks grants.",
+    changefreq: "monthly",
+  },
+  {
+    path: "/demo",
+    title: "Request Early Access — EdenRadar",
+    description:
+      "Apply for early access to EdenRadar: AI-powered biotech asset discovery across 350+ technology transfer offices. Tell us about your BD team and we'll be in touch within 24 hours.",
+    changefreq: "monthly",
+  },
 ];
 
 function getBaseUrl(req: Request): string {
