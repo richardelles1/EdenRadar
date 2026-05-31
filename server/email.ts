@@ -350,7 +350,7 @@ export function sendTeamInviteEmail(
         Set Your Password
       </a>
       <p style="margin:16px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
-        This link expires in 24 hours. After setting your password you can sign in at
+        This link expires in 7 days. After setting your password you can sign in at
         <a href="${LOGIN_URL}" style="color:#059669;text-decoration:none;">edenradar.com</a> anytime.
       </p>`
     : `<a href="${LOGIN_URL}"

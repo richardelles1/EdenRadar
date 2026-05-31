@@ -707,7 +707,7 @@ export default function Pricing() {
               Two ways to source your next deal
             </h1>
             <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
-              EdenRadar surfaces licensable signals from 350+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
+              Continuous intelligence across 350+ TTOs for BD teams that move first. A confidential marketplace for assets that never hit the open market. Free for researchers, always.
             </p>
             <Link href="/one-pager" className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors" data-testid="link-pricing-one-pager">
               <FileText className="w-3.5 h-3.5" />
@@ -871,31 +871,33 @@ export default function Pricing() {
             {FREE_TIERS.map((tier) => (
               <div
                 key={tier.id}
-                className="flex items-start gap-5 py-5"
+                className="flex flex-col sm:flex-row sm:items-start gap-3 sm:gap-5 py-5"
                 data-testid={`pricing-card-${tier.id}`}
               >
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                  style={{ background: tier.colorDim }}
-                >
-                  <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2.5 mb-1.5">
-                    <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
-                    <span className="text-sm font-black" style={{ color: tier.color }}>Free</span>
-                    <span className="text-xs text-muted-foreground">{tier.tagline}</span>
+                <div className="flex items-start gap-3 sm:contents">
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                    style={{ background: tier.colorDim }}
+                  >
+                    <tier.icon className="w-4 h-4" style={{ color: tier.color }} />
                   </div>
-                  <div className="flex flex-wrap gap-x-5 gap-y-1">
-                    {tier.features.map((f) => (
-                      <div key={f} className="flex items-center gap-1.5">
-                        <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
-                        <span className="text-xs text-foreground">{f}</span>
-                      </div>
-                    ))}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2.5 mb-1.5 flex-wrap">
+                      <h3 className="font-bold text-foreground text-sm">{tier.name}</h3>
+                      <span className="text-sm font-black" style={{ color: tier.color }}>Free</span>
+                      <span className="text-xs text-muted-foreground">{tier.tagline}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-5 gap-y-1">
+                      {tier.features.map((f) => (
+                        <div key={f} className="flex items-center gap-1.5">
+                          <Check className="w-3 h-3 flex-shrink-0" style={{ color: tier.color }} />
+                          <span className="text-xs text-foreground">{f}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
-                <div className="flex-shrink-0 pt-0.5">
+                <div className="flex-shrink-0 sm:pt-0.5 pl-12 sm:pl-0">
                   <Link href="/login">
                     <Button
                       variant="outline"

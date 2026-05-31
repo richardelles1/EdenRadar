@@ -70,7 +70,7 @@ export async function handleGetTrendingAreas(
     ? await db
         .select({ therapyArea: convergenceSignals.therapyArea, score: convergenceSignals.score })
         .from(convergenceSignals)
-        .where(sql`therapy_area = ANY(${indications}::text[])`)
+        .where(sql`therapy_area = ANY(ARRAY[${sql.join(indications.map(v => sql`${v}`), sql`, `)}])`)
     : [];
 
   const signalByArea = new Map(signals.map((s) => [s.therapyArea, s.score]));

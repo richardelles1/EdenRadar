@@ -201,8 +201,7 @@ export default function Demo() {
 
           {/* ── LEFT: narrative over full-bleed intelligence background ─── */}
           <div
-            className="relative flex flex-col justify-center overflow-hidden"
-            style={{ minHeight: "calc(100vh - 56px)" }}
+            className="relative flex flex-col justify-center overflow-hidden min-h-[480px] lg:min-h-[calc(100vh-56px)]"
           >
             {/* Full-bleed intelligence screenshot */}
             <img
@@ -319,7 +318,6 @@ export default function Demo() {
             style={{
               background: "hsl(var(--card))",
               borderLeft: "1px solid hsl(var(--border))",
-              minHeight: "calc(100vh - 56px)",
             }}
           >
             <div className="w-full max-w-sm mx-auto lg:max-w-none">

@@ -13,6 +13,9 @@ export interface SchedulerStateRow {
   tierOnly: number | null;
   /** True when the scheduler is running a staleness-first scan. */
   stalenessFirst: boolean;
+  /** True when the current staleness-first scan was started by the scheduled cron (startAutoSweep).
+   * Persisted so a server crash mid-sweep still fires the completion email on next cycle end. */
+  autoSweepActive: boolean;
 }
 
 export interface ScraperHealthRow {
@@ -42,6 +45,7 @@ export async function ensureSchedulerStateSchema(): Promise<void> {
     await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS tier_only INTEGER NULL`);
     await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS staleness_first BOOLEAN NOT NULL DEFAULT FALSE`);
     await db.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_completed_cycle INTEGER NULL`);
+    await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS auto_sweep_active BOOLEAN NOT NULL DEFAULT FALSE`);
   } catch (err: any) {
     // Non-fatal — column may already exist or DB may lack ALTER privileges; proceed anyway.
     console.warn(`[scraperState] ensureSchedulerStateSchema: ${err?.message}`);
@@ -51,8 +55,8 @@ export async function ensureSchedulerStateSchema(): Promise<void> {
 export async function saveSchedulerState(state: SchedulerStateRow): Promise<void> {
   try {
     await db.execute(sql`
-      INSERT INTO scheduler_state (id, queue_index, cycle_count, cycle_started_at, completed_this_cycle, failed_this_cycle, last_cycle_completed_at, scheduler_running, tier_only, staleness_first, updated_at)
-      VALUES (1, ${state.queueIndex}, ${state.cycleCount}, ${state.cycleStartedAt}, ${state.completedThisCycle}, ${state.failedThisCycle}, ${state.lastCycleCompletedAt}, ${state.schedulerRunning}, ${state.tierOnly ?? null}, ${state.stalenessFirst}, NOW())
+      INSERT INTO scheduler_state (id, queue_index, cycle_count, cycle_started_at, completed_this_cycle, failed_this_cycle, last_cycle_completed_at, scheduler_running, tier_only, staleness_first, auto_sweep_active, updated_at)
+      VALUES (1, ${state.queueIndex}, ${state.cycleCount}, ${state.cycleStartedAt}, ${state.completedThisCycle}, ${state.failedThisCycle}, ${state.lastCycleCompletedAt}, ${state.schedulerRunning}, ${state.tierOnly ?? null}, ${state.stalenessFirst}, ${state.autoSweepActive}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         queue_index = EXCLUDED.queue_index,
         cycle_count = EXCLUDED.cycle_count,
@@ -63,6 +67,7 @@ export async function saveSchedulerState(state: SchedulerStateRow): Promise<void
         scheduler_running = EXCLUDED.scheduler_running,
         tier_only = EXCLUDED.tier_only,
         staleness_first = EXCLUDED.staleness_first,
+        auto_sweep_active = EXCLUDED.auto_sweep_active,
         updated_at = NOW()
     `);
   } catch (err: any) {
@@ -86,6 +91,7 @@ export async function loadSchedulerState(): Promise<SchedulerStateRow | null> {
       schedulerRunning: row.scheduler_running === true || row.scheduler_running === 't' || row.scheduler_running === 'true',
       tierOnly: row.tier_only != null ? Number(row.tier_only) : null,
       stalenessFirst: row.staleness_first === true || row.staleness_first === 't' || row.staleness_first === 'true',
+      autoSweepActive: row.auto_sweep_active === true || row.auto_sweep_active === 't' || row.auto_sweep_active === 'true',
     };
   } catch (err: any) {
     console.warn(`[scraperState] loadSchedulerState failed: ${err?.message}`);

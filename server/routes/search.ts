@@ -473,7 +473,7 @@ export function registerSearchRoutes(app: Express): void {
           const hydrationRows = await db.execute(sql`
             SELECT source_url, category_confidence, asset_class
             FROM ingested_assets
-            WHERE source_url = ANY(${allUrls}::text[])
+            WHERE source_url = ANY(ARRAY[${sql.join(allUrls.map(u => sql`${u}`), sql`, `)}])
               AND (category_confidence IS NOT NULL OR asset_class IS NOT NULL)
           `);
           const urlToMeta = new Map<string, { categoryConfidence: number | undefined; assetClass: string | null }>();

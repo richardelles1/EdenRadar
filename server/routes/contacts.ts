@@ -39,7 +39,7 @@ export function registerContactRoutes(app: Express): void {
       const result = await db.execute(sql`
         SELECT id, institution, name, title, email, phone, linkedin_url, tto_url, verified_at
         FROM tto_contacts
-        WHERE lower(institution) = ANY(${capped.map(i => i.toLowerCase())}::text[])
+        WHERE lower(institution) = ANY(ARRAY[${sql.join(capped.map(i => sql`${i.toLowerCase()}`), sql`, `)}])
         ORDER BY institution, CASE WHEN verified_at IS NOT NULL THEN 0 ELSE 1 END, name ASC
       `);
       const byInst: Record<string, unknown[]> = {};

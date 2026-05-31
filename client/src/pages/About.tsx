@@ -167,7 +167,7 @@ export default function About() {
         {/* Mission */}
         <section
           ref={missionRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16"
+          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28"
         >
           <div
             className="rounded-2xl p-8 sm:p-12 text-center relative overflow-hidden"
@@ -271,7 +271,7 @@ export default function About() {
         {/* Values */}
         <section
           ref={valuesRef}
-          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-16"
+          className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-24 sm:py-32"
         >
           <div className="text-center mb-12">
             <h2 className="text-3xl sm:text-4xl font-bold text-foreground">
@@ -309,7 +309,7 @@ export default function About() {
         />
 
         {/* Bottom CTA */}
-        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+        <section className="max-w-screen-xl mx-auto px-4 sm:px-6 py-24 sm:py-32">
           <div
             className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{

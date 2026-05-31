@@ -309,6 +309,7 @@ function buildStateSnapshot() {
     // order is in-memory only). The flag is persisted so the UI shows the correct mode
     // after restart and the cycle-complete handler fires the sweep report.
     stalenessFirst: stalenessFirstActive || dailySweepActive,
+    autoSweepActive,
   };
 }
 
@@ -467,6 +468,18 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
       tieredQueue = buildStalenessFirstQueue();
       queueIndex = 0;
       console.log(`[scheduler] Restored staleness-first scan after restart — rebuilding from scratch: ${tieredQueue.length} institutions (original position lost)`);
+      // If this was a cron-triggered auto-sweep, restore the flag so the completion
+      // email still fires when this cycle ends, even after a server crash mid-run.
+      if (saved.autoSweepActive) {
+        autoSweepActive = true;
+        autoSweepStats = {
+          startedAt: saved.cycleStartedAt ?? new Date(),
+          triggerLabel: "Scheduled (recovered)",
+          newAssetsByInstitution: new Map(),
+          failed: [],
+        };
+        console.log(`[scheduler] Restored autoSweepActive=true — completion email will fire when cycle ends`);
+      }
     } else {
       tieredQueue = buildTieredQueue();
       console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running (unclean shutdown — mode context cleared)" : "paused"}`);
