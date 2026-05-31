@@ -193,7 +193,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div
-      className="flex min-h-screen bg-background relative"
+      className="flex h-screen bg-background relative overflow-hidden"
       style={orgColor ? { "--org-accent": orgColor } as React.CSSProperties : {}}
     >
       <IndustrySidebar />
