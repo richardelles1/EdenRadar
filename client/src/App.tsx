@@ -61,6 +61,7 @@ import Tos from "@/pages/Tos";
 import Privacy from "@/pages/Privacy";
 import Pricing from "@/pages/Pricing";
 import Demo from "@/pages/Demo";
+import Status from "@/pages/Status";
 import ResearchPage from "@/pages/ResearchPage";
 import BillingSuccess from "@/pages/BillingSuccess";
 import IndustryConcepts from "@/pages/IndustryConcepts";
@@ -417,6 +418,7 @@ function Router() {
       <Route path="/privacy" component={Privacy} />
       <Route path="/pricing" component={Pricing} />
       <Route path="/demo" component={Demo} />
+      <Route path="/status" component={Status} />
       <Route path="/billing/success" component={BillingSuccess} />
 
       <Route path="/discovery">

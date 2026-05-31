@@ -89,6 +89,51 @@ const v1AssetSearchSchema = z.object({
 });
 
 export function registerMiscRoutes(app: Express): void {
+
+  // ── Public system status ───────────────────────────────────────────────
+  app.get("/api/status", async (_req, res) => {
+    const t0 = Date.now();
+
+    // DB latency + pipeline data — single query, uses the new partial indexes
+    const [dbResult, alertResult] = await Promise.allSettled([
+      (async () => {
+        const t = Date.now();
+        const row = await db.execute(sql`
+          SELECT
+            COUNT(*)::int                              AS total_assets,
+            MAX(first_seen_at)                         AS last_indexed_at,
+            COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '7 days')::int AS indexed_7d
+          FROM ingested_assets WHERE relevant = true
+        `);
+        return { latencyMs: Date.now() - t, ...(row.rows[0] as Record<string, unknown>) };
+      })(),
+      (async () => {
+        const row = await db.execute(sql`
+          SELECT MAX(sent_at) AS last_sent_at FROM alert_emails LIMIT 1
+        `).catch(() => ({ rows: [{}] }));
+        return row.rows[0] as Record<string, unknown>;
+      })(),
+    ]);
+
+    const dbMs = dbResult.status === "fulfilled" ? (dbResult.value.latencyMs as number) : null;
+    const totalAssets = dbResult.status === "fulfilled" ? (dbResult.value.total_assets as number) : null;
+    const lastIndexedAt = dbResult.status === "fulfilled" ? (dbResult.value.last_indexed_at as string | null) : null;
+    const indexed7d = dbResult.status === "fulfilled" ? (dbResult.value.indexed_7d as number) : null;
+    const lastAlertAt = alertResult.status === "fulfilled" ? (alertResult.value.last_sent_at as string | null) : null;
+
+    const openaiOk = !!process.env.OPENAI_API_KEY;
+
+    res.json({
+      status: "operational",
+      checkedAt: new Date().toISOString(),
+      responseMs: Date.now() - t0,
+      database: { status: dbResult.status === "fulfilled" ? "operational" : "degraded", latencyMs: dbMs },
+      pipeline: { status: "operational", totalAssets, lastIndexedAt, indexed7d },
+      alerts: { status: "operational", lastSentAt: lastAlertAt },
+      embedding: { status: openaiOk ? "operational" : "degraded" },
+    });
+  });
+
   // ── Unsubscribe helpers ────────────────────────────────────────────────
 
   async function handleUnsubscribe(token: string): Promise<{ ok: boolean; alreadyUnsubscribed?: boolean; error?: string }> {

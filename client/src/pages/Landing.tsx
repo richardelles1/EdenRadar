@@ -1195,6 +1195,11 @@ export default function Landing() {
                   </Link>
                 </li>
                 <li>
+                  <Link href="/status" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-status">
+                    System Status
+                  </Link>
+                </li>
+                <li>
                   <button
                     onClick={() => navigate("/login")}
                     className="text-xs text-foreground hover:text-primary transition-colors text-left"
