@@ -348,7 +348,22 @@ export function registerEdenRoutes(app: Express): void {
     try {
       let newArrivalsHint: { count: number; label: string; query: string } | undefined;
       const donePayload = () => ({ sessionId: sid, ...(newArrivalsHint ? { newArrivalsHint } : {}) });
-      const [session, portfolioStats, userProfile] = await Promise.all([
+
+      // ── Start embedding immediately — no session state needed ────────────────
+      const embeddingPromise = embedQuery(message.trim()).catch(() => null);
+
+      // ── Speculative broad search: fires as soon as embedding is ready ────────
+      // Used directly on the no-filter search path (most common), saving the full
+      // vector search latency that would otherwise sit behind classifyIntent.
+      const speculativeSearchPromise: Promise<import("../storage").RetrievedAsset[] | null> =
+        embeddingPromise.then((embedding) =>
+          embedding
+            ? storage.filteredSemanticSearch(embedding, undefined, undefined, undefined, undefined, undefined, 20, undefined, undefined, undefined, true).catch(() => null)
+            : Promise.resolve(null)
+        );
+
+      // ── All DB fetches in parallel (including cross-session memory) ──────────
+      const [session, portfolioStats, userProfile, preloadedRecentSessions] = await Promise.all([
         storage.getOrCreateEdenSession(sid),
         fetchPortfolioStats().catch((err) => {
           console.error("[eden] Portfolio stats preload failed:", err?.message ?? err);
@@ -357,6 +372,9 @@ export function registerEdenRoutes(app: Express): void {
         requestUserId
           ? storage.getIndustryProfileByUserId(requestUserId).catch(() => undefined)
           : Promise.resolve(undefined),
+        requestUserId
+          ? storage.getRecentSessionsForUser(requestUserId, 6).catch(() => [])
+          : Promise.resolve([]),
       ]);
 
       // Merge DB industry profile into UserContext so reranking + response generation
@@ -406,18 +424,11 @@ export function registerEdenRoutes(app: Express): void {
       // ── Seed in-memory focus from DB on first message of this server process ──
       seedSessionFocusFromDb(sid, session.focusContext);
 
-      // ── Cross-session memory: load history for known users on first turn ──
-      // Aggregates the last 6 sessions' focus contexts into a memory block that
-      // gets injected into the system prompt, giving Eden longitudinal context.
+      // ── Cross-session memory: built from pre-fetched sessions (no extra round-trip) ──
       let crossSessionMemory: CrossSessionMemory | null = null;
       const isFirstTurn = (session.messages ?? []).length === 0;
       if (requestUserId && isFirstTurn) {
-        try {
-          const recentSessions = await storage.getRecentSessionsForUser(requestUserId, 6);
-          crossSessionMemory = buildCrossSessionMemory(recentSessions);
-        } catch (e) {
-          console.warn("[eden] cross-session memory load failed:", (e as Error)?.message ?? e);
-        }
+        crossSessionMemory = buildCrossSessionMemory(preloadedRecentSessions);
         // Fire-and-forget: check for new relevant assets matching user history (no AI cost)
         if (crossSessionMemory) {
           const topModality = crossSessionMemory.topModalities[0];
@@ -504,20 +515,19 @@ export function registerEdenRoutes(app: Express): void {
         }
       }
 
-      // ── LLM Intent Router + Embedding (parallel) ──────────────────────────────────
-      // classifyIntent replaces the regex cascade. embedQuery runs speculatively
-      // so it's ready when we reach the search path — cost is negligible if discarded.
-      const [intentResult, precomputedEmbedding] = await Promise.allSettled([
+      // ── LLM Intent Router (embedding already in-flight since request start) ──────
+      // classifyIntent needs session state so runs here; embedding is already running.
+      const [intentResult, embeddingResult] = await Promise.allSettled([
         classifyIntent(message.trim(), priorIds.length > 0, focusContext),
-        embedQuery(message.trim()),
+        embeddingPromise,
       ]);
       const intentClass: IntentClassification = intentResult.status === "fulfilled"
         ? intentResult.value
         : isConversational(message.trim())
           ? { intent: "conversational", filters: {}, backRefPosition: null, liveSource: null }
           : { intent: "search", filters: {}, backRefPosition: null, liveSource: null };
-      const cachedEmbedding: number[] | null = precomputedEmbedding.status === "fulfilled"
-        ? precomputedEmbedding.value
+      const cachedEmbedding: number[] | null = embeddingResult.status === "fulfilled"
+        ? embeddingResult.value
         : null;
 
       _qIntent = intentClass.intent ?? "search";
@@ -936,7 +946,7 @@ export function registerEdenRoutes(app: Express): void {
           fullResponse += bridgeIntro;
 
           const bridgePrompt = `You just explained a concept. Now briefly introduce these ${relatedAssets.length} portfolio asset${relatedAssets.length > 1 ? "s" : ""} that relate to it. Lead with "There ${relatedAssets.length === 1 ? "is" : "are"} ${relatedAssets.length} related asset${relatedAssets.length > 1 ? "s" : ""} in the portfolio:" then list each with one concise hook sentence (standard **Asset Name** (Institution) — hook format). Keep it under 80 words total.`;
-          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
+          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal, "gpt-4o-mini")) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -1142,15 +1152,22 @@ export function registerEdenRoutes(app: Express): void {
 
       try {
         const queryEmbedding = cachedEmbedding ?? await embedQuery(message.trim());
-        const instAssets = institutionName
-          ? await storage.searchIngestedAssetsByInstitution(institutionName, 10).catch(() => [])
-          : [];
+
+        // Parallelize institution search with semantic retrieval.
+        // For the no-filter path, the speculative search (started at request open)
+        // is already done — just await the resolved promise, 0 extra wait.
+        const [instAssets, semanticResults] = await Promise.all([
+          institutionName
+            ? storage.searchIngestedAssetsByInstitution(institutionName, 10).catch(() => [])
+            : Promise.resolve([]),
+          filtersActive
+            ? storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined, true)
+            : speculativeSearchPromise.then((speculative) =>
+                speculative ?? storage.filteredSemanticSearch(queryEmbedding, undefined, undefined, undefined, undefined, undefined, 20, undefined, undefined, undefined, true)
+              ),
+        ]);
         institutionAssets = instAssets;
-        if (filtersActive) {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined, true);
-        } else {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, undefined, undefined, undefined, undefined, undefined, 20, undefined, undefined, undefined, true);
-        }
+        allSemantic = semanticResults ?? [];
       } catch (embedErr) {
         console.warn("[eden/rag] embedding failed, falling back to keyword search:", (embedErr as Error)?.message ?? embedErr);
         const kwResults = await storage.keywordSearchIngestedAssets(message.trim(), 15, {
@@ -1217,8 +1234,9 @@ After covering TTO assets, note in one sentence whether any of these external re
       const ragQuestion = (filters.trending
         ? `${message.trim()}\n\n[CONTEXT FOR EDEN: These assets were indexed in the last 90 days and are well-documented. After presenting them, add 2–3 sentences of genuine market context from your industry intelligence — what deal dynamics, funding trends, or mechanism enthusiasm makes this area compelling right now. Do NOT fabricate market data; only reference what you know from your training.]`
         : message.trim()) + crossRefNote;
+      const ragModel = retrieved.length === 0 ? "gpt-4o-mini" : "gpt-4o";
       let fullResponse = "";
-      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
+      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal, ragModel)) {
         fullResponse += token;
         sendEvent("token", { text: token });
       }

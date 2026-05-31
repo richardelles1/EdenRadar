@@ -7,6 +7,13 @@ import { sql, desc, eq } from "drizzle-orm";
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const EMBED_MODEL = "text-embedding-3-small";
 
+// ── Embedding LRU cache ──────────────────────────────────────────────────────
+// Embeddings are deterministic — same text always produces the same vector.
+// Caching eliminates repeat API calls for follow-up questions and re-sends.
+const _embedCache = new Map<string, { vec: number[]; ts: number }>();
+const EMBED_CACHE_TTL = 5 * 60 * 1000;
+const EMBED_CACHE_MAX = 200;
+
 export { type RetrievedAsset };
 
 export type UserContext = {
@@ -1255,11 +1262,23 @@ export async function classifyIntent(
 
 // ─────────────────────────────────────────────────────────────────────────
 export async function embedQuery(query: string): Promise<number[]> {
+  const key = query.slice(0, 300);
+  const cached = _embedCache.get(key);
+  if (cached && Date.now() - cached.ts < EMBED_CACHE_TTL) return cached.vec;
+
   const response = await client.embeddings.create({
     model: EMBED_MODEL,
     input: query.slice(0, 8000),
   });
-  return response.data[0].embedding;
+  const vec = response.data[0].embedding;
+
+  if (_embedCache.size >= EMBED_CACHE_MAX) {
+    // Evict oldest entry
+    const oldest = [..._embedCache.entries()].reduce((a, b) => a[1].ts < b[1].ts ? a : b)[0];
+    _embedCache.delete(oldest);
+  }
+  _embedCache.set(key, { vec, ts: Date.now() });
+  return vec;
 }
 
 function buildUserContextBlock(ctx: UserContext): string {
@@ -1566,7 +1585,8 @@ export async function* ragQuery(
   portfolioStats?: PortfolioStats,
   focusContext?: SessionFocusContext,
   engagementSignals?: EngagementSignals,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  model = "gpt-4o"
 ): AsyncGenerator<string> {
   const context = buildContext(assets);
   const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext, engagementSignals);
@@ -1583,11 +1603,11 @@ export async function* ragQuery(
   ];
 
   const stream = await client.chat.completions.create({
-    model: "gpt-4o",
+    model,
     messages,
     stream: true,
     temperature: 0.5,
-    max_tokens: 900,
+    max_tokens: model === "gpt-4o-mini" ? 500 : 900,
   }, { signal });
 
   for await (const chunk of stream) {
