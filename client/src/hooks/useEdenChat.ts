@@ -143,6 +143,22 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
 
     let gotFirstToken = false;
 
+    // Batch token updates per animation frame to avoid excessive re-renders
+    let pendingTokens = "";
+    let rafId: number | null = null;
+    const flushTokens = () => {
+      rafId = null;
+      if (!pendingTokens) return;
+      const text = pendingTokens;
+      pendingTokens = "";
+      setMessages((prev) => {
+        const upd = [...prev];
+        const last = upd[upd.length - 1];
+        if (last?.role === "assistant") upd[upd.length - 1] = { ...last, content: last.content + text };
+        return upd;
+      });
+    };
+
     try {
       const response = await fetch("/api/eden/chat", {
         method: "POST",
@@ -182,6 +198,8 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
           if (!dispatched) continue;
 
           if (dispatched.type === "context") {
+            flushTokens();
+            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
             const d = dispatched.data;
             if (d.sessionId) setSessionId(d.sessionId);
             setStreamingStage("ranking");
@@ -202,13 +220,11 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
               gotFirstToken = true;
               setStreamingStage("generating");
             }
-            setMessages((prev) => {
-              const upd = [...prev];
-              const last = upd[upd.length - 1];
-              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, content: last.content + d.text };
-              return upd;
-            });
+            pendingTokens += d.text;
+            if (rafId === null) rafId = requestAnimationFrame(flushTokens);
           } else if (dispatched.type === "action_offer") {
+            flushTokens();
+            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
             const d = dispatched.data;
             setMessages((prev) => {
               const upd = [...prev];
@@ -217,6 +233,8 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
               return upd;
             });
           } else if (dispatched.type === "done") {
+            flushTokens();
+            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
             const d = dispatched.data;
             if (d.sessionId) setSessionId(d.sessionId);
             setMessages((prev) => {
@@ -226,12 +244,16 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
               return upd;
             });
           } else if (dispatched.type === "error") {
+            flushTokens();
+            if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
             throw new Error(dispatched.data.message ?? "Chat error");
           }
         }
       }
 
-      // Finalize the last assistant turn in case `done` event was not received
+      // Flush any remaining buffered tokens and finalize
+      flushTokens();
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null; }
       setMessages((prev) => {
         const upd = [...prev];
         const last = upd[upd.length - 1];

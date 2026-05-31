@@ -12,6 +12,8 @@ import { getIndustryProfile } from "@/hooks/use-industry";
 import { useAuth } from "@/hooks/use-auth";
 import { getAuthHeaders } from "@/lib/queryClient";
 
+const LAST_SESSION_KEY = "eden-last-session-id";
+
 const SLASH_COMMANDS = [
   { cmd: "/thesis-match", desc: "Match assets to your deal criteria" },
   { cmd: "/compare", desc: "Compare institutions or asset classes" },
@@ -247,8 +249,28 @@ export default function IndustryEden() {
 
   const isFirstVisit = !sessionsData || sessionsData.length === 0;
 
+  // Persist active sessionId so navigation away and back restores the chat
+  useEffect(() => {
+    if (sessionId) {
+      try { sessionStorage.setItem(LAST_SESSION_KEY, sessionId); } catch {}
+    }
+  }, [sessionId]);
+
+  // Auto-restore the last session on mount (once sessionsData loads)
+  const [autoRestored, setAutoRestored] = useState(false);
+  useEffect(() => {
+    if (autoRestored || !sessionsData?.length || messages.length > 0 || sessionId) return;
+    setAutoRestored(true);
+    try {
+      const lastId = sessionStorage.getItem(LAST_SESSION_KEY);
+      const target = (lastId ? sessionsData.find((s) => s.sessionId === lastId) : null) ?? sessionsData[0];
+      if (target) loadSession(target);
+    } catch {}
+  }, [sessionsData, autoRestored, messages.length, sessionId]);
+
   function handleNewChat() {
     clearChat();
+    try { sessionStorage.removeItem(LAST_SESSION_KEY); } catch {}
     setExpandedCitations({});
     setMessageFeedback({});
   }
@@ -375,7 +397,7 @@ export default function IndustryEden() {
   }
 
   return (
-    <div className="min-h-full bg-background flex flex-col" data-testid="industry-eden-page">
+    <div className="h-full bg-background flex flex-col" data-testid="industry-eden-page">
       <style>{`
         @keyframes em-slide-user {
           from { opacity: 0; transform: translateX(20px) translateY(4px); }

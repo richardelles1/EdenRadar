@@ -44,7 +44,7 @@ export async function searchClinicalTrials(query: string, maxResults = 10): Prom
     });
 
     const url = `${BASE}?${params}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+    const res = await fetch(url, { signal: AbortSignal.timeout(11000) });
     if (!res.ok) throw new Error(`ClinicalTrials API error: ${res.status}`);
     const data = await res.json();
 

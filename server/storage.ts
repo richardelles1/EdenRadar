@@ -3669,9 +3669,12 @@ export class DatabaseStorage implements IStorage {
         if (tsvAvailable && tsqueryExpr && expansion.groups.some((g) => !g.negated)) {
           orClauses.push(sql`search_tsv @@ ${tsqueryExpr}`);
         }
-        // Exact-name clause carried over from #759 — never demoted.
-        if (normalizedQuery) {
-          orClauses.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`);
+        // Exact-name recall clause — use simple LIKE on LOWER(asset_name) so
+        // the GIN trigram index (ingested_assets_asset_name_trgm_idx) is used
+        // instead of forcing a full heap scan. The precise normalized form
+        // lives only in exactMatchExpr in the SELECT list (scored on ~100 rows).
+        if (trimmedQuery) {
+          orClauses.push(sql`LOWER(asset_name) LIKE ${`%${trimmedQuery.toLowerCase()}%`}`);
         }
         // Trigram fuzzy clause — `<%` (word_similarity, default threshold 0.6)
         // uses the GIN trgm index and catches single-character typos like

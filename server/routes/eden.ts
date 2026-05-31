@@ -327,6 +327,11 @@ export function registerEdenRoutes(app: Express): void {
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders();
 
+    // Hard timeout: abort the request if the AI hasn't finished in 50 s
+    const abortController = new AbortController();
+    const abortTimer = setTimeout(() => abortController.abort(), 50_000);
+    req.on("close", () => abortController.abort());
+
     // Analytics tracking — populated as the request progresses, flushed in finally.
     const _qStart = Date.now();
     let _qIntent = "search";
@@ -634,7 +639,7 @@ export function registerEdenRoutes(app: Express): void {
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
+        for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -658,7 +663,7 @@ export function registerEdenRoutes(app: Express): void {
         if (resolvedResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, resolvedCtx, portfolioStats, focusContext)) {
+          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -679,7 +684,7 @@ export function registerEdenRoutes(app: Express): void {
             : `Total relevant assets indexed in the portfolio: **${count.toLocaleString()}**`;
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, resolvedCtx, portfolioStats, focusContext)) {
+          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -864,7 +869,7 @@ export function registerEdenRoutes(app: Express): void {
             }));
             sendEvent("context", { sessionId: sid, assets: compareAssetPayload });
             let fullResponse = "";
-            for await (const token of compareQuery(message.trim(), fetchedForCompare, history, resolvedCtx, portfolioStats, focusContext)) {
+            for await (const token of compareQuery(message.trim(), fetchedForCompare, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
               fullResponse += token;
               sendEvent("token", { text: token });
             }
@@ -894,7 +899,7 @@ export function registerEdenRoutes(app: Express): void {
 
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
-        for await (const token of conceptQuery(message.trim(), history, resolvedCtx, portfolioStats, focusContext)) {
+        for await (const token of conceptQuery(message.trim(), history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -931,7 +936,7 @@ export function registerEdenRoutes(app: Express): void {
           fullResponse += bridgeIntro;
 
           const bridgePrompt = `You just explained a concept. Now briefly introduce these ${relatedAssets.length} portfolio asset${relatedAssets.length > 1 ? "s" : ""} that relate to it. Lead with "There ${relatedAssets.length === 1 ? "is" : "are"} ${relatedAssets.length} related asset${relatedAssets.length > 1 ? "s" : ""} in the portfolio:" then list each with one concise hook sentence (standard **Asset Name** (Institution) — hook format). Keep it under 80 words total.`;
-          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
+          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -1013,7 +1018,7 @@ export function registerEdenRoutes(app: Express): void {
           : `[CONTEXT: The user asked about ${pipelineLabel} but has no saved assets yet${namedPipeline ? ` in "${namedPipeline}"` : ""}. Inform them their pipeline is empty and suggest searching for assets to add.]\n\n${message.trim()}`;
 
         let fullResponse = "";
-        for await (const token of ragQuery(pipelineQuestion, pipelineAssets.slice(0, 15), history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
+        for await (const token of ragQuery(pipelineQuestion, pipelineAssets.slice(0, 15), history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1054,7 +1059,7 @@ export function registerEdenRoutes(app: Express): void {
 
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
-        for await (const token of synthesisQuery(message.trim(), synthAssets, history, resolvedCtx, portfolioStats, focusContext, synthPriorSnapshot)) {
+        for await (const token of synthesisQuery(message.trim(), synthAssets, history, resolvedCtx, portfolioStats, focusContext, synthPriorSnapshot, abortController.signal)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1105,7 +1110,7 @@ export function registerEdenRoutes(app: Express): void {
         const docPayload = [{ id: targetAsset.id, assetName: targetAsset.assetName, institution: targetAsset.institution, indication: targetAsset.indication ?? "unknown", modality: targetAsset.modality ?? "unknown", developmentStage: targetAsset.developmentStage, similarity: 1.0 }];
         sendEvent("context", { sessionId: sid, assets: docPayload });
         let fullResponse = "";
-        for await (const token of documentQuery(docType, targetAsset, history, resolvedCtx, portfolioStats, focusContext)) {
+        for await (const token of documentQuery(docType, targetAsset, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1119,7 +1124,7 @@ export function registerEdenRoutes(app: Express): void {
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
-        for await (const token of directQuery(message.trim(), history, resolvedCtx, portfolioStats, focusContext)) {
+        for await (const token of directQuery(message.trim(), history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1213,7 +1218,7 @@ After covering TTO assets, note in one sentence whether any of these external re
         ? `${message.trim()}\n\n[CONTEXT FOR EDEN: These assets were indexed in the last 90 days and are well-documented. After presenting them, add 2–3 sentences of genuine market context from your industry intelligence — what deal dynamics, funding trends, or mechanism enthusiasm makes this area compelling right now. Do NOT fabricate market data; only reference what you know from your training.]`
         : message.trim()) + crossRefNote;
       let fullResponse = "";
-      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals)) {
+      for await (const token of ragQuery(ragQuestion, retrieved, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
         fullResponse += token;
         sendEvent("token", { text: token });
       }
@@ -1226,10 +1231,24 @@ After covering TTO assets, note in one sentence whether any of these external re
       if (searchOffers.length > 0) sendEvent("action_offer", { offers: searchOffers });
       sendEvent("done", donePayload());
     } catch (err: unknown) {
-      const errMsg = "Chat failed";
+      const status = (err as { status?: number })?.status;
+      const msg = (err as Error)?.message ?? "";
+      const isAborted = abortController.signal.aborted;
+      const errMsg = isAborted
+        ? "Request timed out — please try again."
+        : status === 429
+        ? "Too many requests — please wait a moment and try again."
+        : status === 401 || status === 403
+        ? "AI service authentication error — please contact support."
+        : status != null && status >= 500
+        ? "AI service is temporarily unavailable — please try again in a moment."
+        : msg.toLowerCase().includes("timeout") || msg.toLowerCase().includes("econnreset")
+        ? "Connection timed out — please try again."
+        : "Something went wrong. Please try again.";
       console.error("[EDEN chat] Error:", err);
       sendEvent("error", { message: errMsg });
     } finally {
+      clearTimeout(abortTimer);
       res.end();
       db.insert(edenQueries).values({
         sessionId: sid,

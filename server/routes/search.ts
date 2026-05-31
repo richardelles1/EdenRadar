@@ -1400,7 +1400,7 @@ export function registerSearchRoutes(app: Express): void {
         .from(ingestedAssets)
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
-        db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE institution IS NOT NULL AND institution != ''`),
+        db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE relevant = true AND institution IS NOT NULL AND institution != ''`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM review_queue WHERE status = 'pending'`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE first_seen_at >= NOW() - INTERVAL '7 days'`),
       ]);
