@@ -100,6 +100,30 @@
       "expect": { "intent": "pipeline" }
     },
     {
+      "id": "i16b", "label": "create pipeline — should be search not pipeline",
+      "message": "create a gene therapy pipeline for me",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "modality": "Gene Therapy" } }
+    },
+    {
+      "id": "i16c", "label": "build pipeline — should be search not pipeline",
+      "message": "build me a pipeline of oncology assets",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "filters": { "indication": "oncology" } }
+    },
+    {
+      "id": "i16d", "label": "supporting research — should trigger harvard live source",
+      "message": "can you find supporting research on this?",
+      "hasPriorAssets": true,
+      "expect": { "intent": "search", "liveSource": "harvard" }
+    },
+    {
+      "id": "i16e", "label": "academic papers — should trigger harvard live source",
+      "message": "find me academic papers on CRISPR gene editing",
+      "hasPriorAssets": false,
+      "expect": { "intent": "search", "liveSource": "harvard" }
+    },
+    {
       "id": "i17", "label": "synthesis — portfolio review",
       "message": "analyze everything I have saved and give me a summary",
       "hasPriorAssets": false,

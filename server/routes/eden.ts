@@ -1029,9 +1029,16 @@ export function registerEdenRoutes(app: Express): void {
 
         sendEvent("context", { sessionId: sid, assets: pipelineAssetPayload });
 
+        const isCreateIntent = /\b(create|build|start|make|set up|setup)\b/i.test(message.trim());
+
+        // If user wants to CREATE a pipeline and has nothing saved, fall through to search
+        // so EDEN finds assets they can save — rather than dead-ending with "pipeline is empty"
+        if (pipelineAssets.length === 0 && isCreateIntent) {
+          // Fall through to standard RAG search path below
+        } else {
         const pipelineQuestion = pipelineAssets.length > 0
           ? `[CONTEXT: These are the assets the user has saved in ${pipelineLabel}. They are NOT search results — they are assets this user has already bookmarked. Answer the question in the context of their saved portfolio.]\n\n${message.trim()}`
-          : `[CONTEXT: The user asked about ${pipelineLabel} but has no saved assets yet${namedPipeline ? ` in "${namedPipeline}"` : ""}. Inform them their pipeline is empty and suggest searching for assets to add.]\n\n${message.trim()}`;
+          : `[CONTEXT: The user asked about ${pipelineLabel} but has no saved assets yet${namedPipeline ? ` in "${namedPipeline}"` : ""}. Explain that their pipeline is built by searching for assets and clicking Save. Offer to search for relevant assets right now based on their therapeutic focus.]\n\n${message.trim()}`;
 
         let fullResponse = "";
         for await (const token of ragQuery(pipelineQuestion, pipelineAssets.slice(0, 15), history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
@@ -1045,8 +1052,9 @@ export function registerEdenRoutes(app: Express): void {
         });
         sendEvent("done", donePayload());
         return;
+        } // end else (non-create pipeline)
       }
-      // If pipeline intent but no user ID, fall through to standard RAG search
+      // If pipeline intent but no user ID, or create-pipeline with empty list, fall through to standard RAG search
 
       // ── Path 5.5: Pipeline synthesis ─────────────────────────────────────────
       if (intentClass.intent === "synthesis" && requestUserId) {

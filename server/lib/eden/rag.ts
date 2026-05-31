@@ -1188,7 +1188,7 @@ INTENTS:
 - back_ref: refers to a previously shown asset by position/anaphora ("the second one", "tell me more about it", "that one") — ONLY valid when hasPriorAssets=true
 - comparative: wants head-to-head comparison ("compare", "vs", "which is better")
 - definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
-- pipeline: user asks about their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio")
+- pipeline: user asks to VIEW their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio") — IMPORTANT: "create a pipeline", "build a pipeline", "start a pipeline" are NOT pipeline intent — they are search intent, because the user wants to find assets to populate a new pipeline
 - synthesis: user wants a cross-cutting analysis of their entire saved pipeline ("analyze my pipeline", "portfolio review", "summarize what I have", "what do I have in evaluation", "give me an overview", "what are my top assets", "pipeline assessment")
 - document: user wants a structured deliverable OR is revising one ("draft a diligence checklist", "generate a memo", "write a term sheet outline", "create a brief for", "give me a checklist", "write up a summary for") — when hasRecentDocument is present, also classify as document: "make it shorter", "focus on X section", "revise the", "expand", "adjust the tone", "add more detail"
 - conversational: greeting, thanks, out-of-scope chat with no biotech search intent
@@ -1208,7 +1208,7 @@ back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
 live_source: ONLY non-null when user EXPLICITLY asks for live external data (not general TTO search). Null in all other cases.
 - "clinicaltrials": user explicitly asks about currently enrolling trials, trial status, trial recruitment, open clinical trial search (NOT phase-filtered TTO asset queries)
 - "patents": user explicitly asks about patent landscape, IP holders, patent search, who holds patents in a space
-- "harvard": user explicitly asks for Harvard research datasets or Harvard Library catalog resources
+- "harvard": user asks for supporting research, academic papers, scientific literature, published studies, research evidence, or background science on a topic — e.g. "find supporting research", "show me papers on", "what does the literature say", "academic evidence", "scientific publications", "research backing"
 null for ALL general biotech/TTO searches, stage filters, indication searches, institution queries, comparisons
 
 Return exactly this shape:
@@ -1246,7 +1246,28 @@ hasPriorAssets: false
 
 Message: "what's hot in GLP-1 right now"
 hasPriorAssets: false
-→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"GLP-1","institution":null,"geography":null,"biology":null,"recency":"last90","trending":true},"back_ref_position":null,"live_source":null}`;
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"GLP-1","institution":null,"geography":null,"biology":null,"recency":"last90","trending":true},"back_ref_position":null,"live_source":null}
+
+Message: "create a gene therapy pipeline for me"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":"Gene Therapy","stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+Note: "create/build a pipeline" = find assets to populate one = search intent, NOT pipeline intent
+
+Message: "build me a pipeline of oncology assets"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"oncology","institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "can you find supporting research on this?"
+hasPriorAssets: true
+→ {"intent":"search","filters":{},"back_ref_position":null,"live_source":"harvard"}
+
+Message: "find me academic papers on CRISPR gene editing"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":"Gene Editing"},"back_ref_position":null,"live_source":"harvard"}
+
+Message: "what does the scientific literature say about CAR-T for leukemia?"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":"CAR-T","indication":"leukemia"},"back_ref_position":null,"live_source":"harvard"}`;
 
 export async function classifyIntent(
   message: string,
