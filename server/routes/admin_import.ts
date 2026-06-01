@@ -318,6 +318,8 @@ If multiple assets appear, return each as a separate array item.`;
         innovationClaim: a.innovationClaim && a.innovationClaim !== "unknown" ? a.innovationClaim : null,
         mechanismOfAction: a.mechanismOfAction && a.mechanismOfAction !== "unknown" ? a.mechanismOfAction : null,
         unmetNeed: a.unmetNeed || null,
+        // Auto-infer ipType from patentStatus — all patent variants map to "patent"
+        ipType: ["patented", "patent pending", "provisional"].includes(a.patentStatus) ? "patent" : null,
         relevant: true,
         runId: run.id,
       }));
@@ -330,12 +332,15 @@ If multiple assets appear, return each as a separate array item.`;
 
       if (newAssets.length > 0) {
         const listingMap = new Map(listings.map((l) => [l.fingerprint, l]));
-        const classifyInputs = newAssets.map((a) => ({
-          id: a.id,
-          title: a.assetName,
-          description: listingMap.get(makeFingerprint(a.assetName, institution))?.summary ?? a.assetName,
-          abstract: undefined as string | undefined,
-        }));
+        const classifyInputs = newAssets.map((a) => {
+          const listing = listingMap.get(makeFingerprint(a.assetName, institution));
+          return {
+            id: a.id,
+            title: a.assetName,
+            description: listing?.summary ?? a.assetName,
+            abstract: listing?.abstract ?? undefined,
+          };
+        });
 
         // Re-classify to fill any remaining unknown fields; preserve values already set from parse step
         const newAssetById = new Map(newAssets.map((a) => [a.id, a]));
@@ -348,6 +353,10 @@ If multiple assets appear, return each as a separate array item.`;
             const finalModality = (listing?.modality && listing.modality !== "unknown") ? listing.modality : (classification.modality ?? "unknown");
             const finalIndication = (listing?.indication && listing.indication !== "unknown") ? listing.indication : (classification.indication ?? "unknown");
             const finalStage = (listing?.developmentStage && listing.developmentStage !== "unknown") ? listing.developmentStage : classification.developmentStage;
+            const finalCategories = (listing?.categories && listing.categories.length > 0) ? listing.categories : (classification.categories ?? null);
+            const finalInnovationClaim = (listing?.innovationClaim) ? listing.innovationClaim : (classification.innovationClaim ?? null);
+            const finalMoA = (listing?.mechanismOfAction) ? listing.mechanismOfAction : (classification.mechanismOfAction ?? null);
+            // Score must use the same resolved values that will be written to DB
             const score = computeCompletenessScore({
               assetClass: classification.assetClass,
               deviceAttributes: classification.deviceAttributes,
@@ -355,17 +364,15 @@ If multiple assets appear, return each as a separate array item.`;
               modality: finalModality,
               indication: finalIndication,
               developmentStage: finalStage,
-              categories: classification.categories,
-              innovationClaim: classification.innovationClaim,
-              mechanismOfAction: classification.mechanismOfAction,
+              categories: finalCategories,
+              innovationClaim: finalInnovationClaim,
+              mechanismOfAction: finalMoA,
               summary: listing?.summary ?? null,
               abstract: listing?.abstract ?? null,
               inventors: listing?.inventors ?? null,
               patentStatus: listing?.patentStatus ?? null,
+              sourceType: "tech_transfer",
             });
-            const finalCategories = (listing?.categories && listing.categories.length > 0) ? listing.categories : (classification.categories ?? null);
-            const finalInnovationClaim = (listing?.innovationClaim) ? listing.innovationClaim : (classification.innovationClaim ?? null);
-            const finalMoA = (listing?.mechanismOfAction) ? listing.mechanismOfAction : (classification.mechanismOfAction ?? null);
             await db
               .update(ingestedAssets)
               .set({
