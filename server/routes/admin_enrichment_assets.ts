@@ -247,6 +247,19 @@ export function registerAssetRoutes(app: Express): void {
     }
   });
 
+  // Selective cap reset: re-enqueues capped assets that now have rich content (>=300 chars)
+  // and still have >=2 unknown primary fields. Resets attempts to 2 (one fresh chance).
+  app.post("/api/admin/enrichment/mini-cap-reset", async (req, res) => {
+    try {
+      const { dryRun } = z.object({ dryRun: z.boolean().default(false) }).parse(req.body ?? {});
+      const result = await storage.resetMiniEnrichCapSelective(dryRun);
+      console.log(`[enrichment] mini-cap-reset: eligible=${result.eligible} reset=${result.reset} dryRun=${dryRun}`);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: "Cap reset failed" });
+    }
+  });
+
   // --- Dataset Quality Analytics (relevant=true only) ---
 
   app.get("/api/admin/dataset-quality", async (req, res) => {

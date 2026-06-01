@@ -261,6 +261,7 @@ export interface IStorage {
   getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number; exhaustedCount: number; backfillCount: number }>;
   incrementMiniEnrichAttempts(assetId: number): Promise<void>;
   backfillMiniEnrichAttempts(): Promise<number>;
+  resetMiniEnrichCapSelective(dryRun?: boolean): Promise<{ eligible: number; reset: number }>;
 
   createEnrichmentJob(total: number, filters?: Record<string, string>, completenessBeforeRun?: number | null): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total" | "completenessBeforeRun" | "completenessAfterRun" | "tokenCostUsd">>): Promise<void>;
@@ -2793,6 +2794,32 @@ export class DatabaseStorage implements IStorage {
         )
     `);
     return (result as any).rowCount ?? 0;
+  }
+
+  async resetMiniEnrichCapSelective(dryRun = false): Promise<{ eligible: number; reset: number }> {
+    const CONTENT_THRESHOLD = 300;
+    const UNKNOWN_GATE = 2;
+    const unknownExpr = sql`
+      (CASE WHEN COALESCE(target,'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+      (CASE WHEN COALESCE(modality,'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+      (CASE WHEN COALESCE(indication,'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+      (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+    `;
+    const baseWhere = sql`
+      relevant = true
+      AND (data_sparse IS NULL OR data_sparse = false)
+      AND COALESCE(mini_enrich_attempts, 0) >= 3
+      AND char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= ${CONTENT_THRESHOLD}
+      AND (${unknownExpr}) >= ${UNKNOWN_GATE}
+    `;
+    const [countRow] = await db.execute<{ n: string }>(sql`SELECT COUNT(*)::text AS n FROM ingested_assets WHERE ${baseWhere}`);
+    const eligible = parseInt((countRow as any)?.n ?? "0", 10);
+    if (dryRun || eligible === 0) return { eligible, reset: 0 };
+    const result = await db.execute(sql`
+      UPDATE ingested_assets SET mini_enrich_attempts = 2 WHERE ${baseWhere}
+    `);
+    const reset = (result as any).rowCount ?? 0;
+    return { eligible, reset };
   }
 
   async flagDataSparse(): Promise<number> {
