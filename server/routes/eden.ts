@@ -8,7 +8,7 @@ import { verifyAnyAuth } from "../lib/supabaseAuth";
 import {
   embedQuery, ragQuery, directQuery, aggregationQuery, isConversational,
   resolveAggregationQuery, fetchPortfolioStats, hasMeaningfulFilters,
-  getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName,
+  getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectUSSubRegionRx, detectInstitutionName,
   detectAllInstitutionNames, rerankAssets, persistSessionFocus, seedSessionFocusFromDb,
   conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage,
   isComparativeQuery, compareQuery, summarizeSession, classifyIntent,
@@ -573,7 +573,10 @@ export function registerEdenRoutes(app: Express): void {
       }
 
       const filtersActive = hasMeaningfulFilters(filters);
-      const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
+      // Sub-region detection takes priority: "West Coast" / "California" / "Boston" etc.
+      // produce a specific institution regex that overrides the broad GEO_INSTITUTION_REGEX["us"].
+      const subRegionRx = detectUSSubRegionRx(message.trim());
+      const geoRx: string | undefined = subRegionRx ?? (filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined);
 
       // ── Live external source fork ──────────────────────────────────────────────
       // Fires in parallel with TTO corpus search when classifyIntent returns a

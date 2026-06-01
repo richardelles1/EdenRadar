@@ -283,6 +283,26 @@ const GEO_DETECT: Record<string, GeoKey> = {
   "u.s.-based": "us",
   "us-based": "us",
   "domestic": "us",
+  // US states and regions — all map to "us" so the US institution regex applies;
+  // detectUSSubRegionRx() then narrows to the specific sub-region.
+  "west coast": "us",
+  "west-coast": "us",
+  "east coast": "us",
+  "east-coast": "us",
+  "new england": "us",
+  " california": "us",
+  "california ": "us",
+  "bay area": "us",
+  "silicon valley": "us",
+  "pacific northwest": "us",
+  " boston ": "us",
+  " seattle ": "us",
+  " chicago ": "us",
+  " texas ": "us",
+  "new york": "us",
+  " midwest ": "us",
+  " southeast ": "us",
+  " northeast ": "us",
   "european": "eu",
   " eu ": "eu",
   "europe ": "eu",
@@ -296,6 +316,44 @@ const GEO_DETECT: Record<string, GeoKey> = {
   "chinese": "asia",
   "korean": "asia",
 };
+
+// US sub-region patterns → specific institution regex strings.
+// Used to override the broad GEO_INSTITUTION_REGEX["us"] with a geographically
+// precise set when the user names a US state, coast, or city.
+const US_SUBREGION_PATTERNS: Array<{ re: RegExp; rx: string }> = [
+  {
+    re: /\bwest\s*coast\b|\bcalifornia\b|\bbay\s+area\b|\bsilicon\s+valley\b|\bpacific\s+northwest\b|\bseattle\b|\bportland\b/i,
+    rx: "UCLA|UCSF|Stanford|UC Berkeley|UC San Diego|UC Davis|UC Irvine|UC Santa Barbara|UC Santa Cruz|Caltech|Salk|Scripps|USC|Oregon Health|University of Washington|Fred Hutch|Buck Institute|Gladstone|Lawrence Berkeley|UC Riverside|UC Merced",
+  },
+  {
+    re: /\beast\s*coast\b|\bnew\s+england\b|\bnortheast\b|\bboston\b/i,
+    rx: "Harvard|MIT|Boston University|Tufts|Brown|Yale|Columbia|NYU|Cornell|Princeton|Penn|Weill Cornell|Rockefeller|Dana-Farber|Mass General|Brigham|Broad Institute|Cold Spring Harbor",
+  },
+  {
+    re: /\bnew\s+york\b|\bnyc\b/i,
+    rx: "Columbia|NYU|Weill Cornell|Rockefeller|Memorial Sloan|Icahn|Albert Einstein|Cold Spring Harbor",
+  },
+  {
+    re: /\bmidwest\b|\bchicago\b|\bohio\b|\bminnesota\b|\bwisconsin\b/i,
+    rx: "University of Michigan|Michigan State|Ohio State|Northwestern|University of Chicago|Minnesota|Wisconsin|Purdue|Indiana University|Washington University|Mayo Clinic|Cleveland Clinic",
+  },
+  {
+    re: /\bsoutheast\b|\batlanta\b|\bflorida\b|\bcarolina\b/i,
+    rx: "Duke|UNC|Vanderbilt|Emory|University of Florida|Georgia Tech|UAB|Wake Forest|MD Anderson",
+  },
+  {
+    re: /\btexas\b|\bhouston\b|\bdallas\b|\baustin\b/i,
+    rx: "MD Anderson|Texas A|UT Austin|Baylor|UT Southwestern|Rice University",
+  },
+];
+
+/** Returns a specific institution regex if the text names a US sub-region; undefined otherwise. */
+export function detectUSSubRegionRx(text: string): string | undefined {
+  for (const { re, rx } of US_SUBREGION_PATTERNS) {
+    if (re.test(text)) return rx;
+  }
+  return undefined;
+}
 
 export const GEO_INSTITUTION_REGEX: Record<GeoKey, string> = {
   us: "Stanford|MIT|Harvard|Yale|Princeton|Columbia|UCLA|UCSF|Duke|Cornell|Michigan|Washington University|Johns Hopkins|Vanderbilt|Emory|NYU|Northwestern|Penn State|UNC|Pittsburgh|Mayo|NIH|MD Anderson|Memorial Sloan|Carnegie Mellon|Georgia Tech|Purdue|Minnesota|Colorado|Florida|Illinois|USC|Rockefeller|Salk|Scripps|Caltech|UC Berkeley|UC San|WUSTL|Baylor|Tufts|Brown|Dartmouth|Georgetown|Cincinnati|Utah|Arizona|Nebraska|Virginia|UC Davis|UC Irvine|Case Western|Icahn|Sinai|Weill Cornell|Wake Forest|Texas A|Notre Dame|Rice University|Tulane|Oregon Health",
@@ -1251,7 +1309,7 @@ FILTER EXTRACTION (null if not mentioned):
 - indication: free-text disease/area. Shorthands: "cancer"→oncology, "Alzheimer's"/"Alzheimer"→alzheimer, "Parkinson's"→parkinson, "ALS"/"Lou Gehrig's"→ALS, "MS"→multiple sclerosis, "IBD"→inflammatory bowel disease, "RA"→rheumatoid arthritis, "lupus"→lupus/SLE, "NASH"/"NAFLD"→metabolic liver disease, "T2D"→type 2 diabetes, "CVD"→cardiovascular disease, "GBM"→glioblastoma, "NSCLC"→non-small cell lung cancer, "HCC"→hepatocellular carcinoma, "CLL"/"NHL"→lymphoma/leukemia
 - institution: university or TTO name if mentioned. Shorthands: "Hopkins"→Johns Hopkins, "Mass General"/"MGH"→Massachusetts General Hospital, "UCSF"→University of California San Francisco, "Sloan"/"MSKCC"→Memorial Sloan Kettering, "Dana-Farber"→Dana-Farber Cancer Institute, "Broad"→Broad Institute, "Salk"→Salk Institute, "Scripps"→Scripps Research, "Baylor"→Baylor College of Medicine, "Mayo"→Mayo Clinic
 - modality shorthands: "RNA"→RNA Therapeutics, "biologics"→Protein/Biologics, "bi-specific"/"bispecific"→Bispecific Antibody, "CART"/"CAR T"→CAR-T, "base editing"/"prime editing"→Gene Editing, "naked antibody"→Antibody, "mAb"→Antibody, "ASO"→Antisense, "LNP"→mRNA (likely delivery), "viral vector"→Gene Therapy
-- geography: us | eu | uk | asia — only if a region or country is explicitly mentioned
+- geography: us | eu | uk | asia — set when a region, country, US state, or US coast is mentioned. US states and coasts (California, West Coast, East Coast, New England, Texas, Boston, New York, Midwest, Pacific Northwest, Bay Area, etc.) → "us". Do NOT extract a state or coast as institution — use geography:"us" instead.
 - biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation", "checkpoint inhibition", "gene silencing")
 - recency: "last30" (new, recent, last month), "last90" (last quarter, last 3 months), "last180" (last 6 months), "lastyear" (this year, last year)
 - trending: true when user asks about "hot", "rising", "trending", "getting attention", "exciting right now", "what's interesting lately", "what's moving", "what's gaining momentum"
@@ -1296,6 +1354,35 @@ Note: asking about IP/patents for a specific already-shown asset is back_ref, NO
 Message: "tell me more about the second one"
 hasPriorAssets: false
 → {"intent":"search","filters":{},"back_ref_position":null,"live_source":null}
+
+Message: "what was new?"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last30","trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "what's been added recently"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last30","trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "show me recent additions"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last30","trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "what's new in oncology?"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"oncology","institution":null,"geography":null,"biology":null,"recency":"last30","trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "oncology assets on the West Coast"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"oncology","institution":null,"geography":"us","biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "show me California institutions"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":"us","biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "try California"
+hasPriorAssets: true
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":"us","biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+Note: US states and coasts (California, West Coast, East Coast, New England, Texas, etc.) map to geography:"us" — NOT to institution
 
 Message: "what's hot in GLP-1 right now"
 hasPriorAssets: false
