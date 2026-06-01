@@ -28,6 +28,22 @@ function extractTechUrls($: CheerioAPI): { id: string; url: string }[] {
   return results;
 }
 
+// Detects whether a loaded page is the login wall (the portal went auth-only in 2025).
+// Throws so the scheduler records a real failure and applies backoff, rather than
+// silently returning rawCount=0 which shows as a false "ok/empty_response".
+function assertNotLoginPage($: ReturnType<typeof import("cheerio").load>, context: string): void {
+  const bodyText = $('body').text();
+  const isLoginPage =
+    $('input[type="password"]').length > 0 ||
+    bodyText.includes("OSU Users") ||
+    bodyText.includes("Non-OSU Users") ||
+    bodyText.includes("Forgot Password") ||
+    (bodyText.includes("Log In") && bodyText.includes("Technology Commercialization"));
+  if (isLoginPage) {
+    throw new Error("innovate.osu.edu requires login — portal moved behind authentication wall (detected at: " + context + ")");
+  }
+}
+
 // Fetches the main listing page and parses category filter links to discover all
 // active categories. Falls back to FALLBACK_CATEGORIES on failure so that a
 // temporary OSU outage doesn't permanently break the scraper.
@@ -37,6 +53,8 @@ async function discoverCategories(): Promise<{ id: number; name: string }[]> {
     console.warn(`[scraper] ${INST}: could not load listing page for category discovery — using fallback`);
     return FALLBACK_CATEGORIES;
   }
+
+  assertNotLoginPage($, LISTING_BASE);
 
   const cats: { id: number; name: string }[] = [];
   const seen = new Set<number>();
@@ -81,6 +99,7 @@ async function fetchCategoryListings(cat: { id: number; name: string }): Promise
       break;
     }
 
+    assertNotLoginPage($, pageUrl);
     const found = extractTechUrls($);
     let newCount = 0;
     for (const item of found) {
@@ -221,67 +240,16 @@ async function fetchDetail(url: string): Promise<ScrapedListing | null> {
 
 export const osuScraper: InstitutionScraper = {
   institution: INST,
-  scraperTimeoutMs: 20 * 60 * 1000, // 20 min — initial full sync fetches 400+ detail pages
+  // innovate.osu.edu moved behind authentication in 2025 — every page now
+  // redirects to a login wall. Stubbed to stop wasting 20-min scrape slots.
+  // Re-enable (remove scraperType: "stub") if OSU re-opens the public catalog
+  // or we obtain API credentials. Login detection in discoverCategories() and
+  // fetchCategoryListings() will surface a clear error if the scraper is re-enabled.
+  scraperType: "stub",
+  scraperTimeoutMs: 20 * 60 * 1000,
 
-  async scrape(_signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
-    const categories = await discoverCategories();
-    console.log(`[scraper] ${INST}: collecting listings from ${categories.length} categories...`);
-
-    const allUrls = new Set<string>();
-    for (const cat of categories) {
-      const urls = await fetchCategoryListings(cat);
-      console.log(`[scraper] ${INST}: ${cat.name} → ${urls.length} listings`);
-      for (const u of urls) allUrls.add(u);
-    }
-
-    // Normalize URLs the same way the ingestion layer does before storing them,
-    // so the knownUrls lookup hits correctly (strips ?query and #hash fragments).
-    const normalizeUrl = (u: string) => u.replace(/[?#].*$/, "");
-
-    const urlList = Array.from(allUrls);
-    const newUrls = knownUrls
-      ? urlList.filter((u) => !knownUrls.has(normalizeUrl(u)))
-      : urlList;
-    const skippedCount = urlList.length - newUrls.length;
-
-    console.log(
-      `[scraper] ${INST}: ${urlList.length} unique listings` +
-      (skippedCount > 0 ? `, ${skippedCount} already indexed (skipping detail fetch)` : "") +
-      `, fetching details for ${newUrls.length}...`
-    );
-
-    const listings: ScrapedListing[] = [];
-
-    for (let i = 0; i < newUrls.length; i += DETAIL_CONCURRENCY) {
-      const batch = newUrls.slice(i, i + DETAIL_CONCURRENCY);
-      const results = await Promise.all(batch.map(fetchDetail));
-      for (const r of results) {
-        if (r) listings.push(r);
-      }
-    }
-
-    // Return empty-title stubs for known (skipped) URLs so that rawCount correctly
-    // reflects the total number of listings found on the site, not just new ones.
-    // The ingestion layer's staging-row builder drops rows where title is empty
-    // (`if (!l.title || !l.institution) continue`), so stubs never create staging
-    // rows or appear in the Indexing Queue — but they do prevent the rawCount=0
-    // false-positive that triggers the "Parser failure" banner and push block.
-    const knownStubs: ScrapedListing[] = skippedCount > 0
-      ? urlList
-          .filter((u) => knownUrls!.has(normalizeUrl(u)))
-          .map((u) => ({ title: "", url: u, institution: INST, description: "" }))
-      : [];
-
-    console.log(`[scraper] ${INST}: ${listings.length} new listings fetched, ${knownStubs.length} already-indexed (counted for rawCount)`);
-    return [...listings, ...knownStubs];
-  },
-
-  async probe(maxResults = 3): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: probe — discovering categories and fetching first listings...`);
-    const categories = await discoverCategories();
-    const urls = await fetchCategoryListings(categories[0]);
-    const subset = urls.slice(0, maxResults);
-    const results = await Promise.all(subset.map(fetchDetail));
-    return results.filter((r): r is ScrapedListing => r !== null);
+  async scrape(): Promise<ScrapedListing[]> {
+    console.log(`[scraper] ${INST}: STUB — innovate.osu.edu requires login, no public catalog available`);
+    return [];
   },
 };
