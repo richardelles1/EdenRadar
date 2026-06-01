@@ -228,6 +228,32 @@ export function registerDispatchRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/admin/sweep/test-email", async (req, res) => {
+    try {
+      const to = process.env.AUTO_SWEEP_REPORT_EMAIL ?? "richardelles@gmail.com";
+      const now = new Date();
+      const timeLabel = now.toLocaleDateString("en-US", {
+        month: "short", day: "numeric", year: "numeric",
+        hour: "2-digit", minute: "2-digit", timeZone: "America/Los_Angeles",
+      });
+      const html = `
+<div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;max-width:560px;margin:0 auto;color:#111827">
+  <div style="background:#f0fdf4;border:1px solid #a7f3d0;border-radius:10px;padding:20px 24px;margin-bottom:20px">
+    <p style="margin:0 0 4px;font-size:11px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:0.06em">EdenRadar Auto-Sweep</p>
+    <h2 style="margin:0 0 4px;font-size:22px;font-weight:800;color:#111827">Test email — delivery confirmed</h2>
+    <p style="margin:0;font-size:13px;color:#6b7280">Sent ${timeLabel} PT</p>
+  </div>
+  <p style="font-size:14px;color:#374151">The sweep report email is working correctly. This is what you'll receive after each 7:30am and 5:00pm sweep completes.</p>
+  <p style="font-size:11px;color:#9ca3af;margin:0">Recipient: ${to}</p>
+</div>`;
+      await sendEmail(to, "[TEST] EdenRadar sweep report — delivery check", html, FROM_DIGEST);
+      return res.json({ ok: true, sentTo: to });
+    } catch (err: any) {
+      console.error("[admin/sweep/test-email] Error:", err?.message);
+      return res.status(500).json({ error: err?.message ?? "Failed to send test email" });
+    }
+  });
+
   app.get("/api/admin/dispatch/subscribers", async (req, res) => {
     try {
       if (!supabaseServiceRoleKey || !supabaseUrl) {
