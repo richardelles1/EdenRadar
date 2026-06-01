@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "../db";
 import { storage } from "../storage";
 import { ingestedAssets } from "@shared/schema";
+import { sql, desc, eq, and, isNotNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { verifyAnyAuth } from "../lib/supabaseAuth";
 import { sendWelcomeEmail } from "../email";
 
@@ -31,11 +33,43 @@ export function registerPlatformRoutes(app: Express): void {
 
   app.get("/api/admin/duplicate-candidates", async (req, res) => {
     try {
-      const candidates = await storage.getDuplicateCandidates();
-      res.json({ candidates, total: candidates.length });
+      const limit = Math.min(5000, Math.max(1, parseInt(String(req.query.limit ?? "1000"), 10)));
+      const result = await storage.getDuplicateCandidates(limit);
+      res.json({ candidates: result.candidates, total: result.total });
     } catch (err: any) {
       console.error("[duplicate-candidates] Error:", err);
       res.status(500).json({ error: "Failed to load duplicate candidates" });
+    }
+  });
+
+  // Cross-institution canonical links — assets linked via canonicalAssetId (not duplicate_flag).
+  // These are NOT shown in the duplicate panel but represent same-technology-different-institution matches.
+  app.get("/api/admin/canonical-links", async (req, res) => {
+    try {
+      const canon = alias(ingestedAssets, "canon");
+      const [countRow] = await db
+        .select({ count: sql<number>`COUNT(*)::int` })
+        .from(ingestedAssets)
+        .where(and(isNotNull(ingestedAssets.canonicalAssetId), eq(ingestedAssets.relevant, true)));
+      const rows = await db
+        .select({
+          id: ingestedAssets.id,
+          assetName: ingestedAssets.assetName,
+          institution: ingestedAssets.institution,
+          canonicalAssetId: ingestedAssets.canonicalAssetId,
+          canonicalName: canon.assetName,
+          canonicalInstitution: canon.institution,
+          completenessScore: ingestedAssets.completenessScore,
+        })
+        .from(ingestedAssets)
+        .leftJoin(canon, eq(canon.id, ingestedAssets.canonicalAssetId))
+        .where(and(isNotNull(ingestedAssets.canonicalAssetId), eq(ingestedAssets.relevant, true)))
+        .orderBy(desc(ingestedAssets.completenessScore))
+        .limit(500);
+      res.json({ links: rows, total: countRow?.count ?? 0 });
+    } catch (err: any) {
+      console.error("[canonical-links] Error:", err);
+      res.status(500).json({ error: "Failed to load canonical links" });
     }
   });
 

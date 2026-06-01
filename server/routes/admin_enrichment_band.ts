@@ -6,9 +6,16 @@ import { z } from "zod";
 import { db, pool } from "../db";
 import { sql } from "drizzle-orm";
 import { storage } from "../storage";
-import { deepEnrichBatch } from "../lib/pipeline/deepEnrichBatch";
+import { deepEnrichBatch, type DeepEnrichResult } from "../lib/pipeline/deepEnrichBatch";
 import { isEdenRunning, scoreToBand, computeBandMovements } from "./admin_enrichment_eden";
 import { Job, registerJob } from "../lib/jobState";
+import {
+  submitClassifyBatch,
+  getClassifyBatchStatus,
+  processClassifyBatchOutput,
+  type BatchClassifyItem,
+} from "../lib/pipeline/classifyAsset";
+import { computeCompletenessScore } from "../lib/pipeline/contentHash";
 
 // Re-fetch state persistence
 const REFETCH_STATE_FILE = path.join(process.cwd(), ".local", "refetch-state.json");
@@ -37,7 +44,10 @@ let classifyOutputTokens = 0;
 let classifyLastSummary: {
   succeeded: number; failed: number; skipped: number; total: number;
   inputTokens: number; outputTokens: number; costUsd: number; durationMs: number; completedAt: string;
+  batchMode?: boolean;
 } | null = (_refetchState.classify as typeof classifyLastSummary) ?? null;
+// Non-null while a Batch API job is in flight; cleared when complete or failed.
+let classifyBatchId: string | null = null;
 
 // ── Stage fill state ──────────────────────────────────────────────────────────
 const stageFillJob = new Job();
@@ -135,6 +145,7 @@ export function registerBandRoutes(app: Express): void {
       skipped: classifySkipped,
       liveCostUsd: parseFloat(liveCostUsd.toFixed(4)),
       lastSummary: classifyLastSummary,
+      batchId: classifyBatchId ?? undefined,
     });
   });
 
@@ -150,7 +161,10 @@ export function registerBandRoutes(app: Express): void {
     if (isEdenRunning()) return res.status(409).json({ error: "Eden deep enrichment is running – stop it first" });
 
     try {
-      const { cap: rawCap } = z.object({ cap: z.number().int().min(10).max(50000).default(30000) }).parse(req.body ?? {});
+      const { cap: rawCap, batchMode } = z.object({
+        cap: z.number().int().min(10).max(50000).default(30000),
+        batchMode: z.boolean().default(false),
+      }).parse(req.body ?? {});
       const cap = rawCap;
 
       const rows = await db.execute<{
@@ -198,6 +212,143 @@ export function registerBandRoutes(app: Express): void {
       classifyInputTokens = 0;
       classifyOutputTokens = 0;
 
+      // ── Batch API mode: submit to OpenAI Batch API, poll in background ────────
+      if (batchMode) {
+        // Mirrors deepEnrichBatch's combinedLength logic: deduplicate when summary === assetName
+        // (no description scraped) so the length gate matches the real-time path exactly.
+        const MIN_THIN_CHARS = 40;
+        const GPT4O_THRESHOLD = 600;
+        const batchItems: BatchClassifyItem[] = assets
+          .map((a) => {
+            const name = a.assetName || "";
+            const summary = a.summary || "";
+            const abstract = a.abstract || "";
+            const combined =
+              name.length +
+              (summary !== name ? summary.length : 0) +
+              (abstract && abstract !== name && abstract !== summary ? abstract.length : 0);
+            return { a, combined };
+          })
+          .filter(({ combined }) => combined >= MIN_THIN_CHARS)
+          .map(({ a, combined }) => ({
+            id: a.id,
+            title: a.assetName,
+            description: a.summary,
+            abstract: a.abstract ?? undefined,
+            model: (combined >= GPT4O_THRESHOLD ? "gpt-4o" : "gpt-4o-mini") as "gpt-4o" | "gpt-4o-mini",
+            ctx: a.ctx,
+          }));
+
+        const skippedCount = assets.length - batchItems.length;
+        classifySkipped = skippedCount;
+
+        const batchId = await submitClassifyBatch(batchItems);
+        classifyBatchId = batchId;
+        res.json({ message: "Classify batch submitted to OpenAI", total: assets.length, batchId, batchMode: true });
+
+        // Background polling — polls every 30s until the batch is done, then persists results.
+        const assetMap = new Map(assets.map((a) => [a.id, a]));
+        const pollTimer = setInterval(async () => {
+          try {
+            const status = await getClassifyBatchStatus(batchId);
+            classifyJob.tick(status.completed);
+
+            if (status.status === "completed" && status.outputFileId) {
+              clearInterval(pollTimer);
+              classifyBatchId = null;
+
+              const classifyResults = await processClassifyBatchOutput(status.outputFileId);
+              const deepResults: DeepEnrichResult[] = [];
+
+              for (const [assetId, classification] of classifyResults) {
+                const asset = assetMap.get(assetId);
+                const completenessScore = computeCompletenessScore({
+                  assetClass: classification.assetClass,
+                  target: classification.target,
+                  modality: classification.modality,
+                  indication: classification.indication,
+                  developmentStage: classification.developmentStage,
+                  mechanismOfAction: classification.mechanismOfAction,
+                  innovationClaim: classification.innovationClaim,
+                  unmetNeed: classification.unmetNeed,
+                  comparableDrugs: classification.comparableDrugs,
+                  licensingReadiness: classification.licensingReadiness,
+                  deviceAttributes: classification.deviceAttributes,
+                  summary: asset?.summary ?? null,
+                  abstract: asset?.abstract ?? null,
+                  categories: asset?.ctx?.categories ?? null,
+                  inventors: asset?.ctx?.inventors ?? null,
+                  patentStatus: asset?.ctx?.patentStatus ?? null,
+                  sourceType: asset?.sourceType ?? null,
+                  biology: asset?.biology ?? null,
+                });
+                deepResults.push({
+                  id: assetId,
+                  target: classification.target,
+                  modality: classification.modality,
+                  indication: classification.indication,
+                  developmentStage: classification.developmentStage,
+                  biotechRelevant: classification.biotechRelevant,
+                  categories: classification.categories,
+                  categoryConfidence: classification.categoryConfidence,
+                  innovationClaim: classification.innovationClaim ?? "",
+                  mechanismOfAction: classification.mechanismOfAction ?? "",
+                  ipType: classification.ipType,
+                  unmetNeed: classification.unmetNeed ?? "",
+                  comparableDrugs: classification.comparableDrugs ?? "",
+                  licensingReadiness: classification.licensingReadiness,
+                  completenessScore,
+                  assetClass: classification.assetClass,
+                  deviceAttributes: classification.deviceAttributes,
+                });
+              }
+
+              const written = await storage.bulkUpdateIngestedAssetsDeepEnrichment(deepResults, "classify");
+              classifySucceeded = written;
+              classifyFailed = batchItems.length - classifyResults.size;
+
+              const durationMs = classifyJob.status().elapsedMs ?? 0;
+              const totalIn = [...classifyResults.values()].reduce((s, r) => s + r.tokenUsage.inputTokens, 0);
+              const totalOut = [...classifyResults.values()].reduce((s, r) => s + r.tokenUsage.outputTokens, 0);
+              classifyInputTokens = totalIn;
+              classifyOutputTokens = totalOut;
+              const GPT4O_INPUT_PER_M = 2.50;
+              const GPT4O_OUTPUT_PER_M = 10.0;
+              const costUsd = (totalIn * GPT4O_INPUT_PER_M + totalOut * GPT4O_OUTPUT_PER_M) / 1_000_000;
+              classifyLastSummary = {
+                succeeded: written,
+                failed: classifyFailed,
+                skipped: classifySkipped,
+                total: assets.length,
+                inputTokens: totalIn,
+                outputTokens: totalOut,
+                costUsd: parseFloat(costUsd.toFixed(4)),
+                durationMs,
+                completedAt: new Date().toISOString(),
+                batchMode: true,
+              };
+              classifyJob.finish({});
+              saveRefetchState("classify", classifyLastSummary);
+              console.log(`[classify:batch] Complete: ${written} classified, ${classifyFailed} failed, ${classifySkipped} skipped – $${costUsd.toFixed(4)}`);
+
+            } else if (["failed", "expired", "cancelled"].includes(status.status)) {
+              clearInterval(pollTimer);
+              classifyBatchId = null;
+              classifyJob.fail(`OpenAI batch ended with status: ${status.status}`);
+              console.error(`[classify:batch] Batch ${batchId} ended with status: ${status.status}`);
+            }
+          } catch (e: any) {
+            clearInterval(pollTimer);
+            classifyBatchId = null;
+            classifyJob.fail(e?.message ?? "Batch poll error");
+            console.error("[classify:batch] Poll error:", e);
+          }
+        }, 30_000);
+
+        return;
+      }
+
+      // ── Real-time mode (default) ───────────────────────────────────────────────
       res.json({ message: "Classify unclassified started", total: assets.length });
 
       deepEnrichBatch(

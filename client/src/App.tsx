@@ -62,6 +62,7 @@ import Privacy from "@/pages/Privacy";
 import Pricing from "@/pages/Pricing";
 import Demo from "@/pages/Demo";
 import Status from "@/pages/Status";
+import Dpa from "@/pages/Dpa";
 import ResearchPage from "@/pages/ResearchPage";
 import BillingSuccess from "@/pages/BillingSuccess";
 import IndustryConcepts from "@/pages/IndustryConcepts";
@@ -419,6 +420,7 @@ function Router() {
       <Route path="/pricing" component={Pricing} />
       <Route path="/demo" component={Demo} />
       <Route path="/status" component={Status} />
+      <Route path="/dpa" component={Dpa} />
       <Route path="/billing/success" component={BillingSuccess} />
 
       <Route path="/discovery">

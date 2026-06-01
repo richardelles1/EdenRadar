@@ -1,4 +1,4 @@
-import OpenAI from "openai";
+import OpenAI, { toFile } from "openai";
 import { sanitizeToVocab } from "./vocab";
 
 let _openai: OpenAI | undefined;
@@ -80,8 +80,8 @@ export interface AssetContext {
 const SYSTEM_PROMPT = `You are a biotech licensing analyst classifying university TTO listings. Analyze the technology and return JSON only (no markdown).
 
 STEP 1 — Determine assetClass:
-- "drug_biologic": small molecules, antibodies, biologics, cell/gene therapy, vaccines, RNA therapeutics intended to treat, prevent, or diagnose disease in humans or animals
-- "medical_device": hardware devices, instruments, implants, wearables, surgical tools, diagnostic devices, prosthetics
+- "drug_biologic": small molecules, antibodies, biologics, cell/gene therapy, vaccines, RNA therapeutics intended to TREAT or PREVENT disease in humans or animals — NOT diagnostics
+- "medical_device": hardware devices, instruments, implants, wearables, surgical tools, diagnostic devices, prosthetics, imaging agents, biomarker assays, biosensors, lateral flow tests, and any technology whose PRIMARY purpose is to DETECT or MEASURE disease rather than treat it
 - "research_tool": reagents, assay kits, cell lines, animal models, antibodies used only as research reagents, lab protocols, wet-lab methods
 - "software": standalone software platforms, algorithms, AI/ML tools, data pipelines, bioinformatics tools (not wet-lab research tools)
 - "other": materials, chemical processes, agriculture, food science without therapeutic use, environmental, unrelated
@@ -110,7 +110,7 @@ Drug/Biologic ONLY — return null for all other types:
 - modality: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|diagnostic|platform technology|unknown — or null
 - indication: MeSH disease name, or null. Prefer the most specific applicable term: "non-small cell lung cancer" not "lung cancer" or "cancer"; "glioblastoma" not "brain cancer"; "chronic lymphocytic leukemia" not "leukemia". Only use a broad term ("cancer", "neurological disorder") when the text genuinely does not specify the disease subtype.
 - mechanismOfAction: brief MOA description, or null
-- comparableDrugs: existing approved or late-stage treatments in this indication/target space, or null
+- comparableDrugs: the current standard of care OR the closest approved/late-stage competitor in the same disease area — even if the mechanism differs. Examples: for a new glaucoma drug → "latanoprost, timolol"; for a malaria vaccine → "RTS,S/AS01 (Mosquirix), R21/Matrix-M"; for a Friedreich's ataxia compound → "omaveloxolone (Skyclarys)". Write the disease-area competitive landscape, not just same-mechanism drugs. Return null ONLY when the indication is unclear or genuinely no treatments exist.
 - unmetNeed: specific clinical gap this addresses vs current standard of care, or null
 
 Medical Device ONLY — return null for other types:
@@ -149,14 +149,14 @@ function buildGapFillSystemPrompt(fields: string[]): string {
   return lines.join("\n");
 }
 
-export async function classifyAsset(
+// ── Shared helpers (used by both classifyAsset and the Batch API path) ───────
+
+function buildClassifyInputText(
   title: string,
   description: string,
-  abstract?: string,
-  model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini",
-  throwOnError = false,
-  ctx?: AssetContext,
-): Promise<ClassifyResult> {
+  abstract: string | undefined,
+  ctx: AssetContext | undefined,
+): string {
   const contextLines: string[] = [];
   if (ctx?.categories?.length) contextLines.push(`Tags/Categories: ${ctx.categories.join(", ")}`);
   if (ctx?.patentStatus && ctx.patentStatus !== "unknown") contextLines.push(`Patent Status: ${ctx.patentStatus}`);
@@ -164,8 +164,6 @@ export async function classifyAsset(
   if (ctx?.inventors?.length) contextLines.push(`Inventors: ${ctx.inventors.join(", ")}`);
   if (ctx?.sourceUrl) contextLines.push(`Source URL: ${ctx.sourceUrl}`);
 
-  // Render currently-known field values so the model focuses on filling the
-  // unknowns rather than re-deriving everything from scratch every pass.
   const cv = ctx?.currentValues;
   const knownLines: string[] = [];
   const unknownFields: string[] = [];
@@ -182,13 +180,12 @@ export async function classifyAsset(
   const focusBlock = unknownFields.length
     ? `\nFocus on filling these currently-unknown fields if the source supports it: ${unknownFields.join(", ")}.`
     : "";
-  // Gap-fill mode: strict prompt instruction to limit output to target fields
   const gapFillFields = ctx?.fieldsToGenerate?.length ? ctx.fieldsToGenerate : null;
   const gapFillBlock = gapFillFields
     ? `\nGAP-FILL MODE: Only generate values for these fields: ${gapFillFields.join(", ")}. For ALL other output fields return "unknown" or null — do NOT attempt to derive them.`
     : "";
 
-  const inputText = [
+  return [
     `Title: ${title}`,
     description && description !== title ? `Description: ${description.slice(0, 2000)}` : "",
     abstract ? `Abstract: ${abstract.slice(0, 2000)}` : "",
@@ -197,28 +194,104 @@ export async function classifyAsset(
     focusBlock,
     gapFillBlock,
   ].filter(Boolean).join("\n");
+}
 
-  const fallback: ClassifyResult = {
-    biotechRelevant: false,
-    assetClass: "other",
-    target: null,
-    modality: null,
-    indication: null,
-    mechanismOfAction: null,
-    comparableDrugs: null,
-    unmetNeed: null,
-    deviceAttributes: null,
-    developmentStage: "unknown",
-    categories: [],
-    categoryConfidence: 0,
-    innovationClaim: "",
-    ipType: "unknown",
-    licensingReadiness: "unknown",
-    tokenUsage: { inputTokens: 0, outputTokens: 0 },
+function parseClassifyResponse(
+  text: string,
+  usage: { prompt_tokens?: number; completion_tokens?: number } | undefined,
+  gapFillFields: string[] | null,
+): ClassifyResult {
+  const parsed = JSON.parse(text.replace(/```json?|```/g, "").trim());
+
+  const assetClass: AssetClass = gapFillFields
+    ? "drug_biologic"
+    : ASSET_CLASSES.has(parsed.assetClass) ? parsed.assetClass : "other";
+  const isDrug = assetClass === "drug_biologic";
+
+  let deviceAttributes: Record<string, unknown> | null = null;
+  if (assetClass === "medical_device" && parsed.deviceAttributes) {
+    const da = parsed.deviceAttributes;
+    deviceAttributes = {
+      primaryApplication: nullIfUnknown(da.primaryApplication),
+      keyAdvantages: Array.isArray(da.keyAdvantages) ? da.keyAdvantages : null,
+      regulatoryPathway: da.regulatoryPathway ?? "unknown",
+    };
+  } else if (assetClass === "research_tool" && parsed.deviceAttributes) {
+    const da = parsed.deviceAttributes;
+    deviceAttributes = {
+      applications: Array.isArray(da.applications) ? da.applications : null,
+      targetUsers: nullIfUnknown(da.targetUsers),
+    };
+  } else if (assetClass === "software" && parsed.deviceAttributes) {
+    const da = parsed.deviceAttributes;
+    deviceAttributes = {
+      useCase: nullIfUnknown(da.useCase),
+      deploymentModel: da.deploymentModel ?? "unknown",
+    };
+  }
+
+  const rawIndication = isDrug ? nullIfUnknown(parsed.indication) : null;
+  const rawTarget = isDrug ? nullIfUnknown(parsed.target) : null;
+  const indication = !isDrug ? null : (rawIndication ? sanitizeToVocab(rawIndication, "indication") : "unknown");
+  const target = !isDrug ? null : (rawTarget ? sanitizeToVocab(rawTarget, "target") : "unknown");
+
+  const gapFillSet = gapFillFields ? new Set(gapFillFields) : null;
+  const gapNull = <T>(field: string, val: T): T | null =>
+    gapFillSet && !gapFillSet.has(field) ? null : val;
+
+  return {
+    biotechRelevant: parsed.biotechRelevant === true,
+    assetClass,
+    target,
+    modality: isDrug ? sanitize(parsed.modality ?? "", MODALITY_VALUES, "unknown") : null,
+    indication,
+    mechanismOfAction: gapNull("mechanismOfAction", isDrug ? nullIfUnknown(parsed.mechanismOfAction) : null),
+    comparableDrugs: gapNull("comparableDrugs", isDrug ? nullIfUnknown(parsed.comparableDrugs) : null),
+    unmetNeed: gapNull("unmetNeed", isDrug ? nullIfUnknown(parsed.unmetNeed) : null),
+    deviceAttributes,
+    developmentStage: sanitize(parsed.developmentStage ?? "", STAGE_VALUES, "unknown"),
+    categories: Array.isArray(parsed.categories) ? parsed.categories.map((c: string) => c.toLowerCase().trim()) : [],
+    categoryConfidence: typeof parsed.categoryConfidence === "number" ? Math.min(1, Math.max(0, parsed.categoryConfidence)) : 0,
+    innovationClaim: gapNull("innovationClaim", (parsed.innovationClaim ?? "").trim()) ?? "",
+    ipType: sanitize(parsed.ipType ?? "", IP_TYPES, "unknown"),
+    licensingReadiness: sanitize(parsed.licensingReadiness ?? "", LICENSING_READINESS, "unknown"),
+    tokenUsage: {
+      inputTokens: usage?.prompt_tokens ?? 0,
+      outputTokens: usage?.completion_tokens ?? 0,
+    },
   };
+}
+
+const CLASSIFY_FALLBACK: ClassifyResult = {
+  biotechRelevant: false,
+  assetClass: "other",
+  target: null,
+  modality: null,
+  indication: null,
+  mechanismOfAction: null,
+  comparableDrugs: null,
+  unmetNeed: null,
+  deviceAttributes: null,
+  developmentStage: "unknown",
+  categories: [],
+  categoryConfidence: 0,
+  innovationClaim: "",
+  ipType: "unknown",
+  licensingReadiness: "unknown",
+  tokenUsage: { inputTokens: 0, outputTokens: 0 },
+};
+
+export async function classifyAsset(
+  title: string,
+  description: string,
+  abstract?: string,
+  model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini",
+  throwOnError = false,
+  ctx?: AssetContext,
+): Promise<ClassifyResult> {
+  const gapFillFields = ctx?.fieldsToGenerate?.length ? ctx.fieldsToGenerate : null;
 
   // Gap-fill JSON schema: structurally restrict the API response to only the requested fields.
-  // Each field is a nullable string; all are required (strictMode compatible).
   const gapFillSchema = gapFillFields
     ? {
         type: "json_schema" as const,
@@ -241,91 +314,130 @@ export async function classifyAsset(
     const response = await getOpenAI().chat.completions.create({
       model,
       temperature: 0,
-      // Gap-fill: up to 8 short string fields (4 primary + 4 secondary) — 500 tokens is sufficient.
+      // Gap-fill: up to 8 short string fields — 500 tokens is sufficient.
       // Full pass: full drug_biologic JSON with categories[], deviceAttributes etc. — needs 1000.
       max_tokens: gapFillFields ? 500 : 1000,
       response_format: gapFillSchema,
       messages: [
         { role: "system", content: gapFillFields ? buildGapFillSystemPrompt(gapFillFields) : SYSTEM_PROMPT },
-        { role: "user", content: inputText },
+        { role: "user", content: buildClassifyInputText(title, description, abstract, ctx) },
       ],
     });
 
     const text = response.choices[0]?.message?.content ?? "{}";
-    const parsed = JSON.parse(text.replace(/```json?|```/g, "").trim());
-
-    // In gap-fill mode the response schema only contains the target fields — `assetClass` is
-    // absent from the parsed JSON. Since run-band pre-filters to asset_class='drug_biologic',
-    // force isDrug=true so drug-specific fields are extracted correctly.
-    const assetClass: AssetClass = gapFillFields
-      ? "drug_biologic"
-      : ASSET_CLASSES.has(parsed.assetClass) ? parsed.assetClass : "other";
-    const isDrug = assetClass === "drug_biologic";
-
-    // Parse device attributes for non-drug classes
-    let deviceAttributes: Record<string, unknown> | null = null;
-    if (assetClass === "medical_device" && parsed.deviceAttributes) {
-      const da = parsed.deviceAttributes;
-      deviceAttributes = {
-        primaryApplication: nullIfUnknown(da.primaryApplication),
-        keyAdvantages: Array.isArray(da.keyAdvantages) ? da.keyAdvantages : null,
-        regulatoryPathway: da.regulatoryPathway ?? "unknown",
-      };
-    } else if (assetClass === "research_tool" && parsed.deviceAttributes) {
-      const da = parsed.deviceAttributes;
-      deviceAttributes = {
-        applications: Array.isArray(da.applications) ? da.applications : null,
-        targetUsers: nullIfUnknown(da.targetUsers),
-      };
-    } else if (assetClass === "software" && parsed.deviceAttributes) {
-      const da = parsed.deviceAttributes;
-      deviceAttributes = {
-        useCase: nullIfUnknown(da.useCase),
-        deploymentModel: da.deploymentModel ?? "unknown",
-      };
-    }
-
-    // Normalize indication and target through vocab.
-    // Semantics: null = non-applicable for this asset class; "unknown" = applicable but unresolved.
-    const rawIndication = isDrug ? nullIfUnknown(parsed.indication) : null;
-    const rawTarget = isDrug ? nullIfUnknown(parsed.target) : null;
-    // Drug assets: if AI couldn't determine the value, keep "unknown" (not null).
-    // null is reserved for non-drug classes where the concept doesn't apply.
-    const indication = !isDrug ? null : (rawIndication ? sanitizeToVocab(rawIndication, "indication") : "unknown");
-    const target = !isDrug ? null : (rawTarget ? sanitizeToVocab(rawTarget, "target") : "unknown");
-
-    // Gap-fill strict output contract: null out any drug field NOT in the target list,
-    // so non-target fields can never overwrite existing DB values downstream.
-    // This is applied structurally after parsing — model prompt alone is not a sufficient guard.
-    const gapFillSet = gapFillFields ? new Set(gapFillFields) : null;
-    const gapNull = <T>(field: string, val: T): T | null =>
-      gapFillSet && !gapFillSet.has(field) ? null : val;
-
-    return {
-      biotechRelevant: parsed.biotechRelevant === true,
-      assetClass,
-      target,
-      modality: isDrug ? sanitize(parsed.modality ?? "", MODALITY_VALUES, "unknown") : null,
-      indication,
-      mechanismOfAction: gapNull("mechanismOfAction", isDrug ? nullIfUnknown(parsed.mechanismOfAction) : null),
-      comparableDrugs: gapNull("comparableDrugs", isDrug ? nullIfUnknown(parsed.comparableDrugs) : null),
-      unmetNeed: gapNull("unmetNeed", isDrug ? nullIfUnknown(parsed.unmetNeed) : null),
-      deviceAttributes,
-      developmentStage: sanitize(parsed.developmentStage ?? "", STAGE_VALUES, "unknown"),
-      categories: Array.isArray(parsed.categories) ? parsed.categories.map((c: string) => c.toLowerCase().trim()) : [],
-      categoryConfidence: typeof parsed.categoryConfidence === "number" ? Math.min(1, Math.max(0, parsed.categoryConfidence)) : 0,
-      innovationClaim: gapNull("innovationClaim", (parsed.innovationClaim ?? "").trim()) ?? "",
-      ipType: sanitize(parsed.ipType ?? "", IP_TYPES, "unknown"),
-      licensingReadiness: sanitize(parsed.licensingReadiness ?? "", LICENSING_READINESS, "unknown"),
-      tokenUsage: {
-        inputTokens: response.usage?.prompt_tokens ?? 0,
-        outputTokens: response.usage?.completion_tokens ?? 0,
-      },
-    };
+    return parseClassifyResponse(text, response.usage, gapFillFields);
   } catch (e) {
     if (throwOnError) throw e;
-    return fallback;
+    return CLASSIFY_FALLBACK;
   }
+}
+
+// ── OpenAI Batch API support ──────────────────────────────────────────────────
+
+export interface BatchClassifyItem {
+  id: number;
+  title: string;
+  description: string;
+  abstract?: string;
+  model: "gpt-4o" | "gpt-4o-mini";
+  ctx?: AssetContext;
+}
+
+function buildBatchRequest(item: BatchClassifyItem): object {
+  const gapFillFields = item.ctx?.fieldsToGenerate?.length ? item.ctx.fieldsToGenerate : null;
+  const responseFormat = gapFillFields
+    ? {
+        type: "json_schema",
+        json_schema: {
+          name: "gap_fill_output",
+          strict: true,
+          schema: {
+            type: "object",
+            properties: Object.fromEntries(gapFillFields.map((f) => [f, { type: ["string", "null"] }])),
+            required: gapFillFields,
+            additionalProperties: false,
+          },
+        },
+      }
+    : { type: "json_object" };
+
+  return {
+    custom_id: String(item.id),
+    method: "POST",
+    url: "/v1/chat/completions",
+    body: {
+      model: item.model,
+      temperature: 0,
+      max_tokens: gapFillFields ? 500 : 1000,
+      response_format: responseFormat,
+      messages: [
+        { role: "system", content: gapFillFields ? buildGapFillSystemPrompt(gapFillFields) : SYSTEM_PROMPT },
+        { role: "user", content: buildClassifyInputText(item.title, item.description, item.abstract, item.ctx) },
+      ],
+    },
+  };
+}
+
+/** Submits a batch of classify requests to the OpenAI Batch API. Returns the batch ID. */
+export async function submitClassifyBatch(items: BatchClassifyItem[]): Promise<string> {
+  const client = getOpenAI();
+  const jsonl = items.map((item) => JSON.stringify(buildBatchRequest(item))).join("\n");
+
+  const uploadedFile = await client.files.create({
+    file: await toFile(Buffer.from(jsonl, "utf-8"), "classify_batch.jsonl", { type: "application/jsonl" }),
+    purpose: "batch",
+  });
+
+  const batch = await client.batches.create({
+    input_file_id: uploadedFile.id,
+    endpoint: "/v1/chat/completions",
+    completion_window: "24h",
+  });
+
+  console.log(`[classifyBatch] Submitted ${items.length} items → batch ${batch.id}`);
+  return batch.id;
+}
+
+export interface ClassifyBatchStatus {
+  status: string;
+  completed: number;
+  total: number;
+  outputFileId?: string;
+}
+
+/** Polls the OpenAI Batch API for current status. */
+export async function getClassifyBatchStatus(batchId: string): Promise<ClassifyBatchStatus> {
+  const client = getOpenAI();
+  const batch = await client.batches.retrieve(batchId);
+  return {
+    status: batch.status,
+    completed: batch.request_counts?.completed ?? 0,
+    total: batch.request_counts?.total ?? 0,
+    outputFileId: batch.output_file_id ?? undefined,
+  };
+}
+
+/** Downloads and parses the output JSONL from a completed batch. */
+export async function processClassifyBatchOutput(outputFileId: string): Promise<Map<number, ClassifyResult>> {
+  const client = getOpenAI();
+  const file = await client.files.content(outputFileId);
+  const text = await file.text();
+  const lines = text.split("\n").filter(Boolean);
+
+  const results = new Map<number, ClassifyResult>();
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line);
+      const id = Number(entry.custom_id);
+      if (entry.error || !entry.response?.body?.choices?.[0]?.message?.content) continue;
+      const content = entry.response.body.choices[0].message.content as string;
+      const usage = entry.response.body.usage as { prompt_tokens?: number; completion_tokens?: number } | undefined;
+      results.set(id, parseClassifyResponse(content, usage, null));
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  return results;
 }
 
 export const MIN_CONTENT_CHARS = 120;

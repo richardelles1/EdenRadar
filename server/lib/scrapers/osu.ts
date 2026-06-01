@@ -64,47 +64,44 @@ async function discoverCategories(): Promise<{ id: number; name: string }[]> {
   return cats;
 }
 
-// Fetches all listing URLs for a category using a doubling-limit strategy.
-// Starts at limit=500 and doubles on each full page until the server returns
-// fewer items than requested, meaning we have everything. Capped at 5 000 per
-// request to avoid server timeouts on very large categories.
-async function fetchCategoryListings(cat: { id: number; name: string }): Promise<string[]> {
+// Fetches all listing URLs using a doubling-limit strategy on a given page URL.
+// Starts at limit=500, doubles on each full page until fewer items than requested
+// are returned (meaning we have everything). Capped at 5 000 per request.
+async function fetchListingUrls(pageBase: string, label: string): Promise<string[]> {
   const seen = new Set<string>();
   const urls: string[] = [];
   let limit = 500;
 
   while (true) {
-    const pageUrl = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}&limit=${limit}`;
-    const $ = await fetchHtml(pageUrl, 20_000);
+    const sep = pageBase.includes("?") ? "&" : "?";
+    const pageUrl = `${pageBase}${sep}limit=${limit}`;
+    const $ = await fetchHtml(pageUrl, 30_000);
     if (!$) {
-      console.warn(`[scraper] ${INST}: ${cat.name} — fetch failed at limit=${limit}, stopping`);
+      console.warn(`[scraper] ${INST}: ${label} — fetch failed at limit=${limit}, stopping`);
       break;
     }
 
     const found = extractTechUrls($);
-    let newCount = 0;
+    let added = 0;
     for (const item of found) {
       if (!seen.has(item.id)) {
         seen.add(item.id);
         urls.push(item.url);
-        newCount++;
+        added++;
       }
     }
 
-    console.log(`[scraper] ${INST}: ${cat.name} limit=${limit} → ${found.length} found, ${newCount} new`);
+    console.log(`[scraper] ${INST}: ${label} limit=${limit} → ${found.length} on page, ${added} new, ${urls.length} total`);
 
-    if (found.length < limit) break; // received fewer than requested — have everything
+    if (found.length < limit) break;
 
-    // Got a full page; double the limit and try again to capture any remaining items.
-    // Cap at 5 000 to avoid requesting an unreasonably large page from OSU's server.
     if (limit >= 5000) {
-      console.warn(`[scraper] ${INST}: ${cat.name} — hit limit ceiling at ${limit}, some items may be missing`);
+      console.warn(`[scraper] ${INST}: ${label} — hit limit ceiling at ${limit}, some items may be missing`);
       break;
     }
     limit = Math.min(limit * 2, 5000);
   }
 
-  console.log(`[scraper] ${INST}: ${cat.name} → ${urls.length} total unique listings`);
   return urls;
 }
 
@@ -224,15 +221,29 @@ export const osuScraper: InstitutionScraper = {
   scraperTimeoutMs: 20 * 60 * 1000, // 20 min — initial full sync fetches 400+ detail pages
 
   async scrape(_signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
-    const categories = await discoverCategories();
-    console.log(`[scraper] ${INST}: collecting listings from ${categories.length} categories...`);
+    // Strategy 1: fetch all listings without a category filter — simpler and immune to
+    // category-discovery failures (if OSU changes their filter UI, this still works).
+    let allUrlList = await fetchListingUrls(LISTING_BASE, "all (no filter)");
 
-    const allUrls = new Set<string>();
-    for (const cat of categories) {
-      const urls = await fetchCategoryListings(cat);
-      console.log(`[scraper] ${INST}: ${cat.name} → ${urls.length} listings`);
-      for (const u of urls) allUrls.add(u);
+    if (allUrlList.length === 0) {
+      // Strategy 2: category-by-category fallback (original approach).
+      // Used when the no-filter request returns nothing — e.g. if OSU changed their
+      // listing page to require a category selection before showing results.
+      console.warn(`[scraper] ${INST}: no-filter fetch returned 0 URLs — falling back to category-by-category`);
+      const categories = await discoverCategories();
+      console.log(`[scraper] ${INST}: collecting listings from ${categories.length} categories...`);
+      const seen = new Set<string>();
+      for (const cat of categories) {
+        const pageBase = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}`;
+        const urls = await fetchListingUrls(pageBase, cat.name);
+        for (const u of urls) {
+          if (!seen.has(u)) { seen.add(u); allUrlList.push(u); }
+        }
+      }
+      console.log(`[scraper] ${INST}: category-by-category total → ${allUrlList.length} listings`);
     }
+
+    const allUrls = new Set<string>(allUrlList);
 
     // Normalize URLs the same way the ingestion layer does before storing them,
     // so the knownUrls lookup hits correctly (strips ?query and #hash fragments).
@@ -277,9 +288,8 @@ export const osuScraper: InstitutionScraper = {
   },
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: probe — discovering categories and fetching first listings...`);
-    const categories = await discoverCategories();
-    const urls = await fetchCategoryListings(categories[0]);
+    console.log(`[scraper] ${INST}: probe — fetching first ${maxResults} listings...`);
+    const urls = await fetchListingUrls(LISTING_BASE, "probe");
     const subset = urls.slice(0, maxResults);
     const results = await Promise.all(subset.map(fetchDetail));
     return results.filter((r): r is ScrapedListing => r !== null);

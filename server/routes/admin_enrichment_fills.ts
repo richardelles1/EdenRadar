@@ -485,11 +485,16 @@ export function registerFillRoutes(app: Express): void {
       const dbPool = new Pool({ connectionString: process.env.SUPABASE_DATABASE_URL!, ssl: { rejectUnauthorized: false } });
       const client = await dbPool.connect();
       try {
-        // Count assets that would be addressed by either pass.
-        // Pass 1: has biology bucket but no MOA.
-        // Pass 2: has rich text (summary OR abstract OR innovation_claim > 200 chars combined) but no MOA.
-        const { rows } = await client.query<{ total: string }>(
-          `SELECT COUNT(*)::text AS total FROM ingested_assets
+        // total: all assets the fill pass will process (all classes with biology or rich text)
+        // drugBiologicActionable: the high-value subset — drug/biologic with ≥120 chars
+        const { rows } = await client.query<{ total: string; drug_biologic_actionable: string }>(
+          `SELECT
+             COUNT(*)::text AS total,
+             COUNT(*) FILTER (
+               WHERE asset_class = 'drug_biologic'
+                 AND char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= 120
+             )::text AS drug_biologic_actionable
+           FROM ingested_assets
            WHERE relevant = true
              AND (mechanism_of_action IS NULL OR mechanism_of_action = '' OR mechanism_of_action = 'unknown')
              AND (
@@ -500,7 +505,10 @@ export function registerFillRoutes(app: Express): void {
                OR (LENGTH(COALESCE(summary, '')) + LENGTH(COALESCE(abstract, '')) + LENGTH(COALESCE(innovation_claim, ''))) > 200
              )`,
         );
-        res.json({ total: parseInt(rows[0]?.total ?? "0", 10) });
+        res.json({
+          total: parseInt(rows[0]?.total ?? "0", 10),
+          drugBiologicActionable: parseInt(rows[0]?.drug_biologic_actionable ?? "0", 10),
+        });
       } finally {
         client.release();
         await dbPool.end();

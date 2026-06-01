@@ -36,11 +36,11 @@ export function friendlyOpenAIError(err: unknown): string {
   return "AI service error. Please try again.";
 }
 
-function buildExtractionPrompt(signal: RawSignal, text: string): string {
-  if (signal.source_type === "patent") {
-    return `You are a biotech patent analyst. Extract structured drug asset information from the following patent record.
+// ── System prompt constants (stable prefixes for OpenAI automatic prompt caching) ──
 
-IMPORTANT PATENT EXTRACTION RULES:
+const EXTRACTION_PATENT_SYSTEM = `You are a biotech patent analyst. Extract structured drug asset information from patent records.
+
+Return ONLY valid JSON with these fields:
 - asset_name: Look in the patent TITLE for the compound class or drug name (e.g. "KRAS G12C inhibitors", "Anti-PD-1 antibody"). Do NOT use "method", "composition", "compound", or "formula" as the asset name. Extract the specific therapeutic agent class.
 - target: The molecular or biological target (e.g. "KRAS G12C", "PD-1", "HER2"). Find it in the title or description.
 - modality: The therapy type based on context clues in the description.
@@ -53,16 +53,9 @@ IMPORTANT PATENT EXTRACTION RULES:
 - summary: 2-3 sentences describing mechanism, target, and intended disease indication.
 - matching_tags: 3-5 relevant keyword tags.
 
-Return ONLY valid JSON. If you cannot determine a field with reasonable confidence, use "unknown".
+Return ONLY valid JSON. If you cannot determine a field with reasonable confidence, use "unknown".`;
 
-Source type: patent
-Assignee/Owner: ${signal.institution_or_sponsor || signal.authors_or_owner}
-Title: ${signal.title}
-Abstract/Description: ${text.slice(0, 2000)}`;
-  }
-
-  if (signal.source_type === "tech_transfer") {
-    return `You are a biotech licensing analyst. Extract structured drug asset information from the following university technology transfer listing.
+const EXTRACTION_TECH_TRANSFER_SYSTEM = `You are a biotech licensing analyst. Extract structured drug asset information from university technology transfer listings.
 
 Return ONLY valid JSON with these fields:
 - asset_name: The specific drug, compound, platform, or therapy name as described (string)
@@ -76,15 +69,9 @@ Return ONLY valid JSON with these fields:
 - licensing_status: "available" (tech transfer listings are explicitly available for licensing)
 - patent_status: use the metadata hint if available, otherwise "patent pending" (string)
 - summary: 2-3 sentence summary of the mechanism and commercial significance (string)
-- matching_tags: array of 3-5 relevant keyword tags
+- matching_tags: array of 3-5 relevant keyword tags`;
 
-Source type: tech_transfer
-Institution: ${signal.institution_or_sponsor}
-Title: ${signal.title}
-Description: ${text.slice(0, 2000)}`;
-  }
-
-  return `You are a biotech intelligence analyst. Extract structured drug asset information from the following ${signal.source_type} record.
+const EXTRACTION_GENERAL_SYSTEM = `You are a biotech intelligence analyst. Extract structured drug asset information from research records.
 
 Return ONLY valid JSON with these fields:
 - asset_name: specific drug, compound, therapy, or platform name (string; "unknown" if unclear)
@@ -98,13 +85,84 @@ Return ONLY valid JSON with these fields:
 - licensing_status: e.g. "available", "licensed", "not available", "unknown" (string)
 - patent_status: e.g. "patented", "patent pending", "not patented", "unknown" (string)
 - summary: 2-3 sentence summary of mechanism and significance (string)
-- matching_tags: array of 3-5 relevant keyword tags
+- matching_tags: array of 3-5 relevant keyword tags`;
 
-Source type: ${signal.source_type}
+const EXTRACTION_BATCH_SYSTEM = `You are a biotech intelligence analyst. Extract structured drug asset information from research signals.
+
+Return ONLY a JSON object with a single key "items" whose value is an array of objects in the same order as the input.
+Each object must have these fields:
+- asset_name: specific drug, compound, therapy, or platform name (use the title as the name if no specific asset is named)
+- target: molecular or biological target ("unknown" if not mentioned)
+- modality: one of: "small molecule","antibody","CAR-T","gene therapy","mRNA therapy","peptide","bispecific antibody","ADC","cell therapy","oncolytic virus","RNA interference","antisense oligonucleotide","protein","vaccine","other","unknown"
+- indication: disease or condition ("unknown" if not stated)
+- development_stage: one of: "discovery","preclinical","phase 1","phase 2","phase 3","approved","unknown"
+- owner_name: company, university, or sponsor name
+- owner_type: "university" | "company" | "unknown"
+- institution: academic or research institution if applicable
+- licensing_status: "available" | "licensed" | "not available" | "unknown"
+- patent_status: "patented" | "patent pending" | "not patented" | "unknown"
+- summary: 1-2 sentence summary of mechanism and biotech significance
+- matching_tags: array of 3-5 keyword tags`;
+
+const WHY_IT_MATTERS_SYSTEM = `You are a biotech business development analyst writing for a pharma BD executive. In 2-3 sentences, explain why a drug asset may matter commercially. Focus on: novelty of the target/mechanism, how early and reachable it appears, and what type of buyer might care. Be specific and direct. Respond with only the 2-3 sentence explanation. No headers.`;
+
+const REPORT_NARRATIVE_SYSTEM = `You are a senior biotech intelligence analyst writing commercial opportunity reports for pharma business development teams.
+
+Write a professional intelligence brief — 3-4 substantive paragraphs — covering:
+1. Why the search query is commercially relevant now
+2. What the top ranked assets represent as a portfolio of opportunities
+3. What themes emerge across the assets (modalities, target areas, development patterns)
+4. What actionable next steps a BD team should consider
+
+Write in the voice of a premium commercial intelligence service. Use precise language. No bullet points. No headers. Just flowing professional analysis.`;
+
+const DOSSIER_SYSTEM = `You are a senior biotech deal analyst writing confidential asset dossiers for pharma licensing teams.
+
+Write a detailed commercial opportunity brief. Structure it as:
+
+**Executive Summary** (1 paragraph): What this asset is, why it's interesting, and what type of buyer should care.
+
+**Commercial Rationale** (1-2 paragraphs): Mechanism novelty, competitive position, why this target/indication/modality combination matters now.
+
+**Licensing Outlook** (1 paragraph): Likelihood of access (university origin, licensing status), typical deal structure for this type of asset, who would be the natural acquirer or licensor.
+
+**Key Risks & Unknowns** (1 paragraph): What is uncertain — data gaps, competitive threats, regulatory challenges, ownership ambiguity.
+
+**Suggested Next Step** (1-2 sentences): Concrete actionable recommendation for a BD team.
+
+Write in precise, professional language suitable for a BD executive.`;
+
+// ── Message builders ──────────────────────────────────────────────────────────
+
+function buildExtractionMessages(signal: RawSignal, text: string): { system: string; user: string } {
+  if (signal.source_type === "patent") {
+    return {
+      system: EXTRACTION_PATENT_SYSTEM,
+      user: `Source type: patent
+Assignee/Owner: ${signal.institution_or_sponsor || signal.authors_or_owner}
+Title: ${signal.title}
+Abstract/Description: ${text.slice(0, 2000)}`,
+    };
+  }
+
+  if (signal.source_type === "tech_transfer") {
+    return {
+      system: EXTRACTION_TECH_TRANSFER_SYSTEM,
+      user: `Source type: tech_transfer
+Institution: ${signal.institution_or_sponsor}
+Title: ${signal.title}
+Description: ${text.slice(0, 2000)}`,
+    };
+  }
+
+  return {
+    system: EXTRACTION_GENERAL_SYSTEM,
+    user: `Source type: ${signal.source_type}
 Institution/Sponsor: ${signal.institution_or_sponsor}
 Owner/Author: ${signal.authors_or_owner}
 Title: ${signal.title}
-Text: ${text.slice(0, 2000)}`;
+Text: ${text.slice(0, 2000)}`,
+  };
 }
 
 function selectModel(signal: RawSignal): { client: OpenAI; model: string } {
@@ -120,13 +178,16 @@ export async function extractAssetFromSignal(
   const text = signal.text?.trim();
   if (!text || text === "No abstract available.") return null;
 
-  const prompt = buildExtractionPrompt(signal, text);
+  const { system, user } = buildExtractionMessages(signal, text);
   const { client, model } = selectModel(signal);
 
   try {
     const response = await client.chat.completions.create({
       model,
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
       response_format: { type: "json_object" },
       temperature: 0.1,
     });
@@ -153,10 +214,12 @@ export async function extractAssetFromSignal(
     if (isFatalOpenAIError(err)) throw err;
     if (model === "gpt-4o") {
       try {
-        const fallbackPrompt = buildExtractionPrompt(signal, text);
         const fallback = await clientMini.chat.completions.create({
           model: "gpt-4o-mini",
-          messages: [{ role: "user", content: fallbackPrompt }],
+          messages: [
+            { role: "system", content: system },
+            { role: "user", content: user },
+          ],
           response_format: { type: "json_object" },
           temperature: 0.1,
         });
@@ -175,7 +238,7 @@ export async function extractAssetFromSignal(
           licensing_status: fp.licensing_status ?? "unknown",
           patent_status: fp.patent_status ?? "unknown",
           summary: fp.summary ?? "",
-          matching_tags: Array.isArray(fp.matching_tags) ? fp.matching_tags : [],
+          matching_tags: Array.isArray(fp.matching_tags) ? fp.matching_tags.map(String) : [],
         };
       } catch (fallbackErr: any) {
         console.warn("[llm] gpt-4o-mini fallback failed:", fallbackErr?.message);
@@ -198,30 +261,13 @@ export async function extractAssetsFromSignalBatch(
     return `[${i + 1}] SOURCE: ${s.source_type} | INSTITUTION: ${inst} | TITLE: ${s.title} | TEXT: ${text}`;
   }).join("\n\n");
 
-  const prompt = `You are a biotech intelligence analyst. Extract structured drug asset information from the following ${signals.length} research signals.
-
-Return ONLY a JSON object with a single key "items" whose value is an array of exactly ${signals.length} objects in the same order as the input.
-Each object must have these fields:
-- asset_name: specific drug, compound, therapy, or platform name (use the title as the name if no specific asset is named)
-- target: molecular or biological target ("unknown" if not mentioned)
-- modality: one of: "small molecule","antibody","CAR-T","gene therapy","mRNA therapy","peptide","bispecific antibody","ADC","cell therapy","oncolytic virus","RNA interference","antisense oligonucleotide","protein","vaccine","other","unknown"
-- indication: disease or condition ("unknown" if not stated)
-- development_stage: one of: "discovery","preclinical","phase 1","phase 2","phase 3","approved","unknown"
-- owner_name: company, university, or sponsor name
-- owner_type: "university" | "company" | "unknown"
-- institution: academic or research institution if applicable
-- licensing_status: "available" | "licensed" | "not available" | "unknown"
-- patent_status: "patented" | "patent pending" | "not patented" | "unknown"
-- summary: 1-2 sentence summary of mechanism and biotech significance
-- matching_tags: array of 3-5 keyword tags
-
-Signals:
-${signalLines}`;
-
   try {
     const response = await clientMini.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: EXTRACTION_BATCH_SYSTEM },
+        { role: "user", content: `Extract from the following ${signals.length} signals:\n\n${signalLines}` },
+      ],
       response_format: { type: "json_object" },
       temperature: 0.1,
     });
@@ -284,11 +330,7 @@ export async function generateWhyItMatters(
     ? `Buyer focus: ${[...buyerProfile.therapeutic_areas, ...buyerProfile.indication_keywords].join(", ") || "broad biotech"}.`
     : "";
 
-  const prompt = `You are a biotech business development analyst writing for a pharma BD executive.
-
-In 2-3 sentences, explain why this drug asset may matter commercially. Focus on: novelty of the target/mechanism, how early and reachable it appears, and what type of buyer might care. Be specific and direct.
-
-Asset: ${asset.asset_name}
+  const userContent = `Asset: ${asset.asset_name}
 Target: ${asset.target}
 Modality: ${asset.modality}
 Indication: ${asset.indication}
@@ -296,14 +338,15 @@ Stage: ${asset.development_stage}
 Owner: ${asset.owner_name} (${asset.owner_type})
 Licensing: ${asset.licensing_status}
 Summary: ${asset.summary}
-${profileContext}
-
-Respond with only the 2-3 sentence explanation. No headers.`;
+${profileContext}`.trim();
 
   try {
     const response = await clientMini.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: WHY_IT_MATTERS_SYSTEM },
+        { role: "user", content: userContent },
+      ],
       temperature: 0.3,
       max_tokens: 200,
     });
@@ -344,25 +387,19 @@ export async function generateReportNarrative(
     .filter(Boolean)
     .join(". ");
 
-  const prompt = `You are a senior biotech intelligence analyst writing a commercial opportunity report for a pharma business development team.
-
-Write a professional intelligence brief — 3-4 substantive paragraphs — covering:
-1. Why this search query (${query}) is commercially relevant now
-2. What the top ranked assets represent as a portfolio of opportunities
-3. What themes emerge across the assets (modalities, target areas, development patterns)
-4. What actionable next steps a BD team should consider
-
+  const userContent = `Query: ${query}
 Buyer profile: ${profileDesc || "general biotech buyer"}
 
 Top assets found:
-${assetSummaries}
-
-Write in the voice of a premium commercial intelligence service. Use precise language. No bullet points. No headers. Just flowing professional analysis.`;
+${assetSummaries}`;
 
   try {
     const response = await clientFull.chat.completions.create({
       model: "gpt-4o",
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: REPORT_NARRATIVE_SYSTEM },
+        { role: "user", content: userContent },
+      ],
       temperature: 0.4,
       max_tokens: 800,
     });
@@ -372,7 +409,10 @@ Write in the voice of a premium commercial intelligence service. Use precise lan
     try {
       const fallback = await clientMini.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [{ role: "user", content: prompt }],
+        messages: [
+          { role: "system", content: REPORT_NARRATIVE_SYSTEM },
+          { role: "user", content: userContent },
+        ],
         temperature: 0.4,
         max_tokens: 600,
       });
@@ -383,27 +423,13 @@ Write in the voice of a premium commercial intelligence service. Use precise lan
   }
 }
 
-function buildDossierPrompt(asset: ScoredAsset): string {
+function buildDossierUserContent(asset: ScoredAsset): string {
   const signals = asset.signals
     .slice(0, 5)
     .map((s) => `- [${s.source_type}] ${s.title} (${s.date})`)
     .join("\n");
 
-  return `You are a senior biotech deal analyst writing a confidential asset dossier for a pharma licensing team.
-
-Write a detailed commercial opportunity brief for this drug asset. Structure it as:
-
-**Executive Summary** (1 paragraph): What this asset is, why it's interesting, and what type of buyer should care.
-
-**Commercial Rationale** (1-2 paragraphs): Mechanism novelty, competitive position, why this target/indication/modality combination matters now.
-
-**Licensing Outlook** (1 paragraph): Likelihood of access (university origin, licensing status), typical deal structure for this type of asset, who would be the natural acquirer or licensor.
-
-**Key Risks & Unknowns** (1 paragraph): What is uncertain — data gaps, competitive threats, regulatory challenges, ownership ambiguity.
-
-**Suggested Next Step** (1-2 sentences): Concrete actionable recommendation for a BD team.
-
-Asset:
+  return `Asset:
 Name: ${asset.asset_name}
 Target: ${asset.target}
 Modality: ${asset.modality}
@@ -417,21 +443,20 @@ Score: ${asset.score}/100
 Summary: ${asset.summary}
 
 Supporting Evidence:
-${signals}
-
-Write in precise, professional language suitable for a BD executive.`;
+${signals}`;
 }
 
-/** Stream dossier narrative token-by-token. Uses mini by default; pass fullModel=true for gpt-4o. */
 export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = false): AsyncGenerator<string> {
-  const prompt = buildDossierPrompt(asset);
   const model = fullModel ? "gpt-4o" : "gpt-4o-mini";
   const client = fullModel ? clientFull : clientMini;
   const maxTokens = fullModel ? 900 : 700;
 
   const stream = await client.chat.completions.create({
     model,
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      { role: "system", content: DOSSIER_SYSTEM },
+      { role: "user", content: buildDossierUserContent(asset) },
+    ],
     temperature: 0.3,
     max_tokens: maxTokens,
     stream: true,
@@ -444,11 +469,13 @@ export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = fa
 }
 
 export async function generateDossierNarrative(asset: ScoredAsset): Promise<string> {
-  const prompt = buildDossierPrompt(asset);
   try {
     const response = await clientMini.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [
+        { role: "system", content: DOSSIER_SYSTEM },
+        { role: "user", content: buildDossierUserContent(asset) },
+      ],
       temperature: 0.3,
       max_tokens: 700,
     });

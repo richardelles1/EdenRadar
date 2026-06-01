@@ -17,6 +17,7 @@ import { registerPipelineRoutes } from "./routes/pipeline";
 import { registerInstitutionRoutes } from "./routes/institutions";
 import { registerMiscRoutes } from "./routes/misc";
 import { registerContactRoutes } from "./routes/contacts";
+import { registerInternalRoutes } from "./routes/internal";
 import { sendDemoRequestEmail } from "./email";
 
 export async function registerRoutes(
@@ -51,6 +52,7 @@ export async function registerRoutes(
   registerInstitutionRoutes(app);
   registerMiscRoutes(app);
   registerContactRoutes(app);
+  registerInternalRoutes(app);
 
   // Waitlist
   app.post("/api/waitlist", async (req, res) => {

@@ -1123,19 +1123,54 @@ export { resolveAggregationQuery };
 
 // ── Conversational detection ──────────────────────────────────────────────
 const BIOTECH_SIGNALS = [
+  // Core biotech / science
   "target", "mechanism", "moa", "modality", "antibody", "therapeutic", "biologic",
   "gene", "protein", "receptor", "kinase", "inhibitor", "agonist", "antagonist",
   "drug", "compound", "molecule", "rna", "dna", "mrna", "sirna", "crispr",
-  "oncology", "cancer", "tumor", "tumour", "indication", "disease", "preclinical",
-  "clinical", "trial", "fda", "license", "licensing", "patent", "asset",
-  "portfolio", "pipeline", "stage", "biotech", "biopharma", "pharma",
-  "institution", "university", "research", "vaccine", "immunotherapy",
-  "stem cell", "diagnostic", "assay", "platform", "tto", "tech transfer", "technology",
-  "how many", "gpl", "glp", "cnc", "cns", "hiv", "covid", "autoimmune",
-  "inflammation", "cardiac", "neuro", "stanford", "mit", "harvard", "columbia",
-  // Stage and organ terms that indicate search intent even in short messages
-  "discovery", "liver", "kidney", "lung", "brain", "breast", "prostate",
-  "rare", "orphan", "pediatric", "solid tumor", "hematologic",
+  "vaccine", "immunotherapy", "stem cell", "diagnostic", "assay", "platform",
+  "base editing", "prime editing", "epigenetic", "bispecific", "adc", "protac",
+  "car-t", "cart", "cell therapy", "gene therapy", "gene editing",
+  "checkpoint", "pd-1", "pd-l1", "pdl1", "ctla4", "tgf-beta", "her2", "vegf",
+  "antisense", "oligonucleotide", "payload", "linker", "conjugate",
+
+  // Deal / licensing / BD language
+  "license", "licensing", "licensable", "in-license", "out-license", "in-licensing",
+  "opportunity", "opportunities", "asset", "assets", "deal", "deals", "diligence",
+  "term sheet", "royalty", "milestone", "upfront", "exclusive", "field of use",
+  "freedom to operate", "fto", "ip", "patent", "patents", "tto", "tech transfer",
+  "scouting", "scout", "evaluate", "evaluating", "evaluation", "shortlist",
+  "watchlist", "track", "tracking", "bookmark", "save", "portfolio", "pipeline",
+
+  // Institutions
+  "stanford", "mit", "harvard", "columbia", "ucsf", "penn", "yale", "duke",
+  "johns hopkins", "hopkins", "mayo", "caltech", "michigan", "oxford", "cambridge",
+  "mass general", "mgh", "sloan", "mskcc", "dana-farber",
+
+  // Indications / disease areas
+  "oncology", "cancer", "tumor", "tumour", "indication", "disease",
+  "autoimmune", "inflammation", "inflammatory", "cardiac", "cardiovascular",
+  "neuro", "neurological", "neurology", "cns", "brain", "alzheimer", "parkinson",
+  "als", "ms", "multiple sclerosis", "rare", "orphan", "pediatric",
+  "liver", "kidney", "lung", "breast", "prostate", "ovarian", "pancreatic",
+  "leukemia", "lymphoma", "myeloma", "glioblastoma", "solid tumor", "hematologic",
+  "metabolic", "diabetes", "obesity", "nash", "nafld", "fibrosis",
+  "respiratory", "pulmonary", "copd", "asthma", "ibd", "crohn", "colitis",
+  "lupus", "rheumatoid", "ra", "psoriasis", "atopic", "dermatology",
+  "infectious", "hiv", "covid", "hepatitis", "antimicrobial", "antiviral",
+  "ophthalmic", "retinal", "eye disease", "hearing", "musculoskeletal",
+  "renal", "urological", "endocrine", "thyroid",
+
+  // Stage / development
+  "preclinical", "clinical", "trial", "phase 1", "phase 2", "phase 3",
+  "discovery", "ind", "fda", "ema", "approved", "marketed", "early stage", "late stage",
+
+  // Research / academic
+  "research", "publication", "paper", "literature", "evidence", "data",
+  "study", "studies", "journal", "peer reviewed",
+
+  // Org / company context
+  "biotech", "biopharma", "pharma", "startup", "series a", "series b",
+  "institution", "university", "technology", "how many", "gpl", "glp",
 ];
 
 const FUN_FACT_PATTERNS = [
@@ -1183,33 +1218,51 @@ export type IntentClassification = {
 const ROUTER_SYSTEM_PROMPT = `You are a biotech search intent classifier for a TTO (technology transfer office) asset discovery platform. The PRIMARY corpus is TTO assets — always default to TTO corpus search unless the query unambiguously targets external live data sources. Respond with JSON only.
 
 INTENTS:
-- search: user wants to find/browse TTO assets (DEFAULT — use when unclear)
-- aggregation: wants counts or statistics ("how many", "breakdown by", "top institutions")
-- back_ref: refers to a previously shown asset by position/anaphora ("the second one", "tell me more about it", "that one") — ONLY valid when hasPriorAssets=true
-- comparative: wants head-to-head comparison ("compare", "vs", "which is better")
-- definitional: wants a concept explained ("what is a PROTAC", "explain mRNA", "how does gene editing work")
-- pipeline: user asks about their OWN saved/bookmarked assets ("my pipeline", "what do I have saved", "what's in my list", "show my saved", "what have I bookmarked", "my watchlist", "my portfolio")
-- synthesis: user wants a cross-cutting analysis of their entire saved pipeline ("analyze my pipeline", "portfolio review", "summarize what I have", "what do I have in evaluation", "give me an overview", "what are my top assets", "pipeline assessment")
-- document: user wants a structured deliverable OR is revising one ("draft a diligence checklist", "generate a memo", "write a term sheet outline", "create a brief for", "give me a checklist", "write up a summary for") — when hasRecentDocument is present, also classify as document: "make it shorter", "focus on X section", "revise the", "expand", "adjust the tone", "add more detail"
-- conversational: greeting, thanks, out-of-scope chat with no biotech search intent
+- search: find/browse TTO assets. DEFAULT — use when unclear. Triggers:
+  General: "find", "show me", "look for", "search for", "what do you have on", "any assets on", "what's available in", "I'm looking for", "surface", "pull up", "give me assets on", "anything on", "what's out there for", "explore", "I'm interested in"
+  BD/deal language: "looking to in-license", "scouting for", "we're evaluating", "potential targets in", "any opportunities in", "what's licensable in", "complement our portfolio with", "fill a gap in our pipeline with", "what's coming out of [institution]", "promising assets in", "I need something for", "we need X for our platform", "adjacencies to", "what should I be looking at in", "help me find candidates for", "what would fit our thesis"
+  Institution queries: "what does [institution] have", "show me [institution]'s portfolio", "[institution] assets", "what's [institution] licensing"
+  Also: create/build pipeline requests, short disease or modality names alone ("leukemia", "antibody"), company-context searches ("I'm a Series A company in oncology looking for")
 
-FILTER EXTRACTION (null if not mentioned in the message):
+- aggregation: counts, stats, breakdowns, market mapping. Triggers: "how many", "how much", "count of", "breakdown by", "distribution of", "split by", "top 10", "most common", "what percentage", "what proportion", "rank", "which institution has the most", "what's the spread", "how does it break down", "volume of", "give me a market map of", "how saturated is", "what's the competitive density in", "how crowded is", "what's the landscape look like for", "overview of the space", "how many players are there in", "what's the breadth of"
+
+- back_ref: refers to a PREVIOUSLY SHOWN asset. ONLY valid when hasPriorAssets=true. Triggers:
+  Positional: "the first one", "the second one", "the third one", "that one", "this one", "the last one", "the top one", "number two"
+  Anaphoric: "tell me more about it", "go deeper on that", "more details on it", "dig into that", "expand on that", "more on that asset", "what else can you tell me about it", "can you elaborate"
+  Asset-specific questions about a prior asset: "what's the IP on this", "is it exclusive", "what's the licensing status", "has it been licensed before", "who do I contact about that", "what's the TTO for that", "what's the ask", "what are the deal terms", "can I see the source", "where can I read more", "what stage is it at", "what's the mechanism", "tell me about the science behind it", "how validated is this", "is there clinical data on this one"
+  Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]"
+  NOT valid if hasPriorAssets=false
+
+- comparative: head-to-head between assets. Triggers: "compare", "vs", "versus", "side by side", "head to head", "which is better", "how do they differ", "what's the difference between", "contrast", "stack them up", "which would you choose", "which is stronger", "weigh them against each other", "pros and cons of each", "which would be a better fit", "which is more de-risked", "which has better IP", "which one should I pursue first", "priority order these", "rank these against each other", "which is further along", "which has a cleaner path"
+
+- definitional: explain a concept or mechanism. Triggers: "what is", "what are", "explain", "how does X work", "help me understand", "what's a", "what do you mean by", "walk me through", "tell me about the mechanism", "what's the science behind", "how does it work", "what's the difference between [concept A] and [concept B]", "educate me on", "primer on", "I'm not familiar with", "never heard of", "what does [acronym] stand for", "can you break down", "in simple terms what is", "ELI5", "what's the mechanism of action of", "how validated is [approach]", "is [approach] proven", "what's the scientific basis for"
+
+- pipeline: VIEW own saved/bookmarked assets. Triggers: "my pipeline", "what have I saved", "what am I tracking", "my saved assets", "my watchlist", "my bookmarks", "my list", "my portfolio", "show my saves", "what's in my pipeline", "what have I bookmarked", "my deals", "assets I'm tracking", "show me what I've saved". CRITICAL: "create a pipeline", "build a pipeline", "start a pipeline", "put together a list", "compile assets" are NOT pipeline — they are search
+
+- synthesis: cross-cutting analysis of entire saved pipeline. Triggers: "analyze my pipeline", "portfolio review", "summarize what I have", "what do I have", "overview of my saves", "how does my pipeline look", "what's the status of my assets", "review what I've saved", "what am I missing", "what gaps do I have", "pipeline assessment", "what are my strongest assets", "portfolio breakdown", "how balanced is my pipeline", "what themes do I have", "what's my coverage in X", "do I have any [modality] saved", "what stage is most of my pipeline at", "am I too concentrated in", "what's the risk profile of my pipeline", "which of my assets is furthest along", "rank my saves", "prioritize my pipeline", "what should I focus on", "where are the gaps", "how diversified am I"
+
+- document: generate a structured deliverable. Triggers: "draft a", "write a", "generate a", "create a checklist", "give me a memo", "put together a brief", "help me write up", "I need a term sheet", "can you draft", "write something up for", "diligence checklist", "executive summary", "one-pager", "one pager", "investment memo", "licensing memo", "deal brief", "prepare a summary", "help me prep for a meeting", "I need talking points", "draft a pitch", "write a summary for my team", "put together something I can share", "help me structure a conversation about this", "make a case for this asset". When hasRecentDocument is present, also: "make it shorter", "focus on X section", "revise the", "expand", "adjust the tone", "add more detail", "simplify", "rewrite", "tighten it up", "cut it down", "make it more compelling"
+
+- conversational: greeting, thanks, chitchat, out-of-scope. Triggers: "hello", "hi", "good morning/evening", "thanks", "thank you", "great", "got it", "makes sense", "interesting", "cool", vague openers with no biotech content ("I'm building a company" alone, "tell me about yourself", "what can you do")
+
+FILTER EXTRACTION (null if not mentioned):
 - modality: Gene Therapy | Gene Editing | Cell Therapy | CAR-T | Small Molecule | Antibody | mRNA | RNA Therapeutics | siRNA | Antisense | PROTAC | ADC | Bispecific Antibody | Vaccine | Peptide | Nanoparticle | Protein/Biologics
-- stage: discovery | preclinical | IND-enabling | phase 1 | phase 2 | phase 3 | approved
-- indication: free-text disease/area (e.g. "liver cancer", "oncology", "alzheimer", "rare disease", "autoimmune")
-- institution: university or TTO name if explicitly mentioned
-- geography: us | eu | uk | asia (only if a region or country is explicitly mentioned)
-- biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation")
-- recency: time window when user signals recency interest — "last30" (new, recent, last month, last 30 days), "last90" (last quarter, last 3 months, last 90 days), "last180" (last 6 months, last half year), "lastyear" (this year, last year, past year) — null if no time signal
-- trending: true when user asks about "hot", "rising", "trending", "getting attention", "exciting right now", "what's interesting lately" — implies recency:"last90" if recency is null; false/null otherwise
+- stage: discovery | preclinical | IND-enabling | phase 1 | phase 2 | phase 3 | approved. Shorthands: "early stage"/"early-stage"→preclinical, "late stage"/"late-stage"→phase 3, "in the clinic"→phase 1, "approved/marketed/on market"→approved, "IND-ready"→IND-enabling, "pre-IND"→preclinical, "proof of concept"→preclinical, "first-in-human"→phase 1
+- indication: free-text disease/area. Shorthands: "cancer"→oncology, "Alzheimer's"/"Alzheimer"→alzheimer, "Parkinson's"→parkinson, "ALS"/"Lou Gehrig's"→ALS, "MS"→multiple sclerosis, "IBD"→inflammatory bowel disease, "RA"→rheumatoid arthritis, "lupus"→lupus/SLE, "NASH"/"NAFLD"→metabolic liver disease, "T2D"→type 2 diabetes, "CVD"→cardiovascular disease, "GBM"→glioblastoma, "NSCLC"→non-small cell lung cancer, "HCC"→hepatocellular carcinoma, "CLL"/"NHL"→lymphoma/leukemia
+- institution: university or TTO name if mentioned. Shorthands: "Hopkins"→Johns Hopkins, "Mass General"/"MGH"→Massachusetts General Hospital, "UCSF"→University of California San Francisco, "Sloan"/"MSKCC"→Memorial Sloan Kettering, "Dana-Farber"→Dana-Farber Cancer Institute, "Broad"→Broad Institute, "Salk"→Salk Institute, "Scripps"→Scripps Research, "Baylor"→Baylor College of Medicine, "Mayo"→Mayo Clinic
+- modality shorthands: "RNA"→RNA Therapeutics, "biologics"→Protein/Biologics, "bi-specific"/"bispecific"→Bispecific Antibody, "CART"/"CAR T"→CAR-T, "base editing"/"prime editing"→Gene Editing, "naked antibody"→Antibody, "mAb"→Antibody, "ASO"→Antisense, "LNP"→mRNA (likely delivery), "viral vector"→Gene Therapy
+- geography: us | eu | uk | asia — only if a region or country is explicitly mentioned
+- biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation", "checkpoint inhibition", "gene silencing")
+- recency: "last30" (new, recent, last month), "last90" (last quarter, last 3 months), "last180" (last 6 months), "lastyear" (this year, last year)
+- trending: true when user asks about "hot", "rising", "trending", "getting attention", "exciting right now", "what's interesting lately", "what's moving", "what's gaining momentum"
 
 back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
 
-live_source: ONLY non-null when user EXPLICITLY asks for live external data (not general TTO search). Null in all other cases.
-- "clinicaltrials": user explicitly asks about currently enrolling trials, trial status, trial recruitment, open clinical trial search (NOT phase-filtered TTO asset queries)
-- "patents": user explicitly asks about patent landscape, IP holders, patent search, who holds patents in a space
-- "harvard": user explicitly asks for Harvard research datasets or Harvard Library catalog resources
-null for ALL general biotech/TTO searches, stage filters, indication searches, institution queries, comparisons
+live_source: non-null ONLY when user clearly wants external live data:
+- "clinicaltrials": enrolling trials, trial status, trial recruitment, active clinical studies — "what trials are running", "who's recruiting for", "active programs in [indication]", "who's in the clinic for", "competitive clinical landscape", "any active programs", "what's in the clinic", "clinical activity in", "who's running trials on", "ongoing trials", "currently enrolling"
+- "patents": patent landscape, IP holders, freedom to operate — "who holds the patents", "IP landscape", "who owns the IP on", "patent search", "freedom to operate", "FTO analysis", "who's patented", "patent holders in", "competitive IP landscape", "who controls the IP in"
+- "harvard": supporting research, academic papers, scientific literature — "find supporting research", "show me papers on", "what does the literature say", "academic evidence", "what's been published on", "scientific publications", "research backing", "what does the science say", "any clinical data on this", "what's the evidence base for", "is there proof of concept data", "what do researchers say about", "peer-reviewed studies on", "published data on", "what's the scientific consensus on", "is this mechanism validated in the literature"
+null for ALL standard TTO asset searches
 
 Return exactly this shape:
 {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
@@ -1246,7 +1299,28 @@ hasPriorAssets: false
 
 Message: "what's hot in GLP-1 right now"
 hasPriorAssets: false
-→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"GLP-1","institution":null,"geography":null,"biology":null,"recency":"last90","trending":true},"back_ref_position":null,"live_source":null}`;
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"GLP-1","institution":null,"geography":null,"biology":null,"recency":"last90","trending":true},"back_ref_position":null,"live_source":null}
+
+Message: "create a gene therapy pipeline for me"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":"Gene Therapy","stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+Note: "create/build a pipeline" = find assets to populate one = search intent, NOT pipeline intent
+
+Message: "build me a pipeline of oncology assets"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":"oncology","institution":null,"geography":null,"biology":null,"recency":null,"trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "can you find supporting research on this?"
+hasPriorAssets: true
+→ {"intent":"search","filters":{},"back_ref_position":null,"live_source":"harvard"}
+
+Message: "find me academic papers on CRISPR gene editing"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":"Gene Editing"},"back_ref_position":null,"live_source":"harvard"}
+
+Message: "what does the scientific literature say about CAR-T for leukemia?"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":"CAR-T","indication":"leukemia"},"back_ref_position":null,"live_source":"harvard"}`;
 
 export async function classifyIntent(
   message: string,
