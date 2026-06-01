@@ -2812,7 +2812,7 @@ export class DatabaseStorage implements IStorage {
       AND char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= ${CONTENT_THRESHOLD}
       AND (${unknownExpr}) >= ${UNKNOWN_GATE}
     `;
-    const [countRow] = await db.execute<{ n: string }>(sql`SELECT COUNT(*)::text AS n FROM ingested_assets WHERE ${baseWhere}`);
+    const countRow = (await db.execute<{ n: string }>(sql`SELECT COUNT(*)::text AS n FROM ingested_assets WHERE ${baseWhere}`)).rows[0];
     const eligible = parseInt((countRow as any)?.n ?? "0", 10);
     if (dryRun || eligible === 0) return { eligible, reset: 0 };
     const result = await db.execute(sql`
