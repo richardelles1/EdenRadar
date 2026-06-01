@@ -340,6 +340,7 @@ type ParsedImportAsset = {
   name: string;
   description: string;
   sourceUrl: string;
+  unmetNeed: string;
   inventors: string[];
   patentStatus: string;
   technologyId: string;
@@ -444,6 +445,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
 
   // Input content
   const [pastedText, setPastedText] = useState("");
+  const [sourceUrlInput, setSourceUrlInput] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
   const [docFiles, setDocFiles] = useState<File[]>([]);
@@ -507,7 +509,10 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
       const formData = new FormData();
       formData.append("institution", selectedInst);
       if (mode === "text") {
-        formData.append("rawText", pastedText);
+        const textWithUrl = sourceUrlInput.trim()
+          ? `Page URL: ${sourceUrlInput.trim()}\n\n${pastedText}`
+          : pastedText;
+        formData.append("rawText", textWithUrl);
       } else if (mode === "image") {
         for (const file of imageFiles) {
           formData.append("images", file);
@@ -548,8 +553,8 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
         headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({
           institution: parsedInstitution,
-          assets: selected.map(({ name, description, abstract, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage }) =>
-            ({ name, description, abstract, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage })
+          assets: selected.map(({ name, description, abstract, sourceUrl, unmetNeed, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage, categories, innovationClaim, mechanismOfAction }) =>
+            ({ name, description, abstract, sourceUrl, unmetNeed, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage, categories, innovationClaim, mechanismOfAction })
           ),
         }),
       });
@@ -580,16 +585,21 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const revCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "revisions").length;
   const incCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "incomplete").length;
 
-  const resetToInput = () => {
+  const resetToInput = (clearInstitution = false) => {
     setStage("input");
     setParsedAssets([]);
     setChecked([]);
     setImportResult(null);
     setFailedImages([]);
     setPastedText("");
+    setSourceUrlInput("");
     setImageFiles([]);
     setImagePreviews([]);
     setDocFiles([]);
+    if (clearInstitution) {
+      setSelectedInst("");
+      setInstSearch("");
+    }
   };
 
   return (
@@ -722,13 +732,22 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
             </div>
 
             {mode === "text" ? (
-              <Textarea
-                placeholder="Paste the TTO listing text: titles, descriptions, inventors, patent info…"
-                value={pastedText}
-                onChange={(e) => setPastedText(e.target.value)}
-                className="min-h-[180px] font-mono text-xs"
-                data-testid="textarea-paste-text"
-              />
+              <div className="space-y-2">
+                <Input
+                  placeholder="Page URL (optional — paste the listing URL so it's stored with the asset)"
+                  value={sourceUrlInput}
+                  onChange={(e) => setSourceUrlInput(e.target.value)}
+                  className="text-xs"
+                  data-testid="input-source-url"
+                />
+                <Textarea
+                  placeholder="Paste the TTO listing text: titles, descriptions, inventors, patent info…"
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  className="min-h-[180px] font-mono text-xs"
+                  data-testid="textarea-paste-text"
+                />
+              </div>
             ) : mode === "image" ? (
               <div className="space-y-3">
                 <div

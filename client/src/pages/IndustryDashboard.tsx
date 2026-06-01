@@ -613,6 +613,8 @@ export default function IndustryDashboard() {
   const firstVisitThisSession = typeof window !== "undefined" && !sessionStorage.getItem("edenradar_welcomed");
   const [showWelcome, setShowWelcome] = useState(firstVisitThisSession);
   const [welcomeVisible, setWelcomeVisible] = useState(firstVisitThisSession);
+  // Splash sequence: 0-2 = scanning phrases, 3 = "ready"
+  const [splashPhase, setSplashPhase] = useState(0);
   const minTimePassedRef = useRef(false);
   const loadingDoneRef = useRef(false);
   const dismissCalledRef = useRef(false);
@@ -738,6 +740,15 @@ export default function IndustryDashboard() {
   }
 
   useEffect(() => {
+    if (!firstVisitThisSession) return;
+    const STEP = 300;
+    const t1 = setTimeout(() => setSplashPhase(1), STEP);
+    const t2 = setTimeout(() => setSplashPhase(2), STEP * 2);
+    const t3 = setTimeout(() => setSplashPhase(3), STEP * 3); // "ready"
+    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+  }, []);
+
+  useEffect(() => {
     const minTimer = setTimeout(() => {
       minTimePassedRef.current = true;
       if (loadingDoneRef.current) triggerWelcomeDismiss();
@@ -816,32 +827,64 @@ export default function IndustryDashboard() {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes splash-ready {
+          from { opacity: 0; transform: translateY(7px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
 
       {/* ── WELCOME ANIMATION OVERLAY ── */}
       {showWelcome && (
         <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 pointer-events-none"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center pointer-events-none"
           style={{
             opacity: welcomeVisible ? 1 : 0,
             transition: "opacity 700ms ease-in-out",
-            background: "color-mix(in srgb, hsl(var(--background)) 97%, hsl(var(--primary)))",
+            background: "#020c06",
           }}
           data-testid="dashboard-welcome-overlay"
         >
+          {/* Ambient glow */}
           <div
-            className="flex flex-col items-center gap-4"
-            style={{ animation: "dash-fade-up 0.4s ease-out both" }}
-          >
-            <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg">
-              <Radar className="w-7 h-7 text-white" />
-            </div>
-            <div className="text-center space-y-1">
-              <p className="text-xl font-bold text-foreground tracking-tight">
-                Eden<span className="text-emerald-500">Radar</span>
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: "radial-gradient(ellipse 55% 35% at 50% 58%, rgba(16,185,129,0.07) 0%, transparent 70%)",
+            }}
+          />
+
+          {/* Wordmark anchor */}
+          <div className="absolute top-10 left-1/2 -translate-x-1/2">
+            <p className="text-[11px] font-semibold tracking-[0.25em] text-emerald-700/70 uppercase select-none">
+              EdenRadar
+            </p>
+          </div>
+
+          {/* Scanning phrases */}
+          <div className="relative h-8 flex items-center justify-center w-full">
+            {splashPhase < 3 ? (
+              <>
+                {(["SCANNING 350+ SOURCES", "CHECKING YOUR ALERTS", "BUILDING YOUR VIEW"] as const).map((phrase, i) => (
+                  <p
+                    key={i}
+                    className="absolute text-[11px] font-medium tracking-[0.2em] uppercase text-center"
+                    style={{
+                      color: "rgba(52,211,153,0.45)",
+                      opacity: splashPhase === i ? 1 : 0,
+                      transition: "opacity 180ms ease",
+                    }}
+                  >
+                    {phrase}
+                  </p>
+                ))}
+              </>
+            ) : (
+              <p
+                className="text-[22px] font-semibold text-white tracking-tight text-center"
+                style={{ animation: "splash-ready 0.5s cubic-bezier(0.16,1,0.3,1) both" }}
+              >
+                Your intelligence is ready.
               </p>
-              <p className="text-sm text-muted-foreground">Preparing your intelligence...</p>
-            </div>
+            )}
           </div>
         </div>
       )}

@@ -227,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       "eden-alerts-dismissed",
       "eden-alerts-checked-at",
       "eden-orientation-dismissed",
+      "scout-tour-done-v1",
     ];
     userSpecificKeys.forEach((k) => localStorage.removeItem(k));
     await supabase.auth.signOut();

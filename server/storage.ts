@@ -1017,6 +1017,10 @@ export class DatabaseStorage implements IStorage {
             ...(listing.licensingStatus && !hv_has("licensingStatus") ? { licensingStatus: listing.licensingStatus } : {}),
             ...(listing.contactEmail && !hv_has("contactEmail") ? { contactEmail: listing.contactEmail } : {}),
             ...(listing.technologyId && !hv_has("technologyId") ? { technologyId: listing.technologyId } : {}),
+            ...((listing as any).innovationClaim && !hv_has("innovationClaim") ? { innovationClaim: (listing as any).innovationClaim } : {}),
+            ...((listing as any).mechanismOfAction && !hv_has("mechanismOfAction") ? { mechanismOfAction: (listing as any).mechanismOfAction } : {}),
+            ...((listing as any).unmetNeed ? { unmetNeed: (listing as any).unmetNeed } : {}),
+            ...((listing as any).ipType && !hv_has("ipType") ? { ipType: (listing as any).ipType } : {}),
             ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0, miniEnrichAttempts: 0, classifyAttempts: 0 } : {}),
           })
           .where(eq(ingestedAssets.id, existing.id));
@@ -1166,6 +1170,10 @@ export class DatabaseStorage implements IStorage {
             ...(listing.licensingStatus && !hv_has("licensingStatus") ? { licensingStatus: listing.licensingStatus } : {}),
             ...(listing.contactEmail && !hv_has("contactEmail") ? { contactEmail: listing.contactEmail } : {}),
             ...(listing.technologyId && !hv_has("technologyId") ? { technologyId: listing.technologyId } : {}),
+            ...((listing as any).innovationClaim && !hv_has("innovationClaim") ? { innovationClaim: (listing as any).innovationClaim } : {}),
+            ...((listing as any).mechanismOfAction && !hv_has("mechanismOfAction") ? { mechanismOfAction: (listing as any).mechanismOfAction } : {}),
+            ...((listing as any).unmetNeed ? { unmetNeed: (listing as any).unmetNeed } : {}),
+            ...((listing as any).ipType && !hv_has("ipType") ? { ipType: (listing as any).ipType } : {}),
             ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
             enrichedAt: null,
             deepEnrichAttempts: 0,
@@ -2812,7 +2820,7 @@ export class DatabaseStorage implements IStorage {
       AND char_length(COALESCE(summary,'') || COALESCE(abstract,'')) >= ${CONTENT_THRESHOLD}
       AND (${unknownExpr}) >= ${UNKNOWN_GATE}
     `;
-    const [countRow] = await db.execute<{ n: string }>(sql`SELECT COUNT(*)::text AS n FROM ingested_assets WHERE ${baseWhere}`);
+    const countRow = (await db.execute<{ n: string }>(sql`SELECT COUNT(*)::text AS n FROM ingested_assets WHERE ${baseWhere}`)).rows[0];
     const eligible = parseInt((countRow as any)?.n ?? "0", 10);
     if (dryRun || eligible === 0) return { eligible, reset: 0 };
     const result = await db.execute(sql`

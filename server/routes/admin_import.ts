@@ -138,7 +138,8 @@ Extract exactly one asset from this page. Return ONLY valid JSON with a single k
 - developmentStage: one of "discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"
 - categories: array of 2-4 therapeutic area tags e.g. ["oncology", "gene therapy"] ([] if not determinable)
 - innovationClaim: 1-sentence key innovation from the Advantages or Technology section ("unknown" if not clear)
-- mechanismOfAction: brief mechanism description ("unknown" if not stated)`;
+- mechanismOfAction: brief mechanism description ("unknown" if not stated)
+- unmetNeed: verbatim text from the "Unmet Need" or "Value Proposition" section ("" if not present)`;
 
     // Normalise a raw AI response into a typed asset array
     function normaliseAssets(raw: any[]): any[] {
@@ -158,6 +159,7 @@ Extract exactly one asset from this page. Return ONLY valid JSON with a single k
         categories: Array.isArray(a.categories) ? a.categories.map(String) : [],
         innovationClaim: String(a.innovationClaim || "unknown"),
         mechanismOfAction: String(a.mechanismOfAction || "unknown"),
+        unmetNeed: String(a.unmetNeed || ""),
       }));
     }
 
@@ -232,6 +234,7 @@ Return ONLY valid JSON with a single key "assets" containing an array (up to 200
 - categories: array of 2-4 therapeutic area tags ([] if not determinable)
 - innovationClaim: 1-sentence key innovation ("unknown" if not clear)
 - mechanismOfAction: brief MoA description ("unknown" if not stated)
+- unmetNeed: verbatim text from the "Unmet Need" or "Value Proposition" section ("" if not present)
 
 If multiple assets appear, return each as a separate array item.`;
 
@@ -239,7 +242,7 @@ If multiple assets appear, return each as a separate array item.`;
           model: "gpt-4o-mini",
           messages: [{ role: "user", content: [
             { type: "text", text: textPrompt },
-            { type: "text", text: `\n\n---\nContent:\n${combinedText.slice(0, 16000)}` },
+            { type: "text", text: `\n\n---\nContent:\n${combinedText.slice(0, 32000)}` },
           ] }],
           response_format: { type: "json_object" },
           temperature: 0.1,
@@ -276,6 +279,10 @@ If multiple assets appear, return each as a separate array item.`;
       modality: z.string().default("unknown"),
       indication: z.string().default("unknown"),
       developmentStage: z.string().default("unknown"),
+      categories: z.array(z.string()).default([]),
+      innovationClaim: z.string().default(""),
+      mechanismOfAction: z.string().default(""),
+      unmetNeed: z.string().default(""),
     });
 
     const bodySchema = z.object({
@@ -307,6 +314,12 @@ If multiple assets appear, return each as a separate array item.`;
         patentStatus: a.patentStatus !== "unknown" ? a.patentStatus : null,
         inventors: a.inventors.length > 0 ? a.inventors : null,
         contactEmail: a.contactEmail || null,
+        categories: a.categories.length > 0 ? a.categories : null,
+        innovationClaim: a.innovationClaim && a.innovationClaim !== "unknown" ? a.innovationClaim : null,
+        mechanismOfAction: a.mechanismOfAction && a.mechanismOfAction !== "unknown" ? a.mechanismOfAction : null,
+        unmetNeed: a.unmetNeed || null,
+        // Auto-infer ipType from patentStatus — all patent variants map to "patent"
+        ipType: ["patented", "patent pending", "provisional"].includes(a.patentStatus) ? "patent" : null,
         relevant: true,
         runId: run.id,
       }));
@@ -319,12 +332,15 @@ If multiple assets appear, return each as a separate array item.`;
 
       if (newAssets.length > 0) {
         const listingMap = new Map(listings.map((l) => [l.fingerprint, l]));
-        const classifyInputs = newAssets.map((a) => ({
-          id: a.id,
-          title: a.assetName,
-          description: listingMap.get(makeFingerprint(a.assetName, institution))?.summary ?? a.assetName,
-          abstract: undefined as string | undefined,
-        }));
+        const classifyInputs = newAssets.map((a) => {
+          const listing = listingMap.get(makeFingerprint(a.assetName, institution));
+          return {
+            id: a.id,
+            title: a.assetName,
+            description: listing?.summary ?? a.assetName,
+            abstract: listing?.abstract ?? undefined,
+          };
+        });
 
         // Re-classify to fill any remaining unknown fields; preserve values already set from parse step
         const newAssetById = new Map(newAssets.map((a) => [a.id, a]));
@@ -337,6 +353,10 @@ If multiple assets appear, return each as a separate array item.`;
             const finalModality = (listing?.modality && listing.modality !== "unknown") ? listing.modality : (classification.modality ?? "unknown");
             const finalIndication = (listing?.indication && listing.indication !== "unknown") ? listing.indication : (classification.indication ?? "unknown");
             const finalStage = (listing?.developmentStage && listing.developmentStage !== "unknown") ? listing.developmentStage : classification.developmentStage;
+            const finalCategories = (listing?.categories && listing.categories.length > 0) ? listing.categories : (classification.categories ?? null);
+            const finalInnovationClaim = (listing?.innovationClaim) ? listing.innovationClaim : (classification.innovationClaim ?? null);
+            const finalMoA = (listing?.mechanismOfAction) ? listing.mechanismOfAction : (classification.mechanismOfAction ?? null);
+            // Score must use the same resolved values that will be written to DB
             const score = computeCompletenessScore({
               assetClass: classification.assetClass,
               deviceAttributes: classification.deviceAttributes,
@@ -344,13 +364,14 @@ If multiple assets appear, return each as a separate array item.`;
               modality: finalModality,
               indication: finalIndication,
               developmentStage: finalStage,
-              categories: classification.categories,
-              innovationClaim: classification.innovationClaim,
-              mechanismOfAction: classification.mechanismOfAction,
+              categories: finalCategories,
+              innovationClaim: finalInnovationClaim,
+              mechanismOfAction: finalMoA,
               summary: listing?.summary ?? null,
               abstract: listing?.abstract ?? null,
               inventors: listing?.inventors ?? null,
               patentStatus: listing?.patentStatus ?? null,
+              sourceType: "tech_transfer",
             });
             await db
               .update(ingestedAssets)
@@ -359,10 +380,10 @@ If multiple assets appear, return each as a separate array item.`;
                 modality: finalModality,
                 indication: finalIndication,
                 developmentStage: finalStage,
-                ...(classification.categories ? { categories: classification.categories } : {}),
+                ...(finalCategories ? { categories: finalCategories } : {}),
                 ...(classification.categoryConfidence !== undefined ? { categoryConfidence: classification.categoryConfidence } : {}),
-                ...(classification.innovationClaim ? { innovationClaim: classification.innovationClaim } : {}),
-                ...(classification.mechanismOfAction ? { mechanismOfAction: classification.mechanismOfAction } : {}),
+                ...(finalInnovationClaim ? { innovationClaim: finalInnovationClaim } : {}),
+                ...(finalMoA ? { mechanismOfAction: finalMoA } : {}),
                 completenessScore: score,
               })
               .where(eq(ingestedAssets.id, id));
