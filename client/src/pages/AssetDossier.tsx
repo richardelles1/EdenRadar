@@ -501,10 +501,27 @@ export default function AssetDossier() {
     let fullNarrative = "";
 
     try {
+      const dossierContext = intelligence ? {
+        mechanismOfAction: intelligence.enriched?.mechanismOfAction ?? null,
+        innovationClaim: intelligence.enriched?.innovationClaim ?? null,
+        unmetNeed: intelligence.enriched?.unmetNeed ?? null,
+        comparableDrugs: intelligence.enriched?.comparableDrugs ?? null,
+        abstract: intelligence.enriched?.abstract ?? null,
+        ipType: intelligence.enriched?.ipType ?? null,
+        licensingReadiness: intelligence.enriched?.licensingReadiness ?? null,
+        dataSparse: intelligence.assetRecord?.dataSparse ?? false,
+        competingAssets: (intelligence.competingAssets ?? []).map((c) => ({
+          assetName: c.assetName,
+          developmentStage: c.developmentStage ?? "unknown",
+          institution: c.institution ?? "unknown",
+          modality: c.modality ?? null,
+        })),
+      } : undefined;
+
       const res = await fetch("/api/dossier/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset: targetAsset, fullModel }),
+        body: JSON.stringify({ asset: targetAsset, fullModel, context: dossierContext }),
         signal: controller.signal,
       });
 

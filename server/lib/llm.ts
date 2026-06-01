@@ -116,21 +116,29 @@ Write a professional intelligence brief — 3-4 substantive paragraphs — cover
 
 Write in the voice of a premium commercial intelligence service. Use precise language. No bullet points. No headers. Just flowing professional analysis.`;
 
-const DOSSIER_SYSTEM = `You are a senior biotech deal analyst writing confidential asset dossiers for pharma licensing teams.
+const DOSSIER_SYSTEM = `You are a senior biotech licensing analyst writing a confidential deal brief for a pharma BD executive.
 
-Write a detailed commercial opportunity brief. Structure it as:
+The reader already sees the asset name, target, modality, indication, and development stage on the page. Do NOT open with "XYZ is a [modality] targeting [target] for [indication]" — that wastes the first sentence. Start with commercial insight, not a data recap.
 
-**Executive Summary** (1 paragraph): What this asset is, why it's interesting, and what type of buyer should care.
+Write four sections with exactly these markdown headers:
 
-**Commercial Rationale** (1-2 paragraphs): Mechanism novelty, competitive position, why this target/indication/modality combination matters now.
+**Commercial Thesis**
+Why this asset is commercially interesting — what makes the mechanism or approach non-obvious, what market gap it fills, and whether this is a first-mover, fast-follower, or late entrant. If the innovation claim or unmet need data is provided, use it directly rather than inferring. If data is thin, say so honestly — do not pad with generic biotech boilerplate.
 
-**Licensing Outlook** (1 paragraph): Likelihood of access (university origin, licensing status), typical deal structure for this type of asset, who would be the natural acquirer or licensor.
+**Competitive Position**
+How this asset sits relative to the programs listed in the competitive landscape. Reference them by name and stage if provided. Explain what this asset's differentiation means for deal value — don't just say "the field is competitive." If no competitive data is available, state that explicitly.
 
-**Key Risks & Unknowns** (1 paragraph): What is uncertain — data gaps, competitive threats, regulatory challenges, ownership ambiguity.
+**Licensing & Deal Dynamics**
+Realistic access assessment. Distinguish between deal structures (sponsored research, exclusive option, exclusive license, co-development) based on the asset's stage, institution type, and IP position. Identify the most likely acquirer profile by company type and therapeutic focus — not just "a pharma company." If licensing_readiness or patent status is provided, use it.
 
-**Suggested Next Step** (1-2 sentences): Concrete actionable recommendation for a BD team.
+**Key Questions Before Proceeding**
+Specific gaps the BD team must resolve — not generic "clinical trials carry risk." Name the missing data points, the IP ambiguities, the regulatory pathway questions, or the competitive threats that would change the thesis. If the asset is data-sparse, flag that as the primary uncertainty.
 
-Write in precise, professional language suitable for a BD executive.`;
+**Next Action**
+One specific, concrete action sentence. Name the institution, the contact method, and the reason for urgency if applicable. Not "contact the TTO" — something like "Request the IND filing and Phase 1 enrollment data from [institution]'s OTC before the next ASCO abstract deadline."
+
+Tone: precise, opinionated, free of filler. Write like a Morgan Stanley healthcare equity note — no "it is worth noting," no "as mentioned above," no "in conclusion."`;
+
 
 // ── Message builders ──────────────────────────────────────────────────────────
 
@@ -423,41 +431,73 @@ ${assetSummaries}`;
   }
 }
 
-function buildDossierUserContent(asset: ScoredAsset): string {
-  const signals = asset.signals
-    .slice(0, 5)
-    .map((s) => `- [${s.source_type}] ${s.title} (${s.date})`)
-    .join("\n");
-
-  return `Asset:
-Name: ${asset.asset_name}
-Target: ${asset.target}
-Modality: ${asset.modality}
-Indication: ${asset.indication}
-Stage: ${asset.development_stage}
-Owner: ${asset.owner_name} (${asset.owner_type})
-Institution: ${asset.institution}
-Licensing Status: ${asset.licensing_status}
-Patent Status: ${asset.patent_status}
-Score: ${asset.score}/100
-Summary: ${asset.summary}
-
-Supporting Evidence:
-${signals}`;
+export interface DossierContext {
+  mechanismOfAction?: string | null;
+  innovationClaim?: string | null;
+  unmetNeed?: string | null;
+  comparableDrugs?: string | null;
+  abstract?: string | null;
+  ipType?: string | null;
+  licensingReadiness?: string | null;
+  dataSparse?: boolean;
+  competingAssets?: Array<{ assetName: string; developmentStage: string; institution: string; modality?: string | null }>;
 }
 
-export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = false): AsyncGenerator<string> {
+function buildDossierUserContent(asset: ScoredAsset, ctx?: DossierContext): string {
+  const lines: string[] = [];
+
+  // Core identity
+  lines.push(`Asset: ${asset.asset_name}`);
+  lines.push(`Target: ${asset.target} | Modality: ${asset.modality} | Indication: ${asset.indication} | Stage: ${asset.development_stage}`);
+  lines.push(`Institution: ${asset.institution} (${asset.owner_type})`);
+  lines.push(`Licensing status: ${asset.licensing_status}${ctx?.licensingReadiness ? ` / readiness: ${ctx.licensingReadiness}` : ""}`);
+  lines.push(`IP: patent_status=${asset.patent_status}${ctx?.ipType ? ` / ip_type=${ctx.ipType}` : ""}`);
+
+  if (ctx?.dataSparse) {
+    lines.push(`DATA NOTE: This asset has a thin public description (< 150 chars). Calibrate confidence accordingly — do not invent specifics.`);
+  }
+
+  // Enrich with deep fields when available
+  if (asset.summary) lines.push(`\nSummary: ${asset.summary}`);
+  if (ctx?.abstract && ctx.abstract.length > 50) lines.push(`\nFull description: ${ctx.abstract.slice(0, 800)}`);
+  if (ctx?.mechanismOfAction && ctx.mechanismOfAction !== "unknown") lines.push(`\nMechanism of action: ${ctx.mechanismOfAction}`);
+  if (ctx?.innovationClaim && ctx.innovationClaim !== "unknown") lines.push(`\nStated innovation: ${ctx.innovationClaim}`);
+  if (ctx?.unmetNeed && ctx.unmetNeed.length > 20) lines.push(`\nUnmet need (from source): ${ctx.unmetNeed.slice(0, 400)}`);
+  if (ctx?.comparableDrugs && ctx.comparableDrugs !== "unknown") lines.push(`\nComparable drugs identified: ${ctx.comparableDrugs}`);
+
+  // Competitive landscape
+  if (ctx?.competingAssets && ctx.competingAssets.length > 0) {
+    lines.push(`\nKnown competing programs (same target or indication, different institutions):`);
+    ctx.competingAssets.slice(0, 5).forEach((c) => {
+      lines.push(`  - ${c.assetName} | ${c.modality ?? "unknown modality"} | ${c.developmentStage} | ${c.institution}`);
+    });
+  } else {
+    lines.push(`\nNo competing programs identified in database for this target/indication.`);
+  }
+
+  // Supporting signals
+  const signals = (asset.signals ?? []).slice(0, 5);
+  if (signals.length > 0) {
+    lines.push(`\nSupporting signals (${signals.length}):`);
+    signals.forEach((s) => lines.push(`  - [${s.source_type}] ${s.title} (${s.date})`));
+  }
+
+  return lines.join("\n");
+}
+
+export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = false, ctx?: DossierContext): AsyncGenerator<string> {
   const model = fullModel ? "gpt-4o" : "gpt-4o-mini";
   const client = fullModel ? clientFull : clientMini;
-  const maxTokens = fullModel ? 900 : 700;
+  // Raised limits: 5 sections × ~200 tokens each = 1000 min; add headroom for opinionated prose
+  const maxTokens = fullModel ? 1400 : 1000;
 
   const stream = await client.chat.completions.create({
     model,
     messages: [
       { role: "system", content: DOSSIER_SYSTEM },
-      { role: "user", content: buildDossierUserContent(asset) },
+      { role: "user", content: buildDossierUserContent(asset, ctx) },
     ],
-    temperature: 0.3,
+    temperature: 0.4,
     max_tokens: maxTokens,
     stream: true,
   });
@@ -468,16 +508,16 @@ export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = fa
   }
 }
 
-export async function generateDossierNarrative(asset: ScoredAsset): Promise<string> {
+export async function generateDossierNarrative(asset: ScoredAsset, ctx?: DossierContext): Promise<string> {
   try {
     const response = await clientMini.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: DOSSIER_SYSTEM },
-        { role: "user", content: buildDossierUserContent(asset) },
+        { role: "user", content: buildDossierUserContent(asset, ctx) },
       ],
-      temperature: 0.3,
-      max_tokens: 700,
+      temperature: 0.4,
+      max_tokens: 1000,
     });
     return response.choices[0]?.message?.content?.trim() ?? "";
   } catch (err) {
