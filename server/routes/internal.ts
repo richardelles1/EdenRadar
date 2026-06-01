@@ -22,10 +22,13 @@ export function registerInternalRoutes(app: Express): void {
       return res.json({ ok: true, started: false, reason: `cooldown (${agoMin}min ago)` });
     }
 
+    // Only skip if we're already mid-sweep — not for a normal running cycle.
+    // startStalenessFirstScan() safely preempts a running cycle by incrementing
+    // runGeneration and rebuilding the queue in staleness-first order.
     const status = getSchedulerStatus();
-    if (status.state === "running") {
-      console.log("[sweep-trigger] Skipped — scheduler already running");
-      return res.json({ ok: true, started: false, reason: "already_running" });
+    if (status.autoSweepActive) {
+      console.log("[sweep-trigger] Skipped — auto-sweep already in progress");
+      return res.json({ ok: true, started: false, reason: "auto_sweep_already_active" });
     }
 
     lastTriggerAt = now;

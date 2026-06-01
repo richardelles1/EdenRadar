@@ -228,6 +228,55 @@ export function registerDispatchRoutes(app: Express): void {
     }
   });
 
+  app.post("/api/admin/alerts/repair", async (req, res) => {
+    try {
+      const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
+      const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+      if (!sbUrl || !sbKey) return res.status(500).json({ error: "Supabase not configured" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const admin = createClient(sbUrl, sbKey);
+
+      // Step 1: sync all Supabase subscribers into industry_profiles
+      let synced = 0;
+      const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000 });
+      if (error) return res.status(500).json({ error: "Supabase listUsers failed: " + error.message });
+
+      const users = data?.users ?? [];
+      const report: { userId: string; email: string; action: string }[] = [];
+
+      for (const u of users) {
+        const email = u.user_metadata?.contactEmail || u.email || u.id;
+        if (u.user_metadata?.subscribedToDigest === true) {
+          await storage.setIndustryProfileSubscription(u.id, true);
+          synced++;
+          report.push({ userId: u.id, email, action: "synced_subscription" });
+        }
+      }
+
+      // Step 2: backfill user_alerts rows for everyone now subscribed
+      const { backfillDefaultAlerts } = await import("../lib/alertMailer");
+      await backfillDefaultAlerts();
+
+      // Step 3: return current state
+      const { pool } = await import("../db");
+      const profileCount = await pool.query("SELECT COUNT(*) FROM industry_profiles WHERE subscribed_to_digest = true");
+      const alertCount = await pool.query("SELECT COUNT(*) FROM user_alerts WHERE enabled = true");
+
+      return res.json({
+        ok: true,
+        supabaseUsersScanned: users.length,
+        subscriptionsSynced: synced,
+        subscribedProfiles: Number(profileCount.rows[0].count),
+        enabledAlerts: Number(alertCount.rows[0].count),
+        detail: report,
+      });
+    } catch (err: any) {
+      console.error("[admin/alerts/repair] Error:", err?.message);
+      return res.status(500).json({ error: err?.message ?? "Repair failed" });
+    }
+  });
+
   app.post("/api/admin/sweep/test-email", async (req, res) => {
     try {
       const to = process.env.AUTO_SWEEP_REPORT_EMAIL ?? "richardelles@gmail.com";

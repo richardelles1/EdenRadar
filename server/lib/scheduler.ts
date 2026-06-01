@@ -47,6 +47,8 @@ export interface SchedulerStatus {
   dailySweep: boolean;
   /** True when the Daily Sweep has entered the T3-complex sub-phase (concurrency=1, 3 retries). */
   dailySweepComplexPhase: boolean;
+  /** True when the current cycle was started by the pg_cron auto-sweep trigger. */
+  autoSweepActive: boolean;
   /** Queue position at which the scheduler resumed mid-cycle after a restart.
    * Null when this is a fresh cycle start. */
   resumedAtPosition: number | null;
@@ -384,6 +386,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     stalenessFirst: stalenessFirstActive,
     dailySweep: dailySweepActive,
     dailySweepComplexPhase,
+    autoSweepActive,
     resumedAtPosition,
   };
 }
