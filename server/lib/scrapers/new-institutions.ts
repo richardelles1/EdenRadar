@@ -4580,6 +4580,45 @@ export const nottinghamScraper = createTechPublisherScraper(
   { maxPg: 80 }
 );
 
+// ── TechLink detail page helper ──────────────────────────────────────────────────
+// Visits a single TechLink technology page with Playwright and extracts the full
+// description text. Used by both DoD and VA scrapers after the bulk ES replay to
+// enrich thin-content listings (ES search index stores teasers only).
+async function fetchTechLinkDetailContent(
+  browser: import("playwright").Browser,
+  url: string,
+): Promise<string> {
+  const page = await browser.newPage();
+  try {
+    await page.setExtraHTTPHeaders({
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      "Accept-Language": "en-US,en;q=0.9",
+    });
+    await page.goto(url, { timeout: 20_000, waitUntil: "domcontentloaded" });
+    await page.waitForTimeout(3_000); // allow React to hydrate
+    const text = await page.evaluate(() => {
+      // Extract all readable text from main content, skipping nav/interactive elements
+      const SKIP = new Set(["nav", "header", "footer", "script", "style", "button", "aside"]);
+      function extractText(el: Element): string {
+        if (SKIP.has(el.tagName.toLowerCase())) return "";
+        if (el.children.length === 0) return (el.textContent ?? "").trim();
+        return Array.from(el.children).map(extractText).filter(Boolean).join(" ");
+      }
+      const root =
+        document.querySelector("main") ??
+        document.querySelector("[class*='content']") ??
+        document.querySelector("[class*='detail']") ??
+        document.body;
+      return extractText(root).replace(/\s+/g, " ").trim().slice(0, 3000);
+    });
+    return text;
+  } catch {
+    return "";
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 // ── TechLink (DoD Technology Transfer) — ES XHR Intercept + Playwright (Task #137) ─
 // techlinkcenter.org/technologies — React SPA backed by an OpenSearch/ES cluster.
 // robots.txt: /technologies not disallowed. Legal: DoD Partnership Intermediary
@@ -4697,12 +4736,8 @@ export const techLinkScraper: InstitutionScraper = {
       });
       await page.waitForTimeout(8_000); // wait for React mount + first XHR
 
-      // ── Close browser — Node.js handles all bulk requests directly ─────────
-      // We captured the ES URL and Authorization header from the first XHR.
-      // All subsequent pagination is done via Node.js fetch (no page.evaluate)
-      // so there is no Playwright evaluation timeout to hit.
-      await browser.close();
-      browser = null;
+      // Browser stays open — needed for detail page pass after ES replay.
+      // The finally block closes it unconditionally.
 
       // ── Bulk replay via Node.js fetch with captured auth header ────────────
       // The Authorization header is a public client credential embedded in the
@@ -4768,6 +4803,29 @@ export const techLinkScraper: InstitutionScraper = {
           ...item,
           institution: INST,
         }));
+
+        // ── Detail page pass: enrich thin-content listings ──────────────────
+        // ES index stores teasers only. Visit individual pages for items where
+        // the combined ES fields produced < 150 chars of usable description.
+        // Cap at 300 pages per run (~10 min) to keep sync times bounded.
+        const DETAIL_THRESHOLD = 150;
+        const DETAIL_CAP = 300;
+        const thinItems = results.filter(r => r.description.length < DETAIL_THRESHOLD && r.url && !r.url.endsWith("/technologies"));
+        const detailBatch = thinItems.slice(0, DETAIL_CAP);
+        if (detailBatch.length > 0 && browser) {
+          console.log(`[scraper] ${INST}: detail page pass — ${detailBatch.length} thin items (${thinItems.length - detailBatch.length} deferred)`);
+          let enriched = 0;
+          for (const item of detailBatch) {
+            await new Promise(r => setTimeout(r, 1500)); // 1.5s between pages
+            const detail = await fetchTechLinkDetailContent(browser, item.url);
+            if (detail.length > item.description.length + 50) {
+              item.description = detail.slice(0, 2000);
+              enriched++;
+            }
+          }
+          console.log(`[scraper] ${INST}: detail pass enriched ${enriched}/${detailBatch.length} items`);
+        }
+
         console.log(`[scraper] ${INST}: ${results.length} listings (ES bulk fetch)`);
         return results;
       }
@@ -6309,8 +6367,7 @@ export const techLinkVAScraper: InstitutionScraper = {
       });
       await page.waitForTimeout(10_000); // wait for React mount + first VA XHR
 
-      await browser.close();
-      browser = null;
+      // Browser stays open — needed for detail page pass after ES replay.
 
       // ── Bulk replay via Node.js fetch with captured auth header ────────────
       if (esRequestUrl && esAuthHeader && esTotal > 0) {
@@ -6368,6 +6425,26 @@ export const techLinkVAScraper: InstitutionScraper = {
           ...item,
           institution: INST,
         }));
+
+        // ── Detail page pass: enrich thin-content VA listings ───────────────
+        const DETAIL_THRESHOLD = 150;
+        const DETAIL_CAP = 300;
+        const thinItems = results.filter(r => r.description.length < DETAIL_THRESHOLD && r.url && !r.url.endsWith("/va-technologies"));
+        const detailBatch = thinItems.slice(0, DETAIL_CAP);
+        if (detailBatch.length > 0 && browser) {
+          console.log(`[scraper] ${INST}: detail page pass — ${detailBatch.length} thin items (${thinItems.length - detailBatch.length} deferred)`);
+          let enriched = 0;
+          for (const item of detailBatch) {
+            await new Promise(r => setTimeout(r, 1500));
+            const detail = await fetchTechLinkDetailContent(browser, item.url);
+            if (detail.length > item.description.length + 50) {
+              item.description = detail.slice(0, 2000);
+              enriched++;
+            }
+          }
+          console.log(`[scraper] ${INST}: detail pass enriched ${enriched}/${detailBatch.length} items`);
+        }
+
         console.log(`[scraper] ${INST}: ${results.length} listings (ES bulk fetch)`);
         return results;
       }

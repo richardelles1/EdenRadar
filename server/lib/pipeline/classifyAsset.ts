@@ -110,7 +110,7 @@ Drug/Biologic ONLY — return null for all other types:
 - modality: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|diagnostic|platform technology|unknown — or null
 - indication: MeSH disease name, or null. Prefer the most specific applicable term: "non-small cell lung cancer" not "lung cancer" or "cancer"; "glioblastoma" not "brain cancer"; "chronic lymphocytic leukemia" not "leukemia". Only use a broad term ("cancer", "neurological disorder") when the text genuinely does not specify the disease subtype.
 - mechanismOfAction: brief MOA description, or null
-- comparableDrugs: existing approved or late-stage treatments in this indication/target space, or null
+- comparableDrugs: the current standard of care OR the closest approved/late-stage competitor in the same disease area — even if the mechanism differs. Examples: for a new glaucoma drug → "latanoprost, timolol"; for a malaria vaccine → "RTS,S/AS01 (Mosquirix), R21/Matrix-M"; for a Friedreich's ataxia compound → "omaveloxolone (Skyclarys)". Write the disease-area competitive landscape, not just same-mechanism drugs. Return null ONLY when the indication is unclear or genuinely no treatments exist.
 - unmetNeed: specific clinical gap this addresses vs current standard of care, or null
 
 Medical Device ONLY — return null for other types:
