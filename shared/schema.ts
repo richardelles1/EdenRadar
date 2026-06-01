@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType, index, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, numeric, customType, index, uniqueIndex, bigserial } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -363,6 +363,7 @@ export const enrichmentJobs = pgTable("enrichment_jobs", {
   filters: jsonb("filters").$type<Record<string, string>>(),
   completenessBeforeRun: integer("completeness_before_run"),
   completenessAfterRun: integer("completeness_after_run"),
+  tokenCostUsd: numeric("token_cost_usd"),
 });
 
 export type EnrichmentJob = typeof enrichmentJobs.$inferSelect;

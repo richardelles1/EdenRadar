@@ -151,6 +151,7 @@ async function runEnrichmentWorker(
       processed: enrichJob.processed,
       improved: enrichImproved,
       completedAt: new Date(),
+      tokenCostUsd: String(enrichTokenCost.toFixed(6)),
       ...(completenessAfterRun !== null ? { completenessAfterRun } : {}),
     });
     console.log(`[enrichment] Job ${jobId} completed: ${enrichImproved} improved out of ${enrichJob.processed} processed · $${lastRunTokenCost.toFixed(4)} spent`);
@@ -262,14 +263,17 @@ export function registerAssetRoutes(app: Express): void {
           COUNT(CASE WHEN completeness_score >= 40 AND completeness_score < 60 THEN 1 END)::int AS tier_partial,
           COUNT(CASE WHEN completeness_score >= 1 AND completeness_score < 40 THEN 1 END)::int AS tier_poor,
           COUNT(CASE WHEN completeness_score IS NULL OR completeness_score = 0 THEN 1 END)::int AS tier_unscored,
-          ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
+          -- target and MoA are drug/biologic concepts: denominator scoped to that class only
+          ROUND(100.0 * COUNT(CASE WHEN asset_class = 'drug_biologic' AND target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END)
+            / NULLIF(COUNT(CASE WHEN asset_class = 'drug_biologic' THEN 1 END),0), 1) AS fill_target,
           ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication,
           ROUND(100.0 * COUNT(CASE WHEN modality IS NOT NULL AND modality NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_modality,
           ROUND(100.0 * COUNT(CASE WHEN development_stage IS NOT NULL AND development_stage NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_stage,
           ROUND(100.0 * COUNT(CASE WHEN licensing_readiness IS NOT NULL AND licensing_readiness NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_licensing,
           ROUND(100.0 * COUNT(CASE WHEN ip_type IS NOT NULL AND ip_type NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_patent,
           ROUND(100.0 * COUNT(CASE WHEN biology IS NOT NULL AND biology NOT IN ('unknown','','other') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_biology,
-          ROUND(100.0 * COUNT(CASE WHEN mechanism_of_action IS NOT NULL AND mechanism_of_action NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_moa,
+          ROUND(100.0 * COUNT(CASE WHEN asset_class = 'drug_biologic' AND mechanism_of_action IS NOT NULL AND mechanism_of_action NOT IN ('unknown','') THEN 1 END)
+            / NULLIF(COUNT(CASE WHEN asset_class = 'drug_biologic' THEN 1 END),0), 1) AS fill_moa,
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '7 days' THEN 1 END)::int AS added_7d,
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int AS added_30d
         FROM ingested_assets
@@ -766,6 +770,12 @@ export function registerAssetRoutes(app: Express): void {
       if (lastJob.status === "completed") {
         return res.json({ status: "idle", processed: 0, total: 0, improved: 0, resumed: false });
       }
+      // For cost: prefer in-memory (accurate for current run), fall back to DB-persisted value
+      // (survives server restarts). lastRunTokenCost resets to 0 on restart, so use DB when 0.
+      const persistedCost = lastJob.tokenCostUsd != null ? parseFloat(String(lastJob.tokenCostUsd)) : 0;
+      const tokenCost = lastJob.status === "done"
+        ? (lastRunTokenCost > 0 ? lastRunTokenCost : persistedCost)
+        : undefined;
       return res.json({
         status: lastJob.status as string,
         jobId: lastJob.id,
@@ -773,8 +783,7 @@ export function registerAssetRoutes(app: Express): void {
         total: lastJob.total,
         improved: lastJob.improved,
         resumed: false,
-        // Include spend from the last completed run so the "done" banner and toast show cost.
-        tokenCost: lastJob.status === "done" ? lastRunTokenCost : undefined,
+        tokenCost,
       });
     }
 

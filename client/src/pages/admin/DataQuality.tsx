@@ -919,11 +919,10 @@ function PotentialDuplicates({ pw }: { pw: string }) {
 
 function DataQualityTab({ pw }: { pw: string }) {
   const [gaveUpTrigger, setGaveUpTrigger] = useState(0);
-  const [qualityReportOpen, setQualityReportOpen] = useState(false);
+  const [qualityReportOpen, setQualityReportOpen] = useState(true);
   return (
     <div className="space-y-6" data-testid="data-quality-tab">
-      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => { setGaveUpTrigger(v => v + 1); setQualityReportOpen(true); }} />
-      <PotentialDuplicates pw={pw} />
+      {/* Quality Report first — operator needs ground truth before acting on controls */}
       <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="quality-report-panel">
         <button
           onClick={() => setQualityReportOpen(o => !o)}
@@ -937,6 +936,8 @@ function DataQualityTab({ pw }: { pw: string }) {
         </button>
         {qualityReportOpen && <Enrichment pw={pw} initialGaveUpFilter={gaveUpTrigger} />}
       </div>
+      <EnrichmentPipelinePanel pw={pw} onGaveUpClick={() => { setGaveUpTrigger(v => v + 1); setQualityReportOpen(true); }} />
+      <PotentialDuplicates pw={pw} />
       <CollapsibleRelevancePanel pw={pw} />
     </div>
   );

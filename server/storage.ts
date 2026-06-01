@@ -262,8 +262,8 @@ export interface IStorage {
   incrementMiniEnrichAttempts(assetId: number): Promise<void>;
   backfillMiniEnrichAttempts(): Promise<number>;
 
-  createEnrichmentJob(total: number, filters?: Record<string, string>): Promise<EnrichmentJob>;
-  updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void>;
+  createEnrichmentJob(total: number, filters?: Record<string, string>, completenessBeforeRun?: number | null): Promise<EnrichmentJob>;
+  updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total" | "completenessBeforeRun" | "completenessAfterRun" | "tokenCostUsd">>): Promise<void>;
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   resetLatestEnrichmentJob(): Promise<void>;
@@ -377,11 +377,14 @@ export interface IStorage {
   pushNewArrivals(institution?: string): Promise<{ updated: number }>;
   rejectStagingItem(id: number): Promise<boolean>;
 
-  getDuplicateCandidates(): Promise<Array<{
-    id: number; assetName: string; institution: string | null; indication: string | null;
-    target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
-    canonicalName: string | null; dedupeSimilarity: number | null;
-  }>>;
+  getDuplicateCandidates(limit?: number): Promise<{
+    candidates: Array<{
+      id: number; assetName: string; institution: string | null; indication: string | null;
+      target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
+      canonicalName: string | null; dedupeSimilarity: number | null;
+    }>;
+    total: number;
+  }>;
   dismissDuplicateCandidate(id: number): Promise<void>;
   dismissAllDuplicateCandidates(institution?: string): Promise<number>;
   runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{ embedded: number; flagged: number; pairs: number }>;
@@ -1927,7 +1930,7 @@ export class DatabaseStorage implements IStorage {
     return rows;
   }
 
-  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total" | "completenessBeforeRun" | "completenessAfterRun">>): Promise<void> {
+  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total" | "completenessBeforeRun" | "completenessAfterRun" | "tokenCostUsd">>): Promise<void> {
     await db.update(enrichmentJobs).set(data).where(eq(enrichmentJobs.id, id));
   }
 
@@ -2329,7 +2332,13 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(ingestedAssets.relevant, true),
           or(
-            isNull(ingestedAssets.enrichedAt),
+            // Bucket A — fresh/reset: only select assets with enough text for at least a lite
+            // pass (≥ 40 combined chars). Assets below this threshold are permanently skipped
+            // inside deepEnrichBatch and would otherwise cycle indefinitely.
+            and(
+              isNull(ingestedAssets.enrichedAt),
+              sql`char_length(COALESCE(${ingestedAssets.assetName},'') || COALESCE(${ingestedAssets.summary},'') || COALESCE(${ingestedAssets.abstract},'')) >= 40`,
+            ),
             and(
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               isNull(ingestedAssets.completenessScore),
@@ -2364,7 +2373,11 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(ingestedAssets.relevant, true),
           or(
-            isNull(ingestedAssets.enrichedAt),
+            // Bucket A: matches the char_length >= 40 guard in getAssetsNeedingDeepEnrich
+            and(
+              isNull(ingestedAssets.enrichedAt),
+              sql`char_length(COALESCE(${ingestedAssets.assetName},'') || COALESCE(${ingestedAssets.summary},'') || COALESCE(${ingestedAssets.abstract},'')) >= 40`,
+            ),
             and(
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               isNull(ingestedAssets.completenessScore),
@@ -2389,18 +2402,21 @@ export class DatabaseStorage implements IStorage {
   async getAssetsNeedingDeepEnrichBreakdown(): Promise<{ fresh: number; legacy: number; lowQualityRetry: number; nullCategory: number; total: number }> {
     const result = await db.execute<{ fresh: number; legacy: number; low_quality_retry: number; null_category: number; total: number }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                                                                    AS fresh,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                                                 AS legacy,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)::int   AS low_quality_retry,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)::int                                           AS null_category,
-        COUNT(*)::int                                                                                                                                        AS total
+        COUNT(*) FILTER (WHERE enriched_at IS NULL
+          AND char_length(COALESCE(asset_name,'') || COALESCE(summary,'') || COALESCE(abstract,'')) >= 40)::int AS fresh,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                      AS legacy,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL
+          AND completeness_score < 15 AND COALESCE(deep_enrich_attempts,0) <= 5)::int                           AS low_quality_retry,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND categories IS NULL
+          AND COALESCE(deep_enrich_attempts,0) <= 5)::int                                                       AS null_category,
+        COUNT(*)::int                                                                                            AS total
       FROM ingested_assets
       WHERE relevant = true
         AND (
-          enriched_at IS NULL
+          (enriched_at IS NULL AND char_length(COALESCE(asset_name,'') || COALESCE(summary,'') || COALESCE(abstract,'')) >= 40)
           OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
-          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 3)
-          OR (enriched_at IS NOT NULL AND categories IS NULL AND deep_enrich_attempts <= 3)
+          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND COALESCE(deep_enrich_attempts,0) <= 5)
+          OR (enriched_at IS NOT NULL AND categories IS NULL AND COALESCE(deep_enrich_attempts,0) <= 5)
         )
     `);
     const row = result.rows[0];
@@ -3106,13 +3122,20 @@ export class DatabaseStorage implements IStorage {
     return rows.length > 0;
   }
 
-  async getDuplicateCandidates(): Promise<Array<{
-    id: number; assetName: string; institution: string | null; indication: string | null;
-    target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
-    canonicalName: string | null; dedupeSimilarity: number | null;
-  }>> {
-    // Use a typed Drizzle self-join to avoid unsafe row casts
+  async getDuplicateCandidates(limit = 1000): Promise<{
+    candidates: Array<{
+      id: number; assetName: string; institution: string | null; indication: string | null;
+      target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
+      canonicalName: string | null; dedupeSimilarity: number | null;
+    }>;
+    total: number;
+  }> {
     const canonical = alias(ingestedAssets, "canonical");
+    const [countRow] = await db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.duplicateFlag, true));
+    const total = countRow?.count ?? 0;
     const rows = await db
       .select({
         id: ingestedAssets.id,
@@ -3129,18 +3152,21 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(canonical, eq(canonical.id, ingestedAssets.duplicateOfId))
       .where(eq(ingestedAssets.duplicateFlag, true))
       .orderBy(desc(ingestedAssets.dedupeSimilarity), desc(ingestedAssets.id))
-      .limit(500);
-    return rows.map((r) => ({
-      id: r.id,
-      assetName: r.assetName,
-      institution: r.institution,
-      indication: r.indication,
-      target: r.target,
-      sourceUrl: r.sourceUrl,
-      duplicateOfId: r.duplicateOfId,
-      canonicalName: r.canonicalName,
-      dedupeSimilarity: r.dedupeSimilarity,
-    }));
+      .limit(limit);
+    return {
+      total,
+      candidates: rows.map((r) => ({
+        id: r.id,
+        assetName: r.assetName,
+        institution: r.institution,
+        indication: r.indication,
+        target: r.target,
+        sourceUrl: r.sourceUrl,
+        duplicateOfId: r.duplicateOfId,
+        canonicalName: r.canonicalName,
+        dedupeSimilarity: r.dedupeSimilarity,
+      })),
+    };
   }
 
   async dismissDuplicateCandidate(id: number): Promise<void> {
