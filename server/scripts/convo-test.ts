@@ -182,6 +182,18 @@ const SCENARIOS: Scenario[] = [
   },
   {
     suite: "routing",
+    label: "Institution-qualified back_ref — 'show me the JHU one'",
+    turns: [
+      { msg: "show me gene therapy assets", expectAssets: true },
+      {
+        msg: "yes, show me the Columbia one",
+        expectIntent: "back_ref",
+        note: "Institution-qualified 'show me the X one' was being classified as search",
+      },
+    ],
+  },
+  {
+    suite: "routing",
     label: "Add to pipeline — back_ref, not search",
     turns: [
       { msg: "show me CAR-T assets for leukemia", expectAssets: true },

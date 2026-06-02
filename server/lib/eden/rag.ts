@@ -987,6 +987,13 @@ const BACK_REF_PATTERNS = [
   // Institution-qualified back-references (anaphora with institution name)
   /\bthe\s+one\s+from\s+\w/i,
   /\bthat\s+one\s+from\s+\w/i,
+  // "show me the JHU one", "show me the Stanford asset" — institution before "one/asset"
+  /\bshow\s+me\s+the\s+\w+\s+one\b/i,
+  /\bshow\s+(?:me\s+)?the\s+\w+\s+(?:asset|technology|program|card)\b/i,
+  // "yes, show me the X one" — affirmative + institution qualifier
+  /\byes[,.]?\s+show\s+me\s+the\s+\w/i,
+  // "pull up the [institution] one"
+  /\bpull\s+(?:up\s+)?the\s+\w+\s+one\b/i,
   // Comparative follow-up back-references — "the stronger one", "the winner", etc.
   // Covers post-comparison turns that reference a conclusion from the prior head-to-head.
   /\bthe\s+(?:stronger|weaker|better|worse|dominant|leading|preferred|winning|losing)\s+one\b/i,
@@ -1404,7 +1411,7 @@ INTENTS:
   Similarity: "show me similar assets", "more like this", "find me something similar", "other assets like that", "related technologies", "what else is similar", "anything comparable", "more like number 2", "find me more like the first one"
   Asset-specific questions about a prior asset: "what's the IP on this", "is it exclusive", "what's the licensing status", "has it been licensed before", "who do I contact about that", "what's the TTO for that", "what's the ask", "what are the deal terms", "can I see the source", "where can I read more", "what stage is it at", "what's the mechanism", "tell me about the science behind it", "how validated is this", "is there clinical data on this one"
   Pipeline actions on a prior asset: "add that to my [X] pipeline", "save that to my [X] list", "put that in my [X] pipeline", "move that to [X]", "bookmark that for [X]"
-  Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]"
+  Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]", "show me the JHU one", "show me the Stanford asset", "yes show me the Hopkins one", "pull up the Columbia one"
   NOT valid if hasPriorAssets=false
 
 - comparative: head-to-head between assets. Triggers: "compare", "vs", "versus", "side by side", "head to head", "which is better", "how do they differ", "what's the difference between", "contrast", "stack them up", "which would you choose", "which is stronger", "weigh them against each other", "pros and cons of each", "which would be a better fit", "which is more de-risked", "which has better IP", "which one should I pursue first", "priority order these", "rank these against each other", "which is further along", "which has a cleaner path"
@@ -1475,6 +1482,15 @@ Note: institution count comparisons are ALWAYS aggregation — never comparative
 Message: "does Harvard or Yale have more gene therapy programs?"
 hasPriorAssets: false
 → {"intent":"aggregation","filters":{"modality":"Gene Therapy"},"back_ref_position":null,"live_source":null}
+
+Message: "yes, show me the JHU one"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: institution-qualified "show me the [X] one" is ALWAYS back_ref when hasPriorAssets=true — never search
+
+Message: "show me the Stanford asset"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 
 Message: "add that to my ALS pipeline"
 hasPriorAssets: true
