@@ -166,6 +166,7 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   for (const m of (alert.modalities ?? [])) criteriaChips.push({ label: toDisplayModality(m), colorClass: "bg-primary/10 text-primary border-primary/20" });
   for (const s of (alert.stages ?? [])) criteriaChips.push({ label: toDisplayStage(s), colorClass: "bg-violet-500/10 text-violet-500 border-violet-500/20" });
   for (const inst of (alert.institutions ?? [])) criteriaChips.push({ label: inst, colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" });
+  for (const c of (alert.continents ?? [])) criteriaChips.push({ label: c, colorClass: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20" });
 
   // Build a structured Scout URL that preserves the alert's actual criteria
   // (canonical slugs for modalities/stages, full names for institutions, optional
@@ -176,6 +177,7 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   if ((alert.modalities ?? []).length > 0) exploreParams.set("modalities", (alert.modalities ?? []).join(","));
   if ((alert.stages ?? []).length > 0) exploreParams.set("stages", (alert.stages ?? []).join(","));
   if ((alert.institutions ?? []).length > 0) exploreParams.set("institutions", (alert.institutions ?? []).join(","));
+  if ((alert.continents ?? []).length > 0) exploreParams.set("continents", (alert.continents ?? []).join(","));
   const hasExploreCriteria = exploreParams.toString().length > 0;
   const exploreUrl = `/scout?${exploreParams.toString()}`;
 
@@ -541,6 +543,7 @@ const MODALITY_OPTIONS = [
   "mRNA Therapy", "Peptide", "Bispecific Antibody", "ADC", "PROTAC",
 ];
 const STAGE_OPTIONS = ["Discovery", "Preclinical", "Phase 1", "Phase 2", "Phase 3"];
+const CONTINENT_OPTIONS = ["North America", "Europe", "Asia-Pacific", "Latin America"];
 
 function MultiSelectCombobox({
   options,
@@ -638,12 +641,12 @@ function InstitutionCombobox({ selected, onToggle }: { selected: string[]; onTog
   );
 }
 
-function AlertPreviewSection({ query, modalities, stages, institutions }: {
-  query: string; modalities: string[]; stages: string[]; institutions: string[];
+function AlertPreviewSection({ query, modalities, stages, institutions, continents }: {
+  query: string; modalities: string[]; stages: string[]; institutions: string[]; continents: string[];
 }) {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const hasAnyFilter = !!(query.trim()) || modalities.length > 0 || stages.length > 0 || institutions.length > 0;
+  const hasAnyFilter = !!(query.trim()) || modalities.length > 0 || stages.length > 0 || institutions.length > 0 || continents.length > 0;
 
   useEffect(() => {
     if (!hasAnyFilter) { setPreview(null); return; }
@@ -655,6 +658,7 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
           modalities: modalities.map(normalizeModality),
           stages: stages.map(normalizeStage),
           institutions,
+          continents,
         });
         const data = await res.json();
         setPreview(data);
@@ -663,7 +667,7 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
     }, 500);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, modalities.join(","), stages.join(","), institutions.join(","), hasAnyFilter]);
+  }, [query, modalities.join(","), stages.join(","), institutions.join(","), continents.join(","), hasAnyFilter]);
 
   if (!hasAnyFilter) return null;
 
@@ -698,13 +702,14 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
 
 function AlertFormFields({
   query, setQuery,
-  modalities, stages, institutions,
-  toggleModality, toggleStage, toggleInstitution,
+  modalities, stages, institutions, continents,
+  toggleModality, toggleStage, toggleInstitution, toggleContinent,
   idPrefix,
 }: {
   query: string; setQuery: (v: string) => void;
-  modalities: string[]; stages: string[]; institutions: string[];
-  toggleModality: (v: string) => void; toggleStage: (v: string) => void; toggleInstitution: (v: string) => void;
+  modalities: string[]; stages: string[]; institutions: string[]; continents: string[];
+  toggleModality: (v: string) => void; toggleStage: (v: string) => void;
+  toggleInstitution: (v: string) => void; toggleContinent: (v: string) => void;
   idPrefix: string;
 }) {
   return (
@@ -746,6 +751,19 @@ function AlertFormFields({
         )}
       </div>
       <div className="space-y-2">
+        <Label>Geography</Label>
+        <MultiSelectCombobox options={CONTINENT_OPTIONS} selected={continents} onToggle={toggleContinent} placeholder="All regions" searchPlaceholder="Search regions..." testId={`select-${idPrefix}-continent`} />
+        {continents.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {continents.map((c) => (
+              <span key={c} className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 border border-sky-500/20 flex items-center gap-1">
+                {c}<button onClick={() => toggleContinent(c)} className="hover:text-destructive">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
         <Label>Institutions</Label>
         <InstitutionCombobox selected={institutions} onToggle={toggleInstitution} />
         {institutions.length > 0 && (
@@ -759,7 +777,7 @@ function AlertFormFields({
           </div>
         )}
       </div>
-      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
+      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} continents={continents} />
     </>
   );
 }
@@ -771,6 +789,7 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
   const [modalities, setModalities] = useState<string[]>((alert.modalities ?? []).map(toDisplayModality));
   const [stages, setStages] = useState<string[]>((alert.stages ?? []).map(toDisplayStage));
   const [institutions, setInstitutions] = useState<string[]>(alert.institutions ?? []);
+  const [continents, setContinents] = useState<string[]>(alert.continents ?? []);
   const isAllNew = alert.criteriaType === "all_new";
 
   function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
@@ -785,6 +804,7 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
         modalities: isAllNew ? null : modalities.map(normalizeModality),
         stages: isAllNew ? null : stages.map(normalizeStage),
         institutions: isAllNew ? null : institutions,
+        continents: isAllNew ? null : continents,
         criteriaType: alert.criteriaType ?? null,
       }),
     onSuccess: () => {
@@ -803,7 +823,7 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
       toast({ title: "Alert name is required", variant: "destructive" });
       return;
     }
-    if (!isAllNew && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+    if (!isAllNew && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0 && continents.length === 0) {
       toast({ title: "Set at least one filter", variant: "destructive" });
       return;
     }
@@ -831,10 +851,11 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
           {!isAllNew && (
             <AlertFormFields
               query={query} setQuery={setQuery}
-              modalities={modalities} stages={stages} institutions={institutions}
+              modalities={modalities} stages={stages} institutions={institutions} continents={continents}
               toggleModality={(v) => toggle(modalities, setModalities, v)}
               toggleStage={(v) => toggle(stages, setStages, v)}
               toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+              toggleContinent={(v) => toggle(continents, setContinents, v)}
               idPrefix="edit-alert"
             />
           )}
@@ -904,6 +925,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const [modalities, setModalities] = useState<string[]>([]);
   const [stages, setStages] = useState<string[]>([]);
   const [institutions, setInstitutions] = useState<string[]>([]);
+  const [continents, setContinents] = useState<string[]>([]);
   const [criteriaType, setCriteriaType] = useState<string | null>(null);
 
   function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
@@ -917,6 +939,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
     setModalities([...tmpl.modalities]);
     setStages([...tmpl.stages]);
     setInstitutions([...tmpl.institutions]);
+    setContinents([]);
   }
 
   const saveMutation = useMutation({
@@ -927,6 +950,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
         modalities: criteriaType === "all_new" ? null : modalities.map(normalizeModality),
         stages: criteriaType === "all_new" ? null : stages.map(normalizeStage),
         institutions: criteriaType === "all_new" ? null : institutions,
+        continents: criteriaType === "all_new" ? null : continents,
         criteriaType: criteriaType ?? null,
       }),
     onSuccess: () => {
@@ -934,7 +958,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
       toast({ title: "Alert saved", description: "You'll see it in My Saved Alerts." });
-      setName(""); setQuery(""); setModalities([]); setStages([]); setInstitutions([]); setCriteriaType(null);
+      setName(""); setQuery(""); setModalities([]); setStages([]); setInstitutions([]); setContinents([]); setCriteriaType(null);
       onClose();
     },
     onError: (err: any) => {
@@ -947,7 +971,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
       toast({ title: "Alert name is required", variant: "destructive" });
       return;
     }
-    if (criteriaType !== "all_new" && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+    if (criteriaType !== "all_new" && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0 && continents.length === 0) {
       toast({ title: "Set at least one filter", variant: "destructive" });
       return;
     }
@@ -1001,7 +1025,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
                 <p className="text-[11px] text-muted-foreground mt-1">This alert matches every new relevant TTO asset — no filters applied.</p>
                 <button
                   className="text-[11px] text-muted-foreground hover:text-foreground underline mt-2"
-                  onClick={() => { setCriteriaType(null); setModalities([]); setStages([]); setQuery(""); }}
+                  onClick={() => { setCriteriaType(null); setModalities([]); setStages([]); setQuery(""); setContinents([]); }}
                 >
                   Switch to filtered criteria
                 </button>
@@ -1009,10 +1033,11 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
             ) : (
               <AlertFormFields
                 query={query} setQuery={setQuery}
-                modalities={modalities} stages={stages} institutions={institutions}
+                modalities={modalities} stages={stages} institutions={institutions} continents={continents}
                 toggleModality={(v) => toggle(modalities, setModalities, v)}
                 toggleStage={(v) => toggle(stages, setStages, v)}
                 toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+                toggleContinent={(v) => toggle(continents, setContinents, v)}
                 idPrefix="alert"
               />
             )}

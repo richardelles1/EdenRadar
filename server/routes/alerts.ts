@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { db } from "../db";
 import { eq, and, sql, desc, or, ilike, inArray, gt, count as drizzleCount } from "drizzle-orm";
 import { storage } from "../storage";
-import { ingestedAssets, userAlerts, industryProfiles } from "@shared/schema";
+import { ingestedAssets, userAlerts, industryProfiles, institutionMetadata } from "@shared/schema";
 import { tryGetUserId } from "../lib/supabaseAuth";
 import { z } from "zod";
 
@@ -12,6 +12,7 @@ export const alertBodySchema = z.object({
   modalities: z.array(z.string().max(100)).max(20).nullable().optional(),
   stages: z.array(z.string().max(100)).max(20).nullable().optional(),
   institutions: z.array(z.string().max(200)).max(100).nullable().optional(),
+  continents: z.array(z.string().max(100)).max(10).nullable().optional(),
   criteriaType: z.enum(["all_new", "custom"]).optional(),
   cadence: z.enum(["daily", "weekly"]).optional(),
   enabled: z.boolean().optional(),
@@ -22,6 +23,7 @@ export const alertPreviewSchema = z.object({
   modalities: z.array(z.string().max(100)).max(20).nullable().optional(),
   stages: z.array(z.string().max(100)).max(20).nullable().optional(),
   institutions: z.array(z.string().max(200)).max(100).nullable().optional(),
+  continents: z.array(z.string().max(100)).max(10).nullable().optional(),
 });
 export function registerAlertsRoutes(app: Express): void {
   app.get("/api/alerts", async (req, res) => {
@@ -38,13 +40,13 @@ export function registerAlertsRoutes(app: Express): void {
     try {
       const parsed = alertBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request" });
-      const { query, modalities, stages, institutions, name, criteriaType, cadence, enabled } = parsed.data;
+      const { query, modalities, stages, institutions, continents, name, criteriaType, cadence, enabled } = parsed.data;
       const trimmedName = name.trim();
       if (!trimmedName) {
         return res.status(400).json({ error: "Alert name is required" });
       }
       const isAllNew = criteriaType === "all_new";
-      if (!isAllNew && !query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
+      if (!isAllNew && !query && (!modalities?.length) && (!stages?.length) && (!institutions?.length) && (!continents?.length)) {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
       const userId = await tryGetUserId(req);
@@ -55,6 +57,7 @@ export function registerAlertsRoutes(app: Express): void {
         modalities: isAllNew ? null : (modalities ?? null),
         stages: isAllNew ? null : (stages ?? null),
         institutions: isAllNew ? null : (institutions ?? null),
+        continents: isAllNew ? null : (continents ?? null),
         criteriaType: criteriaType ?? "custom",
         cadence: cadence ?? "weekly",
         enabled: enabled !== false,
@@ -102,13 +105,13 @@ export function registerAlertsRoutes(app: Express): void {
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
       const parsed = alertBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) return res.status(400).json({ error: parsed.error.errors[0]?.message ?? "Invalid request" });
-      const { query, modalities, stages, institutions, name, criteriaType, enabled } = parsed.data;
+      const { query, modalities, stages, institutions, continents, name, criteriaType, enabled } = parsed.data;
       const trimmedName = name.trim();
       if (!trimmedName) {
         return res.status(400).json({ error: "Alert name is required" });
       }
       const isAllNew = criteriaType === "all_new";
-      if (!isAllNew && !query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
+      if (!isAllNew && !query && (!modalities?.length) && (!stages?.length) && (!institutions?.length) && (!continents?.length)) {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
       const updated = await storage.updateUserAlert(id, userId, {
@@ -117,6 +120,7 @@ export function registerAlertsRoutes(app: Express): void {
         modalities: isAllNew ? null : (modalities ?? null),
         stages: isAllNew ? null : (stages ?? null),
         institutions: isAllNew ? null : (institutions ?? null),
+        continents: isAllNew ? null : (continents ?? null),
         criteriaType: criteriaType ?? "custom",
         ...(enabled !== undefined ? { enabled: enabled !== false } : {}),
       });
@@ -133,7 +137,7 @@ export function registerAlertsRoutes(app: Express): void {
   // When criteriaType === "all_new", all filter conditions are skipped so every
   // relevant asset matches (the "All New Assets" catch-all alert type).
   function buildAlertWhere(
-    alert: { query?: string | null; modalities?: string[] | null; stages?: string[] | null; institutions?: string[] | null; criteriaType?: string | null },
+    alert: { query?: string | null; modalities?: string[] | null; stages?: string[] | null; institutions?: string[] | null; continents?: string[] | null; criteriaType?: string | null },
     extraConditions?: ReturnType<typeof and>[],
   ) {
     if (alert.criteriaType === "all_new") {
@@ -144,6 +148,14 @@ export function registerAlertsRoutes(app: Express): void {
       eq(ingestedAssets.relevant, true),
       ...(extraConditions ?? []),
       alert.institutions?.length ? inArray(ingestedAssets.institution, alert.institutions) : undefined,
+      alert.continents?.length
+        ? inArray(
+            ingestedAssets.institution,
+            db.select({ name: institutionMetadata.name })
+              .from(institutionMetadata)
+              .where(inArray(institutionMetadata.continent, alert.continents)),
+          )
+        : undefined,
       alert.modalities?.length ? inArray(ingestedAssets.modality, alert.modalities) : undefined,
       alert.stages?.length ? inArray(ingestedAssets.developmentStage, alert.stages) : undefined,
       trimmedQuery
@@ -243,13 +255,14 @@ export function registerAlertsRoutes(app: Express): void {
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
       const previewParsed = alertPreviewSchema.safeParse(req.body ?? {});
       if (!previewParsed.success) return res.status(400).json({ error: previewParsed.error.errors[0]?.message ?? "Invalid request" });
-      const { query, modalities, stages, institutions } = previewParsed.data;
+      const { query, modalities, stages, institutions, continents } = previewParsed.data;
       const trimmedQuery = query?.trim();
       const hasAnyFilter =
         !!trimmedQuery ||
         (modalities?.length ?? 0) > 0 ||
         (stages?.length ?? 0) > 0 ||
-        (institutions?.length ?? 0) > 0;
+        (institutions?.length ?? 0) > 0 ||
+        (continents?.length ?? 0) > 0;
 
       if (!hasAnyFilter) return res.json({ count: 0, samples: [] });
 
@@ -258,6 +271,7 @@ export function registerAlertsRoutes(app: Express): void {
         modalities: (modalities?.length ?? 0) > 0 ? (modalities as string[]) : null,
         stages: (stages?.length ?? 0) > 0 ? (stages as string[]) : null,
         institutions: (institutions?.length ?? 0) > 0 ? (institutions as string[]) : null,
+        continents: (continents?.length ?? 0) > 0 ? (continents as string[]) : null,
       };
       const whereClause = buildAlertWhere(draft);
 
