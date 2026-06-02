@@ -1907,10 +1907,30 @@ export function registerSearchRoutes(app: Express): void {
   // SSE streaming dossier — mini by default, gpt-4o when fullModel=true
   app.post("/api/dossier/stream", aiRateLimit, async (req, res) => {
     try {
-      const body = z.object({ asset: z.any(), fullModel: z.boolean().optional() }).parse(req.body);
+      const body = z.object({
+        asset: z.any(),
+        fullModel: z.boolean().optional(),
+        context: z.object({
+          mechanismOfAction: z.string().nullish(),
+          innovationClaim: z.string().nullish(),
+          unmetNeed: z.string().nullish(),
+          comparableDrugs: z.string().nullish(),
+          abstract: z.string().nullish(),
+          ipType: z.string().nullish(),
+          licensingReadiness: z.string().nullish(),
+          dataSparse: z.boolean().optional(),
+          competingAssets: z.array(z.object({
+            assetName: z.string(),
+            developmentStage: z.string(),
+            institution: z.string(),
+            modality: z.string().nullish(),
+          })).optional(),
+        }).optional(),
+      }).parse(req.body);
       if (!body.asset) return res.status(400).json({ error: "Asset required" });
       const asset = body.asset as ScoredAsset;
       const fullModel = body.fullModel ?? false;
+      const ctx = body.context;
 
       res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
       res.setHeader("Cache-Control", "no-cache, no-transform");
@@ -1918,7 +1938,7 @@ export function registerSearchRoutes(app: Express): void {
       res.setHeader("X-Accel-Buffering", "no");
       res.flushHeaders();
 
-      for await (const chunk of streamDossierNarrative(asset, fullModel)) {
+      for await (const chunk of streamDossierNarrative(asset, fullModel, ctx)) {
         res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
       }
       res.write(`data: ${JSON.stringify({ done: true, generated_at: new Date().toISOString() })}\n\n`);

@@ -116,21 +116,35 @@ Write a professional intelligence brief — 3-4 substantive paragraphs — cover
 
 Write in the voice of a premium commercial intelligence service. Use precise language. No bullet points. No headers. Just flowing professional analysis.`;
 
-const DOSSIER_SYSTEM = `You are a senior biotech deal analyst writing confidential asset dossiers for pharma licensing teams.
+const DOSSIER_SYSTEM = `You are a senior biotech licensing analyst writing a confidential deal brief for a pharma BD executive.
 
-Write a detailed commercial opportunity brief. Structure it as:
+CRITICAL RULES — violating these makes the dossier worse, not better:
 
-**Executive Summary** (1 paragraph): What this asset is, why it's interesting, and what type of buyer should care.
+1. The reader already sees name, target, modality, indication, and stage on the page. Do NOT restate them in opening sentences.
+2. Each section below has a DATA CONTRACT. If the input marks a field as [NOT IN DATABASE], you MUST use the exact phrase specified. Do not substitute your own knowledge, do not infer from the target name, do not say "appears to be first-in-class" unless the innovation claim field explicitly says so. Filling a data gap with training-set knowledge is a hallucination — it destroys trust.
+3. Write only what the provided data supports. A shorter honest section is better than a longer fabricated one.
 
-**Commercial Rationale** (1-2 paragraphs): Mechanism novelty, competitive position, why this target/indication/modality combination matters now.
+Write exactly five sections with these headers:
 
-**Licensing Outlook** (1 paragraph): Likelihood of access (university origin, licensing status), typical deal structure for this type of asset, who would be the natural acquirer or licensor.
+**Commercial Thesis**
+Lead with commercial insight — why this asset matters to a buyer, grounded in the MECHANISM, INNOVATION CLAIM, and UNMET NEED fields provided. If MECHANISM is [NOT IN DATABASE], write the thesis from what is available. If all three enriched fields are [NOT IN DATABASE], base the thesis strictly on the summary text and stage, and state that enriched data is pending.
 
-**Key Risks & Unknowns** (1 paragraph): What is uncertain — data gaps, competitive threats, regulatory challenges, ownership ambiguity.
+**Competitive Position**
+If COMPETING PROGRAMS is provided: analyze this asset's position by name and stage — what the competition means for deal value, differentiation, and timing. If COMPARABLE DRUGS is provided, use it.
+If both COMPETING PROGRAMS and COMPARABLE DRUGS are [NOT IN DATABASE], write exactly: "Competitive intelligence for this target/indication is not available in EdenRadar's current dataset. This reflects database coverage at time of generation, not a signal about market crowding or novelty — independent competitive research is required before drawing conclusions."
 
-**Suggested Next Step** (1-2 sentences): Concrete actionable recommendation for a BD team.
+**Licensing & Deal Dynamics**
+Use the LICENSING STATUS, IP TYPE, PATENT STATUS, and LICENSING READINESS fields to assess deal structure and acquirer profile. Be specific: distinguish between exclusive option, sponsored research agreement, and outright license based on stage and IP position. Name the likely acquirer type by therapeutic focus, not just "a pharma company."
+If IP TYPE and PATENT STATUS are both unknown, note that IP position needs to be independently verified before deal structuring.
 
-Write in precise, professional language suitable for a BD executive.`;
+**Key Questions Before Proceeding**
+Specific, asset-level questions the BD team must answer before proceeding — not generic risk disclaimers. Draw these from actual gaps: what's unknown in the provided data (unknown fields, [NOT IN DATABASE] markers, data-sparse flag). Each question should be answerable by a specific action (calling the TTO, reviewing the IND, requesting a data package).
+
+**Next Action**
+One sentence. Name the institution. Specify the action (request IND, review Phase 1 protocol, schedule introductory call with TTO licensing officer). Add timing context if the stage or conference calendar suggests urgency. Do not write "contact the TTO" as a complete sentence.
+
+Tone: precise, opinionated, free of filler. Morgan Stanley healthcare equity note style — no "it is worth noting," no "as mentioned above," no "in conclusion."`;
+
 
 // ── Message builders ──────────────────────────────────────────────────────────
 
@@ -423,41 +437,89 @@ ${assetSummaries}`;
   }
 }
 
-function buildDossierUserContent(asset: ScoredAsset): string {
-  const signals = asset.signals
-    .slice(0, 5)
-    .map((s) => `- [${s.source_type}] ${s.title} (${s.date})`)
-    .join("\n");
-
-  return `Asset:
-Name: ${asset.asset_name}
-Target: ${asset.target}
-Modality: ${asset.modality}
-Indication: ${asset.indication}
-Stage: ${asset.development_stage}
-Owner: ${asset.owner_name} (${asset.owner_type})
-Institution: ${asset.institution}
-Licensing Status: ${asset.licensing_status}
-Patent Status: ${asset.patent_status}
-Score: ${asset.score}/100
-Summary: ${asset.summary}
-
-Supporting Evidence:
-${signals}`;
+export interface DossierContext {
+  mechanismOfAction?: string | null;
+  innovationClaim?: string | null;
+  unmetNeed?: string | null;
+  comparableDrugs?: string | null;
+  abstract?: string | null;
+  ipType?: string | null;
+  licensingReadiness?: string | null;
+  dataSparse?: boolean;
+  competingAssets?: Array<{ assetName: string; developmentStage: string; institution: string; modality?: string | null }>;
 }
 
-export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = false): AsyncGenerator<string> {
+const NOT_IN_DB = "[NOT IN DATABASE]";
+function val(v: string | null | undefined, fallback = NOT_IN_DB): string {
+  if (!v || v === "unknown" || v === "n/a" || v.trim() === "") return fallback;
+  return v;
+}
+
+function buildDossierUserContent(asset: ScoredAsset, ctx?: DossierContext): string {
+  const lines: string[] = [];
+
+  // ── Core identity (always present) ────────────────────────────────────────
+  lines.push(`Asset: ${asset.asset_name}`);
+  lines.push(`Target: ${val(asset.target)} | Modality: ${val(asset.modality)} | Indication: ${val(asset.indication)} | Stage: ${val(asset.development_stage)}`);
+  lines.push(`Institution: ${asset.institution} (${asset.owner_type})`);
+
+  if (ctx?.dataSparse) {
+    lines.push(`DATA QUALITY FLAG: This asset has a thin public description (<150 chars). Do not invent specifics not supported by the text below.`);
+  }
+
+  // ── Summary / description ──────────────────────────────────────────────────
+  lines.push(`\nSummary: ${asset.summary || NOT_IN_DB}`);
+  if (ctx?.abstract && ctx.abstract.length > 50) {
+    lines.push(`Full description: ${ctx.abstract.slice(0, 800)}`);
+  }
+
+  // ── Enriched analytical fields — explicit availability markers ─────────────
+  lines.push(`\nMECHANISM: ${val(ctx?.mechanismOfAction)}`);
+  lines.push(`INNOVATION CLAIM: ${val(ctx?.innovationClaim)}`);
+  lines.push(`UNMET NEED: ${ctx?.unmetNeed && ctx.unmetNeed.length > 20 ? ctx.unmetNeed.slice(0, 400) : NOT_IN_DB}`);
+  lines.push(`COMPARABLE DRUGS: ${val(ctx?.comparableDrugs)}`);
+
+  // ── IP and licensing ───────────────────────────────────────────────────────
+  lines.push(`\nLICENSING STATUS: ${val(asset.licensing_status)}`);
+  lines.push(`LICENSING READINESS: ${val(ctx?.licensingReadiness)}`);
+  lines.push(`IP TYPE: ${val(ctx?.ipType)}`);
+  lines.push(`PATENT STATUS: ${val(asset.patent_status)}`);
+
+  // ── Competitive landscape — explicit when absent ───────────────────────────
+  if (ctx?.competingAssets && ctx.competingAssets.length > 0) {
+    lines.push(`\nCOMPETING PROGRAMS (${ctx.competingAssets.length} found in database, same target or indication):`);
+    ctx.competingAssets.slice(0, 5).forEach((c) => {
+      lines.push(`  - ${c.assetName} | ${c.modality ?? "unknown modality"} | ${c.developmentStage} | ${c.institution}`);
+    });
+  } else {
+    lines.push(`\nCOMPETING PROGRAMS: ${NOT_IN_DB}`);
+  }
+
+  // ── Supporting signals ─────────────────────────────────────────────────────
+  const signals = (asset.signals ?? []).slice(0, 5);
+  if (signals.length > 0) {
+    lines.push(`\nSupporting signals:`);
+    signals.forEach((s) => lines.push(`  - [${s.source_type}] ${s.title} (${s.date})`));
+  } else {
+    lines.push(`\nSupporting signals: ${NOT_IN_DB}`);
+  }
+
+  return lines.join("\n");
+}
+
+export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = false, ctx?: DossierContext): AsyncGenerator<string> {
   const model = fullModel ? "gpt-4o" : "gpt-4o-mini";
   const client = fullModel ? clientFull : clientMini;
-  const maxTokens = fullModel ? 900 : 700;
+  // Raised limits: 5 sections × ~200 tokens each = 1000 min; add headroom for opinionated prose
+  const maxTokens = fullModel ? 1400 : 1000;
 
   const stream = await client.chat.completions.create({
     model,
     messages: [
       { role: "system", content: DOSSIER_SYSTEM },
-      { role: "user", content: buildDossierUserContent(asset) },
+      { role: "user", content: buildDossierUserContent(asset, ctx) },
     ],
-    temperature: 0.3,
+    temperature: 0.4,
     max_tokens: maxTokens,
     stream: true,
   });
@@ -468,16 +530,16 @@ export async function* streamDossierNarrative(asset: ScoredAsset, fullModel = fa
   }
 }
 
-export async function generateDossierNarrative(asset: ScoredAsset): Promise<string> {
+export async function generateDossierNarrative(asset: ScoredAsset, ctx?: DossierContext): Promise<string> {
   try {
     const response = await clientMini.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: DOSSIER_SYSTEM },
-        { role: "user", content: buildDossierUserContent(asset) },
+        { role: "user", content: buildDossierUserContent(asset, ctx) },
       ],
-      temperature: 0.3,
-      max_tokens: 700,
+      temperature: 0.4,
+      max_tokens: 1000,
     });
     return response.choices[0]?.message?.content?.trim() ?? "";
   } catch (err) {

@@ -6271,7 +6271,7 @@ export const techLinkVAScraper: InstitutionScraper = {
     const results = await this.scrape();
     return results.slice(0, maxResults);
   },
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(_signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
     const INST = "TechLink (VA Technology Transfer)";
     const BASE = "https://techlinkcenter.org";
 
@@ -6427,15 +6427,23 @@ export const techLinkVAScraper: InstitutionScraper = {
         }));
 
         // ── Detail page pass: enrich thin-content VA listings ───────────────
+        // Only fetch detail pages for NEW items (not in knownUrls) to avoid
+        // re-visiting all ~1,400 VA listings on every run — at 4-5s per page
+        // that would blow the 15-minute Playwright watchdog timeout.
         const DETAIL_THRESHOLD = 150;
-        const DETAIL_CAP = 300;
-        const thinItems = results.filter(r => r.description.length < DETAIL_THRESHOLD && r.url && !r.url.endsWith("/va-technologies"));
+        const DETAIL_CAP = 80;
+        const thinItems = results.filter(r =>
+          r.description.length < DETAIL_THRESHOLD &&
+          r.url &&
+          !r.url.endsWith("/va-technologies") &&
+          (!knownUrls || !knownUrls.has(r.url))
+        );
         const detailBatch = thinItems.slice(0, DETAIL_CAP);
         if (detailBatch.length > 0 && browser) {
-          console.log(`[scraper] ${INST}: detail page pass — ${detailBatch.length} thin items (${thinItems.length - detailBatch.length} deferred)`);
+          console.log(`[scraper] ${INST}: detail page pass — ${detailBatch.length} new thin items (${thinItems.length - detailBatch.length} deferred, known items skipped)`);
           let enriched = 0;
           for (const item of detailBatch) {
-            await new Promise(r => setTimeout(r, 1500));
+            await new Promise(r => setTimeout(r, 800));
             const detail = await fetchTechLinkDetailContent(browser, item.url);
             if (detail.length > item.description.length + 50) {
               item.description = detail.slice(0, 2000);

@@ -501,10 +501,27 @@ export default function AssetDossier() {
     let fullNarrative = "";
 
     try {
+      const dossierContext = intelligence ? {
+        mechanismOfAction: intelligence.enriched?.mechanismOfAction ?? null,
+        innovationClaim: intelligence.enriched?.innovationClaim ?? null,
+        unmetNeed: intelligence.enriched?.unmetNeed ?? null,
+        comparableDrugs: intelligence.enriched?.comparableDrugs ?? null,
+        abstract: intelligence.enriched?.abstract ?? null,
+        ipType: intelligence.enriched?.ipType ?? null,
+        licensingReadiness: intelligence.enriched?.licensingReadiness ?? null,
+        dataSparse: intelligence.assetRecord?.dataSparse ?? false,
+        competingAssets: (intelligence.competingAssets ?? []).map((c) => ({
+          assetName: c.assetName,
+          developmentStage: c.developmentStage ?? "unknown",
+          institution: c.institution ?? "unknown",
+          modality: c.modality ?? null,
+        })),
+      } : undefined;
+
       const res = await fetch("/api/dossier/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ asset: targetAsset, fullModel }),
+        body: JSON.stringify({ asset: targetAsset, fullModel, context: dossierContext }),
         signal: controller.signal,
       });
 
@@ -625,8 +642,25 @@ export default function AssetDossier() {
   const bd = asset.score_breakdown;
   const scoredDimsCount = bd?.scored_dimensions?.length ?? 0;
   const signalCoverage = bd?.signal_coverage ?? 0;
-  const strongSignal = asset.score >= 85 && (signalCoverage >= 60 || scoredDimsCount >= 4);
-  const scoreVerdict = strongSignal
+
+  // True when the asset was opened via Scout search and has a real relevance score.
+  // scored_dimensions is only populated by the Scout scoring pipeline — if it's empty
+  // the user navigated here from a non-Scout context (alerts, market, institution page).
+  const hasScoutScore = scoredDimsCount > 0;
+
+  // When no Scout score is available, fall back to the DB completeness score (0–100).
+  const completenessScore = intelligence?.assetRecord?.completenessScore ?? null;
+  const displayScore = hasScoutScore ? asset.score : (completenessScore ?? 0);
+  const scoreLabel = hasScoutScore ? "Scout Match" : "Completeness";
+
+  const strongSignal = hasScoutScore && asset.score >= 85 && (signalCoverage >= 60 || scoredDimsCount >= 4);
+  const scoreVerdict = !hasScoutScore
+    ? (completenessScore ?? 0) >= 80
+      ? { label: "Rich Data",     color: "text-emerald-600 dark:text-emerald-400" }
+      : (completenessScore ?? 0) >= 55
+      ? { label: "Good Data",     color: "text-amber-600 dark:text-amber-400" }
+      : { label: "Sparse Data",   color: "text-muted-foreground" }
+    : strongSignal
     ? { label: "Strong Commercial Signal", color: "text-emerald-600 dark:text-emerald-400" }
     : asset.score >= 70
     ? { label: "Moderate Signal",          color: "text-amber-600 dark:text-amber-400" }
@@ -660,7 +694,7 @@ export default function AssetDossier() {
     { id: "evidence",   title: "Evidence Signals",        available: (asset.signals?.length ?? 0) > 0,                                  statusText: `${asset.signals?.length ?? 0} total` },
   ]
     .filter(s => s.available)
-    .map((s, i) => ({ ...s, num: String(i + 3).padStart(2, "0") }));
+    .map((s, i) => ({ ...s, num: String(i + (hasScoutScore ? 3 : 2)).padStart(2, "0") }));
 
   const secStyle = {
     display: "grid", gridTemplateColumns: "56px 1fr",
@@ -736,11 +770,11 @@ export default function AssetDossier() {
               pointerEvents: "none",
             }} />
             <p style={{ fontSize: "9px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: "8px", position: "relative", color: isSparse ? "hsl(33 32% 85%)" : "hsl(142 36% 85%)" }}>
-              EDEN Score
+              {scoreLabel}
             </p>
             <div style={{ display: "flex", alignItems: "baseline", gap: "2px", lineHeight: 1, marginBottom: "8px", position: "relative" }}>
               <span style={{ fontSize: "52px", fontWeight: 900, letterSpacing: "-0.045em", fontVariantNumeric: "tabular-nums", color: "hsl(0 0% 98%)" }}>
-                <CountUp value={asset.score / 10} duration={prefersReducedMotion ? 0 : 620} />
+                <CountUp value={displayScore / 10} duration={prefersReducedMotion ? 0 : 620} />
               </span>
               <span style={{ fontSize: "16px", fontWeight: 600, paddingBottom: "4px", color: isSparse ? "hsl(33 36% 82%)" : "hsl(142 38% 80%)" }}>/ 10</span>
             </div>
@@ -753,7 +787,9 @@ export default function AssetDossier() {
               border: "1px solid hsl(0 0% 100% / 0.28)",
               color: "hsl(0 0% 97%)",
             }}>
-              {strongSignal
+              {!hasScoutScore
+                ? <><Activity className="w-2.5 h-2.5" /> {scoreVerdict.label}</>
+                : strongSignal
                 ? <><Check className="w-2.5 h-2.5" /> Strong Signal</>
                 : asset.score >= 70
                 ? <><Activity className="w-2.5 h-2.5" /> Moderate Signal</>
@@ -838,7 +874,9 @@ export default function AssetDossier() {
             <h1 className="font-extrabold leading-tight mb-1" style={{ fontSize: "20px", color: isSparse ? "hsl(222 14% 28%)" : "hsl(222 22% 9%)", letterSpacing: "-0.025em" }} data-testid="dossier-asset-name">
               {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
             </h1>
-            <p className="mb-3" style={{ fontSize: "13px", color: "hsl(220 10% 46%)" }}>{asset.indication}</p>
+            {asset.indication && asset.indication !== "unknown" && (
+              <p className="mb-3" style={{ fontSize: "13px", color: "hsl(220 10% 46%)" }}>{asset.indication}</p>
+            )}
             {allCategories.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {allCategories.slice(0, 6).map(cat => (
@@ -992,8 +1030,8 @@ export default function AssetDossier() {
             </div>
           </div>
 
-          {/* 02 — Signal Profile */}
-          {asset.score_breakdown && (
+          {/* 02 — Signal Profile (only shown when asset was opened via Scout search) */}
+          {hasScoutScore && asset.score_breakdown && (
             <div style={secStyle} data-testid="score-breakdown-panel">
               {secNum("02")}
               <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
