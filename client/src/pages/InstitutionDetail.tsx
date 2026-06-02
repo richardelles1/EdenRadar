@@ -232,6 +232,9 @@ function ResearchDnaPanel({
   const hasStandout   = (profile?.standoutAssets?.length ?? 0) > 0;
   const hasAny        = hasBiology || hasStage || hasIndications || hasStandout;
 
+  const [bioTooltip, setBioTooltip] = useState<{ label: string; count: number; pct: number; x: number; y: number } | null>(null);
+  const total = profile?.biologyBreakdown?.reduce((s, b) => s + b.count, 0) ?? 1;
+
   const totalStageCnt = profile?.stageBreakdown?.reduce((s, r) => s + r.count, 0) ?? 1;
 
   const sortedStages = profile?.stageBreakdown
@@ -282,6 +285,7 @@ function ResearchDnaPanel({
               <div className="relative w-full rounded-lg overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
                 {buildTreemap(profile!.biologyBreakdown).map((rect, i) => {
                   const { bg, text } = BIO_FILLS[i] ?? BIO_FILLS[BIO_FILLS.length - 1];
+                  const pct = Math.round((rect.count / total) * 100);
                   return (
                     <button
                       key={rect.label}
@@ -294,8 +298,10 @@ function ResearchDnaPanel({
                         background: bg,
                       }}
                       onClick={() => onBiologyClick?.(rect.label)}
+                      onMouseEnter={(e) => setBioTooltip({ label: rect.label, count: rect.count, pct, x: e.clientX, y: e.clientY })}
+                      onMouseMove={(e) => setBioTooltip((t) => t ? { ...t, x: e.clientX, y: e.clientY } : t)}
+                      onMouseLeave={() => setBioTooltip(null)}
                       data-testid={`biology-bar-${i}`}
-                      title={`${rect.label}: ${rect.count}`}
                     >
                       {rect.h > 0.1 && (
                         <span
@@ -317,6 +323,15 @@ function ResearchDnaPanel({
                   );
                 })}
               </div>
+              {bioTooltip && (
+                <div
+                  className="fixed z-50 pointer-events-none text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md"
+                  style={{ left: bioTooltip.x + 14, top: bioTooltip.y - 8 }}
+                >
+                  <span className="font-semibold text-foreground capitalize">{bioTooltip.label}</span>
+                  <span className="text-muted-foreground ml-2">{bioTooltip.count} · {bioTooltip.pct}%</span>
+                </div>
+              )}
             ) : (
               <p className="text-sm text-muted-foreground/60 italic">No biology data yet</p>
             )}
