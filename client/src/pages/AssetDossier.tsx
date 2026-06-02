@@ -874,7 +874,9 @@ export default function AssetDossier() {
             <h1 className="font-extrabold leading-tight mb-1" style={{ fontSize: "20px", color: isSparse ? "hsl(222 14% 28%)" : "hsl(222 22% 9%)", letterSpacing: "-0.025em" }} data-testid="dossier-asset-name">
               {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
             </h1>
-            <p className="mb-3" style={{ fontSize: "13px", color: "hsl(220 10% 46%)" }}>{asset.indication}</p>
+            {asset.indication && asset.indication !== "unknown" && (
+              <p className="mb-3" style={{ fontSize: "13px", color: "hsl(220 10% 46%)" }}>{asset.indication}</p>
+            )}
             {allCategories.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {allCategories.slice(0, 6).map(cat => (

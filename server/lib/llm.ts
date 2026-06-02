@@ -118,26 +118,32 @@ Write in the voice of a premium commercial intelligence service. Use precise lan
 
 const DOSSIER_SYSTEM = `You are a senior biotech licensing analyst writing a confidential deal brief for a pharma BD executive.
 
-The reader already sees the asset name, target, modality, indication, and development stage on the page. Do NOT open with "XYZ is a [modality] targeting [target] for [indication]" — that wastes the first sentence. Start with commercial insight, not a data recap.
+CRITICAL RULES — violating these makes the dossier worse, not better:
 
-Write four sections with exactly these markdown headers:
+1. The reader already sees name, target, modality, indication, and stage on the page. Do NOT restate them in opening sentences.
+2. Each section below has a DATA CONTRACT. If the input marks a field as [NOT IN DATABASE], you MUST use the exact phrase specified. Do not substitute your own knowledge, do not infer from the target name, do not say "appears to be first-in-class" unless the innovation claim field explicitly says so. Filling a data gap with training-set knowledge is a hallucination — it destroys trust.
+3. Write only what the provided data supports. A shorter honest section is better than a longer fabricated one.
+
+Write exactly five sections with these headers:
 
 **Commercial Thesis**
-Why this asset is commercially interesting — what makes the mechanism or approach non-obvious, what market gap it fills, and whether this is a first-mover, fast-follower, or late entrant. If the innovation claim or unmet need data is provided, use it directly rather than inferring. If data is thin, say so honestly — do not pad with generic biotech boilerplate.
+Lead with commercial insight — why this asset matters to a buyer, grounded in the MECHANISM, INNOVATION CLAIM, and UNMET NEED fields provided. If MECHANISM is [NOT IN DATABASE], write the thesis from what is available. If all three enriched fields are [NOT IN DATABASE], base the thesis strictly on the summary text and stage, and state that enriched data is pending.
 
 **Competitive Position**
-How this asset sits relative to the programs listed in the competitive landscape. Reference them by name and stage if provided. Explain what this asset's differentiation means for deal value — don't just say "the field is competitive." If no competitive data is available, state that explicitly.
+If COMPETING PROGRAMS is provided: analyze this asset's position by name and stage — what the competition means for deal value, differentiation, and timing. If COMPARABLE DRUGS is provided, use it.
+If both COMPETING PROGRAMS and COMPARABLE DRUGS are [NOT IN DATABASE], write exactly: "Competitive intelligence for this target/indication is not available in EdenRadar's current dataset. This reflects database coverage at time of generation, not a signal about market crowding or novelty — independent competitive research is required before drawing conclusions."
 
 **Licensing & Deal Dynamics**
-Realistic access assessment. Distinguish between deal structures (sponsored research, exclusive option, exclusive license, co-development) based on the asset's stage, institution type, and IP position. Identify the most likely acquirer profile by company type and therapeutic focus — not just "a pharma company." If licensing_readiness or patent status is provided, use it.
+Use the LICENSING STATUS, IP TYPE, PATENT STATUS, and LICENSING READINESS fields to assess deal structure and acquirer profile. Be specific: distinguish between exclusive option, sponsored research agreement, and outright license based on stage and IP position. Name the likely acquirer type by therapeutic focus, not just "a pharma company."
+If IP TYPE and PATENT STATUS are both unknown, note that IP position needs to be independently verified before deal structuring.
 
 **Key Questions Before Proceeding**
-Specific gaps the BD team must resolve — not generic "clinical trials carry risk." Name the missing data points, the IP ambiguities, the regulatory pathway questions, or the competitive threats that would change the thesis. If the asset is data-sparse, flag that as the primary uncertainty.
+Specific, asset-level questions the BD team must answer before proceeding — not generic risk disclaimers. Draw these from actual gaps: what's unknown in the provided data (unknown fields, [NOT IN DATABASE] markers, data-sparse flag). Each question should be answerable by a specific action (calling the TTO, reviewing the IND, requesting a data package).
 
 **Next Action**
-One specific, concrete action sentence. Name the institution, the contact method, and the reason for urgency if applicable. Not "contact the TTO" — something like "Request the IND filing and Phase 1 enrollment data from [institution]'s OTC before the next ASCO abstract deadline."
+One sentence. Name the institution. Specify the action (request IND, review Phase 1 protocol, schedule introductory call with TTO licensing officer). Add timing context if the stage or conference calendar suggests urgency. Do not write "contact the TTO" as a complete sentence.
 
-Tone: precise, opinionated, free of filler. Write like a Morgan Stanley healthcare equity note — no "it is worth noting," no "as mentioned above," no "in conclusion."`;
+Tone: precise, opinionated, free of filler. Morgan Stanley healthcare equity note style — no "it is worth noting," no "as mentioned above," no "in conclusion."`;
 
 
 // ── Message builders ──────────────────────────────────────────────────────────
@@ -443,43 +449,59 @@ export interface DossierContext {
   competingAssets?: Array<{ assetName: string; developmentStage: string; institution: string; modality?: string | null }>;
 }
 
+const NOT_IN_DB = "[NOT IN DATABASE]";
+function val(v: string | null | undefined, fallback = NOT_IN_DB): string {
+  if (!v || v === "unknown" || v === "n/a" || v.trim() === "") return fallback;
+  return v;
+}
+
 function buildDossierUserContent(asset: ScoredAsset, ctx?: DossierContext): string {
   const lines: string[] = [];
 
-  // Core identity
+  // ── Core identity (always present) ────────────────────────────────────────
   lines.push(`Asset: ${asset.asset_name}`);
-  lines.push(`Target: ${asset.target} | Modality: ${asset.modality} | Indication: ${asset.indication} | Stage: ${asset.development_stage}`);
+  lines.push(`Target: ${val(asset.target)} | Modality: ${val(asset.modality)} | Indication: ${val(asset.indication)} | Stage: ${val(asset.development_stage)}`);
   lines.push(`Institution: ${asset.institution} (${asset.owner_type})`);
-  lines.push(`Licensing status: ${asset.licensing_status}${ctx?.licensingReadiness ? ` / readiness: ${ctx.licensingReadiness}` : ""}`);
-  lines.push(`IP: patent_status=${asset.patent_status}${ctx?.ipType ? ` / ip_type=${ctx.ipType}` : ""}`);
 
   if (ctx?.dataSparse) {
-    lines.push(`DATA NOTE: This asset has a thin public description (< 150 chars). Calibrate confidence accordingly — do not invent specifics.`);
+    lines.push(`DATA QUALITY FLAG: This asset has a thin public description (<150 chars). Do not invent specifics not supported by the text below.`);
   }
 
-  // Enrich with deep fields when available
-  if (asset.summary) lines.push(`\nSummary: ${asset.summary}`);
-  if (ctx?.abstract && ctx.abstract.length > 50) lines.push(`\nFull description: ${ctx.abstract.slice(0, 800)}`);
-  if (ctx?.mechanismOfAction && ctx.mechanismOfAction !== "unknown") lines.push(`\nMechanism of action: ${ctx.mechanismOfAction}`);
-  if (ctx?.innovationClaim && ctx.innovationClaim !== "unknown") lines.push(`\nStated innovation: ${ctx.innovationClaim}`);
-  if (ctx?.unmetNeed && ctx.unmetNeed.length > 20) lines.push(`\nUnmet need (from source): ${ctx.unmetNeed.slice(0, 400)}`);
-  if (ctx?.comparableDrugs && ctx.comparableDrugs !== "unknown") lines.push(`\nComparable drugs identified: ${ctx.comparableDrugs}`);
+  // ── Summary / description ──────────────────────────────────────────────────
+  lines.push(`\nSummary: ${asset.summary || NOT_IN_DB}`);
+  if (ctx?.abstract && ctx.abstract.length > 50) {
+    lines.push(`Full description: ${ctx.abstract.slice(0, 800)}`);
+  }
 
-  // Competitive landscape
+  // ── Enriched analytical fields — explicit availability markers ─────────────
+  lines.push(`\nMECHANISM: ${val(ctx?.mechanismOfAction)}`);
+  lines.push(`INNOVATION CLAIM: ${val(ctx?.innovationClaim)}`);
+  lines.push(`UNMET NEED: ${ctx?.unmetNeed && ctx.unmetNeed.length > 20 ? ctx.unmetNeed.slice(0, 400) : NOT_IN_DB}`);
+  lines.push(`COMPARABLE DRUGS: ${val(ctx?.comparableDrugs)}`);
+
+  // ── IP and licensing ───────────────────────────────────────────────────────
+  lines.push(`\nLICENSING STATUS: ${val(asset.licensing_status)}`);
+  lines.push(`LICENSING READINESS: ${val(ctx?.licensingReadiness)}`);
+  lines.push(`IP TYPE: ${val(ctx?.ipType)}`);
+  lines.push(`PATENT STATUS: ${val(asset.patent_status)}`);
+
+  // ── Competitive landscape — explicit when absent ───────────────────────────
   if (ctx?.competingAssets && ctx.competingAssets.length > 0) {
-    lines.push(`\nKnown competing programs (same target or indication, different institutions):`);
+    lines.push(`\nCOMPETING PROGRAMS (${ctx.competingAssets.length} found in database, same target or indication):`);
     ctx.competingAssets.slice(0, 5).forEach((c) => {
       lines.push(`  - ${c.assetName} | ${c.modality ?? "unknown modality"} | ${c.developmentStage} | ${c.institution}`);
     });
   } else {
-    lines.push(`\nNo competing programs identified in database for this target/indication.`);
+    lines.push(`\nCOMPETING PROGRAMS: ${NOT_IN_DB}`);
   }
 
-  // Supporting signals
+  // ── Supporting signals ─────────────────────────────────────────────────────
   const signals = (asset.signals ?? []).slice(0, 5);
   if (signals.length > 0) {
-    lines.push(`\nSupporting signals (${signals.length}):`);
+    lines.push(`\nSupporting signals:`);
     signals.forEach((s) => lines.push(`  - [${s.source_type}] ${s.title} (${s.date})`));
+  } else {
+    lines.push(`\nSupporting signals: ${NOT_IN_DB}`);
   }
 
   return lines.join("\n");
