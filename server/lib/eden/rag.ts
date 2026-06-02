@@ -1583,7 +1583,7 @@ function buildContext(assets: RetrievedAsset[]): string {
         `[Asset ${i + 1}] ${a.assetName}`,
         `  Institution: ${a.institution}`,
         a.technologyId ? `  Technology ID: ${a.technologyId}` : null,
-        a.biology ? `  Biology: ${a.biology}` : null,
+        a.biology ? `  Biology class: ${a.biology}` : null,
         (() => {
           if (!a.categories) return null;
           try {
@@ -1591,9 +1591,21 @@ function buildContext(assets: RetrievedAsset[]): string {
             return Array.isArray(parsed) && parsed.length ? `  Categories: ${parsed.join(", ")}` : null;
           } catch { return null; }
         })(),
-        a.mechanismOfAction ? `  Mechanism: ${a.mechanismOfAction}` : null,
-        a.innovationClaim ? `  Innovation: ${a.innovationClaim}` : null,
-        `  Target: ${a.target} | Modality: ${a.modality}`,
+        // mechanism_of_action is a taxonomy label (shared across many assets), not asset-specific MOA.
+        // Only surface it when it differs from the biology label — adds detail without duplication.
+        (() => {
+          if (!a.mechanismOfAction) return null;
+          const bioLower = (a.biology ?? "").toLowerCase();
+          const moaLower = a.mechanismOfAction.toLowerCase();
+          // Skip if the MOA is essentially a verbose restatement of the biology field
+          if (bioLower && (moaLower.includes(bioLower.slice(0, 12)) || bioLower.includes(moaLower.slice(0, 12)))) return null;
+          return `  Mechanism class: ${a.mechanismOfAction}`;
+        })(),
+        a.innovationClaim ? `  Key differentiator: ${a.innovationClaim}` : null,
+        (() => {
+          const target = a.target && a.target !== "unknown" && a.target !== "" ? a.target : null;
+          return `  Target: ${target ?? "not yet characterized"} | Modality: ${a.modality}`;
+        })(),
         `  Indication: ${a.indication} | Stage: ${a.developmentStage}`,
         a.unmetNeed ? `  Unmet need: ${a.unmetNeed}` : null,
         a.comparableDrugs ? `  Comparable drugs: ${a.comparableDrugs}` : null,
@@ -1602,7 +1614,7 @@ function buildContext(assets: RetrievedAsset[]): string {
         a.completenessScore != null
           ? `  Data quality: ${Math.round(a.completenessScore)}/100${a.completenessScore >= 70 ? " (well-documented)" : a.completenessScore < 40 ? " (sparse — verify with TTO)" : ""}`
           : null,
-        a.summary ? `  Summary: ${a.summary.slice(0, 800)}` : null,
+        a.summary ? `  Summary: ${a.summary.slice(0, 1200)}` : null,
         a.sourceUrl ? `  URL: ${a.sourceUrl}` : null,
       ]
         .filter(Boolean)
@@ -1767,6 +1779,8 @@ You're warm and direct, occasionally wry. You don't hedge excessively, you don't
 - For research queries, present a maximum of 3 assets per response even if more were retrieved. Lead with the most commercially interesting one. Each asset gets one compelling hook sentence — not a field dump. Vary your opening style each response.
 - For count or portfolio questions, use your live portfolio numbers (provided below) rather than counting from retrieved assets. If the exact breakdown isn't in your stats, say so honestly.
 - Use "Data quality" scores (0–100) to calibrate your language. 70+ means well-documented and licensing-ready — present with confidence and lead with these. Below 40 means the record is sparse — note briefly that the user should verify details directly with the TTO. Never rank a thin record above a well-documented one when relevance is otherwise equal.
+- When an asset shows "Target: not yet characterized", do not invent or speculate about the molecular target. Acknowledge the gap naturally ("the specific molecular target hasn't been characterized yet") and direct to the TTO or summary for details.
+- "Key differentiator" is the most reliable asset-specific scientific claim — weight it heavily when describing what makes an asset interesting. "Biology class" and "Mechanism class" are taxonomy labels shared across many assets; use them for framing but not as asset-specific mechanism descriptions. The real MOA detail for each asset lives in the Summary.
 - When results are filtered by region (EU, UK, Asia), acknowledge the geographic scope naturally in your framing — "Looking at European programs…" or "In the UK TTO space…". Don't just list assets as if geography is invisible.
 - You ask one smart follow-up when the query is genuinely ambiguous. Never several at once.
 - Never fabricate data. If the retrieved context doesn't cover something, say so and offer to look from a different angle.
