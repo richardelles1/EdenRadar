@@ -16,8 +16,6 @@ import {
 } from "@/lib/titleSignals";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 
-const ACCENT = "hsl(142 71% 45%)";
-
 // ── Stage & Biology config ────────────────────────────────────────────────────
 
 // Stage chip classes encode maturity: neutral (early) → emerald (clinical) → primary (approved)
@@ -207,12 +205,7 @@ function ResearchDnaPanel({
     <div className="rounded-xl border border-card-border bg-card p-5 space-y-5" data-testid="research-dna-panel">
       <div className="flex items-center gap-2">
         <Dna className="w-4 h-4 text-primary" />
-        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Research DNA</h2>
-        {!loading && hasAny && (
-          <span className="text-[10px] text-muted-foreground/60 ml-auto">
-            Click any item to see assets
-          </span>
-        )}
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Portfolio Profile</h2>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
@@ -590,7 +583,7 @@ export default function InstitutionDetail() {
 
   const SORT_OPTIONS: { value: SortMode; label: string }[] = [
     { value: "newest",     label: "Newest First" },
-    { value: "commercial", label: "Best Commercial" },
+    { value: "commercial", label: "Top Scoring" },
     { value: "az",         label: "A → Z" },
     { value: "za",         label: "Z → A" },
   ];
@@ -648,8 +641,8 @@ export default function InstitutionDetail() {
                     {inst.specialties.map((s) => (
                       <Badge
                         key={s}
-                        variant="secondary"
-                        className="text-[10px] font-medium bg-primary/8 text-primary/80 border-0 px-2 py-0.5"
+                        variant="outline"
+                        className={`text-[10px] font-medium px-1.5 py-0.5 ${BIOLOGY_CHIP}`}
                       >
                         {s}
                       </Badge>
@@ -693,14 +686,7 @@ export default function InstitutionDetail() {
         {/* Active Listings */}
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-            <div className="flex items-center gap-3">
-              <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Active Listings</h2>
-              {activeCount !== null && activeCount > 0 && (
-                <Badge variant="secondary" className="text-[11px] bg-primary/10 text-primary border-0">
-                  {activeCount} listings
-                </Badge>
-              )}
-            </div>
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide">Active Listings</h2>
             {rawAssets.length > 0 && (
               <div className="flex items-center gap-2 flex-wrap">
                 <input
@@ -766,8 +752,14 @@ export default function InstitutionDetail() {
               </p>
             </div>
           ) : sorted.length === 0 ? (
-            <div className="flex flex-col items-center gap-3 py-12 text-center">
+            <div className="flex flex-col items-center gap-2 py-12 text-center">
               <p className="text-sm text-muted-foreground">No listings match &ldquo;{search}&rdquo;</p>
+              <button
+                onClick={() => setSearch("")}
+                className="text-xs font-medium text-primary hover:underline flex items-center gap-1"
+              >
+                <X className="w-3 h-3" />Clear filter
+              </button>
             </div>
           ) : (
             <div className="space-y-2">
