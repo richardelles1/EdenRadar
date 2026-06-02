@@ -1364,6 +1364,7 @@ INTENTS:
 - back_ref: refers to a PREVIOUSLY SHOWN asset. ONLY valid when hasPriorAssets=true. Triggers:
   Positional: "the first one", "the second one", "the third one", "that one", "this one", "the last one", "the top one", "number two"
   Anaphoric: "tell me more about it", "go deeper on that", "more details on it", "dig into that", "expand on that", "more on that asset", "what else can you tell me about it", "can you elaborate"
+  Similarity: "show me similar assets", "more like this", "find me something similar", "other assets like that", "related technologies", "what else is similar", "anything comparable", "more like number 2", "find me more like the first one"
   Asset-specific questions about a prior asset: "what's the IP on this", "is it exclusive", "what's the licensing status", "has it been licensed before", "who do I contact about that", "what's the TTO for that", "what's the ask", "what are the deal terms", "can I see the source", "where can I read more", "what stage is it at", "what's the mechanism", "tell me about the science behind it", "how validated is this", "is there clinical data on this one"
   Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]"
   NOT valid if hasPriorAssets=false
@@ -1427,6 +1428,15 @@ Message: "what's the IP situation on this one?"
 hasPriorAssets: true
 → {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 Note: asking about IP/patents for a specific already-shown asset is back_ref, NOT a patents live search. live_source:"patents" is only for broad patent landscape queries like "who holds patents in CRISPR?"
+
+Message: "show me similar assets"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: "similar assets" / "more like this" / "find me something like that" with hasPriorAssets=true are back_refs — the server handles seed-embedding retrieval
+
+Message: "more like number 2"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":1,"live_source":null}
 
 Message: "tell me more about the second one"
 hasPriorAssets: false

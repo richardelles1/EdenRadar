@@ -299,6 +299,19 @@ function buildActionOffers(
   return offers;
 }
 
+// "More like this" / "find similar" detection — triggers seed-embedding retrieval
+// in the back_ref path instead of re-explaining the same asset.
+const SIMILAR_PATTERNS: RegExp[] = [
+  /\b(?:more|other|find)\s+like\s+(?:this|that|it|these|the\s+\w+\s+one)\b/i,
+  /\bsimilar\s+(?:assets?|technologies?|programs?|ones?|results?|candidates?)\b/i,
+  /\bfind\s+(?:me\s+)?(?:more|similar|comparable|related)\b/i,
+  /\bwhat\s+else\s+(?:is\s+)?(?:similar|like\s+(?:this|that|it))\b/i,
+  /\banything\s+(?:comparable|similar|like\s+(?:this|that))\b/i,
+  /\bshow\s+me\s+(?:more|similar|comparable)\b/i,
+  /\bmore\s+(?:assets?|results?|options?)\s+like\s+(?:this|that|it)\b/i,
+  /\brelated\s+(?:assets?|technologies?|programs?)\b/i,
+];
+
 // Consistent payload shape for all SSE "context" events.
 // 250-char summary gives PipelinePicker enough to create a useful pipeline entry
 // without bloating the SSE stream. Target is omitted when unknown.
@@ -671,6 +684,56 @@ export function registerEdenRoutes(app: Express): void {
         } else {
           const pos = extractBackRefPosition(message.trim());
           targeted = pos !== null && fetchedAssets[pos] ? [fetchedAssets[pos]] : fetchedAssets;
+        }
+
+        // ── "More like this" branch: seed-embedding retrieval ─────────────────
+        // When the user wants SIMILAR assets (not more info about the same one),
+        // embed the target asset's key fields and run a fresh vector search,
+        // excluding everything already shown in this session.
+        const isSimilarIntent = SIMILAR_PATTERNS.some((rx) => rx.test(message.trim()));
+        if (isSimilarIntent && targeted.length > 0 && !abortController.signal.aborted) {
+          const seed = targeted[0];
+          const seedText = [
+            seed.assetName,
+            seed.modality && seed.modality !== "unknown" ? seed.modality : "",
+            seed.indication && seed.indication !== "unknown" ? seed.indication : "",
+            seed.biology ?? "",
+            seed.summary ? seed.summary.slice(0, 400) : "",
+          ].filter(Boolean).join(" ").trim();
+
+          try {
+            const seedVec = await embedQuery(seedText);
+            const allShownIds = new Set<number>([
+              ...priorIds,
+              ...targeted.map((a) => a.id),
+            ]);
+            const similarHits = await storage.filteredSemanticSearch(
+              seedVec, geoRx, filters.modality, filters.stage, undefined,
+              filters.institution, 20, filters.biology, sinceDate, undefined, true
+            ).catch(() => [] as import("../storage").RetrievedAsset[]);
+            const passing = similarHits.filter((a) => a.similarity > 0.45 && !allShownIds.has(a.id)).slice(0, 15);
+
+            if (passing.length >= 2) {
+              const rerankedSimilar = rerankAssets(passing, resolvedCtx, engagementSignals, focusContext?.biology);
+              const similarPayload = rerankedSimilar.map((a) => toAssetPayload(a));
+              sendEvent("context", { sessionId: sid, assets: similarPayload });
+              const seedLabel = `${seed.assetName} (${seed.institution})`;
+              const similarQ = `The user wants assets SIMILAR to "${seedLabel}". These were retrieved using ${seedLabel} as a semantic seed. Present them in your standard format. Open with a natural note that these are related to what they were just looking at — vary the phrasing.`;
+              let fullResponse = "";
+              for await (const token of ragQuery(similarQ, rerankedSimilar, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
+                fullResponse += token;
+                sendEvent("token", { text: token });
+              }
+              await storage.appendEdenMessage(sid, {
+                role: "assistant", content: fullResponse,
+                assetIds: rerankedSimilar.slice(0, 3).map((a) => a.id), assets: similarPayload,
+              });
+              const simOffers = buildActionOffers(message.trim(), "search", rerankedSimilar, filters, acceptedSignals, crossSessionMemory);
+              if (simOffers.length > 0) sendEvent("action_offer", { offers: simOffers });
+              sendEvent("done", donePayload());
+              return;
+            }
+          } catch { /* fall through to standard back_ref */ }
         }
 
         const assetPayload = targeted.map((a) => toAssetPayload(a, 1.0));
@@ -1300,8 +1363,20 @@ export function registerEdenRoutes(app: Express): void {
         }
       }
 
+      // ── Session deduplication ─────────────────────────────────────────────────
+      // Prefer assets the user hasn't already seen in this session.
+      // Only applies when we have enough unseen candidates (≥ 3) so a thin
+      // corpus doesn't result in an empty response.
+      const sessionShownIds = new Set<number>(
+        (session.messages ?? [])
+          .filter((m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0)
+          .flatMap((m) => m.assetIds ?? [])
+      );
+      const unseenMerged = merged.filter((a) => !sessionShownIds.has(a.id));
+      const deduped = unseenMerged.length >= 3 ? unseenMerged : merged;
+
       // Rerank with profile + adaptive + biology tiers using pre-derived engagement signals.
-      const retrieved = rerankAssets(merged, resolvedCtx, engagementSignals, focusContext?.biology);
+      const retrieved = rerankAssets(deduped, resolvedCtx, engagementSignals, focusContext?.biology);
 
       const assetPayload = retrieved.map((a) => toAssetPayload(a));
 
