@@ -36,13 +36,13 @@ function InstitutionCard({ inst, loading }: { inst: Institution; loading: boolea
 
   return (
     <div
-      className="rounded-[14px] overflow-hidden border border-border cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 active:scale-[0.99]"
+      className="rounded-[14px] overflow-hidden border border-border cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 active:scale-[0.99] flex flex-col"
       onClick={() => setLocation(`/institutions/${inst.slug}`)}
       data-testid={`institution-card-${inst.slug}`}
     >
       {/* ── Emerald header ── */}
       <div
-        className="px-4 py-3.5 flex items-start justify-between gap-3"
+        className="px-4 py-3.5 flex items-start justify-between gap-3 min-h-[64px]"
         style={{ background: "linear-gradient(135deg, hsl(142 65% 36%) 0%, hsl(142 55% 27%) 100%)" }}
       >
         <div className="flex items-start gap-2.5 min-w-0 flex-1">
@@ -91,7 +91,7 @@ function InstitutionCard({ inst, loading }: { inst: Institution; loading: boolea
       </div>
 
       {/* ── Card body ── */}
-      <div className={`bg-card flex flex-col gap-2.5 px-4 ${hasBody ? "pt-3 pb-3.5" : "pt-2 pb-3"}`}>
+      <div className={`bg-card flex-1 flex flex-col gap-2.5 px-4 ${hasBody ? "pt-3 pb-3.5" : "pt-2 pb-3"}`}>
         {inst.ttoName && (
           <p className="text-xs text-muted-foreground leading-snug">{inst.ttoName}</p>
         )}
