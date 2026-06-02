@@ -1,8 +1,8 @@
 import type { Express } from "express";
 import { db } from "../db";
-import { eq, and, sql, desc, or, ilike, inArray, gt, count as drizzleCount } from "drizzle-orm";
+import { eq, and, sql, desc, or, ilike, inArray, gt, count as drizzleCount, isNotNull } from "drizzle-orm";
 import { storage } from "../storage";
-import { ingestedAssets, userAlerts, industryProfiles, institutionMetadata } from "@shared/schema";
+import { ingestedAssets, userAlerts, industryProfiles, institutionMetadata, savedAssets, assetSignalEvents } from "@shared/schema";
 import { tryGetUserId } from "../lib/supabaseAuth";
 import { z } from "zod";
 
@@ -28,6 +28,62 @@ export const alertPreviewSchema = z.object({
   targets: z.array(z.string().max(200)).max(20).nullable().optional(),
 });
 export function registerAlertsRoutes(app: Express): void {
+  // Returns stage changes for assets the user has saved to their pipeline.
+  // Joins saved_assets (filtered to rows with ingested_asset_id) →
+  // asset_signal_events (stage_change) → ingested_assets for display data.
+  app.get("/api/alerts/pipeline-updates", async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const sinceParam = req.query.since as string | undefined;
+      const since = sinceParam && !isNaN(Date.parse(sinceParam))
+        ? new Date(sinceParam)
+        : new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+      const savedRows = await db
+        .select({ ingestedAssetId: savedAssets.ingestedAssetId })
+        .from(savedAssets)
+        .where(and(eq(savedAssets.userId, userId), isNotNull(savedAssets.ingestedAssetId)));
+
+      const totalSaved = savedRows.length;
+      if (!totalSaved) return res.json({ updates: [], totalSaved: 0 });
+
+      const ids = savedRows.map((r) => r.ingestedAssetId!);
+
+      const changes = await db
+        .select({
+          assetId: assetSignalEvents.assetId,
+          payload: assetSignalEvents.payload,
+          occurredAt: assetSignalEvents.occurredAt,
+          assetName: ingestedAssets.assetName,
+          institution: ingestedAssets.institution,
+        })
+        .from(assetSignalEvents)
+        .innerJoin(ingestedAssets, eq(ingestedAssets.id, assetSignalEvents.assetId))
+        .where(and(
+          eq(assetSignalEvents.eventType, "stage_change"),
+          inArray(assetSignalEvents.assetId, ids),
+          gt(assetSignalEvents.occurredAt, since),
+        ))
+        .orderBy(desc(assetSignalEvents.occurredAt));
+
+      const updates = changes.map((c) => ({
+        assetId: c.assetId,
+        assetName: c.assetName,
+        institution: c.institution,
+        stageFrom: (c.payload as Record<string, string> | null)?.from ?? null,
+        stageTo: (c.payload as Record<string, string> | null)?.to ?? null,
+        occurredAt: c.occurredAt,
+      }));
+
+      res.json({ updates, totalSaved });
+    } catch (err: any) {
+      console.error("[alerts/pipeline-updates]", err);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  });
+
   // Returns top specific targets for the alert criteria combobox.
   // Excludes generic/catch-all values that aren't useful as alert filters.
   app.get("/api/alerts/targets", async (_req, res) => {
