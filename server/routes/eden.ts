@@ -26,7 +26,7 @@ import { z } from "zod";
 
 const aiRateLimit = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   // Key by authenticated user ID so the limit is per-user, not per-IP.
@@ -405,7 +405,7 @@ export function registerEdenRoutes(app: Express): void {
       const assistantTurnCount = allMessages.filter((m) => m.role === "assistant").length;
       const storedSummary = session.focusContext?._summary as string | undefined;
       let history: typeof allMessages;
-      if (assistantTurnCount >= 8 && storedSummary) {
+      if (assistantTurnCount >= 6 && storedSummary) {
         history = [
           { role: "user" as const, content: `[Prior conversation summary]\n${storedSummary}` },
           { role: "assistant" as const, content: "Understood. Continuing from there." },
@@ -416,7 +416,7 @@ export function registerEdenRoutes(app: Express): void {
       }
       // Trigger async summarization at turn 8+ when no summary exists yet.
       // Uses >= so a server restart between turns 8 and 9 doesn't permanently skip it.
-      if (assistantTurnCount >= 8 && !storedSummary) {
+      if (assistantTurnCount >= 6 && !storedSummary) {
         summarizeSession(allMessages).then(async (summary) => {
           if (summary) {
             const updatedFocus = { ...(session.focusContext ?? {}), _summary: summary } as SessionFocusContext;
@@ -680,9 +680,12 @@ export function registerEdenRoutes(app: Express): void {
       if (aggQuery) {
         const resolvedResult = await resolveAggregationQuery(message.trim(), filters, geoRx).catch(() => null);
         if (resolvedResult) {
+          const aggQ = filters.trending
+            ? `${message.trim()}\n\n[After presenting the count data, add 2–3 sentences of genuine market context from your industry intelligence on why this area is commercially active right now. Do not fabricate data — draw only from what you know.]`
+            : message.trim();
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
+          for await (const token of aggregationQuery(aggQ, resolvedResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -701,9 +704,12 @@ export function registerEdenRoutes(app: Express): void {
           const sqlCountResult = filterDesc
             ? `Filtered count (${filterDesc}): **${count}** relevant assets match the active filters.`
             : `Total relevant assets indexed in the portfolio: **${count.toLocaleString()}**`;
+          const countQ = filters.trending
+            ? `${message.trim()}\n\n[After presenting the count data, add 2–3 sentences of genuine market context from your industry intelligence on why this area is commercially active right now. Do not fabricate data — draw only from what you know.]`
+            : message.trim();
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
+          for await (const token of aggregationQuery(countQ, sqlCountResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -795,35 +801,47 @@ export function registerEdenRoutes(app: Express): void {
               return canonical === instKey;
             };
 
+            // Pass 1 (sync): session history for all institutions
+            const sessionHits = new Map<string, number>();
+            const needsPortfolioSearch: string[] = [];
             for (const inst of mentionedInsts.slice(0, 3)) {
               const instKey = inst.toLowerCase();
-
-              // Pass 1: session history
               const sessionMatch = allPriorAssetPayloads.find((a) => institutionMatches(a.institution, instKey));
-              if (sessionMatch && !instMatched.includes(sessionMatch.id)) {
-                instMatched.push(sessionMatch.id);
-                continue;
+              if (sessionMatch) {
+                sessionHits.set(inst, sessionMatch.id);
+              } else {
+                needsPortfolioSearch.push(inst);
               }
+            }
+            for (const inst of mentionedInsts.slice(0, 3)) {
+              const id = sessionHits.get(inst);
+              if (id !== undefined && !instMatched.includes(id)) instMatched.push(id);
+            }
 
-              // Pass 2: portfolio-level semantic search with institution context
-              let portfolioResolved = false;
-              try {
-                const instQueryText = `${inst} ${message.trim()}`;
-                const instEmbedding = await embedQuery(instQueryText);
-                const instHits = await storage.semanticSearch(instEmbedding, 8);
-                const portfolioHit = instHits.find(
+            // Pass 2 (parallel): portfolio search for unresolved institutions
+            if (needsPortfolioSearch.length > 0 && instMatched.length < 2) {
+              const portfolioSearchResults = await Promise.allSettled(
+                needsPortfolioSearch.map(async (inst) => {
+                  const instEmbedding = await embedQuery(`${inst} ${message.trim()}`);
+                  const instHits = await storage.semanticSearch(instEmbedding, 8);
+                  return { inst, hits: instHits };
+                })
+              );
+              for (const result of portfolioSearchResults) {
+                if (result.status === "rejected") {
+                  console.warn("[eden/comparative] institution portfolio search failed:", (result.reason as Error)?.message);
+                  continue;
+                }
+                const { inst, hits } = result.value;
+                const instKey = inst.toLowerCase();
+                const portfolioHit = hits.find(
                   (h) => institutionMatches(h.institution, instKey) && !instMatched.includes(h.id)
                 );
                 if (portfolioHit) {
                   instMatched.push(portfolioHit.id);
-                  portfolioResolved = true;
+                } else if (!firstUnresolved) {
+                  firstUnresolved = inst;
                 }
-              } catch (instSearchErr) {
-                console.warn("[eden/comparative] institution portfolio search failed:", (instSearchErr as Error)?.message);
-              }
-
-              if (!portfolioResolved && !firstUnresolved) {
-                firstUnresolved = inst;
               }
             }
 
@@ -930,9 +948,13 @@ export function registerEdenRoutes(app: Express): void {
           if (conceptEmbedding) {
             const hits = await storage.semanticSearch(conceptEmbedding, 5);
             const passing = hits.filter((a) => a.similarity >= CONCEPT_SIMILARITY_THRESHOLD);
-            if (hits.length > 0 && passing.length === 0) {
+            if (hits.length > 0) {
               const topSim = hits[0]?.similarity ?? 0;
-              console.log(`[eden/definitional] 0 hits above ${CONCEPT_SIMILARITY_THRESHOLD} threshold (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+              if (passing.length === 0) {
+                console.log(`[eden/definitional] 0 hits above ${CONCEPT_SIMILARITY_THRESHOLD} (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+              } else {
+                console.log(`[eden/definitional] ${passing.length} hit(s) above ${CONCEPT_SIMILARITY_THRESHOLD} (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+              }
             }
             relatedAssets = passing.slice(0, 3);
           }
@@ -1143,6 +1165,7 @@ export function registerEdenRoutes(app: Express): void {
         }
         await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [targetAsset.id], assets: docPayload });
         focusContext._lastDocType = docType;
+        persistSessionFocus(sid, focusContext).catch(() => {});
         sendEvent("done", donePayload());
         return;
       }

@@ -1602,7 +1602,7 @@ function buildContext(assets: RetrievedAsset[]): string {
         a.completenessScore != null
           ? `  Data quality: ${Math.round(a.completenessScore)}/100${a.completenessScore >= 70 ? " (well-documented)" : a.completenessScore < 40 ? " (sparse — verify with TTO)" : ""}`
           : null,
-        a.summary ? `  Summary: ${a.summary.slice(0, 500)}` : null,
+        a.summary ? `  Summary: ${a.summary.slice(0, 800)}` : null,
         a.sourceUrl ? `  URL: ${a.sourceUrl}` : null,
       ]
         .filter(Boolean)
@@ -1921,7 +1921,7 @@ export async function* directQuery(
     messages,
     stream: true,
     temperature: 0.7,
-    max_tokens: 280,
+    max_tokens: 450,
   }, { signal });
 
   for await (const chunk of stream) {
