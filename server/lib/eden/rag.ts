@@ -153,25 +153,44 @@ const _sessionResetMap = new Map<string, number>();
 const MODALITY_ALIASES: Record<string, string> = {
   "gene therapy": "Gene Therapy",
   "gene editing": "Gene Editing",
+  "base editing": "Gene Editing",
+  "prime editing": "Gene Editing",
   "cell therapy": "Cell Therapy",
   "car-t": "CAR-T",
   "car t": "CAR-T",
+  "cart": "CAR-T",
   "small molecule": "Small Molecule",
   "antibody": "Antibody",
   "monoclonal antibody": "Antibody",
+  "monoclonal": "Antibody",
+  "mab": "Antibody",
+  "naked antibody": "Antibody",
   "mrna": "mRNA",
   "rna therapeutics": "RNA Therapeutics",
+  "rna therapy": "RNA Therapeutics",
+  "lnp": "mRNA",
+  "lipid nanoparticle": "mRNA",
   "sirna": "siRNA",
   "antisense": "Antisense",
+  "aso": "Antisense",
+  "oligonucleotide": "Antisense",
   "protac": "PROTAC",
   "adc": "ADC",
   "antibody-drug conjugate": "ADC",
+  "antibody drug conjugate": "ADC",
   "bispecific": "Bispecific Antibody",
+  "bispecific antibody": "Bispecific Antibody",
+  "bi-specific": "Bispecific Antibody",
   "vaccine": "Vaccine",
   "peptide": "Peptide",
   "nanoparticle": "Nanoparticle",
   "protein therapy": "Protein/Biologics",
   "protein replacement": "Protein/Biologics",
+  "biologic": "Protein/Biologics",
+  "biologics": "Protein/Biologics",
+  "viral vector": "Gene Therapy",
+  "aav": "Gene Therapy",
+  "lentiviral": "Gene Therapy",
 };
 
 // ── Institution patterns for two-pass detection ───────────────────────────
@@ -215,7 +234,21 @@ export const INSTITUTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   { pattern: /\bimperial\s+college\b/i, name: "imperial college" },
   { pattern: /\bkarolinska\b/i, name: "karolinska" },
   { pattern: /\beth\s+zurich\b/i, name: "eth zurich" },
-  { pattern: /\boxford\b/i, name: "oxford" },
+  // Oxford: single canonical "oxford" so ILIKE '%oxford%' matches both "University of Oxford"
+  // and shorter references. Removed the separate /\boxford\b/ entry that was producing
+  // two different canonical names from the same institution.
+  { pattern: /\boxford\b|\buniversity\s+of\s+oxford\b|\boxford\s+university\b/i, name: "oxford" },
+  { pattern: /\bfred\s+hutch\b|\bfrederick\s+hutchinson\b/i, name: "fred hutch" },
+  { pattern: /\bbroad\s+institute\b|\bthe\s+broad\b/i, name: "broad institute" },
+  { pattern: /\bdana.?farber\b/i, name: "dana-farber" },
+  { pattern: /\bbrigham\s+and\s+women\b|\bbwh\b/i, name: "brigham and women" },
+  { pattern: /\bmass\s+general\b|\bmassachusetts\s+general\b|\bmgh\b/i, name: "massachusetts general" },
+  { pattern: /\bweill\s+cornell\b/i, name: "weill cornell" },
+  { pattern: /\bsinai\b|\bicahn\b/i, name: "mount sinai" },
+  { pattern: /\bcase\s+western\b/i, name: "case western" },
+  { pattern: /\bdartmouth\b/i, name: "dartmouth" },
+  { pattern: /\bwake\s+forest\b/i, name: "wake forest" },
+  { pattern: /\buniversity\s+of\s+british\s+columbia\b|\bubc\b/i, name: "university of british columbia" },
 ];
 
 export function detectInstitutionName(query: string, portfolioInstitutions?: string[]): string | null {
@@ -363,29 +396,61 @@ export const GEO_INSTITUTION_REGEX: Record<GeoKey, string> = {
 };
 
 const STAGE_DETECT: Array<[RegExp, string]> = [
-  [/\bpreclinical\b|pre-clinical\b/i, "preclinical"],
-  [/\bphase\s*1\b|phase\s*i\b/i, "phase 1"],
+  [/\bpreclinical\b|pre-clinical\b|glp\s+tox\b|in\s+vivo\b|animal\s+model/i, "preclinical"],
+  [/\bphase\s*1\b|phase\s*i\b|\bfih\b|first.in.human\b|dose.escalation\b/i, "phase 1"],
+  [/\bphase\s*1\/?2\b|phase\s*i\/?ii\b/i, "phase 1"],
   [/\bphase\s*2\b|phase\s*ii\b/i, "phase 2"],
-  [/\bphase\s*3\b|phase\s*iii\b/i, "phase 3"],
-  [/\bind-enabling\b|ind enabling\b/i, "IND-enabling"],
-  [/\bdiscovery\b/i, "discovery"],
+  [/\bphase\s*3\b|phase\s*iii\b|pivotal\s+trial\b|registration\s+trial\b/i, "phase 3"],
+  [/\bind-enabling\b|ind enabling\b|\bind\s+ready\b|pre.ind\b/i, "IND-enabling"],
+  [/\bdiscovery\b|lead\s+optimiz|hit.to.lead\b/i, "discovery"],
   [/\bclinical\b/i, "clinical"],
-  [/\bapproved\b/i, "approved"],
+  [/\bapproved\b|fda\s+approved\b|ema\s+approved\b|marketed\b|commerciali[sz]ed\b|on\s+the\s+market\b/i, "approved"],
 ];
 
 const INDICATION_KEYWORDS = [
-  "oncology", "cancer", "tumor", "tumour", "leukemia", "lymphoma", "glioblastoma",
+  // Oncology — broad
+  "oncology", "cancer", "tumor", "tumour", "solid tumor", "solid tumour",
+  "hematologic", "hematological", "hematology",
+  // Specific cancer types most commonly searched by BD teams
+  "leukemia", "lymphoma", "myeloma", "glioblastoma", "glioma",
+  "nsclc", "non-small cell lung", "non-small-cell lung",
+  "pancreatic", "pancreas cancer",
+  "breast cancer",
+  "prostate cancer", "prostate",
+  "colorectal", "colon cancer", "crc",
+  "melanoma",
+  "ovarian", "ovarian cancer",
+  "bladder cancer", "bladder",
+  "hepatocellular", "hcc",
+  // Neuro / CNS
   "neurology", "neurodegenerative", "alzheimer", "parkinson", "als", "huntington", "neurological",
+  "multiple sclerosis", "epilepsy", "seizure",
+  // Rare / genetic
   "rare disease", "orphan disease", "genetic disorder", "monogenic",
+  "sickle cell", "hemophilia", "haemophilia", "thalassemia",
+  "cystic fibrosis", "spinal muscular atrophy", "sma",
+  "pediatric", "paediatric",
+  // Autoimmune / inflammatory
   "autoimmune", "inflammation", "inflammatory", "rheumatoid", "lupus", "crohn",
+  "inflammatory bowel", "ibd", "ulcerative colitis", "colitis",
+  "atopic dermatitis", "eczema",
+  // Metabolic
   "metabolic", "obesity", "diabetes", "mash", "nash", "fatty liver",
+  // Cardiovascular
   "cardiovascular", "cardiac", "heart failure", "stroke", "atherosclerosis",
+  // Infectious
   "infectious disease", "hiv", "covid", "tuberculosis", "malaria", "antimicrobial",
+  // Respiratory
   "respiratory", "asthma", "copd", "pulmonary",
+  // Ophthalmology
   "ophthalmic", "ocular", "retinal", "macular",
+  // Dermatology
   "dermatology", "skin", "fibrosis", "psoriasis",
+  // Musculoskeletal
   "musculoskeletal", "bone", "muscle dystrophy",
+  // Renal / hepatic
   "renal", "kidney", "liver disease",
+  // Immunology
   "immunology", "immunotherapy", "checkpoint inhibitor",
 ];
 
