@@ -1445,7 +1445,7 @@ export function registerSearchRoutes(app: Express): void {
     type RangeOpt = typeof validRanges[number];
     const rangeParam = (req.query.range as string) || "all";
     const range: RangeOpt = (validRanges as readonly string[]).includes(rangeParam) ? rangeParam as RangeOpt : "all";
-    const CACHE_KEY = `intelligence:market:v6:${range}`;
+    const CACHE_KEY = `intelligence:market:v7:${range}`;
     const TTL_MS = 15 * 60 * 1000;
     const cached = cacheGet<object>(CACHE_KEY);
     if (cached) return res.json(cached);
@@ -1461,14 +1461,15 @@ export function registerSearchRoutes(app: Express): void {
             COUNT(*)::int AS count,
             COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '1 day' * ${deltaDays})::int AS recent_delta
           FROM ingested_assets
-          WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+          WHERE relevant = true AND biology IS NOT NULL AND biology != '' AND biology != 'unknown'
           ${df}
           GROUP BY biology ORDER BY count DESC LIMIT 20
         `),
         db.execute(sql`
           SELECT biology, modality, COUNT(*)::int AS count
           FROM ingested_assets
-          WHERE biology IS NOT NULL AND biology != '' AND biology != 'unknown'
+          WHERE relevant = true
+            AND biology IS NOT NULL AND biology != '' AND biology != 'unknown'
             AND modality IS NOT NULL AND modality != '' AND modality != 'unknown'
             AND modality NOT IN ('other', 'medical device', 'research tool', 'biologic')
           ${df}
@@ -1479,7 +1480,7 @@ export function registerSearchRoutes(app: Express): void {
             COUNT(*)::int AS total,
             COUNT(*) FILTER (WHERE first_seen_at >= NOW() - INTERVAL '90 days')::int AS recent_delta
           FROM ingested_assets
-          ${dfWhere} modality IS NOT NULL AND modality != '' AND modality != 'unknown'
+          ${dfWhere} relevant = true AND modality IS NOT NULL AND modality != '' AND modality != 'unknown'
             AND modality NOT IN ('other', 'medical device', 'research tool', 'biologic')
           GROUP BY modality ORDER BY total DESC LIMIT 12
         `),
@@ -1494,7 +1495,7 @@ export function registerSearchRoutes(app: Express): void {
           counts AS (
             SELECT date_trunc('week', first_seen_at)::date AS week, COUNT(*)::int AS count
             FROM ingested_assets
-            WHERE first_seen_at >= NOW() - INTERVAL '8 weeks' AND first_seen_at IS NOT NULL
+            WHERE relevant = true AND first_seen_at >= NOW() - INTERVAL '8 weeks' AND first_seen_at IS NOT NULL
             GROUP BY 1
           )
           SELECT w.week, COALESCE(c.count, 0)::int AS count
@@ -1504,7 +1505,7 @@ export function registerSearchRoutes(app: Express): void {
         db.execute(sql`
           SELECT institution, COUNT(*)::int AS count
           FROM ingested_assets
-          ${dfWhere} institution IS NOT NULL AND institution != ''
+          ${dfWhere} relevant = true AND institution IS NOT NULL AND institution != ''
           GROUP BY institution ORDER BY count DESC LIMIT 20
         `),
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
@@ -1699,19 +1700,23 @@ export function registerSearchRoutes(app: Express): void {
       let rows;
       let countRows;
 
+      // Base TTO filter applied to every drawer query — ensures only relevant, non-duplicate
+      // tech-transfer assets surface (same corpus EDEN and Scout search against).
+      const ttoFilter = sql`relevant = true AND source_type = 'tech_transfer' AND canonical_asset_id IS NULL`;
+
       if (biology && modality) {
         [rows, countRows] = await Promise.all([
           db.execute(sql`
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
-            WHERE biology = ${biology} AND modality = ${modality}
+            WHERE ${ttoFilter} AND biology = ${biology} AND modality = ${modality}
             ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
             SELECT COUNT(*)::int AS total FROM ingested_assets
-            WHERE biology = ${biology} AND modality = ${modality}
+            WHERE ${ttoFilter} AND biology = ${biology} AND modality = ${modality}
             ${mkDateFilter()}
           `),
         ]);
@@ -1720,14 +1725,14 @@ export function registerSearchRoutes(app: Express): void {
           db.execute(sql`
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
-            WHERE biology = ${biology}
+            WHERE ${ttoFilter} AND biology = ${biology}
             ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
             SELECT COUNT(*)::int AS total FROM ingested_assets
-            WHERE biology = ${biology}
+            WHERE ${ttoFilter} AND biology = ${biology}
             ${mkDateFilter()}
           `),
         ]);
@@ -1736,14 +1741,14 @@ export function registerSearchRoutes(app: Express): void {
           db.execute(sql`
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
-            WHERE modality = ${modality}
+            WHERE ${ttoFilter} AND modality = ${modality}
             ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
             SELECT COUNT(*)::int AS total FROM ingested_assets
-            WHERE modality = ${modality}
+            WHERE ${ttoFilter} AND modality = ${modality}
             ${mkDateFilter()}
           `),
         ]);
@@ -1752,14 +1757,14 @@ export function registerSearchRoutes(app: Express): void {
           db.execute(sql`
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
-            WHERE institution = ${institution}
+            WHERE ${ttoFilter} AND institution = ${institution}
             ${mkDateFilter()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
             SELECT COUNT(*)::int AS total FROM ingested_assets
-            WHERE institution = ${institution}
+            WHERE ${ttoFilter} AND institution = ${institution}
             ${mkDateFilter()}
           `),
         ]);
@@ -1773,13 +1778,13 @@ export function registerSearchRoutes(app: Express): void {
           db.execute(sql`
             SELECT id, asset_name, institution, modality, biology, completeness_score
             FROM ingested_assets
-            WHERE first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
+            WHERE ${ttoFilter} AND first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
             ORDER BY completeness_score DESC NULLS LAST
             LIMIT ${limit} OFFSET ${offset}
           `),
           db.execute(sql`
             SELECT COUNT(*)::int AS total FROM ingested_assets
-            WHERE first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
+            WHERE ${ttoFilter} AND first_seen_at >= ${afterDate.toISOString()} AND first_seen_at < ${beforeDate.toISOString()}
           `),
         ]);
       } else {
