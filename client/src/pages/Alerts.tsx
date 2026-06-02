@@ -81,14 +81,6 @@ interface IndustryDeltaResponse {
     hasAlerts: boolean;
     byInstitution: DeltaInstitution[];
   };
-  newConcepts: {
-    total: number;
-    items: Array<{ id: number; title: string; therapeuticArea: string; submitterAffiliation?: string; oneLiner?: string }>;
-  };
-  newProjects: {
-    total: number;
-    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string; projectUrl?: string | null; projectContributors?: Array<{ name: string; institution: string; role: string; email: string }> | null }>;
-  };
   windowHours: number;
   since?: string;
 }
@@ -577,22 +569,16 @@ function NewTtoAssetsSection({
           {alertsDelta!.byAlert.map((bucket) => (
             <AlertBucketRows key={bucket.alertId} bucket={bucket} />
           ))}
-          {!hasAlerts && flatVisible.length > 0 && (
-            <div className="space-y-0.5 pt-2 border-t border-border/40">
-              <p className="text-[10px] text-muted-foreground/70 px-1 pb-1">All new assets</p>
-              {flatVisible.map((asset, i) => (
-                <AssetRow key={asset.id} id={asset.id} name={asset.name} institution={asset.institution} index={i} />
-              ))}
-            </div>
-          )}
         </div>
+      ) : hasAlerts ? (
+        // User has alerts but none matched — show focused message, not a raw dump
+        <p className="text-xs text-muted-foreground py-2 px-1" data-testid="no-alert-matches">
+          No new assets matched your alert criteria since your last visit.{" "}
+          <Link href="/scout" className="text-primary hover:underline">Search in Scout →</Link>
+        </p>
       ) : (
+        // No alerts set — show unfiltered discovery feed
         <>
-          {hasAlerts && (
-            <p className="text-xs text-muted-foreground py-1 px-1" data-testid="no-alert-matches">
-              No new assets match your saved alert criteria. All new assets are shown below.
-            </p>
-          )}
           {flatVisible.length > 0 ? (
             <div className="space-y-0.5" data-testid="flat-asset-list">
               {flatVisible.map((asset, i) => (
