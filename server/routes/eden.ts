@@ -299,6 +299,28 @@ function buildActionOffers(
   return offers;
 }
 
+// Consistent payload shape for all SSE "context" events.
+// 250-char summary gives PipelinePicker enough to create a useful pipeline entry
+// without bloating the SSE stream. Target is omitted when unknown.
+function toAssetPayload(a: import("../storage").RetrievedAsset & { rankNote?: string }, similarity?: number) {
+  return {
+    id: a.id,
+    assetName: a.assetName,
+    institution: a.institution,
+    indication: a.indication ?? "unknown",
+    modality: a.modality ?? "unknown",
+    developmentStage: a.developmentStage,
+    biology: a.biology ?? undefined,
+    target: (a.target && a.target !== "unknown" && a.target !== "") ? a.target : undefined,
+    summary: a.summary ? a.summary.slice(0, 250) : undefined,
+    ipType: a.ipType,
+    sourceName: a.sourceName,
+    sourceUrl: a.sourceUrl,
+    similarity: similarity ?? Math.round((a.similarity ?? 1) * 100) / 100,
+    rankNote: a.rankNote,
+  };
+}
+
 export function registerEdenRoutes(app: Express): void {
   const chatBodySchema = z.object({
     message: z.string().min(1).max(4000),
@@ -651,12 +673,7 @@ export function registerEdenRoutes(app: Express): void {
           targeted = pos !== null && fetchedAssets[pos] ? [fetchedAssets[pos]] : fetchedAssets;
         }
 
-        const assetPayload = targeted.map((a) => ({
-          id: a.id, assetName: a.assetName, institution: a.institution,
-          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
-          biology: a.biology ?? undefined,
-          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-        }));
+        const assetPayload = targeted.map((a) => toAssetPayload(a, 1.0));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
         for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
@@ -899,12 +916,7 @@ export function registerEdenRoutes(app: Express): void {
           fetchedForCompare.sort((a, b) => (compareIdOrder.get(a.id) ?? 99) - (compareIdOrder.get(b.id) ?? 99));
 
           if (fetchedForCompare.length >= 2) {
-            const compareAssetPayload = fetchedForCompare.map((a) => ({
-              id: a.id, assetName: a.assetName, institution: a.institution,
-              indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
-              developmentStage: a.developmentStage, ipType: a.ipType,
-              sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-            }));
+            const compareAssetPayload = fetchedForCompare.map((a) => toAssetPayload(a, 1.0));
             sendEvent("context", { sessionId: sid, assets: compareAssetPayload });
             let fullResponse = "";
             for await (const token of compareQuery(message.trim(), fetchedForCompare, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
@@ -964,13 +976,7 @@ export function registerEdenRoutes(app: Express): void {
         }
 
         if (relatedAssets.length > 0) {
-          const relatedAssetPayload = relatedAssets.map((a) => ({
-            id: a.id, assetName: a.assetName, institution: a.institution,
-            indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
-            developmentStage: a.developmentStage, ipType: a.ipType,
-            sourceName: a.sourceName, sourceUrl: a.sourceUrl,
-            similarity: Math.round(a.similarity * 100) / 100,
-          }));
+          const relatedAssetPayload = relatedAssets.map((a) => toAssetPayload(a));
           sendEvent("context", { sessionId: sid, assets: relatedAssetPayload });
 
           const bridgeIntro = "\n\n";
@@ -1046,12 +1052,7 @@ export function registerEdenRoutes(app: Express): void {
           }
         }
 
-        const pipelineAssetPayload = pipelineAssets.slice(0, 15).map((a) => ({
-          id: a.id, assetName: a.assetName, institution: a.institution,
-          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
-          developmentStage: a.developmentStage, biology: a.biology ?? undefined,
-          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-        }));
+        const pipelineAssetPayload = pipelineAssets.slice(0, 15).map((a) => toAssetPayload(a, 1.0));
 
         sendEvent("context", { sessionId: sid, assets: pipelineAssetPayload });
 
@@ -1157,7 +1158,7 @@ export function registerEdenRoutes(app: Express): void {
           return;
         }
 
-        const docPayload = [{ id: targetAsset.id, assetName: targetAsset.assetName, institution: targetAsset.institution, indication: targetAsset.indication ?? "unknown", modality: targetAsset.modality ?? "unknown", developmentStage: targetAsset.developmentStage, similarity: 1.0 }];
+        const docPayload = [toAssetPayload(targetAsset, 1.0)];
         sendEvent("context", { sessionId: sid, assets: docPayload });
         let fullResponse = "";
         for await (const token of documentQuery(docType, targetAsset, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
@@ -1302,14 +1303,7 @@ export function registerEdenRoutes(app: Express): void {
       // Rerank with profile + adaptive + biology tiers using pre-derived engagement signals.
       const retrieved = rerankAssets(merged, resolvedCtx, engagementSignals, focusContext?.biology);
 
-      const assetPayload = retrieved.map((a) => ({
-        id: a.id, assetName: a.assetName, institution: a.institution,
-        indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
-        biology: a.biology ?? undefined,
-        ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
-        similarity: Math.round(a.similarity * 100) / 100,
-        rankNote: a.rankNote,
-      }));
+      const assetPayload = retrieved.map((a) => toAssetPayload(a));
 
       const externalResults = await liveResultsPromise;
       sendEvent("context", { sessionId: sid, assets: assetPayload, externalResults, activeSource: liveSource ?? "tto" });

@@ -7,6 +7,9 @@ export type ChatAsset = {
   indication: string;
   modality: string;
   developmentStage?: string;
+  biology?: string | null;
+  target?: string | null;
+  summary?: string | null;
   ipType?: string | null;
   sourceName?: string | null;
   sourceUrl?: string | null;

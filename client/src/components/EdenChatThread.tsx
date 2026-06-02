@@ -45,12 +45,14 @@ function modalityLeftBorder(m?: string): string {
 }
 
 function exportCitationsAsCsv(assets: ChatAsset[]): void {
-  const headers = ["Asset Name", "Institution", "Modality", "Development Stage", "IP Type", "Source URL", "Relevance Score"];
+  const headers = ["Asset Name", "Institution", "Indication", "Modality", "Development Stage", "Biology Class", "IP Type", "Source URL", "Relevance Score"];
   const rows = assets.map((a) => [
     a.assetName,
     a.institution,
+    (a.indication && a.indication !== "unknown") ? a.indication : "",
     a.modality || "",
     a.developmentStage || "",
+    a.biology || "",
     a.ipType || "",
     a.sourceUrl || "",
     a.similarity.toFixed(3),
@@ -202,11 +204,11 @@ function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = 
   const isSaved = savedIngestedIds.has(asset.id);
   const payload: PipelinePickerPayload = {
     asset_name: asset.assetName,
-    target: "unknown",
+    target: asset.target || "unknown",
     modality: asset.modality || "unknown",
     development_stage: asset.developmentStage || "unknown",
     disease_indication: asset.indication || "unknown",
-    summary: "",
+    summary: asset.summary || "",
     source_title: asset.assetName,
     source_journal: asset.institution,
     publication_year: "",
@@ -228,7 +230,14 @@ function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = 
       {/* Institution */}
       <p className={`text-muted-foreground leading-none ${compact ? "text-[10px]" : "text-[11px]"}`}>{asset.institution}</p>
 
-      {/* Modality / stage / IP badges */}
+      {/* Indication — the disease/area, most important contextual field */}
+      {asset.indication && asset.indication !== "unknown" && (
+        <p className={`text-foreground/70 leading-none truncate ${compact ? "text-[9px]" : "text-[10px]"}`} title={asset.indication}>
+          {asset.indication.length > 48 ? asset.indication.slice(0, 48) + "…" : asset.indication}
+        </p>
+      )}
+
+      {/* Modality / stage / IP / biology / rank badges */}
       <div className="flex flex-wrap gap-1 mt-0.5">
         {asset.modality && asset.modality !== "unknown" && (
           <span className={`font-medium border rounded px-1.5 py-0.5 ${modalityBadgeClass(asset.modality)} ${compact ? "text-[9px]" : "text-[10px]"}`}>
@@ -243,6 +252,11 @@ function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = 
         {!compact && asset.ipType && (
           <span className="text-[10px] font-medium border rounded px-1.5 py-0.5 bg-muted text-muted-foreground border-border">
             {asset.ipType}
+          </span>
+        )}
+        {!compact && asset.biology && (
+          <span className="text-[10px] font-medium border rounded px-1.5 py-0.5 bg-violet-500/8 text-violet-700 dark:text-violet-400 border-violet-500/20" title={asset.biology}>
+            {asset.biology.length > 28 ? asset.biology.slice(0, 28) + "…" : asset.biology}
           </span>
         )}
         {asset.rankNote && (
