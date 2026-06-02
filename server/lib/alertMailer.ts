@@ -284,10 +284,11 @@ async function evaluateAlerts(): Promise<void> {
       continue;
     }
 
-    const alertCadence = (alert as { cadence?: string }).cadence;
-    const windowHours = alertCadence === "daily" || alertCadence === "weekly"
-      ? frequencyWindowHours(alertCadence)
-      : frequencyWindowHours(matchAlerts);
+    // Use the user's profile preference (matchAlerts) as the source of truth for
+    // window hours. The alert-level cadence column was added with DEFAULT 'weekly',
+    // so every pre-existing alert row has cadence='weekly' regardless of what the
+    // user actually chose — using it here would silently override their preference.
+    const windowHours = frequencyWindowHours(matchAlerts);
     const elapsed = alert.lastAlertSentAt
       ? ((Date.now() - alert.lastAlertSentAt.getTime()) / (1000 * 60 * 60)).toFixed(1)
       : "never sent";
