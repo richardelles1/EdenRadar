@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useParams } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw,
-  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown, Dna, TrendingUp, X,
+  ShieldOff, ChevronDown, ArrowUpDown, Dna, TrendingUp, X,
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
 import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
@@ -20,36 +20,30 @@ const ACCENT = "hsl(142 71% 45%)";
 
 // ── Stage & Biology config ────────────────────────────────────────────────────
 
+// Stage chip classes encode maturity: neutral (early) → emerald (clinical) → primary (approved)
 const STAGE_COLORS: Record<string, string> = {
-  "discovery":   "bg-violet-500/10 text-violet-600 dark:text-violet-400",
-  "preclinical": "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-  "phase 1":     "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400",
-  "phase 2":     "bg-sky-500/10 text-sky-600 dark:text-sky-400",
-  "phase 3":     "bg-blue-500/10 text-blue-600 dark:text-blue-400",
-  "approved":    "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  "discovery":   "bg-muted/80 text-muted-foreground",
+  "preclinical": "bg-slate-100 text-slate-600 dark:bg-slate-800/60 dark:text-slate-400",
+  "phase 1":     "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-500",
+  "phase 2":     "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-400",
+  "phase 3":     "bg-emerald-200/80 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-300",
+  "approved":    "bg-primary/15 text-primary",
 };
 
 const STAGE_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 
-const STAGE_BAR_COLORS: Record<string, string> = {
-  "discovery":   "bg-violet-500",
-  "preclinical": "bg-amber-500",
-  "phase 1":     "bg-cyan-500",
-  "phase 2":     "bg-sky-500",
-  "phase 3":     "bg-blue-500",
-  "approved":    "bg-emerald-500",
+// Bar backgrounds: single-hue green progression, opacity encodes maturity
+const STAGE_BAR_OPACITIES: Record<string, string> = {
+  "discovery":   "hsl(142 71% 45% / 0.15)",
+  "preclinical": "hsl(142 71% 45% / 0.28)",
+  "phase 1":     "hsl(142 71% 45% / 0.44)",
+  "phase 2":     "hsl(142 71% 45% / 0.62)",
+  "phase 3":     "hsl(142 71% 45% / 0.80)",
+  "approved":    "hsl(142 71% 45%)",
 };
 
-const BIOLOGY_COLORS = [
-  "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20",
-  "bg-fuchsia-500/15 text-fuchsia-600 dark:text-fuchsia-400 border-fuchsia-500/20",
-  "bg-violet-500/15 text-violet-600 dark:text-violet-400 border-violet-500/20",
-  "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/20",
-  "bg-teal-500/15 text-teal-600 dark:text-teal-400 border-teal-500/20",
-  "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/20",
-  "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20",
-  "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/20",
-];
+// Biology chips are categorical labels — hierarchy comes from the bar, not chip color
+const BIOLOGY_CHIP = "bg-muted/80 text-foreground/70 border-border/60";
 
 type SortMode = "newest" | "commercial" | "az" | "za";
 
@@ -59,6 +53,7 @@ type DrawerFilter =
   | { type: "biology"; label: string }
   | { type: "stage"; stage: string }
   | { type: "indication"; indication: string }
+  | { type: "asset"; asset: IngestedAsset }
   | null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -96,13 +91,12 @@ function ScoreBadge({ score }: { score: number }) {
 
 // ── AssetRow ──────────────────────────────────────────────────────────────────
 
-function AssetRow({ asset, index, savedIngestedIds }: {
+function AssetRow({ asset, index, savedIngestedIds, onOpen }: {
   asset: IngestedAsset;
   index: number;
   savedIngestedIds: Set<number>;
+  onOpen: (asset: IngestedAsset) => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   const modality = detectModality(asset.assetName);
   const stage = detectStage(asset.assetName, asset.developmentStage);
   const score = computeCommercialScore(asset);
@@ -125,109 +119,36 @@ function AssetRow({ asset, index, savedIngestedIds }: {
 
   return (
     <div
-      className="rounded-lg border border-card-border bg-card transition-colors hover:border-primary/20"
+      className="flex items-center gap-3 p-3.5 rounded-lg border border-card-border bg-card cursor-pointer transition-colors hover:border-primary/25 hover:bg-accent/20"
+      onClick={() => onOpen(asset)}
       data-testid={`asset-listing-${index}`}
     >
-      <div
-        className="flex items-center gap-3 p-4 cursor-pointer select-none"
-        onClick={() => setExpanded((v) => !v)}
-        data-testid={`asset-row-toggle-${index}`}
-      >
-        <FlaskConical className="w-4 h-4 text-primary shrink-0" />
+      <FlaskConical className="w-4 h-4 text-primary/60 shrink-0" />
 
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-foreground truncate leading-snug">
-            {asset.assetName}
-          </p>
-          {modality && (
-            <span className="text-[10px] text-primary/70 font-medium">{modality}</span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <PipelinePicker payload={pickerPayload} alreadySaved={isSaved} />
-
-          {stage && (
-            <span
-              className={`hidden sm:inline text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                STAGE_COLORS[stage.toLowerCase()] ?? "bg-muted text-muted-foreground"
-              }`}
-              data-testid={`badge-stage-${index}`}
-            >
-              {stage}
-            </span>
-          )}
-          <ScoreBadge score={score} />
-          <Link
-            href={`/asset/${asset.id}`}
-            className="hidden sm:inline text-[11px] font-medium text-primary hover:underline"
-            data-testid={`link-dossier-header-${index}`}
-          >
-            Dossier →
-          </Link>
-          {expanded
-            ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-          }
-        </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-foreground truncate leading-snug">
+          {asset.assetName}
+        </p>
+        {modality && (
+          <span className="text-[10px] text-muted-foreground">{modality}</span>
+        )}
       </div>
 
-      {expanded && (
-        <div
-          className="px-4 pb-4 pt-0 border-t border-card-border/60 space-y-3"
-          data-testid={`asset-detail-${index}`}
-        >
-          <dl className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3">
-            <div>
-              <dt className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Modality</dt>
-              <dd className="text-xs text-foreground mt-0.5">{modality ?? "Unknown"}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Stage</dt>
-              <dd className="text-xs text-foreground mt-0.5">{stage ?? "Unknown"}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">First Indexed</dt>
-              <dd className="text-xs text-foreground mt-0.5">{formatRelativeTime(asset.firstSeenAt)}</dd>
-            </div>
-            <div>
-              <dt className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Commercial Score</dt>
-              <dd className="text-xs font-bold text-foreground mt-0.5">{score} / 100</dd>
-            </div>
-          </dl>
-
-          {asset.developmentStage && asset.developmentStage !== "unknown" && (
-            <div>
-              <dt className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">DB Stage</dt>
-              <dd className="text-xs text-foreground mt-0.5">{asset.developmentStage}</dd>
-            </div>
-          )}
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <Link
-              href={`/asset/${asset.id}`}
-              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
-              data-testid={`link-dossier-${index}`}
-              onClick={(e) => e.stopPropagation()}
-            >
-              Dossier →
-            </Link>
-            {asset.sourceUrl && (
-              <a
-                href={asset.sourceUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary hover:underline"
-                data-testid={`link-view-tto-${index}`}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <ExternalLink className="w-3 h-3" />
-                Open at TTO →
-              </a>
-            )}
-          </div>
-        </div>
-      )}
+      <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+        <PipelinePicker payload={pickerPayload} alreadySaved={isSaved} />
+        {stage && (
+          <span
+            className={`hidden sm:inline text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+              STAGE_COLORS[stage.toLowerCase()] ?? "bg-muted text-muted-foreground"
+            }`}
+            data-testid={`badge-stage-${index}`}
+          >
+            {stage}
+          </span>
+        )}
+        <ScoreBadge score={score} />
+        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground/50" />
+      </div>
     </div>
   );
 }
@@ -240,12 +161,16 @@ function ResearchDnaPanel({
   onBiologyClick,
   onStageClick,
   onIndicationClick,
+  onAssetClick,
+  rawAssets,
 }: {
   profile: InstitutionProfile | null;
   loading: boolean;
   onBiologyClick?: (label: string) => void;
   onStageClick?: (stage: string) => void;
   onIndicationClick?: (indication: string) => void;
+  onAssetClick?: (asset: IngestedAsset) => void;
+  rawAssets?: IngestedAsset[];
 }) {
   const hasBiology    = (profile?.biologyBreakdown?.length ?? 0) > 0;
   const hasStage      = (profile?.stageBreakdown?.length ?? 0) > 0;
@@ -309,7 +234,7 @@ function ResearchDnaPanel({
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-all group-hover:ring-1 group-hover:ring-primary/30 ${BIOLOGY_COLORS[i % BIOLOGY_COLORS.length]}`}>
+                      <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full border transition-all group-hover:ring-1 group-hover:ring-primary/30 ${BIOLOGY_CHIP}`}>
                         {b.label}
                       </span>
                       <span className="text-[10px] text-muted-foreground tabular-nums ml-2 shrink-0">{b.count}</span>
@@ -341,7 +266,7 @@ function ResearchDnaPanel({
               {sortedStages.map((s) => {
                 const key = s.stage?.toLowerCase() ?? "";
                 const pct = Math.round((s.count / totalStageCnt) * 100);
-                const barColor = STAGE_BAR_COLORS[key] ?? "bg-muted-foreground/40";
+                const barBg = STAGE_BAR_OPACITIES[key] ?? "hsl(142 71% 45% / 0.30)";
                 const labelColor = STAGE_COLORS[key] ?? "bg-muted text-muted-foreground";
                 return (
                   <div
@@ -354,7 +279,7 @@ function ResearchDnaPanel({
                       {s.stage}
                     </span>
                     <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${barColor}`} style={{ width: `${pct}%` }} />
+                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barBg }} />
                     </div>
                     <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{s.count}</span>
                   </div>
@@ -409,21 +334,24 @@ function ResearchDnaPanel({
               </div>
             ) : hasStandout ? (
               <div className="space-y-1.5">
-                {profile!.standoutAssets.map((a) => (
-                  <Link
-                    key={a.id}
-                    href={`/asset/${a.id}`}
-                    className="flex items-center justify-between gap-2 p-2 rounded-lg border border-card-border bg-background hover:border-primary/30 transition-colors group"
-                    data-testid={`standout-asset-${a.id}`}
-                  >
-                    <span className="text-xs text-foreground truncate group-hover:text-primary transition-colors leading-snug">
-                      {a.assetName}
-                    </span>
-                    <span className="text-[10px] font-bold tabular-nums text-primary shrink-0 bg-primary/10 px-1.5 py-0.5 rounded-full">
-                      {Math.round(a.completenessScore)}
-                    </span>
-                  </Link>
-                ))}
+                {profile!.standoutAssets.map((a) => {
+                  const fullAsset = rawAssets?.find((r) => r.id === a.id);
+                  return (
+                    <div
+                      key={a.id}
+                      className="flex items-center justify-between gap-2 p-2 rounded-lg border border-card-border bg-background hover:border-primary/30 transition-colors group cursor-pointer"
+                      data-testid={`standout-asset-${a.id}`}
+                      onClick={() => fullAsset ? onAssetClick?.(fullAsset) : window.open(`/asset/${a.id}`, "_self")}
+                    >
+                      <span className="text-xs text-foreground truncate group-hover:text-primary transition-colors leading-snug">
+                        {a.assetName}
+                      </span>
+                      <span className="text-[10px] font-bold tabular-nums text-primary shrink-0 bg-primary/10 px-1.5 py-0.5 rounded-full">
+                        {Math.round(a.completenessScore)}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-xs text-muted-foreground/60 italic">No enriched assets yet</p>
@@ -437,6 +365,57 @@ function ResearchDnaPanel({
 
 // ── CategoryDrawer ────────────────────────────────────────────────────────────
 
+function DrawerAssetCard({ asset }: { asset: IngestedAsset }) {
+  const modality = detectModality(asset.assetName);
+  const stage    = detectStage(asset.assetName, asset.developmentStage);
+  const score    = computeCommercialScore(asset);
+  return (
+    <div className="p-3 rounded-lg border border-border bg-background space-y-2">
+      <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2">
+        {asset.assetName}
+      </p>
+      <div className="flex items-center gap-2 flex-wrap">
+        {modality && (
+          <span className="text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-muted/80 text-muted-foreground">
+            {modality}
+          </span>
+        )}
+        {stage && (
+          <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${STAGE_COLORS[stage.toLowerCase()] ?? "bg-muted text-muted-foreground"}`}>
+            {stage}
+          </span>
+        )}
+        <span className="ml-auto"><ScoreBadge score={score} /></span>
+      </div>
+      <div className="flex items-center gap-3 pt-0.5">
+        <Link
+          href={`/asset/${asset.id}`}
+          className="text-[11px] font-medium text-primary hover:underline"
+          onClick={(e) => e.stopPropagation()}
+        >
+          Full dossier →
+        </Link>
+        {asset.sourceUrl && (
+          <a
+            href={asset.sourceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <ExternalLink className="w-2.5 h-2.5" />TTO source
+          </a>
+        )}
+      </div>
+      {asset.summary && (
+        <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-3 border-t border-border/60 pt-2">
+          {asset.summary}
+        </p>
+      )}
+    </div>
+  );
+}
+
 function CategoryDrawer({
   filter,
   assets,
@@ -446,15 +425,21 @@ function CategoryDrawer({
   assets: IngestedAsset[];
   onClose: () => void;
 }) {
+  const isSingle = filter.type === "asset";
+
   const title =
     filter.type === "biology"    ? filter.label :
     filter.type === "stage"      ? `${filter.stage} stage` :
+    filter.type === "asset"      ? filter.asset.assetName :
                                    filter.indication;
 
   const subtitle =
-    filter.type === "biology"    ? "Biology-matched assets from this institution" :
+    filter.type === "biology"    ? "Biology-matched assets" :
     filter.type === "stage"      ? "Assets at this development stage" :
+    filter.type === "asset"      ? "Asset details" :
                                    "Assets targeting this indication";
+
+  const displayAssets = isSingle ? [filter.asset] : assets;
 
   return (
     <>
@@ -463,17 +448,19 @@ function CategoryDrawer({
         onClick={onClose}
       />
       <div
-        className="fixed right-0 top-0 h-full w-[440px] max-w-full bg-card border-l border-border z-50 flex flex-col shadow-2xl"
+        className="fixed right-0 top-0 h-full w-[460px] max-w-full bg-card border-l border-border z-50 flex flex-col shadow-2xl"
         style={{ animation: "slide-in-right 220ms ease both" }}
       >
         {/* Drawer header */}
         <div className="flex items-start justify-between p-5 border-b border-border shrink-0">
           <div className="flex-1 min-w-0 pr-3">
-            <h3 className="text-sm font-bold text-foreground leading-tight capitalize">{title}</h3>
-            <p className="text-xs text-muted-foreground mt-1 leading-snug">{subtitle}</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">
-              {assets.length} asset{assets.length !== 1 ? "s" : ""}
-            </p>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{subtitle}</p>
+            <h3 className="text-sm font-bold text-foreground leading-tight capitalize line-clamp-2">{title}</h3>
+            {!isSingle && (
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {displayAssets.length} asset{displayAssets.length !== 1 ? "s" : ""}
+              </p>
+            )}
           </div>
           <button
             onClick={onClose}
@@ -486,7 +473,7 @@ function CategoryDrawer({
 
         {/* Asset list */}
         <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {assets.length === 0 ? (
+          {displayAssets.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center px-4">
               <p className="text-sm text-muted-foreground">No assets matched in this category.</p>
               <p className="text-xs text-muted-foreground/60">
@@ -494,47 +481,17 @@ function CategoryDrawer({
               </p>
             </div>
           ) : (
-            assets.map((asset) => {
-              const modality = detectModality(asset.assetName);
-              const stage    = detectStage(asset.assetName, asset.developmentStage);
-              const score    = computeCommercialScore(asset);
-              return (
-                <Link key={asset.id} href={`/asset/${asset.id}`}>
-                  <div className="group p-3 rounded-lg border border-border hover:border-primary/30 hover:bg-accent/20 transition-all cursor-pointer">
-                    <p className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
-                      {asset.assetName}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                      {modality && (
-                        <span
-                          className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full"
-                          style={{ background: "hsl(142 71% 45% / 0.10)", color: "hsl(142 71% 32%)" }}
-                        >
-                          {modality}
-                        </span>
-                      )}
-                      {stage && (
-                        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${STAGE_COLORS[stage.toLowerCase()] ?? "bg-muted text-muted-foreground"}`}>
-                          {stage}
-                        </span>
-                      )}
-                      <span className="ml-auto">
-                        <ScoreBadge score={score} />
-                      </span>
-                    </div>
-                  </div>
-                </Link>
-              );
-            })
+            displayAssets.map((asset) => (
+              <DrawerAssetCard key={asset.id} asset={asset} />
+            ))
           )}
         </div>
 
-        {/* Footer CTA */}
+        {/* Footer */}
         <div className="p-4 border-t border-border shrink-0">
           <button
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
-            style={{ background: "hsl(142 71% 45% / 0.12)", color: ACCENT }}
+            className="w-full py-2 px-4 rounded-lg text-sm font-medium text-muted-foreground border border-border hover:text-foreground hover:border-foreground/20 transition-all"
           >
             Back to profile
           </button>
@@ -552,9 +509,11 @@ type SavedAssetsResponse = { assets: Array<{ ingestedAssetId: number | null }> }
 
 export default function InstitutionDetail() {
   const { slug } = useParams<{ slug: string }>();
+  const PAGE_SIZE = 20;
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
   const [drawerFilter, setDrawerFilter] = useState<DrawerFilter>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const { data: instListData } = useQuery<InstitutionsListResponse>({
     queryKey: ["/api/institutions"],
@@ -623,6 +582,9 @@ export default function InstitutionDetail() {
     if (sortMode === "za")         return b.assetName.localeCompare(a.assetName);
     return 0;
   });
+
+  // Reset pagination when search or sort changes
+  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, sortMode]);
 
   const activeCount = isLoading ? null : rawAssets.length;
 
@@ -721,9 +683,11 @@ export default function InstitutionDetail() {
         <ResearchDnaPanel
           profile={profile ?? null}
           loading={profileLoading}
+          rawAssets={rawAssets}
           onBiologyClick={(label) => setDrawerFilter({ type: "biology", label })}
           onStageClick={(stage) => setDrawerFilter({ type: "stage", stage })}
           onIndicationClick={(indication) => setDrawerFilter({ type: "indication", indication })}
+          onAssetClick={(asset) => setDrawerFilter({ type: "asset", asset })}
         />
 
         {/* Active Listings */}
@@ -807,9 +771,25 @@ export default function InstitutionDetail() {
             </div>
           ) : (
             <div className="space-y-2">
-              {sorted.map((asset, i) => (
-                <AssetRow key={asset.id} asset={asset} index={i} savedIngestedIds={savedIngestedIds} />
+              {sorted.slice(0, visibleCount).map((asset, i) => (
+                <AssetRow
+                  key={asset.id}
+                  asset={asset}
+                  index={i}
+                  savedIngestedIds={savedIngestedIds}
+                  onOpen={(a) => setDrawerFilter({ type: "asset", asset: a })}
+                />
               ))}
+              {sorted.length > visibleCount && (
+                <button
+                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
+                  className="w-full py-2.5 text-xs font-medium text-muted-foreground border border-dashed border-border rounded-lg hover:text-foreground hover:border-border/80 transition-colors"
+                  data-testid="button-load-more-assets"
+                >
+                  Show {Math.min(PAGE_SIZE, sorted.length - visibleCount)} more
+                  <span className="text-muted-foreground/60 ml-1">({sorted.length - visibleCount} remaining)</span>
+                </button>
+              )}
             </div>
           )}
         </div>
