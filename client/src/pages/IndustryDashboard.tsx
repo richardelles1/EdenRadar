@@ -253,37 +253,27 @@ function MarketSignalsTeaser() {
 
   return (
     <div
-      className="rounded-xl p-4 transition-all duration-200 hover:-translate-y-0.5"
+      className="rounded-xl p-4 border border-border transition-all duration-200 hover:-translate-y-0.5"
       style={{
-        background: "linear-gradient(135deg, hsl(142 71% 45% / 0.05), hsl(142 71% 45% / 0.01))",
-        border: "1px solid hsl(142 71% 45% / 0.18)",
+        background: "color-mix(in srgb, hsl(var(--primary)) 2%, hsl(var(--background)))",
         animation: "dash-fade-up 400ms ease 65ms both",
       }}
       data-testid="dashboard-market-signals-teaser"
     >
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div
-            className="w-6 h-6 rounded-md flex items-center justify-center shrink-0"
-            style={{ background: "hsl(142 71% 45% / 0.14)" }}
-          >
-            <BarChart2 className="w-3.5 h-3.5" style={{ color: "hsl(142 71% 45%)" }} />
+          <div className="w-6 h-6 rounded-md flex items-center justify-center shrink-0 bg-primary/10">
+            <BarChart2 className="w-3.5 h-3.5 text-primary" />
           </div>
-          <p className="text-sm font-bold text-foreground">Market Signals</p>
-          <span
-            className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-            style={{ background: "hsl(142 71% 45% / 0.12)", color: "hsl(142 71% 45%)" }}
-          >
-            Landscape
-          </span>
+          <p className="text-sm font-semibold text-foreground">Market Signals</p>
+          <span className="text-[10px] text-muted-foreground font-medium">Biology landscape</span>
         </div>
         <Link href="/intelligence">
           <span
-            className="text-[11px] flex items-center gap-1 transition-colors cursor-pointer font-medium"
-            style={{ color: "hsl(142 71% 45%)" }}
+            className="text-[11px] flex items-center gap-1 text-primary hover:text-primary/80 transition-colors cursor-pointer font-medium"
             data-testid="link-market-signals-view-landscape"
           >
-            View full Landscape <ArrowRight className="w-3 h-3" />
+            Full landscape <ArrowRight className="w-3 h-3" />
           </span>
         </Link>
       </div>
@@ -305,15 +295,10 @@ function MarketSignalsTeaser() {
             {top3.map((entry) => (
               <span
                 key={entry.biology}
-                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border whitespace-nowrap"
-                style={{
-                  background: "hsl(142 71% 45% / 0.08)",
-                  borderColor: "hsl(142 71% 45% / 0.22)",
-                  color: "hsl(142 71% 45%)",
-                }}
+                className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border border-border bg-background whitespace-nowrap text-foreground"
                 data-testid={`market-signal-pill-${entry.biology.replace(/\s+/g, "-").toLowerCase()}`}
               >
-                <span className="font-bold tabular-nums text-[10px]">{entry.count.toLocaleString()}</span>
+                <span className="font-bold tabular-nums text-[10px] text-muted-foreground">{entry.count.toLocaleString()}</span>
                 {entry.biology}
               </span>
             ))}
