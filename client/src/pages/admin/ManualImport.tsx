@@ -849,7 +849,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                 <span className="text-red-600 dark:text-red-400">{incCnt} Incomplete</span>
               </p>
             </div>
-            <Button size="sm" variant="ghost" onClick={resetToInput} data-testid="button-back-to-input">
+            <Button size="sm" variant="ghost" onClick={() => resetToInput()} data-testid="button-back-to-input">
               ← Back
             </Button>
           </div>
@@ -983,7 +983,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
             >
               <PackagePlus className="h-4 w-4" /> Go to Indexing Queue
             </Button>
-            <Button variant="ghost" onClick={resetToInput} data-testid="button-import-more">
+            <Button variant="ghost" onClick={() => resetToInput()} data-testid="button-import-more">
               Import more assets
             </Button>
           </div>
