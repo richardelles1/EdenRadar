@@ -940,6 +940,11 @@ const AGG_PATTERNS = [
   /(?:what|give me|show me)\s+(?:the\s+)?(?:total|count|number)/i,
   /how\s+large\s+is\s+(?:the\s+)?(?:database|portfolio|index)/i,
   /size\s+of\s+(?:the\s+)?(?:database|portfolio|index)/i,
+  // Institution head-to-head count comparisons — these are aggregation, NOT comparative
+  /who has more\s+(?:assets?|technologies?|programs?)?/i,
+  /which\s+(?:of\s+)?(?:these\s+)?(?:institutions?|universities|schools?)?\s+has\s+(?:the\s+)?more/i,
+  /(?:more|bigger|larger)\s+(?:portfolio|tto|pipeline)\b/i,
+  /has\s+more\s+(?:assets?|programs?|technologies?)/i,
 ];
 
 export function isAggregationQuery(query: string): boolean {
@@ -1190,6 +1195,32 @@ async function resolveAggregationQuery(
     return `**Top institutions in ${area}**${focusLabel}:\n${lines}`;
   }
 
+  // ── Institution head-to-head count comparison ────────────────────────────
+  // "who has more assets, MIT or Stanford?" — counts both and declares a winner.
+  // Uses unfiltered counts so accumulated session filters don't skew the comparison.
+  if (/who has more|which has more|has more\s+(?:assets?|programs?)|who(?:'s| is) (?:bigger|larger|ahead)/i.test(lower)) {
+    const instNames = detectAllInstitutionNames(query);
+    if (instNames.length >= 2) {
+      const [resultA, resultB] = await Promise.all([
+        runCountForInstitution(instNames[0], undefined, undefined),
+        runCountForInstitution(instNames[1], undefined, undefined),
+      ]);
+      if (resultA && resultB) {
+        const winner = resultA.count >= resultB.count ? resultA : resultB;
+        const loser = resultA.count < resultB.count ? resultA : resultB;
+        const diff = Math.abs(winner.count - loser.count);
+        const pct = loser.count > 0 ? Math.round((diff / loser.count) * 100) : 0;
+        return `**${winner.name}** has more assets: **${winner.count.toLocaleString()}** vs **${loser.name}**'s **${loser.count.toLocaleString()}** — ${pct}% larger portfolio in the indexed corpus.`;
+      }
+      if (resultA && !resultB) {
+        return `**${resultA.name}** has **${resultA.count.toLocaleString()} assets** indexed. I couldn't find data for "${instNames[1]}" — try a broader name.`;
+      }
+      if (!resultA && resultB) {
+        return `**${resultB.name}** has **${resultB.count.toLocaleString()} assets** indexed. I couldn't find data for "${instNames[0]}" — try a broader name.`;
+      }
+    }
+  }
+
   const instCountRx = /how many\s+([\w\s]+?)\s*(?:assets?|technologies?|programs?)?\s*(?:does|from|at|by)\s+([\w\s]+?)(?:\s+(?:tto|university|institute|college|tech transfer))?(?:\s+have|\?|$)/i;
   const icm = instCountRx.exec(query);
   if (icm) {
@@ -1365,6 +1396,7 @@ INTENTS:
   Also: create/build pipeline requests, short disease or modality names alone ("leukemia", "antibody"), company-context searches ("I'm a Series A company in oncology looking for")
 
 - aggregation: counts, stats, breakdowns, market mapping. Triggers: "how many", "how much", "count of", "breakdown by", "distribution of", "split by", "top 10", "most common", "what percentage", "what proportion", "rank", "which institution has the most", "what's the spread", "how does it break down", "volume of", "give me a market map of", "how saturated is", "what's the competitive density in", "how crowded is", "what's the landscape look like for", "overview of the space", "how many players are there in", "what's the breadth of"
+  Institution count comparisons: "who has more assets, MIT or Stanford", "which has a bigger portfolio", "does Harvard or Yale have more", "who leads in gene therapy assets, MIT or Broad" — these are ALWAYS aggregation (count comparison), NEVER comparative (asset head-to-head)
 
 - back_ref: refers to a PREVIOUSLY SHOWN asset. ONLY valid when hasPriorAssets=true. Triggers:
   Positional: "the first one", "the second one", "the third one", "that one", "this one", "the last one", "the top one", "number two"
@@ -1434,6 +1466,15 @@ Message: "what's the IP situation on this one?"
 hasPriorAssets: true
 → {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 Note: asking about IP/patents for a specific already-shown asset is back_ref, NOT a patents live search. live_source:"patents" is only for broad patent landscape queries like "who holds patents in CRISPR?"
+
+Message: "who has more assets, MIT or Stanford?"
+hasPriorAssets: false
+→ {"intent":"aggregation","filters":{},"back_ref_position":null,"live_source":null}
+Note: institution count comparisons are ALWAYS aggregation — never comparative. "Comparative" means head-to-head between specific assets.
+
+Message: "does Harvard or Yale have more gene therapy programs?"
+hasPriorAssets: false
+→ {"intent":"aggregation","filters":{"modality":"Gene Therapy"},"back_ref_position":null,"live_source":null}
 
 Message: "add that to my ALS pipeline"
 hasPriorAssets: true
