@@ -518,7 +518,7 @@ export function registerEdenRoutes(app: Express): void {
       const lastAssistantWithAssets = [...(session.messages ?? [])].reverse().find(
         (m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0
       );
-      const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 3);
+      const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 8);
 
       // Derive engagement signals early so back-ref and definitional paths also benefit.
       const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
@@ -726,7 +726,7 @@ export function registerEdenRoutes(app: Express): void {
               }
               await storage.appendEdenMessage(sid, {
                 role: "assistant", content: fullResponse,
-                assetIds: rerankedSimilar.slice(0, 3).map((a) => a.id), assets: similarPayload,
+                assetIds: rerankedSimilar.map((a) => a.id), assets: similarPayload,
               });
               const simOffers = buildActionOffers(message.trim(), "search", rerankedSimilar, filters, acceptedSignals, crossSessionMemory);
               if (simOffers.length > 0) sendEvent("action_offer", { offers: simOffers });
@@ -1054,7 +1054,7 @@ export function registerEdenRoutes(app: Express): void {
 
           await storage.appendEdenMessage(sid, {
             role: "assistant", content: fullResponse,
-            assetIds: relatedAssets.slice(0, 3).map((a) => a.id),
+            assetIds: relatedAssets.map((a) => a.id),
             assets: relatedAssetPayload,
           });
           const defOffers = buildActionOffers(
@@ -1137,7 +1137,7 @@ export function registerEdenRoutes(app: Express): void {
         }
         await storage.appendEdenMessage(sid, {
           role: "assistant", content: fullResponse,
-          assetIds: pipelineAssets.slice(0, 3).map((a) => a.id),
+          assetIds: pipelineAssets.slice(0, 8).map((a) => a.id),
           assets: pipelineAssetPayload,
         });
         sendEvent("done", donePayload());
@@ -1403,7 +1403,7 @@ After covering TTO assets, note in one sentence whether any of these external re
       }
       await storage.appendEdenMessage(sid, {
         role: "assistant", content: fullResponse,
-        assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
+        assetIds: retrieved.map((a) => a.id), assets: assetPayload,
       });
 
       const searchOffers = buildActionOffers(message.trim(), "search", retrieved, filters, acceptedSignals, crossSessionMemory);
