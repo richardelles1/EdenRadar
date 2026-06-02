@@ -585,7 +585,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const revCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "revisions").length;
   const incCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "incomplete").length;
 
-  const resetToInput = (clearInstitution = false) => {
+  const resetState = () => {
     setStage("input");
     setParsedAssets([]);
     setChecked([]);
@@ -596,10 +596,16 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
     setImageFiles([]);
     setImagePreviews([]);
     setDocFiles([]);
-    if (clearInstitution) {
-      setSelectedInst("");
-      setInstSearch("");
-    }
+  };
+
+  // Preserves institution — use after committing assets from the same TTO
+  const resetToInput = () => resetState();
+
+  // Clears institution — use when starting a fresh import from a different source
+  const resetToInputFresh = () => {
+    resetState();
+    setSelectedInst("");
+    setInstSearch("");
   };
 
   return (
@@ -849,7 +855,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                 <span className="text-red-600 dark:text-red-400">{incCnt} Incomplete</span>
               </p>
             </div>
-            <Button size="sm" variant="ghost" onClick={() => resetToInput()} data-testid="button-back-to-input">
+            <Button size="sm" variant="ghost" onClick={resetToInput} data-testid="button-back-to-input">
               ← Back
             </Button>
           </div>
@@ -983,7 +989,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
             >
               <PackagePlus className="h-4 w-4" /> Go to Indexing Queue
             </Button>
-            <Button variant="ghost" onClick={() => resetToInput()} data-testid="button-import-more">
+            <Button variant="ghost" onClick={resetToInput} data-testid="button-import-more">
               Import more assets
             </Button>
           </div>
