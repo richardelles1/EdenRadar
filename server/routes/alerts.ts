@@ -426,7 +426,8 @@ export function registerAlertsRoutes(app: Express): void {
         const rows = await db
           .select({ id: ingestedAssets.id })
           .from(ingestedAssets)
-          .where(buildAlertWhere(alert, [sinceCondition]));
+          .where(buildAlertWhere(alert, [sinceCondition]))
+          .limit(5000);
         for (const row of rows) seenIds.add(row.id);
       }
 

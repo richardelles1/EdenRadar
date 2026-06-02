@@ -42,6 +42,7 @@ import {
   Zap,
   Bookmark,
   Search,
+  TrendingUp,
 } from "lucide-react";
 import type { ScoutSavedSearch } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -60,7 +61,7 @@ function defaultSince(): string {
 }
 
 function formatSinceLabel(dateStr: string | null | undefined): string {
-  if (!dateStr) return "the last 7 days";
+  if (!dateStr) return "the last 48 hours";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -193,6 +194,7 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   if ((alert.stages ?? []).length > 0) exploreParams.set("stages", (alert.stages ?? []).join(","));
   if ((alert.institutions ?? []).length > 0) exploreParams.set("institutions", (alert.institutions ?? []).join(","));
   if ((alert.continents ?? []).length > 0) exploreParams.set("continents", (alert.continents ?? []).join(","));
+  if ((alert.targets ?? []).length > 0) exploreParams.set("targets", (alert.targets ?? []).join(","));
   const hasExploreCriteria = exploreParams.toString().length > 0;
   const exploreUrl = `/scout?${exploreParams.toString()}`;
 
@@ -452,7 +454,6 @@ function PipelineUpdatesSection({ sinceParam }: { sinceParam: string }) {
   const { data, isLoading } = useQuery<PipelineUpdatesResponse>({
     queryKey: [url],
     queryFn: async () => {
-      const { getAuthHeaders } = await import("@/lib/queryClient");
       const headers = await getAuthHeaders();
       const r = await fetch(url, { credentials: "include", headers });
       if (!r.ok) return { updates: [], totalSaved: 0 };
@@ -916,7 +917,7 @@ function AlertFormFields({
           </div>
         )}
       </div>
-      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} continents={continents} />
+      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} continents={continents} targets={targets} />
     </>
   );
 }
@@ -1022,13 +1023,6 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
 }
 
 const QUICK_TEMPLATES = [
-  {
-    id: "all_new",
-    label: "All New Assets",
-    description: "Every new TTO asset added to the database",
-    criteriaType: "all_new" as const,
-    query: "", modalities: [] as string[], stages: [] as string[], institutions: [] as string[],
-  },
   {
     id: "therapeutic_focus",
     label: "My Therapeutic Focus",

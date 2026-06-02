@@ -1,6 +1,6 @@
 import { db } from "../db";
 import { storage } from "../storage";
-import { userAlerts, ingestedAssets, industryProfiles } from "../../shared/schema";
+import { userAlerts, ingestedAssets, industryProfiles, institutionMetadata } from "../../shared/schema";
 import { eq, gt, and, ilike, or, inArray, desc, isNotNull } from "drizzle-orm";
 import { renderDispatchEmail, type DispatchAsset } from "./emailTemplate";
 import { sendEmail, FROM_DIGEST, unsubscribeUrlFor } from "../email";
@@ -127,6 +127,17 @@ async function matchAssetsForAlert(
         eq(ingestedAssets.relevant, true),
         alert.institutions?.length
           ? inArray(ingestedAssets.institution, alert.institutions)
+          : undefined,
+        alert.continents?.length
+          ? inArray(
+              ingestedAssets.institution,
+              db.select({ name: institutionMetadata.name })
+                .from(institutionMetadata)
+                .where(inArray(institutionMetadata.continent, alert.continents)),
+            )
+          : undefined,
+        alert.targets?.length
+          ? inArray(ingestedAssets.target, alert.targets)
           : undefined,
         alert.modalities?.length
           ? inArray(ingestedAssets.modality, alert.modalities)
