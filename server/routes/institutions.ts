@@ -50,6 +50,23 @@ const INDICATION_TO_SPECIALTY: Record<string, string> = {
   "orthopedic":             "Musculoskeletal",
 };
 
+// Removes substring-redundant indications from a count-sorted list.
+// Iterates in order; skips any term that is a substring of (or contains)
+// an already-accepted term. "prostate cancer" gets dropped when "cancer"
+// is already present; "cancer" gets dropped if "prostate cancer" came first.
+function deduplicateIndications(indications: string[]): string[] {
+  const result: string[] = [];
+  for (const ind of indications) {
+    const lo = ind.toLowerCase();
+    const redundant = result.some((kept) => {
+      const klo = kept.toLowerCase();
+      return klo.includes(lo) || lo.includes(klo);
+    });
+    if (!redundant) result.push(ind);
+  }
+  return result;
+}
+
 function deriveSpecialties(indications: string[]): string[] {
   const seen = new Set<string>();
   const result: string[] = [];
@@ -236,7 +253,7 @@ export function registerInstitutionRoutes(app: Express): void {
           .where(and(inArray(ingestedAssets.institution, names), sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`))
           .groupBy(ingestedAssets.indication)
           .orderBy(desc(sql`count(*)`))
-          .limit(5),
+          .limit(12),
         db
           .select({
             id: ingestedAssets.id,
@@ -258,7 +275,9 @@ export function registerInstitutionRoutes(app: Express): void {
       res.json({
         biologyBreakdown: biologyRows.map((r) => ({ label: r.label, count: r.cnt })),
         stageBreakdown: stageRows.map((r) => ({ stage: r.stage, count: r.cnt })),
-        topIndications: indicationRows.map((r) => r.indication).filter(Boolean),
+        topIndications: deduplicateIndications(
+          indicationRows.map((r) => r.indication).filter((s): s is string => !!s)
+        ).slice(0, 5),
         standoutAssets: standoutRows.map((r) => ({
           id: r.id,
           assetName: r.assetName,
