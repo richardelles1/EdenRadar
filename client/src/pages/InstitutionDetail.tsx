@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useParams } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw,
-  ShieldOff, ChevronDown, ArrowUpDown, Dna, TrendingUp, X,
+  ShieldOff, ChevronDown, ArrowUpDown, Dna, TrendingUp, X, Bell, BellOff,
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import type { IngestedAsset } from "@shared/schema";
@@ -16,6 +16,8 @@ import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import type { UserAlert } from "@shared/schema";
 
 // ── Stage & Biology config ────────────────────────────────────────────────────
 
@@ -574,6 +576,29 @@ export default function InstitutionDetail() {
   const rawAssets = data?.assets ?? [];
   const isBlocked = inst?.accessRestricted ?? false;
 
+  const { data: userAlerts = [] } = useQuery<UserAlert[]>({
+    queryKey: ["/api/alerts"],
+    staleTime: 30000,
+  });
+
+  const institutionDisplayName = inst?.name ?? slugTitle;
+  const followAlert = userAlerts.find(
+    (a) => (a.institutions ?? []).some((i) => i.toLowerCase() === institutionDisplayName.toLowerCase())
+  );
+  const isFollowing = !!followAlert;
+
+  const followMutation = useMutation({
+    mutationFn: () =>
+      isFollowing
+        ? apiRequest("DELETE", `/api/alerts/${followAlert!.id}`)
+        : apiRequest("POST", "/api/alerts", {
+            name: `Following: ${institutionDisplayName}`,
+            institutions: [institutionDisplayName],
+            criteriaType: "custom",
+          }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/alerts"] }),
+  });
+
   // Filter assets client-side based on what was clicked in the DNA panel
   const drawerAssets = useMemo(() => {
     if (!drawerFilter || !rawAssets.length) return [];
@@ -679,7 +704,19 @@ export default function InstitutionDetail() {
                 )}
               </div>
             </div>
-            <div className="flex flex-col items-end gap-2">
+            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-2">
+              <Button
+                variant={isFollowing ? "default" : "outline"}
+                className={`gap-2 ${isFollowing ? "bg-emerald-600 hover:bg-emerald-700 text-white border-0" : "border-card-border"}`}
+                onClick={() => followMutation.mutate()}
+                disabled={followMutation.isPending}
+                data-testid="button-follow-institution"
+              >
+                {isFollowing
+                  ? <><BellOff className="w-3.5 h-3.5" />Unfollow</>
+                  : <><Bell className="w-3.5 h-3.5" />Follow</>
+                }
+              </Button>
               {inst?.website && (
                 <a href={inst.website} target="_blank" rel="noopener noreferrer">
                   <Button

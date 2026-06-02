@@ -782,6 +782,7 @@ export const userAlerts = pgTable("user_alerts", {
   stages: text("stages").array(),
   institutions: text("institutions").array(),
   continents: text("continents").array(),
+  targets: text("targets").array(),
   criteriaType: text("criteria_type").notNull().default("custom"),
   cadence: text("cadence").notNull().default("weekly"),
   enabled: boolean("enabled").notNull().default(true),
