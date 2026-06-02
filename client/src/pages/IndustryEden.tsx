@@ -238,9 +238,10 @@ export default function IndustryEden() {
   }, [input]);
 
   const { data: sessionsData, refetch: refetchSessions } = useQuery<EdenSessionSummary[]>({
-    queryKey: ["/api/eden/sessions"],
+    queryKey: ["/api/eden/sessions", pw],
+    enabled: !!pw,
     queryFn: async () => {
-      const res = await fetch("/api/eden/sessions?limit=25", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      const res = await fetch("/api/eden/sessions?limit=25", { headers: { Authorization: `Bearer ${pw}` } });
       if (!res.ok) return [];
       return res.json();
     },
@@ -367,8 +368,8 @@ export default function IndustryEden() {
 
   // Refetch sessions when sidebar opens or a new session completes
   useEffect(() => {
-    refetchSessions();
-  }, [sessionId]);
+    if (pw) refetchSessions();
+  }, [sessionId, sidebarOpen, pw]);
 
   const { isListening, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechRecognition(
     (transcript) => setInput(input ? `${input} ${transcript}` : transcript)

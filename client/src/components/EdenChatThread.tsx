@@ -670,55 +670,52 @@ export function EdenChatThread({
                 </div>
               )}
 
-              {/* TTO corpus citations */}
+              {/* TTO corpus citations — always show top 3, expand for more */}
               {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
-                <div className="mt-2" data-testid={`chat-citations-${i}`}>
-                  {!(expandedCitations[i] ?? msg.assets.length <= 3) ? (
-                    <button
-                      className={`flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground hover:text-foreground transition-colors group`}
-                      onClick={() => onToggleCitations(i, true)}
-                      data-testid={`button-show-citations-${i}`}
-                    >
-                      <ChevronDown className="h-3 w-3 shrink-0" />
-                      {msg.externalResults?.length
-                        ? `Also in TTO corpus — ${msg.assets.length} asset${msg.assets.length !== 1 ? "s" : ""}`
-                        : compact ? `${msg.assets.length} matched asset${msg.assets.length !== 1 ? "s" : ""}` : `Show ${msg.assets.length} matched asset${msg.assets.length !== 1 ? "s" : ""}`}
-                    </button>
-                  ) : (
-                    <>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <button
-                          className={`flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground hover:text-foreground transition-colors group`}
-                          onClick={() => onToggleCitations(i, false)}
-                          data-testid={`button-hide-citations-${i}`}
+                <div className="mt-3" data-testid={`chat-citations-${i}`}>
+                  {msg.externalResults?.length ? (
+                    <p className={`${compact ? "text-[9px]" : "text-[10px]"} text-muted-foreground/60 mb-1.5 uppercase tracking-wide font-medium`}>
+                      Also in TTO corpus
+                    </p>
+                  ) : null}
+                  <div className={gridCols}>
+                    {sortAssetsByMention(msg.assets, msg.content)
+                      .slice(0, (expandedCitations[i] ?? false) ? undefined : 3)
+                      .map((a, ci) => (
+                        <div
+                          key={a.id}
+                          style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${ci * 50}ms` }}
                         >
-                          <ChevronDown className="h-3 w-3 shrink-0 rotate-180" />
-                          Hide assets
-                        </button>
-                        {!compact && msg.assets.length > 0 && (
-                          <button
-                            className="flex items-center gap-1 text-[11px] text-muted-foreground/60 hover:text-muted-foreground transition-colors"
-                            onClick={() => exportCitationsAsCsv(sortAssetsByMention(msg.assets!, msg.content))}
-                            title="Export assets as CSV"
-                            data-testid={`button-export-csv-${i}`}
-                          >
-                            <Download className="h-3 w-3 shrink-0" />
-                            Export CSV
-                          </button>
-                        )}
-                      </div>
-                      <div className={gridCols}>
-                        {sortAssetsByMention(msg.assets, msg.content).map((a, ci) => (
-                          <div
-                            key={a.id}
-                            style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${ci * 50}ms` }}
-                          >
-                            <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} onAssetSaved={onAssetSaved} compact={compact} />
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                          <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} onAssetSaved={onAssetSaved} compact={compact} />
+                        </div>
+                      ))}
+                  </div>
+                  {/* Overflow + export row */}
+                  <div className={`flex items-center ${msg.assets.length > 3 ? "justify-between" : "justify-end"} mt-1.5`}>
+                    {msg.assets.length > 3 && (
+                      <button
+                        className={`flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground/70 hover:text-foreground transition-colors`}
+                        onClick={() => onToggleCitations(i, !(expandedCitations[i] ?? false))}
+                        data-testid={(expandedCitations[i] ?? false) ? `button-hide-citations-${i}` : `button-show-citations-${i}`}
+                      >
+                        <ChevronDown className={`h-3 w-3 shrink-0 transition-transform duration-200 ${(expandedCitations[i] ?? false) ? "rotate-180" : ""}`} />
+                        {(expandedCitations[i] ?? false)
+                          ? "Show less"
+                          : `${msg.assets.length - 3} more asset${msg.assets.length - 3 !== 1 ? "s" : ""}`}
+                      </button>
+                    )}
+                    {!compact && (
+                      <button
+                        className="flex items-center gap-1 text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                        onClick={() => exportCitationsAsCsv(sortAssetsByMention(msg.assets!, msg.content))}
+                        title="Export assets as CSV"
+                        data-testid={`button-export-csv-${i}`}
+                      >
+                        <Download className="h-3 w-3 shrink-0" />
+                        Export CSV
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

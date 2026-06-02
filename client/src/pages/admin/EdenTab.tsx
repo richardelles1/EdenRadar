@@ -430,39 +430,32 @@ function EdenTab({ pw }: { pw: string }) {
                           </div>
                         )}
 
-                        {/* Citation cards — deferred behind toggle */}
+                        {/* Citation cards — top 3 always visible, expand for more */}
                         {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                           <div className="mt-2.5" data-testid={`chat-citations-${i}`}>
-                            {!expandedCitations[i] ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {msg.assets
+                                .slice(0, (expandedCitations[i] ?? false) ? undefined : 3)
+                                .map((a, ci) => (
+                                  <div
+                                    key={a.id}
+                                    style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${ci * 55}ms` }}
+                                  >
+                                    <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} />
+                                  </div>
+                                ))}
+                            </div>
+                            {msg.assets.length > 3 && (
                               <button
-                                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group"
-                                onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: true }))}
-                                data-testid={`button-show-citations-${i}`}
+                                className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
+                                onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: !(prev[i] ?? false) }))}
+                                data-testid={(expandedCitations[i] ?? false) ? `button-hide-citations-${i}` : `button-show-citations-${i}`}
                               >
-                                <ChevronDown className="h-3 w-3 shrink-0 group-hover:text-foreground transition-colors" />
-                                Show {msg.assets.length} matched asset{msg.assets.length !== 1 ? "s" : ""}
+                                <ChevronDown className={`h-3 w-3 shrink-0 transition-transform duration-200 ${(expandedCitations[i] ?? false) ? "rotate-180" : ""}`} />
+                                {(expandedCitations[i] ?? false)
+                                  ? "Show less"
+                                  : `${msg.assets.length - 3} more asset${msg.assets.length - 3 !== 1 ? "s" : ""}`}
                               </button>
-                            ) : (
-                              <>
-                                <button
-                                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-2 group"
-                                  onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: false }))}
-                                  data-testid={`button-hide-citations-${i}`}
-                                >
-                                  <ChevronDown className="h-3 w-3 shrink-0 rotate-180 group-hover:text-foreground transition-colors" />
-                                  Hide assets
-                                </button>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                  {msg.assets.map((a, ci) => (
-                                    <div
-                                      key={a.id}
-                                      style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${ci * 55}ms` }}
-                                    >
-                                      <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} />
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
                             )}
                           </div>
                         )}
