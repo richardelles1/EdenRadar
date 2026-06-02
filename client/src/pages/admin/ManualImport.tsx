@@ -585,7 +585,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const revCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "revisions").length;
   const incCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "incomplete").length;
 
-  const resetToInput = (clearInstitution = false) => {
+  const resetState = () => {
     setStage("input");
     setParsedAssets([]);
     setChecked([]);
@@ -596,10 +596,16 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
     setImageFiles([]);
     setImagePreviews([]);
     setDocFiles([]);
-    if (clearInstitution) {
-      setSelectedInst("");
-      setInstSearch("");
-    }
+  };
+
+  // Preserves institution — use after committing assets from the same TTO
+  const resetToInput = () => resetState();
+
+  // Clears institution — use when starting a fresh import from a different source
+  const resetToInputFresh = () => {
+    resetState();
+    setSelectedInst("");
+    setInstSearch("");
   };
 
   return (

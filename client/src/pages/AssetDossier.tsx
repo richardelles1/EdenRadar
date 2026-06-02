@@ -649,7 +649,7 @@ export default function AssetDossier() {
   const hasScoutScore = scoredDimsCount > 0;
 
   // When no Scout score is available, fall back to the DB completeness score (0–100).
-  const completenessScore = intelligence?.assetRecord?.completenessScore ?? null;
+  const completenessScore = intelligence?.enriched?.completenessScore ?? null;
   const displayScore = hasScoutScore ? asset.score : (completenessScore ?? 0);
   const scoreLabel = hasScoutScore ? "Scout Match" : "Completeness";
 
