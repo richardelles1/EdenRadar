@@ -29,10 +29,6 @@ import {
 import {
   Bell,
   Plus,
-  ChevronDown,
-  ChevronUp,
-  Lightbulb,
-  FlaskConical,
   Package,
   Clock,
   Trash2,
@@ -40,7 +36,6 @@ import {
   ChevronsUpDown,
   Pencil,
   Loader2,
-  ExternalLink,
   ArrowRight,
   ToggleLeft,
   ToggleRight,
@@ -540,149 +535,6 @@ function NewTtoAssetsSection({
   );
 }
 
-function OtherActivitySection({
-  concepts,
-  projects,
-}: {
-  concepts: IndustryDeltaResponse["newConcepts"];
-  projects: IndustryDeltaResponse["newProjects"];
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const totalActivity = concepts.total + projects.total;
-
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <button
-        className="w-full flex items-center gap-3 text-left px-4 py-3 hover:bg-muted/30 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
-        data-testid="other-activity-toggle"
-      >
-        <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
-          <Lightbulb className="w-3.5 h-3.5 text-muted-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-sm font-semibold text-foreground">Other Activity</span>
-          <p className="text-[10px] text-muted-foreground/70">Platform-wide concepts &amp; research projects</p>
-        </div>
-        <Badge variant="secondary" className="shrink-0 text-[11px] tabular-nums">
-          {totalActivity} new
-        </Badge>
-        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-      </button>
-
-      {expanded && (
-        <div className="border-t border-border px-4 py-4 space-y-5">
-          {concepts.total > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-xs font-semibold text-foreground">New Concepts</span>
-                <Badge variant="secondary" className="text-[11px] tabular-nums">{concepts.total}</Badge>
-              </div>
-              <div className="space-y-0.5">
-                {concepts.items.map((concept) => (
-                  <Link href={`/discovery/concept/${concept.id}`} key={concept.id}>
-                    <div
-                      className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
-                      data-testid={`alert-concept-${concept.id}`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{concept.title}</p>
-                        {concept.oneLiner && (
-                          <p className="text-[10px] text-muted-foreground truncate">{concept.oneLiner}</p>
-                        )}
-                        {(concept.therapeuticArea || concept.submitterAffiliation) && (
-                          <p className="text-[10px] text-muted-foreground/70 truncate">
-                            {[concept.therapeuticArea, concept.submitterAffiliation].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              {concepts.total > concepts.items.length && (
-                <Link href="/industry/concepts">
-                  <p className="text-xs text-primary hover:underline cursor-pointer px-2">
-                    +{concepts.total - concepts.items.length} more — view all concepts
-                  </p>
-                </Link>
-              )}
-            </div>
-          )}
-
-          {concepts.total === 0 && (
-            <p className="text-xs text-muted-foreground">No new concepts since your last visit.</p>
-          )}
-
-          {projects.total > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <FlaskConical className="w-3.5 h-3.5 text-violet-500" />
-                <span className="text-xs font-semibold text-foreground">Research Projects</span>
-                <Badge variant="secondary" className="text-[11px] tabular-nums">{projects.total}</Badge>
-              </div>
-              <div className="space-y-0.5">
-                {projects.items.map((proj) => (
-                  <Link href="/industry/projects" key={proj.id}>
-                    <div
-                      className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
-                      data-testid={`alert-project-${proj.id}`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0 mt-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{proj.discoveryTitle || proj.title}</p>
-                        {(proj.discoverySummary || proj.description) && (
-                          <p className="text-[10px] text-muted-foreground line-clamp-1">
-                            {proj.discoverySummary || proj.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {proj.researchArea && (
-                            <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
-                          )}
-                          {(proj.projectContributors ?? [])[0]?.institution && (
-                            <span className="text-[10px] text-muted-foreground truncate">
-                              {(proj.projectContributors ?? [])[0].institution}
-                            </span>
-                          )}
-                          {proj.projectUrl && (
-                            <a
-                              href={proj.projectUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-[10px] text-violet-500 hover:underline flex items-center gap-0.5"
-                              data-testid={`alert-project-source-${proj.id}`}
-                            >
-                              <ExternalLink className="w-2.5 h-2.5" /> Source
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              {projects.total > projects.items.length && (
-                <Link href="/industry/projects">
-                  <p className="text-xs text-primary hover:underline cursor-pointer px-2">
-                    +{projects.total - projects.items.length} more — view all projects
-                  </p>
-                </Link>
-              )}
-            </div>
-          )}
-
-          {projects.total === 0 && (
-            <p className="text-xs text-muted-foreground">No new research projects since your last visit.</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const MODALITY_OPTIONS = [
   "Small Molecule", "Antibody", "CAR-T", "Gene Therapy",
@@ -1388,7 +1240,7 @@ export default function Alerts() {
   const sidebarTtoCount = hasAlerts
     ? (unreadData?.count ?? alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0)
     : (data?.newAssets.total ?? 0);
-  const totalNew = sidebarTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
+  const totalNew = sidebarTtoCount;
 
   const sinceLabel = formatSinceLabel(sinceParam);
 
@@ -1416,7 +1268,7 @@ export default function Alerts() {
             <div>
               <h1 className="text-xl font-bold text-foreground">Alerts</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                New TTO assets and research activity since {sinceLabel}. Alerts deliver by email when new matches are found.
+                New TTO assets since {sinceLabel}. Alerts deliver by email when new matches are found.
               </p>
             </div>
             <Button className="gap-2 shrink-0" onClick={() => setSheetOpen(true)} data-testid="button-create-alert">
@@ -1440,8 +1292,6 @@ export default function Alerts() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
-              <SavedSearchesSection />
-
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} matchCounts={alertMatchCounts} profile={profile} />
 
               <div className="border-t border-border/40" />
@@ -1454,10 +1304,7 @@ export default function Alerts() {
                 onCreateAlert={() => setSheetOpen(true)}
               />
 
-              <OtherActivitySection
-                concepts={data.newConcepts}
-                projects={data.newProjects}
-              />
+              <SavedSearchesSection />
             </div>
 
             <div className="lg:col-span-1">
@@ -1467,25 +1314,11 @@ export default function Alerts() {
                   <span className="text-xs font-medium">Since last visit</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground/70 -mt-1" data-testid="text-since-label">
-                  Activity since {sinceLabel}
+                  {sinceLabel}
                 </p>
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">TTO Assets</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-tto-count">+{sidebarTtoCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Concepts</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-concepts-count">+{data.newConcepts.total}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Research Projects</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-projects-count">+{data.newProjects.total}</span>
-                  </div>
-                </div>
                 <div className="border-t border-border/60 pt-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
-                  <span className="text-xl font-bold text-primary tabular-nums" data-testid="sidebar-total-count">+{totalNew}</span>
+                  <span className="text-sm text-muted-foreground">New TTO assets</span>
+                  <span className="text-xl font-bold text-primary tabular-nums" data-testid="sidebar-tto-count">+{totalNew}</span>
                 </div>
                 {totalNew > 0 && (
                   <button
@@ -1497,30 +1330,6 @@ export default function Alerts() {
                     Mark all as seen
                   </button>
                 )}
-
-                {/* Email delivery status */}
-                <div className="border-t border-border/40 pt-3 space-y-1.5">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Email Delivery</p>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Frequency</span>
-                    <span className="font-medium text-foreground capitalize">
-                      {profile?.notificationPrefs?.frequency === "realtime"
-                        ? "As discovered"
-                        : profile?.notificationPrefs?.frequency === "weekly"
-                        ? "Weekly"
-                        : "Daily"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Email alerts</span>
-                    <span className={`font-medium ${profile?.subscribedToDigest ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                      {profile?.subscribedToDigest ? "Enabled" : "Disabled"}
-                    </span>
-                  </div>
-                  <Link href="/industry/settings">
-                    <span className="text-[11px] text-primary hover:underline">Manage settings →</span>
-                  </Link>
-                </div>
               </div>
             </div>
           </div>
