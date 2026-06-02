@@ -26,7 +26,7 @@ import { z } from "zod";
 
 const aiRateLimit = rateLimit({
   windowMs: 60 * 1000,
-  max: 10,
+  max: 20,
   standardHeaders: "draft-7",
   legacyHeaders: false,
   // Key by authenticated user ID so the limit is per-user, not per-IP.
@@ -299,6 +299,41 @@ function buildActionOffers(
   return offers;
 }
 
+// "More like this" / "find similar" detection — triggers seed-embedding retrieval
+// in the back_ref path instead of re-explaining the same asset.
+const SIMILAR_PATTERNS: RegExp[] = [
+  /\b(?:more|other|find)\s+like\s+(?:this|that|it|these|the\s+\w+\s+one)\b/i,
+  /\bsimilar\s+(?:assets?|technologies?|programs?|ones?|results?|candidates?)\b/i,
+  /\bfind\s+(?:me\s+)?(?:more|similar|comparable|related)\b/i,
+  /\bwhat\s+else\s+(?:is\s+)?(?:similar|like\s+(?:this|that|it))\b/i,
+  /\banything\s+(?:comparable|similar|like\s+(?:this|that))\b/i,
+  /\bshow\s+me\s+(?:more|similar|comparable)\b/i,
+  /\bmore\s+(?:assets?|results?|options?)\s+like\s+(?:this|that|it)\b/i,
+  /\brelated\s+(?:assets?|technologies?|programs?)\b/i,
+];
+
+// Consistent payload shape for all SSE "context" events.
+// 250-char summary gives PipelinePicker enough to create a useful pipeline entry
+// without bloating the SSE stream. Target is omitted when unknown.
+function toAssetPayload(a: import("../storage").RetrievedAsset & { rankNote?: string }, similarity?: number) {
+  return {
+    id: a.id,
+    assetName: a.assetName,
+    institution: a.institution,
+    indication: a.indication ?? "unknown",
+    modality: a.modality ?? "unknown",
+    developmentStage: a.developmentStage,
+    biology: a.biology ?? undefined,
+    target: (a.target && a.target !== "unknown" && a.target !== "") ? a.target : undefined,
+    summary: a.summary ? a.summary.slice(0, 250) : undefined,
+    ipType: a.ipType,
+    sourceName: a.sourceName,
+    sourceUrl: a.sourceUrl,
+    similarity: similarity ?? Math.round((a.similarity ?? 1) * 100) / 100,
+    rankNote: a.rankNote,
+  };
+}
+
 export function registerEdenRoutes(app: Express): void {
   const chatBodySchema = z.object({
     message: z.string().min(1).max(4000),
@@ -405,7 +440,7 @@ export function registerEdenRoutes(app: Express): void {
       const assistantTurnCount = allMessages.filter((m) => m.role === "assistant").length;
       const storedSummary = session.focusContext?._summary as string | undefined;
       let history: typeof allMessages;
-      if (assistantTurnCount >= 8 && storedSummary) {
+      if (assistantTurnCount >= 6 && storedSummary) {
         history = [
           { role: "user" as const, content: `[Prior conversation summary]\n${storedSummary}` },
           { role: "assistant" as const, content: "Understood. Continuing from there." },
@@ -416,7 +451,7 @@ export function registerEdenRoutes(app: Express): void {
       }
       // Trigger async summarization at turn 8+ when no summary exists yet.
       // Uses >= so a server restart between turns 8 and 9 doesn't permanently skip it.
-      if (assistantTurnCount >= 8 && !storedSummary) {
+      if (assistantTurnCount >= 6 && !storedSummary) {
         summarizeSession(allMessages).then(async (summary) => {
           if (summary) {
             const updatedFocus = { ...(session.focusContext ?? {}), _summary: summary } as SessionFocusContext;
@@ -557,6 +592,7 @@ export function registerEdenRoutes(app: Express): void {
 
       // Map recency window to a concrete Date for storage-layer filtering.
       const RECENCY_MS: Record<string, number> = {
+        last7: 7 * 24 * 60 * 60 * 1000,
         last30: 30 * 24 * 60 * 60 * 1000,
         last90: 90 * 24 * 60 * 60 * 1000,
         last180: 180 * 24 * 60 * 60 * 1000,
@@ -650,12 +686,57 @@ export function registerEdenRoutes(app: Express): void {
           targeted = pos !== null && fetchedAssets[pos] ? [fetchedAssets[pos]] : fetchedAssets;
         }
 
-        const assetPayload = targeted.map((a) => ({
-          id: a.id, assetName: a.assetName, institution: a.institution,
-          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
-          biology: a.biology ?? undefined,
-          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-        }));
+        // ── "More like this" branch: seed-embedding retrieval ─────────────────
+        // When the user wants SIMILAR assets (not more info about the same one),
+        // embed the target asset's key fields and run a fresh vector search,
+        // excluding everything already shown in this session.
+        const isSimilarIntent = SIMILAR_PATTERNS.some((rx) => rx.test(message.trim()));
+        if (isSimilarIntent && targeted.length > 0 && !abortController.signal.aborted) {
+          const seed = targeted[0];
+          const seedText = [
+            seed.assetName,
+            seed.modality && seed.modality !== "unknown" ? seed.modality : "",
+            seed.indication && seed.indication !== "unknown" ? seed.indication : "",
+            seed.biology ?? "",
+            seed.summary ? seed.summary.slice(0, 400) : "",
+          ].filter(Boolean).join(" ").trim();
+
+          try {
+            const seedVec = await embedQuery(seedText);
+            const allShownIds = new Set<number>([
+              ...priorIds,
+              ...targeted.map((a) => a.id),
+            ]);
+            const similarHits = await storage.filteredSemanticSearch(
+              seedVec, geoRx, filters.modality, filters.stage, undefined,
+              filters.institution, 20, filters.biology, sinceDate, undefined, true
+            ).catch(() => [] as import("../storage").RetrievedAsset[]);
+            const passing = similarHits.filter((a) => a.similarity > 0.45 && !allShownIds.has(a.id)).slice(0, 15);
+
+            if (passing.length >= 2) {
+              const rerankedSimilar = rerankAssets(passing, resolvedCtx, engagementSignals, focusContext?.biology);
+              const similarPayload = rerankedSimilar.map((a) => toAssetPayload(a));
+              sendEvent("context", { sessionId: sid, assets: similarPayload });
+              const seedLabel = `${seed.assetName} (${seed.institution})`;
+              const similarQ = `The user wants assets SIMILAR to "${seedLabel}". These were retrieved using ${seedLabel} as a semantic seed. Present them in your standard format. Open with a natural note that these are related to what they were just looking at — vary the phrasing.`;
+              let fullResponse = "";
+              for await (const token of ragQuery(similarQ, rerankedSimilar, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
+                fullResponse += token;
+                sendEvent("token", { text: token });
+              }
+              await storage.appendEdenMessage(sid, {
+                role: "assistant", content: fullResponse,
+                assetIds: rerankedSimilar.slice(0, 3).map((a) => a.id), assets: similarPayload,
+              });
+              const simOffers = buildActionOffers(message.trim(), "search", rerankedSimilar, filters, acceptedSignals, crossSessionMemory);
+              if (simOffers.length > 0) sendEvent("action_offer", { offers: simOffers });
+              sendEvent("done", donePayload());
+              return;
+            }
+          } catch { /* fall through to standard back_ref */ }
+        }
+
+        const assetPayload = targeted.map((a) => toAssetPayload(a, 1.0));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
         for await (const token of ragQuery(message.trim(), targeted, history, resolvedCtx, portfolioStats, focusContext, engagementSignals, abortController.signal)) {
@@ -680,9 +761,12 @@ export function registerEdenRoutes(app: Express): void {
       if (aggQuery) {
         const resolvedResult = await resolveAggregationQuery(message.trim(), filters, geoRx).catch(() => null);
         if (resolvedResult) {
+          const aggQ = filters.trending
+            ? `${message.trim()}\n\n[After presenting the count data, add 2–3 sentences of genuine market context from your industry intelligence on why this area is commercially active right now. Do not fabricate data — draw only from what you know.]`
+            : message.trim();
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
+          for await (const token of aggregationQuery(aggQ, resolvedResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -701,9 +785,12 @@ export function registerEdenRoutes(app: Express): void {
           const sqlCountResult = filterDesc
             ? `Filtered count (${filterDesc}): **${count}** relevant assets match the active filters.`
             : `Total relevant assets indexed in the portfolio: **${count.toLocaleString()}**`;
+          const countQ = filters.trending
+            ? `${message.trim()}\n\n[After presenting the count data, add 2–3 sentences of genuine market context from your industry intelligence on why this area is commercially active right now. Do not fabricate data — draw only from what you know.]`
+            : message.trim();
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
+          for await (const token of aggregationQuery(countQ, sqlCountResult, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -795,35 +882,47 @@ export function registerEdenRoutes(app: Express): void {
               return canonical === instKey;
             };
 
+            // Pass 1 (sync): session history for all institutions
+            const sessionHits = new Map<string, number>();
+            const needsPortfolioSearch: string[] = [];
             for (const inst of mentionedInsts.slice(0, 3)) {
               const instKey = inst.toLowerCase();
-
-              // Pass 1: session history
               const sessionMatch = allPriorAssetPayloads.find((a) => institutionMatches(a.institution, instKey));
-              if (sessionMatch && !instMatched.includes(sessionMatch.id)) {
-                instMatched.push(sessionMatch.id);
-                continue;
+              if (sessionMatch) {
+                sessionHits.set(inst, sessionMatch.id);
+              } else {
+                needsPortfolioSearch.push(inst);
               }
+            }
+            for (const inst of mentionedInsts.slice(0, 3)) {
+              const id = sessionHits.get(inst);
+              if (id !== undefined && !instMatched.includes(id)) instMatched.push(id);
+            }
 
-              // Pass 2: portfolio-level semantic search with institution context
-              let portfolioResolved = false;
-              try {
-                const instQueryText = `${inst} ${message.trim()}`;
-                const instEmbedding = await embedQuery(instQueryText);
-                const instHits = await storage.semanticSearch(instEmbedding, 8);
-                const portfolioHit = instHits.find(
+            // Pass 2 (parallel): portfolio search for unresolved institutions
+            if (needsPortfolioSearch.length > 0 && instMatched.length < 2) {
+              const portfolioSearchResults = await Promise.allSettled(
+                needsPortfolioSearch.map(async (inst) => {
+                  const instEmbedding = await embedQuery(`${inst} ${message.trim()}`);
+                  const instHits = await storage.semanticSearch(instEmbedding, 8);
+                  return { inst, hits: instHits };
+                })
+              );
+              for (const result of portfolioSearchResults) {
+                if (result.status === "rejected") {
+                  console.warn("[eden/comparative] institution portfolio search failed:", (result.reason as Error)?.message);
+                  continue;
+                }
+                const { inst, hits } = result.value;
+                const instKey = inst.toLowerCase();
+                const portfolioHit = hits.find(
                   (h) => institutionMatches(h.institution, instKey) && !instMatched.includes(h.id)
                 );
                 if (portfolioHit) {
                   instMatched.push(portfolioHit.id);
-                  portfolioResolved = true;
+                } else if (!firstUnresolved) {
+                  firstUnresolved = inst;
                 }
-              } catch (instSearchErr) {
-                console.warn("[eden/comparative] institution portfolio search failed:", (instSearchErr as Error)?.message);
-              }
-
-              if (!portfolioResolved && !firstUnresolved) {
-                firstUnresolved = inst;
               }
             }
 
@@ -880,12 +979,7 @@ export function registerEdenRoutes(app: Express): void {
           fetchedForCompare.sort((a, b) => (compareIdOrder.get(a.id) ?? 99) - (compareIdOrder.get(b.id) ?? 99));
 
           if (fetchedForCompare.length >= 2) {
-            const compareAssetPayload = fetchedForCompare.map((a) => ({
-              id: a.id, assetName: a.assetName, institution: a.institution,
-              indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
-              developmentStage: a.developmentStage, ipType: a.ipType,
-              sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-            }));
+            const compareAssetPayload = fetchedForCompare.map((a) => toAssetPayload(a, 1.0));
             sendEvent("context", { sessionId: sid, assets: compareAssetPayload });
             let fullResponse = "";
             for await (const token of compareQuery(message.trim(), fetchedForCompare, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
@@ -930,9 +1024,13 @@ export function registerEdenRoutes(app: Express): void {
           if (conceptEmbedding) {
             const hits = await storage.semanticSearch(conceptEmbedding, 5);
             const passing = hits.filter((a) => a.similarity >= CONCEPT_SIMILARITY_THRESHOLD);
-            if (hits.length > 0 && passing.length === 0) {
+            if (hits.length > 0) {
               const topSim = hits[0]?.similarity ?? 0;
-              console.log(`[eden/definitional] 0 hits above ${CONCEPT_SIMILARITY_THRESHOLD} threshold (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+              if (passing.length === 0) {
+                console.log(`[eden/definitional] 0 hits above ${CONCEPT_SIMILARITY_THRESHOLD} (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+              } else {
+                console.log(`[eden/definitional] ${passing.length} hit(s) above ${CONCEPT_SIMILARITY_THRESHOLD} (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+              }
             }
             relatedAssets = passing.slice(0, 3);
           }
@@ -941,13 +1039,7 @@ export function registerEdenRoutes(app: Express): void {
         }
 
         if (relatedAssets.length > 0) {
-          const relatedAssetPayload = relatedAssets.map((a) => ({
-            id: a.id, assetName: a.assetName, institution: a.institution,
-            indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
-            developmentStage: a.developmentStage, ipType: a.ipType,
-            sourceName: a.sourceName, sourceUrl: a.sourceUrl,
-            similarity: Math.round(a.similarity * 100) / 100,
-          }));
+          const relatedAssetPayload = relatedAssets.map((a) => toAssetPayload(a));
           sendEvent("context", { sessionId: sid, assets: relatedAssetPayload });
 
           const bridgeIntro = "\n\n";
@@ -1023,12 +1115,7 @@ export function registerEdenRoutes(app: Express): void {
           }
         }
 
-        const pipelineAssetPayload = pipelineAssets.slice(0, 15).map((a) => ({
-          id: a.id, assetName: a.assetName, institution: a.institution,
-          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
-          developmentStage: a.developmentStage, biology: a.biology ?? undefined,
-          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-        }));
+        const pipelineAssetPayload = pipelineAssets.slice(0, 15).map((a) => toAssetPayload(a, 1.0));
 
         sendEvent("context", { sessionId: sid, assets: pipelineAssetPayload });
 
@@ -1134,7 +1221,7 @@ export function registerEdenRoutes(app: Express): void {
           return;
         }
 
-        const docPayload = [{ id: targetAsset.id, assetName: targetAsset.assetName, institution: targetAsset.institution, indication: targetAsset.indication ?? "unknown", modality: targetAsset.modality ?? "unknown", developmentStage: targetAsset.developmentStage, similarity: 1.0 }];
+        const docPayload = [toAssetPayload(targetAsset, 1.0)];
         sendEvent("context", { sessionId: sid, assets: docPayload });
         let fullResponse = "";
         for await (const token of documentQuery(docType, targetAsset, history, resolvedCtx, portfolioStats, focusContext, abortController.signal)) {
@@ -1143,6 +1230,7 @@ export function registerEdenRoutes(app: Express): void {
         }
         await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [targetAsset.id], assets: docPayload });
         focusContext._lastDocType = docType;
+        persistSessionFocus(sid, focusContext).catch(() => {});
         sendEvent("done", donePayload());
         return;
       }
@@ -1214,7 +1302,7 @@ export function registerEdenRoutes(app: Express): void {
           ...allSemantic.filter((a) => a.similarity > broadThreshold && !institutionIds.has(a.id)),
         ].slice(0, 8);
       }
-      if (merged.length === 0) {
+      if (merged.length === 0 && !abortController.signal.aborted) {
         const kwFallback = await storage.keywordSearchIngestedAssets(message.trim(), 10, {
           modality: filters.modality,
           stage: filters.stage,
@@ -1222,6 +1310,22 @@ export function registerEdenRoutes(app: Express): void {
           institution: filters.institution ?? (institutionName ?? undefined),
         }).catch(() => [] as import("../storage").RetrievedAsset[]);
         merged = kwFallback.map((a) => ({ ...a, similarity: 0.5 }));
+      }
+
+      // ── Compound-indication filter-drop retry ─────────────────────────────────
+      // When indication is a multi-word phrase (e.g. "pediatric oncology"), the SQL
+      // ILIKE filter over-restricts because asset indications use varied phrasings.
+      // Retry with the cached embedding but no indication SQL filter — the semantic
+      // search already captures the intent without a second API call.
+      if (merged.length === 0 && cachedEmbedding && filters.indication?.includes(" ") && !abortController.signal.aborted) {
+        try {
+          const hits = await storage.filteredSemanticSearch(
+            cachedEmbedding, geoRx, filters.modality, filters.stage, undefined, filters.institution,
+            20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined, true
+          );
+          const passing = hits.filter((a) => a.similarity > 0.38 && !institutionIds.has(a.id)).slice(0, 12);
+          if (passing.length > 0) merged = [...institutionAssets, ...passing].slice(0, 15);
+        } catch { /* fall through to re-embed broadening */ }
       }
 
       // ── Last-resort query broadening ──────────────────────────────────────────
@@ -1243,6 +1347,7 @@ export function registerEdenRoutes(app: Express): void {
 
         for (const term of [...new Set(coreTerms)]) {
           if (!term || term.length < 3) continue;
+          if (abortController.signal.aborted) break;
           try {
             const broaderEmbedding = await embedQuery(term);
             const hits = await storage.filteredSemanticSearch(
@@ -1258,17 +1363,22 @@ export function registerEdenRoutes(app: Express): void {
         }
       }
 
-      // Rerank with profile + adaptive + biology tiers using pre-derived engagement signals.
-      const retrieved = rerankAssets(merged, resolvedCtx, engagementSignals, focusContext?.biology);
+      // ── Session deduplication ─────────────────────────────────────────────────
+      // Prefer assets the user hasn't already seen in this session.
+      // Only applies when we have enough unseen candidates (≥ 3) so a thin
+      // corpus doesn't result in an empty response.
+      const sessionShownIds = new Set<number>(
+        (session.messages ?? [])
+          .filter((m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0)
+          .flatMap((m) => m.assetIds ?? [])
+      );
+      const unseenMerged = merged.filter((a) => !sessionShownIds.has(a.id));
+      const deduped = unseenMerged.length >= 3 ? unseenMerged : merged;
 
-      const assetPayload = retrieved.map((a) => ({
-        id: a.id, assetName: a.assetName, institution: a.institution,
-        indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
-        biology: a.biology ?? undefined,
-        ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
-        similarity: Math.round(a.similarity * 100) / 100,
-        rankNote: a.rankNote,
-      }));
+      // Rerank with profile + adaptive + biology tiers using pre-derived engagement signals.
+      const retrieved = rerankAssets(deduped, resolvedCtx, engagementSignals, focusContext?.biology);
+
+      const assetPayload = retrieved.map((a) => toAssetPayload(a));
 
       const externalResults = await liveResultsPromise;
       sendEvent("context", { sessionId: sid, assets: assetPayload, externalResults, activeSource: liveSource ?? "tto" });

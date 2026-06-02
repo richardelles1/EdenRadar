@@ -45,7 +45,7 @@ export type UserContext = {
 
 export type GeoKey = "us" | "eu" | "uk" | "asia";
 
-export type RecencyWindow = "last30" | "last90" | "last180" | "lastyear";
+export type RecencyWindow = "last7" | "last30" | "last90" | "last180" | "lastyear";
 
 export type QueryFilters = {
   modality?: string;
@@ -55,7 +55,7 @@ export type QueryFilters = {
   institution?: string;
   biology?: string;
   // Temporal filters — per-query only, never accumulated into SessionFocusContext.
-  // "last30/90/180/lastyear" maps to first_seen_at >= NOW() - INTERVAL.
+  // "last7/30/90/180/lastyear" maps to first_seen_at >= NOW() - INTERVAL.
   // trending=true adds a completeness_score threshold and signals EDEN to add market context.
   recency?: RecencyWindow;
   trending?: boolean;
@@ -153,25 +153,44 @@ const _sessionResetMap = new Map<string, number>();
 const MODALITY_ALIASES: Record<string, string> = {
   "gene therapy": "Gene Therapy",
   "gene editing": "Gene Editing",
+  "base editing": "Gene Editing",
+  "prime editing": "Gene Editing",
   "cell therapy": "Cell Therapy",
   "car-t": "CAR-T",
   "car t": "CAR-T",
+  "cart": "CAR-T",
   "small molecule": "Small Molecule",
   "antibody": "Antibody",
   "monoclonal antibody": "Antibody",
+  "monoclonal": "Antibody",
+  "mab": "Antibody",
+  "naked antibody": "Antibody",
   "mrna": "mRNA",
   "rna therapeutics": "RNA Therapeutics",
+  "rna therapy": "RNA Therapeutics",
+  "lnp": "mRNA",
+  "lipid nanoparticle": "mRNA",
   "sirna": "siRNA",
   "antisense": "Antisense",
+  "aso": "Antisense",
+  "oligonucleotide": "Antisense",
   "protac": "PROTAC",
   "adc": "ADC",
   "antibody-drug conjugate": "ADC",
+  "antibody drug conjugate": "ADC",
   "bispecific": "Bispecific Antibody",
+  "bispecific antibody": "Bispecific Antibody",
+  "bi-specific": "Bispecific Antibody",
   "vaccine": "Vaccine",
   "peptide": "Peptide",
   "nanoparticle": "Nanoparticle",
   "protein therapy": "Protein/Biologics",
   "protein replacement": "Protein/Biologics",
+  "biologic": "Protein/Biologics",
+  "biologics": "Protein/Biologics",
+  "viral vector": "Gene Therapy",
+  "aav": "Gene Therapy",
+  "lentiviral": "Gene Therapy",
 };
 
 // ── Institution patterns for two-pass detection ───────────────────────────
@@ -215,7 +234,21 @@ export const INSTITUTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
   { pattern: /\bimperial\s+college\b/i, name: "imperial college" },
   { pattern: /\bkarolinska\b/i, name: "karolinska" },
   { pattern: /\beth\s+zurich\b/i, name: "eth zurich" },
-  { pattern: /\boxford\b/i, name: "oxford" },
+  // Oxford: single canonical "oxford" so ILIKE '%oxford%' matches both "University of Oxford"
+  // and shorter references. Removed the separate /\boxford\b/ entry that was producing
+  // two different canonical names from the same institution.
+  { pattern: /\boxford\b|\buniversity\s+of\s+oxford\b|\boxford\s+university\b/i, name: "oxford" },
+  { pattern: /\bfred\s+hutch\b|\bfrederick\s+hutchinson\b/i, name: "fred hutch" },
+  { pattern: /\bbroad\s+institute\b|\bthe\s+broad\b/i, name: "broad institute" },
+  { pattern: /\bdana.?farber\b/i, name: "dana-farber" },
+  { pattern: /\bbrigham\s+and\s+women\b|\bbwh\b/i, name: "brigham and women" },
+  { pattern: /\bmass\s+general\b|\bmassachusetts\s+general\b|\bmgh\b/i, name: "massachusetts general" },
+  { pattern: /\bweill\s+cornell\b/i, name: "weill cornell" },
+  { pattern: /\bsinai\b|\bicahn\b/i, name: "mount sinai" },
+  { pattern: /\bcase\s+western\b/i, name: "case western" },
+  { pattern: /\bdartmouth\b/i, name: "dartmouth" },
+  { pattern: /\bwake\s+forest\b/i, name: "wake forest" },
+  { pattern: /\buniversity\s+of\s+british\s+columbia\b|\bubc\b/i, name: "university of british columbia" },
 ];
 
 export function detectInstitutionName(query: string, portfolioInstitutions?: string[]): string | null {
@@ -322,7 +355,18 @@ const GEO_DETECT: Record<string, GeoKey> = {
 // precise set when the user names a US state, coast, or city.
 const US_SUBREGION_PATTERNS: Array<{ re: RegExp; rx: string }> = [
   {
-    re: /\bwest\s*coast\b|\bcalifornia\b|\bbay\s+area\b|\bsilicon\s+valley\b|\bpacific\s+northwest\b|\bseattle\b|\bportland\b/i,
+    // California-specific: explicitly excludes PNW institutions (UW, Fred Hutch, Oregon Health)
+    re: /\bcalifornia\b|\bbay\s+area\b|\bsilicon\s+valley\b|\bla\s+jolla\b|\blos\s+angeles\b|\bsan\s+francisco\b|\bsan\s+diego\b/i,
+    rx: "UCLA|UCSF|Stanford|UC Berkeley|UC San Diego|UC Davis|UC Irvine|UC Santa Barbara|UC Santa Cruz|Caltech|Salk|Scripps|USC|Buck Institute|Gladstone|Lawrence Berkeley|UC Riverside|UC Merced|Cedars-Sinai|City of Hope",
+  },
+  {
+    // Pacific Northwest: Seattle, Portland, Oregon — distinct from California
+    re: /\bpacific\s+northwest\b|\bseattle\b|\bportland\b|\boregon\b|\bwashington\s+state\b/i,
+    rx: "University of Washington|Fred Hutch|Oregon Health|Oregon State|Washington State",
+  },
+  {
+    // Broad West Coast: California + PNW combined
+    re: /\bwest\s*coast\b/i,
     rx: "UCLA|UCSF|Stanford|UC Berkeley|UC San Diego|UC Davis|UC Irvine|UC Santa Barbara|UC Santa Cruz|Caltech|Salk|Scripps|USC|Oregon Health|University of Washington|Fred Hutch|Buck Institute|Gladstone|Lawrence Berkeley|UC Riverside|UC Merced",
   },
   {
@@ -363,29 +407,61 @@ export const GEO_INSTITUTION_REGEX: Record<GeoKey, string> = {
 };
 
 const STAGE_DETECT: Array<[RegExp, string]> = [
-  [/\bpreclinical\b|pre-clinical\b/i, "preclinical"],
-  [/\bphase\s*1\b|phase\s*i\b/i, "phase 1"],
+  [/\bpreclinical\b|pre-clinical\b|glp\s+tox\b|in\s+vivo\b|animal\s+model/i, "preclinical"],
+  [/\bphase\s*1\b|phase\s*i\b|\bfih\b|first.in.human\b|dose.escalation\b/i, "phase 1"],
+  [/\bphase\s*1\/?2\b|phase\s*i\/?ii\b/i, "phase 1"],
   [/\bphase\s*2\b|phase\s*ii\b/i, "phase 2"],
-  [/\bphase\s*3\b|phase\s*iii\b/i, "phase 3"],
-  [/\bind-enabling\b|ind enabling\b/i, "IND-enabling"],
-  [/\bdiscovery\b/i, "discovery"],
+  [/\bphase\s*3\b|phase\s*iii\b|pivotal\s+trial\b|registration\s+trial\b/i, "phase 3"],
+  [/\bind-enabling\b|ind enabling\b|\bind\s+ready\b|pre.ind\b/i, "IND-enabling"],
+  [/\bdiscovery\b|lead\s+optimiz|hit.to.lead\b/i, "discovery"],
   [/\bclinical\b/i, "clinical"],
-  [/\bapproved\b/i, "approved"],
+  [/\bapproved\b|fda\s+approved\b|ema\s+approved\b|marketed\b|commerciali[sz]ed\b|on\s+the\s+market\b/i, "approved"],
 ];
 
 const INDICATION_KEYWORDS = [
-  "oncology", "cancer", "tumor", "tumour", "leukemia", "lymphoma", "glioblastoma",
+  // Oncology — broad
+  "oncology", "cancer", "tumor", "tumour", "solid tumor", "solid tumour",
+  "hematologic", "hematological", "hematology",
+  // Specific cancer types most commonly searched by BD teams
+  "leukemia", "lymphoma", "myeloma", "glioblastoma", "glioma",
+  "nsclc", "non-small cell lung", "non-small-cell lung",
+  "pancreatic", "pancreas cancer",
+  "breast cancer",
+  "prostate cancer", "prostate",
+  "colorectal", "colon cancer", "crc",
+  "melanoma",
+  "ovarian", "ovarian cancer",
+  "bladder cancer", "bladder",
+  "hepatocellular", "hcc",
+  // Neuro / CNS
   "neurology", "neurodegenerative", "alzheimer", "parkinson", "als", "huntington", "neurological",
+  "multiple sclerosis", "epilepsy", "seizure",
+  // Rare / genetic
   "rare disease", "orphan disease", "genetic disorder", "monogenic",
+  "sickle cell", "hemophilia", "haemophilia", "thalassemia",
+  "cystic fibrosis", "spinal muscular atrophy", "sma",
+  "pediatric", "paediatric",
+  // Autoimmune / inflammatory
   "autoimmune", "inflammation", "inflammatory", "rheumatoid", "lupus", "crohn",
+  "inflammatory bowel", "ibd", "ulcerative colitis", "colitis",
+  "atopic dermatitis", "eczema",
+  // Metabolic
   "metabolic", "obesity", "diabetes", "mash", "nash", "fatty liver",
+  // Cardiovascular
   "cardiovascular", "cardiac", "heart failure", "stroke", "atherosclerosis",
+  // Infectious
   "infectious disease", "hiv", "covid", "tuberculosis", "malaria", "antimicrobial",
+  // Respiratory
   "respiratory", "asthma", "copd", "pulmonary",
+  // Ophthalmology
   "ophthalmic", "ocular", "retinal", "macular",
+  // Dermatology
   "dermatology", "skin", "fibrosis", "psoriasis",
+  // Musculoskeletal
   "musculoskeletal", "bone", "muscle dystrophy",
+  // Renal / hepatic
   "renal", "kidney", "liver disease",
+  // Immunology
   "immunology", "immunotherapy", "checkpoint inhibitor",
 ];
 
@@ -941,6 +1017,7 @@ type AggResult = Record<string, unknown>[];
 type ExtraSQL = ReturnType<typeof sql>;
 
 const RECENCY_INTERVALS: Record<RecencyWindow, string> = {
+  last7: "7 days",
   last30: "30 days",
   last90: "90 days",
   last180: "180 days",
@@ -1287,6 +1364,7 @@ INTENTS:
 - back_ref: refers to a PREVIOUSLY SHOWN asset. ONLY valid when hasPriorAssets=true. Triggers:
   Positional: "the first one", "the second one", "the third one", "that one", "this one", "the last one", "the top one", "number two"
   Anaphoric: "tell me more about it", "go deeper on that", "more details on it", "dig into that", "expand on that", "more on that asset", "what else can you tell me about it", "can you elaborate"
+  Similarity: "show me similar assets", "more like this", "find me something similar", "other assets like that", "related technologies", "what else is similar", "anything comparable", "more like number 2", "find me more like the first one"
   Asset-specific questions about a prior asset: "what's the IP on this", "is it exclusive", "what's the licensing status", "has it been licensed before", "who do I contact about that", "what's the TTO for that", "what's the ask", "what are the deal terms", "can I see the source", "where can I read more", "what stage is it at", "what's the mechanism", "tell me about the science behind it", "how validated is this", "is there clinical data on this one"
   Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]"
   NOT valid if hasPriorAssets=false
@@ -1311,7 +1389,7 @@ FILTER EXTRACTION (null if not mentioned):
 - modality shorthands: "RNA"→RNA Therapeutics, "biologics"→Protein/Biologics, "bi-specific"/"bispecific"→Bispecific Antibody, "CART"/"CAR T"→CAR-T, "base editing"/"prime editing"→Gene Editing, "naked antibody"→Antibody, "mAb"→Antibody, "ASO"→Antisense, "LNP"→mRNA (likely delivery), "viral vector"→Gene Therapy
 - geography: us | eu | uk | asia — set when a region, country, US state, or US coast is mentioned. US states and coasts (California, West Coast, East Coast, New England, Texas, Boston, New York, Midwest, Pacific Northwest, Bay Area, etc.) → "us". Do NOT extract a state or coast as institution — use geography:"us" instead.
 - biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation", "checkpoint inhibition", "gene silencing")
-- recency: "last30" (new, recent, last month), "last90" (last quarter, last 3 months), "last180" (last 6 months), "lastyear" (this year, last year)
+- recency: "last7" (today, this week, 7 days, past few days, recent activity), "last30" (new, recent, last month), "last90" (last quarter, last 3 months), "last180" (last 6 months), "lastyear" (this year, last year)
 - trending: true when user asks about "hot", "rising", "trending", "getting attention", "exciting right now", "what's interesting lately", "what's moving", "what's gaining momentum"
 
 back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
@@ -1351,9 +1429,26 @@ hasPriorAssets: true
 → {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 Note: asking about IP/patents for a specific already-shown asset is back_ref, NOT a patents live search. live_source:"patents" is only for broad patent landscape queries like "who holds patents in CRISPR?"
 
+Message: "show me similar assets"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: "similar assets" / "more like this" / "find me something like that" with hasPriorAssets=true are back_refs — the server handles seed-embedding retrieval
+
+Message: "more like number 2"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":1,"live_source":null}
+
 Message: "tell me more about the second one"
 hasPriorAssets: false
 → {"intent":"search","filters":{},"back_ref_position":null,"live_source":null}
+
+Message: "show me activity in the past 7 days"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last7","trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "what's new this week"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last7","trending":false},"back_ref_position":null,"live_source":null}
 
 Message: "what was new?"
 hasPriorAssets: false
@@ -1444,7 +1539,7 @@ export async function classifyIntent(
     const f = (parsed.filters ?? {}) as Record<string, unknown>;
     const isTrending = !!(f.trending);
     const rawRecency = (f.recency as string) || null;
-    const validRecencies: RecencyWindow[] = ["last30", "last90", "last180", "lastyear"];
+    const validRecencies: RecencyWindow[] = ["last7", "last30", "last90", "last180", "lastyear"];
     const recency = validRecencies.includes(rawRecency as RecencyWindow)
       ? (rawRecency as RecencyWindow)
       : isTrending && !rawRecency ? "last90" : undefined;
@@ -1518,7 +1613,7 @@ function buildContext(assets: RetrievedAsset[]): string {
         `[Asset ${i + 1}] ${a.assetName}`,
         `  Institution: ${a.institution}`,
         a.technologyId ? `  Technology ID: ${a.technologyId}` : null,
-        a.biology ? `  Biology: ${a.biology}` : null,
+        a.biology ? `  Biology class: ${a.biology}` : null,
         (() => {
           if (!a.categories) return null;
           try {
@@ -1526,9 +1621,21 @@ function buildContext(assets: RetrievedAsset[]): string {
             return Array.isArray(parsed) && parsed.length ? `  Categories: ${parsed.join(", ")}` : null;
           } catch { return null; }
         })(),
-        a.mechanismOfAction ? `  Mechanism: ${a.mechanismOfAction}` : null,
-        a.innovationClaim ? `  Innovation: ${a.innovationClaim}` : null,
-        `  Target: ${a.target} | Modality: ${a.modality}`,
+        // mechanism_of_action is a taxonomy label (shared across many assets), not asset-specific MOA.
+        // Only surface it when it differs from the biology label — adds detail without duplication.
+        (() => {
+          if (!a.mechanismOfAction) return null;
+          const bioLower = (a.biology ?? "").toLowerCase();
+          const moaLower = a.mechanismOfAction.toLowerCase();
+          // Skip if the MOA is essentially a verbose restatement of the biology field
+          if (bioLower && (moaLower.includes(bioLower.slice(0, 12)) || bioLower.includes(moaLower.slice(0, 12)))) return null;
+          return `  Mechanism class: ${a.mechanismOfAction}`;
+        })(),
+        a.innovationClaim ? `  Key differentiator: ${a.innovationClaim}` : null,
+        (() => {
+          const target = a.target && a.target !== "unknown" && a.target !== "" ? a.target : null;
+          return `  Target: ${target ?? "not yet characterized"} | Modality: ${a.modality}`;
+        })(),
         `  Indication: ${a.indication} | Stage: ${a.developmentStage}`,
         a.unmetNeed ? `  Unmet need: ${a.unmetNeed}` : null,
         a.comparableDrugs ? `  Comparable drugs: ${a.comparableDrugs}` : null,
@@ -1537,7 +1644,7 @@ function buildContext(assets: RetrievedAsset[]): string {
         a.completenessScore != null
           ? `  Data quality: ${Math.round(a.completenessScore)}/100${a.completenessScore >= 70 ? " (well-documented)" : a.completenessScore < 40 ? " (sparse — verify with TTO)" : ""}`
           : null,
-        a.summary ? `  Summary: ${a.summary.slice(0, 500)}` : null,
+        a.summary ? `  Summary: ${a.summary.slice(0, 1200)}` : null,
         a.sourceUrl ? `  URL: ${a.sourceUrl}` : null,
       ]
         .filter(Boolean)
@@ -1702,6 +1809,8 @@ You're warm and direct, occasionally wry. You don't hedge excessively, you don't
 - For research queries, present a maximum of 3 assets per response even if more were retrieved. Lead with the most commercially interesting one. Each asset gets one compelling hook sentence — not a field dump. Vary your opening style each response.
 - For count or portfolio questions, use your live portfolio numbers (provided below) rather than counting from retrieved assets. If the exact breakdown isn't in your stats, say so honestly.
 - Use "Data quality" scores (0–100) to calibrate your language. 70+ means well-documented and licensing-ready — present with confidence and lead with these. Below 40 means the record is sparse — note briefly that the user should verify details directly with the TTO. Never rank a thin record above a well-documented one when relevance is otherwise equal.
+- When an asset shows "Target: not yet characterized", do not invent or speculate about the molecular target. Acknowledge the gap naturally ("the specific molecular target hasn't been characterized yet") and direct to the TTO or summary for details.
+- "Key differentiator" is the most reliable asset-specific scientific claim — weight it heavily when describing what makes an asset interesting. "Biology class" and "Mechanism class" are taxonomy labels shared across many assets; use them for framing but not as asset-specific mechanism descriptions. The real MOA detail for each asset lives in the Summary.
 - When results are filtered by region (EU, UK, Asia), acknowledge the geographic scope naturally in your framing — "Looking at European programs…" or "In the UK TTO space…". Don't just list assets as if geography is invisible.
 - You ask one smart follow-up when the query is genuinely ambiguous. Never several at once.
 - Never fabricate data. If the retrieved context doesn't cover something, say so and offer to look from a different angle.
@@ -1856,7 +1965,7 @@ export async function* directQuery(
     messages,
     stream: true,
     temperature: 0.7,
-    max_tokens: 280,
+    max_tokens: 450,
   }, { signal });
 
   for await (const chunk of stream) {
