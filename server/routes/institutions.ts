@@ -7,7 +7,7 @@ import { ingestedAssets, institutionMetadata } from "@shared/schema";
 import { ALL_SCRAPERS } from "../lib/scrapers/index";
 import { slugifyInstitutionName } from "../lib/institutionSeed";
 
-const INSTITUTIONS_CACHE_KEY = "institutions:all:v5";
+const INSTITUTIONS_CACHE_KEY = "institutions:all:v6";
 const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Maps ingested indication values → display specialty tags.
@@ -195,8 +195,14 @@ export function registerInstitutionRoutes(app: Express): void {
         };
       });
 
-      institutions.sort((a, b) => a.name.localeCompare(b.name));
-      const payload = { institutions, total: institutions.length };
+      // Remove institutions with no assets unless they have a meaningful
+      // status flag — restricted/no-portal cards explain the absence,
+      // zero-count unflagged cards are just data gaps with nothing to show.
+      const visibleInstitutions = institutions.filter(
+        (i) => i.count > 0 || i.accessRestricted || i.noPublicPortal,
+      );
+      visibleInstitutions.sort((a, b) => a.name.localeCompare(b.name));
+      const payload = { institutions: visibleInstitutions, total: visibleInstitutions.length };
       cacheSet(INSTITUTIONS_CACHE_KEY, payload, INSTITUTIONS_CACHE_TTL_MS);
       res.json(payload);
     } catch (err: any) {

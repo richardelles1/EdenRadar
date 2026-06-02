@@ -356,11 +356,10 @@ function ResearchDnaPanel({
           <div className="space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Stage Mix</p>
             {loading ? (
-              <div className="flex justify-center py-4">
-                <Skeleton className="h-44 w-44 rounded-full" />
-              </div>
+              <Skeleton className="w-full rounded-full" style={{ aspectRatio: "1 / 1" }} />
             ) : hasStage ? (
-              <ResponsiveContainer width="100%" height={260}>
+              <div className="w-full" style={{ aspectRatio: "1 / 1" }}>
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={sortedStages}
@@ -368,8 +367,8 @@ function ResearchDnaPanel({
                     nameKey="stage"
                     cx="50%"
                     cy="50%"
-                    innerRadius={70}
-                    outerRadius={115}
+                    innerRadius="28%"
+                    outerRadius="46%"
                     paddingAngle={2}
                     strokeWidth={0}
                     onClick={(entry) => onStageClick?.(entry.stage ?? "")}
@@ -397,6 +396,7 @@ function ResearchDnaPanel({
                   />
                 </PieChart>
               </ResponsiveContainer>
+              </div>
             ) : (
               <p className="text-sm text-muted-foreground/60 italic">No stage data yet</p>
             )}
