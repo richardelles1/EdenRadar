@@ -13,7 +13,7 @@ import type { IngestedAsset } from "@shared/schema";
 import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
 
 import {
-  detectModality, detectStage, computeCommercialScore, formatRelativeTime,
+  detectModality, detectStage, computeCommercialScore,
 } from "@/lib/titleSignals";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -109,6 +109,15 @@ function buildTreemap(data: Array<{ label: string; count: number }>): TreeRect[]
 }
 
 type SortMode = "newest" | "commercial" | "az" | "za";
+
+const PAGE_SIZE = 20;
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "newest",     label: "Newest First" },
+  { value: "commercial", label: "Top Scoring" },
+  { value: "az",         label: "A → Z" },
+  { value: "za",         label: "Z → A" },
+];
 
 // ── Drawer types ──────────────────────────────────────────────────────────────
 
@@ -234,6 +243,10 @@ function ResearchDnaPanel({
 
   const [bioTooltip, setBioTooltip] = useState<{ label: string; count: number; pct: number; x: number; y: number } | null>(null);
   const total = profile?.biologyBreakdown?.reduce((s, b) => s + b.count, 0) ?? 1;
+  const treeRects = useMemo(
+    () => (profile?.biologyBreakdown ? buildTreemap(profile.biologyBreakdown) : []),
+    [profile?.biologyBreakdown],
+  );
 
   const totalStageCnt = profile?.stageBreakdown?.reduce((s, r) => s + r.count, 0) ?? 1;
 
@@ -282,56 +295,58 @@ function ResearchDnaPanel({
             {loading ? (
               <Skeleton className="w-full rounded-lg" style={{ aspectRatio: "1 / 1" }} />
             ) : hasBiology ? (
-              <div className="relative w-full rounded-lg overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
-                {buildTreemap(profile!.biologyBreakdown).map((rect, i) => {
-                  const { bg, text } = BIO_FILLS[i] ?? BIO_FILLS[BIO_FILLS.length - 1];
-                  const pct = Math.round((rect.count / total) * 100);
-                  return (
-                    <button
-                      key={rect.label}
-                      className="absolute transition-opacity hover:opacity-75 rounded-[3px]"
-                      style={{
-                        left:       `calc(${rect.x * 100}% + 2px)`,
-                        top:        `calc(${rect.y * 100}% + 2px)`,
-                        width:      `calc(${rect.w * 100}% - 4px)`,
-                        height:     `calc(${rect.h * 100}% - 4px)`,
-                        background: bg,
-                      }}
-                      onClick={() => onBiologyClick?.(rect.label)}
-                      onMouseEnter={(e) => setBioTooltip({ label: rect.label, count: rect.count, pct, x: e.clientX, y: e.clientY })}
-                      onMouseMove={(e) => setBioTooltip((t) => t ? { ...t, x: e.clientX, y: e.clientY } : t)}
-                      onMouseLeave={() => setBioTooltip(null)}
-                      data-testid={`biology-bar-${i}`}
-                    >
-                      {rect.h > 0.1 && (
-                        <span
-                          className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] font-semibold leading-tight line-clamp-2 text-left"
-                          style={{ color: text }}
-                        >
-                          {rect.label}
-                        </span>
-                      )}
-                      {rect.h > 0.18 && (
-                        <span
-                          className="absolute top-1.5 right-1.5 text-[9px] tabular-nums"
-                          style={{ color: text, opacity: 0.65 }}
-                        >
-                          {rect.count}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              {bioTooltip && (
-                <div
-                  className="fixed z-50 pointer-events-none text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md"
-                  style={{ left: bioTooltip.x + 14, top: bioTooltip.y - 8 }}
-                >
-                  <span className="font-semibold text-foreground capitalize">{bioTooltip.label}</span>
-                  <span className="text-muted-foreground ml-2">{bioTooltip.count} · {bioTooltip.pct}%</span>
+              <>
+                <div className="relative w-full rounded-lg overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+                  {treeRects.map((rect, i) => {
+                    const { bg, text } = BIO_FILLS[i] ?? BIO_FILLS[BIO_FILLS.length - 1];
+                    const pct = Math.round((rect.count / total) * 100);
+                    return (
+                      <button
+                        key={rect.label}
+                        className="absolute transition-opacity hover:opacity-75 rounded-[3px]"
+                        style={{
+                          left:       `calc(${rect.x * 100}% + 2px)`,
+                          top:        `calc(${rect.y * 100}% + 2px)`,
+                          width:      `calc(${rect.w * 100}% - 4px)`,
+                          height:     `calc(${rect.h * 100}% - 4px)`,
+                          background: bg,
+                        }}
+                        onClick={() => onBiologyClick?.(rect.label)}
+                        onMouseEnter={(e) => setBioTooltip({ label: rect.label, count: rect.count, pct, x: e.clientX, y: e.clientY })}
+                        onMouseMove={(e) => setBioTooltip((t) => t ? { ...t, x: e.clientX, y: e.clientY } : t)}
+                        onMouseLeave={() => setBioTooltip(null)}
+                        data-testid={`biology-bar-${i}`}
+                      >
+                        {rect.h > 0.1 && (
+                          <span
+                            className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] font-semibold leading-tight line-clamp-2 text-left"
+                            style={{ color: text }}
+                          >
+                            {rect.label}
+                          </span>
+                        )}
+                        {rect.h > 0.18 && (
+                          <span
+                            className="absolute top-1.5 right-1.5 text-[9px] tabular-nums"
+                            style={{ color: text, opacity: 0.65 }}
+                          >
+                            {rect.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              )}
+                {bioTooltip && (
+                  <div
+                    className="fixed z-50 pointer-events-none text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md"
+                    style={{ left: bioTooltip.x + 14, top: bioTooltip.y - 8 }}
+                  >
+                    <span className="font-semibold text-foreground capitalize">{bioTooltip.label}</span>
+                    <span className="text-muted-foreground ml-2">{bioTooltip.count} · {bioTooltip.pct}%</span>
+                  </div>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground/60 italic">No biology data yet</p>
             )}
@@ -606,7 +621,6 @@ type SavedAssetsResponse = { assets: Array<{ ingestedAssetId: number | null }> }
 
 export default function InstitutionDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const PAGE_SIZE = 20;
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
   const [drawerFilter, setDrawerFilter] = useState<DrawerFilter>(null);
@@ -636,9 +650,11 @@ export default function InstitutionDetail() {
     queryKey: ["/api/saved-assets"],
     staleTime: 30000,
   });
-  const savedIngestedIds = new Set(
-    (savedData?.assets ?? []).map((a) => a.ingestedAssetId).filter((id): id is number => id != null)
-  );
+  const savedIngestedIds = useMemo(() =>
+    new Set(
+      (savedData?.assets ?? []).map((a) => a.ingestedAssetId).filter((id): id is number => id != null)
+    ),
+  [savedData]);
 
   const slugTitle = slug
     ? slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
@@ -688,29 +704,30 @@ export default function InstitutionDetail() {
     return [];
   }, [drawerFilter, rawAssets]);
 
-  const filtered = search.trim()
-    ? rawAssets.filter((a) => a.assetName.toLowerCase().includes(search.toLowerCase()))
-    : rawAssets;
+  // Pre-compute scores once per asset list change so the commercial sort
+  // comparator doesn't recompute O(n log n) times.
+  const scoredAssets = useMemo(() =>
+    rawAssets.map((a) => ({ asset: a, score: computeCommercialScore(a) })),
+  [rawAssets]);
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortMode === "newest")     return new Date(b.firstSeenAt).getTime() - new Date(a.firstSeenAt).getTime();
-    if (sortMode === "commercial") return computeCommercialScore(b) - computeCommercialScore(a);
-    if (sortMode === "az")         return a.assetName.localeCompare(b.assetName);
-    if (sortMode === "za")         return b.assetName.localeCompare(a.assetName);
-    return 0;
-  });
+  const sorted = useMemo(() => {
+    const searchLow = search.trim().toLowerCase();
+    const filtered = searchLow
+      ? scoredAssets.filter(({ asset }) => asset.assetName.toLowerCase().includes(searchLow))
+      : scoredAssets;
+    return [...filtered].sort((a, b) => {
+      if (sortMode === "newest")     return new Date(b.asset.firstSeenAt).getTime() - new Date(a.asset.firstSeenAt).getTime();
+      if (sortMode === "commercial") return b.score - a.score;
+      if (sortMode === "az")         return a.asset.assetName.localeCompare(b.asset.assetName);
+      if (sortMode === "za")         return b.asset.assetName.localeCompare(a.asset.assetName);
+      return 0;
+    }).map(({ asset }) => asset);
+  }, [scoredAssets, search, sortMode]);
 
   // Reset pagination when search or sort changes
   useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, sortMode]);
 
   const activeCount = isLoading ? null : rawAssets.length;
-
-  const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-    { value: "newest",     label: "Newest First" },
-    { value: "commercial", label: "Top Scoring" },
-    { value: "az",         label: "A → Z" },
-    { value: "za",         label: "Z → A" },
-  ];
 
   return (
     <div className="min-h-full">
