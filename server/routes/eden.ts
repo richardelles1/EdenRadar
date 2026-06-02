@@ -386,7 +386,7 @@ export function registerEdenRoutes(app: Express): void {
 
     try {
       let newArrivalsHint: { count: number; label: string; query: string } | undefined;
-      const donePayload = () => ({ sessionId: sid, ...(newArrivalsHint ? { newArrivalsHint } : {}) });
+      const donePayload = () => ({ sessionId: sid, intent: _qIntent, ...(newArrivalsHint ? { newArrivalsHint } : {}) });
 
       // ── Start embedding immediately — no session state needed ────────────────
       const embeddingPromise = embedQuery(message.trim()).catch(() => null);
