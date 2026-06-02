@@ -6,6 +6,17 @@ import { PipelinePicker, type PipelinePickerPayload } from "@/components/Pipelin
 import { getAuthHeaders } from "@/lib/queryClient";
 import type { ChatAsset, ChatMessage, ExternalResult, ActionOffer, AlertOfferConfig, WriteActionOffer } from "@/hooks/useEdenChat";
 
+// Top-5 biology taxonomy values that cover 15k+ assets — too generic to be
+// meaningful as a card badge. The values below signal "this is a cancer/infection/etc."
+// rather than anything specific about THIS asset's mechanism.
+const GENERIC_BIOLOGY = new Set([
+  "pathogen replication",        // 5,700 assets
+  "structural protein defect",   // 2,852
+  "oncogenic transcription",     // 2,786
+  "immune evasion",              // 2,631
+  "gene expression deficiency",  // 2,267
+]);
+
 function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
   if (!assets.length || !content) return assets;
   const lower = content.toLowerCase();
@@ -254,7 +265,7 @@ function CitationCard({ asset, index, savedIngestedIds, onAssetSaved, compact = 
             {asset.ipType}
           </span>
         )}
-        {!compact && asset.biology && (
+        {!compact && asset.biology && !GENERIC_BIOLOGY.has(asset.biology) && (
           <span className="text-[10px] font-medium border rounded px-1.5 py-0.5 bg-violet-500/8 text-violet-700 dark:text-violet-400 border-violet-500/20" title={asset.biology}>
             {asset.biology.length > 28 ? asset.biology.slice(0, 28) + "…" : asset.biology}
           </span>

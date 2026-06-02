@@ -584,6 +584,7 @@ const PURE_RESET_PATTERNS = [
 
 const PIVOT_PATTERNS = [
   /\b(?:actually|scratch that|let'?s try something different|instead let'?s)\b/i,
+  /\b(?:shift gears?|change direction|new direction|let'?s move on|change topic|something else|different topic|different angle)\b/i,
 ];
 
 function extractRawFilters(message: string, portfolioInstitutions?: string[]): SessionFocusContext {
@@ -1195,10 +1196,14 @@ async function resolveAggregationQuery(
     const areaRaw = icm[1].trim().replace(/^(?:the|all|total)\s+/i, "");
     const instHint = icm[2].trim();
     const isGeneric = /^(?:assets?|technologies?|programs?|compounds?|the)$/i.test(areaRaw) || areaRaw.length < 2;
-    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw, extra);
+    // For generic counts ("how many assets does X have"), drop accumulated session
+    // filters so the answer reflects the institution's true total, not a heavily
+    // filtered subset that would give a confusing near-zero result.
+    const countExtra = isGeneric ? undefined : extra;
+    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw, countExtra);
     if (result) {
       const label = isGeneric ? "" : `${areaRaw} `;
-      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio${focusLabel ? " " + focusLabel.trim() : ""}.`;
+      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio${!isGeneric && focusLabel ? " " + focusLabel.trim() : ""}.`;
     }
   }
 
@@ -1366,6 +1371,7 @@ INTENTS:
   Anaphoric: "tell me more about it", "go deeper on that", "more details on it", "dig into that", "expand on that", "more on that asset", "what else can you tell me about it", "can you elaborate"
   Similarity: "show me similar assets", "more like this", "find me something similar", "other assets like that", "related technologies", "what else is similar", "anything comparable", "more like number 2", "find me more like the first one"
   Asset-specific questions about a prior asset: "what's the IP on this", "is it exclusive", "what's the licensing status", "has it been licensed before", "who do I contact about that", "what's the TTO for that", "what's the ask", "what are the deal terms", "can I see the source", "where can I read more", "what stage is it at", "what's the mechanism", "tell me about the science behind it", "how validated is this", "is there clinical data on this one"
+  Pipeline actions on a prior asset: "add that to my [X] pipeline", "save that to my [X] list", "put that in my [X] pipeline", "move that to [X]", "bookmark that for [X]"
   Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]"
   NOT valid if hasPriorAssets=false
 
@@ -1428,6 +1434,15 @@ Message: "what's the IP situation on this one?"
 hasPriorAssets: true
 → {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 Note: asking about IP/patents for a specific already-shown asset is back_ref, NOT a patents live search. live_source:"patents" is only for broad patent landscape queries like "who holds patents in CRISPR?"
+
+Message: "add that to my ALS pipeline"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: "add that to my X pipeline" is a back_ref + pipeline action — NOT a search for ALS assets. The server detects the pipeline move intent and executes it on the referenced asset.
+
+Message: "save that to my oncology list"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 
 Message: "show me similar assets"
 hasPriorAssets: true

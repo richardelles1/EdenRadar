@@ -108,7 +108,7 @@ const WRITE_NOTE_PATTERNS: RegExp[] = [
   /\bannotate\b/i,
 ];
 const WRITE_MOVE_PATTERNS: RegExp[] = [
-  /\b(?:move|transfer|put)\s+(?:this|it|that)\s+(?:to|into)\s+(?:my\s+|the\s+)?(.+?)\s+(?:pipeline|list|portfolio)\b/i,
+  /\b(?:move|transfer|put|add)\s+(?:this|it|that)\s+(?:to|into)\s+(?:my\s+|the\s+)?(.+?)\s+(?:pipeline|list|portfolio)\b/i,
 ];
 
 function extractStatusTarget(message: string): string | null {
