@@ -9,7 +9,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Building2, Search, ShieldOff, SlidersHorizontal, X } from "lucide-react";
 import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
 
-const CHIP = "bg-muted/70 text-foreground/70 border-border/60";
+// Specialty chips — faint primary tint, ties to Scout portal identity
+const SPECIALTY_CHIP = "bg-primary/10 text-primary/80 border-primary/15";
+// Biology chips — neutral, derived data signal
+const BIOLOGY_CHIP = "bg-muted text-foreground/65 border-border/70";
 
 function portfolioDepthColor(count: number): string {
   if (count >= 50) return "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
@@ -29,27 +32,37 @@ function InstitutionCard({ inst, loading }: { inst: Institution; loading: boolea
   const count = inst.count;
   const showRestricted = !loading && inst.accessRestricted && !count;
   const showNoPortal = !loading && inst.noPublicPortal && !count && !inst.accessRestricted;
+  const hasBody = !!(inst.ttoName || inst.specialties.length > 0 || (inst.topBiology && inst.topBiology.length > 0));
 
   return (
     <div
-      className="flex flex-col gap-3 p-4 rounded-[14px] border border-border bg-card cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/25 active:scale-[0.99] active:shadow-sm"
+      className="rounded-[14px] overflow-hidden border border-border cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:border-primary/30 active:scale-[0.99]"
       onClick={() => setLocation(`/institutions/${inst.slug}`)}
       data-testid={`institution-card-${inst.slug}`}
     >
-      <div className="flex items-start gap-3">
-        <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-          <Building2 className="w-4 h-4 text-primary" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-foreground leading-tight">{inst.name}</h3>
-          {inst.city && (
-            <p className="text-xs text-muted-foreground mt-0.5">{inst.city}</p>
-          )}
+      {/* ── Emerald header ── */}
+      <div
+        className="px-4 py-3.5 flex items-start justify-between gap-3"
+        style={{ background: "linear-gradient(135deg, hsl(142 65% 36%) 0%, hsl(142 55% 27%) 100%)" }}
+      >
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+          <Building2 className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(0 0% 100% / 0.85)" }} />
+          <div className="min-w-0">
+            <h3 className="font-bold leading-tight text-sm line-clamp-2" style={{ color: "hsl(0 0% 100% / 0.97)" }}>
+              {inst.name}
+            </h3>
+            {inst.city && (
+              <p className="text-[11px] mt-0.5" style={{ color: "hsl(142 30% 80%)" }}>{inst.city}</p>
+            )}
+          </div>
         </div>
         {showRestricted && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 cursor-help shrink-0">
+              <div
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium cursor-help shrink-0 border"
+                style={{ background: "hsl(0 0% 100% / 0.12)", borderColor: "hsl(0 0% 100% / 0.25)", color: "hsl(0 0% 100% / 0.80)" }}
+              >
                 <ShieldOff className="w-2.5 h-2.5" />
                 Restricted
               </div>
@@ -62,7 +75,10 @@ function InstitutionCard({ inst, loading }: { inst: Institution; loading: boolea
         {showNoPortal && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground border border-border cursor-help shrink-0">
+              <div
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium cursor-help shrink-0 border"
+                style={{ background: "hsl(0 0% 100% / 0.10)", borderColor: "hsl(0 0% 100% / 0.20)", color: "hsl(0 0% 100% / 0.65)" }}
+              >
                 <ShieldOff className="w-2.5 h-2.5" />
                 No portal
               </div>
@@ -74,58 +90,68 @@ function InstitutionCard({ inst, loading }: { inst: Institution; loading: boolea
         )}
       </div>
 
-      {inst.ttoName && (
-        <p className="text-xs text-muted-foreground">{inst.ttoName}</p>
-      )}
+      {/* ── Card body ── */}
+      <div className={`bg-card flex flex-col gap-2.5 px-4 ${hasBody ? "pt-3 pb-3.5" : "pt-2 pb-3"}`}>
+        {inst.ttoName && (
+          <p className="text-xs text-muted-foreground leading-snug">{inst.ttoName}</p>
+        )}
 
-      {inst.specialties.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {inst.specialties.map((s) => (
-            <Badge
-              key={s}
-              variant="outline"
-              className={`text-[10px] font-medium px-1.5 py-0.5 border ${CHIP}`}
-            >
-              {s}
-            </Badge>
-          ))}
+        {inst.specialties.length > 0 && (
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Research Focus</p>
+            <div className="flex flex-wrap gap-1.5">
+              {inst.specialties.map((s) => (
+                <Badge
+                  key={s}
+                  variant="outline"
+                  className={`text-[10px] font-medium px-1.5 py-0.5 border ${SPECIALTY_CHIP}`}
+                >
+                  {s}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {inst.topBiology && inst.topBiology.length > 0 && (
+          <div>
+            <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/50 mb-1.5">Biology Signals</p>
+            <div className="flex flex-wrap gap-1.5">
+              {inst.topBiology.map((b) => (
+                <span
+                  key={b}
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full border leading-tight ${BIOLOGY_CHIP}`}
+                  data-testid={`biology-pill-${inst.slug}`}
+                >
+                  {b}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        <div className="flex items-center justify-between pt-2 border-t border-border/50 mt-0.5">
+          <span data-testid={`text-listings-${inst.slug}`}>
+            {loading ? (
+              <Skeleton className="h-3 w-16 inline-block" />
+            ) : count > 0 ? (
+              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${portfolioDepthColor(count)}`}>
+                {count} listings
+              </span>
+            ) : showRestricted ? (
+              <span className="italic text-muted-foreground/50 text-[11px]">Access restricted</span>
+            ) : showNoPortal ? (
+              <span className="italic text-muted-foreground/50 text-[11px]">No public portal</span>
+            ) : (
+              <span className="italic text-muted-foreground/50 text-[11px]">—</span>
+            )}
+          </span>
+          <span className="text-xs font-medium text-primary" data-testid={`button-view-institution-${inst.slug}`}>
+            View Profile →
+          </span>
         </div>
-      )}
-
-      {inst.topBiology && inst.topBiology.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {inst.topBiology.map((b) => (
-            <span
-              key={b}
-              className={`text-[11px] font-medium px-2 py-0.5 rounded-full border leading-tight ${CHIP}`}
-              data-testid={`biology-pill-${inst.slug}`}
-            >
-              {b}
-            </span>
-          ))}
-        </div>
-      )}
-
-      <div className="flex-1" />
-      <div className="flex items-center justify-between pt-2 border-t border-border/60">
-        <span data-testid={`text-listings-${inst.slug}`}>
-          {loading ? (
-            <Skeleton className="h-3 w-16 inline-block" />
-          ) : count > 0 ? (
-            <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${portfolioDepthColor(count)}`}>
-              {count} listings
-            </span>
-          ) : showRestricted ? (
-            <span className="italic text-muted-foreground/60 text-[11px]">Access restricted</span>
-          ) : showNoPortal ? (
-            <span className="italic text-muted-foreground/60 text-[11px]">No public portal</span>
-          ) : (
-            <span className="italic text-muted-foreground/60 text-[11px]">—</span>
-          )}
-        </span>
-        <span className="text-xs font-medium text-primary" data-testid={`button-view-institution-${inst.slug}`}>
-          View Profile →
-        </span>
       </div>
     </div>
   );
@@ -298,7 +324,7 @@ export default function Institutions() {
         {isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 9 }).map((_, i) => (
-              <Skeleton key={i} className="h-44 w-full rounded-[14px]" />
+              <Skeleton key={i} className="h-52 w-full rounded-[14px]" />
             ))}
           </div>
         ) : filtered.length === 0 ? (
