@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useParams } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import type { IngestedAsset } from "@shared/schema";
-import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
+import type { Institution, InstitutionProfile } from "@/lib/institutions";
 
 import {
   detectModality, detectStage, computeCommercialScore,
@@ -624,17 +624,30 @@ export default function InstitutionDetail() {
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
   const [drawerFilter, setDrawerFilter] = useState<DrawerFilter>(null);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const { data: instListData } = useQuery<InstitutionsListResponse>({
-    queryKey: ["/api/institutions"],
+  const { data: inst } = useQuery<Institution>({
+    queryKey: ["/api/institutions", slug],
+    queryFn: () => fetch(`/api/institutions/${slug}`).then((r) => r.json()),
+    enabled: !!slug,
     staleTime: 5 * 60 * 1000,
   });
-  const inst = instListData?.institutions.find((i) => i.slug === slug);
 
-  const { data, isLoading } = useQuery<{ assets: IngestedAsset[]; institution: string }>({
+  const {
+    data: assetsData,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
     queryKey: ["/api/institutions", slug, "assets"],
-    queryFn: () => fetch(`/api/institutions/${slug}/assets`).then((r) => r.json()),
+    queryFn: ({ pageParam }) =>
+      fetch(`/api/institutions/${slug}/assets?limit=20&page=${pageParam}`).then((r) => r.json()),
+    initialPageParam: 0,
+    getNextPageParam: (
+      lastPage: { assets: IngestedAsset[]; hasMore: boolean },
+      _allPages,
+      lastPageParam: number,
+    ) => (lastPage.hasMore ? lastPageParam + 1 : undefined),
     enabled: !!slug,
     staleTime: 5 * 60 * 1000,
   });
@@ -660,7 +673,10 @@ export default function InstitutionDetail() {
     ? slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
     : "Unknown Institution";
 
-  const rawAssets = data?.assets ?? [];
+  const rawAssets = useMemo(
+    () => assetsData?.pages.flatMap((p) => (p as { assets: IngestedAsset[] }).assets) ?? [],
+    [assetsData],
+  );
   const isBlocked = inst?.accessRestricted ?? false;
 
   const { data: userAlerts = [] } = useQuery<UserAlert[]>({
@@ -723,9 +739,6 @@ export default function InstitutionDetail() {
       return 0;
     }).map(({ asset }) => asset);
   }, [scoredAssets, search, sortMode]);
-
-  // Reset pagination when search or sort changes
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, sortMode]);
 
   const activeCount = isLoading ? null : rawAssets.length;
 
@@ -916,7 +929,7 @@ export default function InstitutionDetail() {
             </div>
           ) : (
             <div className="space-y-2">
-              {sorted.slice(0, visibleCount).map((asset, i) => (
+              {sorted.map((asset, i) => (
                 <AssetRow
                   key={asset.id}
                   asset={asset}
@@ -925,14 +938,19 @@ export default function InstitutionDetail() {
                   onOpen={(a) => setDrawerFilter({ type: "asset", asset: a })}
                 />
               ))}
-              {sorted.length > visibleCount && (
+              {hasNextPage && (
                 <button
-                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                  className="w-full py-2.5 text-xs font-medium text-muted-foreground border border-dashed border-border rounded-lg hover:text-foreground hover:border-border/80 transition-colors"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="w-full py-2.5 text-xs font-medium text-muted-foreground border border-dashed border-border rounded-lg hover:text-foreground hover:border-border/80 transition-colors disabled:opacity-50"
                   data-testid="button-load-more-assets"
                 >
-                  Show {Math.min(PAGE_SIZE, sorted.length - visibleCount)} more
-                  <span className="text-muted-foreground/60 ml-1">({sorted.length - visibleCount} remaining)</span>
+                  {isFetchingNextPage ? "Loading…" : `Load 20 more`}
+                  {profile?.totalAssets && (
+                    <span className="text-muted-foreground/60 ml-1">
+                      ({rawAssets.length} of {profile.totalAssets.toLocaleString()} loaded)
+                    </span>
+                  )}
                 </button>
               )}
             </div>

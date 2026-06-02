@@ -205,6 +205,66 @@ export function registerInstitutionRoutes(app: Express): void {
     }
   });
 
+  // Lightweight metadata for a single institution — avoids fetching the full
+  // list just to resolve one slug on the detail page.
+  app.get("/api/institutions/:slug", async (req, res) => {
+    try {
+      const { slug } = req.params;
+
+      const [meta] = await db
+        .select()
+        .from(institutionMetadata)
+        .where(eq(institutionMetadata.slug, slug))
+        .limit(1);
+
+      const aliasNames = new Set<string>();
+      if (meta?.name) aliasNames.add(meta.name);
+      for (const s of ALL_SCRAPERS) {
+        if (slugifyInstitutionName(s.institution) === slug) aliasNames.add(s.institution);
+      }
+
+      const fallbackName =
+        meta?.name ??
+        Array.from(aliasNames)[0] ??
+        slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+      let specialties: string[] = meta?.specialties ?? [];
+      if (!specialties.length && aliasNames.size) {
+        const indicationRows = await db
+          .select({ indication: ingestedAssets.indication })
+          .from(ingestedAssets)
+          .where(and(
+            inArray(ingestedAssets.institution, Array.from(aliasNames)),
+            sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`,
+          ))
+          .groupBy(ingestedAssets.indication)
+          .orderBy(desc(sql`count(*)`))
+          .limit(10);
+        specialties = deriveSpecialties(
+          indicationRows.map((r) => r.indication).filter((s): s is string => !!s),
+        );
+      }
+
+      res.json({
+        slug,
+        name: fallbackName,
+        city: meta?.city ?? null,
+        ttoName: meta?.ttoName ?? null,
+        website: meta?.website ?? null,
+        specialties,
+        continent: meta?.continent ?? null,
+        noPublicPortal: meta?.noPublicPortal ?? false,
+        accessRestricted: meta?.accessRestricted ?? false,
+        count: 0,
+        activeListings: 0,
+        topBiology: [],
+      });
+    } catch (err: any) {
+      console.error("[institutions/meta]", err);
+      res.status(500).json({ error: "Failed to fetch institution metadata" });
+    }
+  });
+
   // Returns portfolio intelligence for a single institution: biology drivers,
   // stage mix, top indications, and standout assets (highest completeness).
   app.get("/api/institutions/:slug/profile", async (req, res) => {
