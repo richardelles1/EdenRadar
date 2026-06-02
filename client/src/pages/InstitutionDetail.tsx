@@ -8,6 +8,7 @@ import {
   ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw,
   ShieldOff, ChevronDown, ArrowUpDown, Dna, TrendingUp, X,
 } from "lucide-react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import type { IngestedAsset } from "@shared/schema";
 import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
 
@@ -30,14 +31,14 @@ const STAGE_COLORS: Record<string, string> = {
 
 const STAGE_ORDER = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 
-// Bar backgrounds: single-hue green progression, opacity encodes maturity
-const STAGE_BAR_OPACITIES: Record<string, string> = {
-  "discovery":   "hsl(142 71% 45% / 0.15)",
-  "preclinical": "hsl(142 71% 45% / 0.28)",
-  "phase 1":     "hsl(142 71% 45% / 0.44)",
-  "phase 2":     "hsl(142 71% 45% / 0.62)",
-  "phase 3":     "hsl(142 71% 45% / 0.80)",
-  "approved":    "hsl(142 71% 45%)",
+// Donut fill colors: solid emerald lightness ladder — light=early, dark=approved
+const STAGE_DONUT_FILL: Record<string, string> = {
+  "discovery":   "#6ee7b7",
+  "preclinical": "#34d399",
+  "phase 1":     "#10b981",
+  "phase 2":     "#059669",
+  "phase 3":     "#047857",
+  "approved":    "#065f46",
 };
 
 // Biology chips are categorical labels — hierarchy comes from the bar, not chip color
@@ -55,15 +56,6 @@ type DrawerFilter =
   | null;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-function parseCategories(raw: unknown): string[] {
-  if (Array.isArray(raw)) return raw.map(String);
-  if (typeof raw === "string") {
-    try { const p = JSON.parse(raw); return Array.isArray(p) ? p.map(String) : []; }
-    catch { return [raw]; }
-  }
-  return [];
-}
 
 function normalizeLabel(s: string): string {
   return s.toLowerCase().replace(/_/g, " ").trim();
@@ -247,37 +239,75 @@ function ResearchDnaPanel({
           )}
         </div>
 
-        {/* Stage Distribution */}
+        {/* Stage Distribution — donut */}
         <div className="space-y-2">
           <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Stage Mix</p>
           {loading ? (
-            <div className="space-y-1.5">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-5 w-full rounded" />)}
+            <div className="flex justify-center py-2">
+              <Skeleton className="h-32 w-32 rounded-full" />
             </div>
           ) : hasStage ? (
-            <div className="space-y-1.5">
-              {sortedStages.map((s) => {
-                const key = s.stage?.toLowerCase() ?? "";
-                const pct = Math.round((s.count / totalStageCnt) * 100);
-                const barBg = STAGE_BAR_OPACITIES[key] ?? "hsl(142 71% 45% / 0.30)";
-                const labelColor = STAGE_COLORS[key] ?? "bg-muted text-muted-foreground";
-                return (
-                  <div
-                    key={s.stage}
-                    className="flex items-center gap-2 rounded-md p-1 -mx-1 cursor-pointer hover:bg-accent/40 group transition-colors"
-                    onClick={() => onStageClick?.(s.stage ?? "")}
-                    data-testid={`stage-bar-${key}`}
+            <div className="flex flex-col items-center gap-3">
+              <ResponsiveContainer width="100%" height={130}>
+                <PieChart>
+                  <Pie
+                    data={sortedStages}
+                    dataKey="count"
+                    nameKey="stage"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={36}
+                    outerRadius={58}
+                    paddingAngle={2}
+                    strokeWidth={0}
+                    onClick={(entry) => onStageClick?.(entry.stage ?? "")}
+                    style={{ cursor: "pointer" }}
                   >
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 transition-all group-hover:ring-1 group-hover:ring-primary/30 ${labelColor}`}>
-                      {s.stage}
-                    </span>
-                    <div className="flex-1 h-1 rounded-full bg-muted overflow-hidden">
-                      <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: barBg }} />
-                    </div>
-                    <span className="text-[10px] text-muted-foreground tabular-nums shrink-0">{s.count}</span>
-                  </div>
-                );
-              })}
+                    {sortedStages.map((s) => {
+                      const key = s.stage?.toLowerCase() ?? "";
+                      return (
+                        <Cell
+                          key={s.stage}
+                          fill={STAGE_DONUT_FILL[key] ?? "#34d399"}
+                        />
+                      );
+                    })}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      const pct = Math.round((d.count / totalStageCnt) * 100);
+                      return (
+                        <div className="text-[11px] bg-popover border border-border rounded-md px-2.5 py-1.5 shadow-md">
+                          <span className="font-semibold text-foreground capitalize">{d.stage}</span>
+                          <span className="text-muted-foreground ml-2">{d.count} · {pct}%</span>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Legend */}
+              <div className="flex flex-wrap gap-x-3 gap-y-1 justify-center">
+                {sortedStages.map((s) => {
+                  const key = s.stage?.toLowerCase() ?? "";
+                  const fill = STAGE_DONUT_FILL[key] ?? "#34d399";
+                  const pct = Math.round((s.count / totalStageCnt) * 100);
+                  return (
+                    <button
+                      key={s.stage}
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => onStageClick?.(s.stage ?? "")}
+                      data-testid={`stage-bar-${key}`}
+                    >
+                      <span className="w-2 h-2 rounded-full shrink-0" style={{ background: fill }} />
+                      <span className="capitalize">{s.stage}</span>
+                      <span className="tabular-nums opacity-60">{pct}%</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground/60 italic">No stage data yet</p>
@@ -548,10 +578,7 @@ export default function InstitutionDetail() {
     if (!drawerFilter || !rawAssets.length) return [];
     if (drawerFilter.type === "biology") {
       const norm = normalizeLabel(drawerFilter.label);
-      return rawAssets.filter((a) => {
-        const cats = parseCategories((a as unknown as Record<string, unknown>).categories);
-        return cats.some((c) => normalizeLabel(c) === norm);
-      });
+      return rawAssets.filter((a) => normalizeLabel(a.biology ?? "") === norm);
     }
     if (drawerFilter.type === "stage") {
       const norm = drawerFilter.stage.toLowerCase();

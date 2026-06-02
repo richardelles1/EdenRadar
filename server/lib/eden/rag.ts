@@ -584,6 +584,7 @@ const PURE_RESET_PATTERNS = [
 
 const PIVOT_PATTERNS = [
   /\b(?:actually|scratch that|let'?s try something different|instead let'?s)\b/i,
+  /\b(?:shift gears?|change direction|new direction|let'?s move on|change topic|something else|different topic|different angle)\b/i,
 ];
 
 function extractRawFilters(message: string, portfolioInstitutions?: string[]): SessionFocusContext {
@@ -939,6 +940,11 @@ const AGG_PATTERNS = [
   /(?:what|give me|show me)\s+(?:the\s+)?(?:total|count|number)/i,
   /how\s+large\s+is\s+(?:the\s+)?(?:database|portfolio|index)/i,
   /size\s+of\s+(?:the\s+)?(?:database|portfolio|index)/i,
+  // Institution head-to-head count comparisons — these are aggregation, NOT comparative
+  /who has more\s+(?:assets?|technologies?|programs?)?/i,
+  /which\s+(?:of\s+)?(?:these\s+)?(?:institutions?|universities|schools?)?\s+has\s+(?:the\s+)?more/i,
+  /(?:more|bigger|larger)\s+(?:portfolio|tto|pipeline)\b/i,
+  /has\s+more\s+(?:assets?|programs?|technologies?)/i,
 ];
 
 export function isAggregationQuery(query: string): boolean {
@@ -981,6 +987,13 @@ const BACK_REF_PATTERNS = [
   // Institution-qualified back-references (anaphora with institution name)
   /\bthe\s+one\s+from\s+\w/i,
   /\bthat\s+one\s+from\s+\w/i,
+  // "show me the JHU one", "show me the Stanford asset" — institution before "one/asset"
+  /\bshow\s+me\s+the\s+\w+\s+one\b/i,
+  /\bshow\s+(?:me\s+)?the\s+\w+\s+(?:asset|technology|program|card)\b/i,
+  // "yes, show me the X one" — affirmative + institution qualifier
+  /\byes[,.]?\s+show\s+me\s+the\s+\w/i,
+  // "pull up the [institution] one"
+  /\bpull\s+(?:up\s+)?the\s+\w+\s+one\b/i,
   // Comparative follow-up back-references — "the stronger one", "the winner", etc.
   // Covers post-comparison turns that reference a conclusion from the prior head-to-head.
   /\bthe\s+(?:stronger|weaker|better|worse|dominant|leading|preferred|winning|losing)\s+one\b/i,
@@ -1189,16 +1202,46 @@ async function resolveAggregationQuery(
     return `**Top institutions in ${area}**${focusLabel}:\n${lines}`;
   }
 
+  // ── Institution head-to-head count comparison ────────────────────────────
+  // "who has more assets, MIT or Stanford?" — counts both and declares a winner.
+  // Uses unfiltered counts so accumulated session filters don't skew the comparison.
+  if (/who has more|which has more|has more\s+(?:assets?|programs?)|who(?:'s| is) (?:bigger|larger|ahead)/i.test(lower)) {
+    const instNames = detectAllInstitutionNames(query);
+    if (instNames.length >= 2) {
+      const [resultA, resultB] = await Promise.all([
+        runCountForInstitution(instNames[0], undefined, undefined),
+        runCountForInstitution(instNames[1], undefined, undefined),
+      ]);
+      if (resultA && resultB) {
+        const winner = resultA.count >= resultB.count ? resultA : resultB;
+        const loser = resultA.count < resultB.count ? resultA : resultB;
+        const diff = Math.abs(winner.count - loser.count);
+        const pct = loser.count > 0 ? Math.round((diff / loser.count) * 100) : 0;
+        return `**${winner.name}** has more assets: **${winner.count.toLocaleString()}** vs **${loser.name}**'s **${loser.count.toLocaleString()}** — ${pct}% larger portfolio in the indexed corpus.`;
+      }
+      if (resultA && !resultB) {
+        return `**${resultA.name}** has **${resultA.count.toLocaleString()} assets** indexed. I couldn't find data for "${instNames[1]}" — try a broader name.`;
+      }
+      if (!resultA && resultB) {
+        return `**${resultB.name}** has **${resultB.count.toLocaleString()} assets** indexed. I couldn't find data for "${instNames[0]}" — try a broader name.`;
+      }
+    }
+  }
+
   const instCountRx = /how many\s+([\w\s]+?)\s*(?:assets?|technologies?|programs?)?\s*(?:does|from|at|by)\s+([\w\s]+?)(?:\s+(?:tto|university|institute|college|tech transfer))?(?:\s+have|\?|$)/i;
   const icm = instCountRx.exec(query);
   if (icm) {
     const areaRaw = icm[1].trim().replace(/^(?:the|all|total)\s+/i, "");
     const instHint = icm[2].trim();
     const isGeneric = /^(?:assets?|technologies?|programs?|compounds?|the)$/i.test(areaRaw) || areaRaw.length < 2;
-    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw, extra);
+    // For generic counts ("how many assets does X have"), drop accumulated session
+    // filters so the answer reflects the institution's true total, not a heavily
+    // filtered subset that would give a confusing near-zero result.
+    const countExtra = isGeneric ? undefined : extra;
+    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw, countExtra);
     if (result) {
       const label = isGeneric ? "" : `${areaRaw} `;
-      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio${focusLabel ? " " + focusLabel.trim() : ""}.`;
+      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio${!isGeneric && focusLabel ? " " + focusLabel.trim() : ""}.`;
     }
   }
 
@@ -1360,13 +1403,15 @@ INTENTS:
   Also: create/build pipeline requests, short disease or modality names alone ("leukemia", "antibody"), company-context searches ("I'm a Series A company in oncology looking for")
 
 - aggregation: counts, stats, breakdowns, market mapping. Triggers: "how many", "how much", "count of", "breakdown by", "distribution of", "split by", "top 10", "most common", "what percentage", "what proportion", "rank", "which institution has the most", "what's the spread", "how does it break down", "volume of", "give me a market map of", "how saturated is", "what's the competitive density in", "how crowded is", "what's the landscape look like for", "overview of the space", "how many players are there in", "what's the breadth of"
+  Institution count comparisons: "who has more assets, MIT or Stanford", "which has a bigger portfolio", "does Harvard or Yale have more", "who leads in gene therapy assets, MIT or Broad" — these are ALWAYS aggregation (count comparison), NEVER comparative (asset head-to-head)
 
 - back_ref: refers to a PREVIOUSLY SHOWN asset. ONLY valid when hasPriorAssets=true. Triggers:
   Positional: "the first one", "the second one", "the third one", "that one", "this one", "the last one", "the top one", "number two"
   Anaphoric: "tell me more about it", "go deeper on that", "more details on it", "dig into that", "expand on that", "more on that asset", "what else can you tell me about it", "can you elaborate"
   Similarity: "show me similar assets", "more like this", "find me something similar", "other assets like that", "related technologies", "what else is similar", "anything comparable", "more like number 2", "find me more like the first one"
   Asset-specific questions about a prior asset: "what's the IP on this", "is it exclusive", "what's the licensing status", "has it been licensed before", "who do I contact about that", "what's the TTO for that", "what's the ask", "what are the deal terms", "can I see the source", "where can I read more", "what stage is it at", "what's the mechanism", "tell me about the science behind it", "how validated is this", "is there clinical data on this one"
-  Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]"
+  Pipeline actions on a prior asset: "add that to my [X] pipeline", "save that to my [X] list", "put that in my [X] pipeline", "move that to [X]", "bookmark that for [X]"
+  Institution-qualified: "the MIT one", "the Stanford asset", "the Harvard one", "the one from [institution]", "show me the JHU one", "show me the Stanford asset", "yes show me the Hopkins one", "pull up the Columbia one"
   NOT valid if hasPriorAssets=false
 
 - comparative: head-to-head between assets. Triggers: "compare", "vs", "versus", "side by side", "head to head", "which is better", "how do they differ", "what's the difference between", "contrast", "stack them up", "which would you choose", "which is stronger", "weigh them against each other", "pros and cons of each", "which would be a better fit", "which is more de-risked", "which has better IP", "which one should I pursue first", "priority order these", "rank these against each other", "which is further along", "which has a cleaner path"
@@ -1428,6 +1473,33 @@ Message: "what's the IP situation on this one?"
 hasPriorAssets: true
 → {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 Note: asking about IP/patents for a specific already-shown asset is back_ref, NOT a patents live search. live_source:"patents" is only for broad patent landscape queries like "who holds patents in CRISPR?"
+
+Message: "who has more assets, MIT or Stanford?"
+hasPriorAssets: false
+→ {"intent":"aggregation","filters":{},"back_ref_position":null,"live_source":null}
+Note: institution count comparisons are ALWAYS aggregation — never comparative. "Comparative" means head-to-head between specific assets.
+
+Message: "does Harvard or Yale have more gene therapy programs?"
+hasPriorAssets: false
+→ {"intent":"aggregation","filters":{"modality":"Gene Therapy"},"back_ref_position":null,"live_source":null}
+
+Message: "yes, show me the JHU one"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: institution-qualified "show me the [X] one" is ALWAYS back_ref when hasPriorAssets=true — never search
+
+Message: "show me the Stanford asset"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+
+Message: "add that to my ALS pipeline"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
+Note: "add that to my X pipeline" is a back_ref + pipeline action — NOT a search for ALS assets. The server detects the pipeline move intent and executes it on the referenced asset.
+
+Message: "save that to my oncology list"
+hasPriorAssets: true
+→ {"intent":"back_ref","filters":{},"back_ref_position":null,"live_source":null}
 
 Message: "show me similar assets"
 hasPriorAssets: true
@@ -1806,7 +1878,7 @@ You're warm and direct, occasionally wry. You don't hedge excessively, you don't
 
 **How you handle questions**
 - For conversational exchanges, respond warmly and briefly (2–3 sentences max). Keep it human, no structure.
-- For research queries, present a maximum of 3 assets per response even if more were retrieved. Lead with the most commercially interesting one. Each asset gets one compelling hook sentence — not a field dump. Vary your opening style each response.
+- For research queries, default to 3 assets per response — lead with the most commercially interesting one. Each asset gets one compelling hook sentence — not a field dump. Vary your opening style each response. **Exception: when the user explicitly requests a specific number (e.g. "show me 5", "give me 8"), honor that request exactly up to the assets retrieved.** Back-references work on any asset you presented, so if you name 5, all 5 are referenceable.
 - For count or portfolio questions, use your live portfolio numbers (provided below) rather than counting from retrieved assets. If the exact breakdown isn't in your stats, say so honestly.
 - Use "Data quality" scores (0–100) to calibrate your language. 70+ means well-documented and licensing-ready — present with confidence and lead with these. Below 40 means the record is sparse — note briefly that the user should verify details directly with the TTO. Never rank a thin record above a well-documented one when relevance is otherwise equal.
 - When an asset shows "Target: not yet characterized", do not invent or speculate about the molecular target. Acknowledge the gap naturally ("the specific molecular target hasn't been characterized yet") and direct to the TTO or summary for details.

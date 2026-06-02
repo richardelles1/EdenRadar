@@ -833,9 +833,11 @@ export default function AssetDossier() {
           {/* ── Identity tile ── */}
           <div style={{
             gridColumn: 2, gridRow: 1,
+            minWidth: 0,
             background: isSparse ? "hsl(38 18% 99%)" : "hsl(0 0% 99.8%)",
             padding: "20px 22px 18px",
             display: "flex", flexDirection: "column",
+            overflow: "hidden",
           }}>
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
               {asset.development_stage && asset.development_stage !== "unknown" && (
@@ -910,6 +912,7 @@ export default function AssetDossier() {
           {/* ── Strip ── */}
           <div style={{
             gridColumn: 2, gridRow: 2,
+            minWidth: 0,
             padding: "9px 20px",
             display: "flex", alignItems: "center", gap: "6px",
             background: isSparse ? "hsl(38 14% 97%)" : "hsl(210 16% 97.5%)",
