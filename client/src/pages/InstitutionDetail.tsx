@@ -46,6 +46,68 @@ const STAGE_DONUT_FILL: Record<string, string> = {
 // Biology chips are categorical labels — hierarchy comes from the bar, not chip color
 const BIOLOGY_CHIP = "bg-muted/80 text-foreground/70 border-border/60";
 
+// ── Biology treemap ───────────────────────────────────────────────────────────
+
+interface TreeRect { label: string; count: number; x: number; y: number; w: number; h: number; }
+
+// Dark → light emerald: rank 0 (most prominent) is darkest
+const BIO_FILLS = [
+  { bg: "#064e3b", text: "#ecfdf5" },
+  { bg: "#065f46", text: "#ecfdf5" },
+  { bg: "#047857", text: "#ecfdf5" },
+  { bg: "#059669", text: "#ecfdf5" },
+  { bg: "#10b981", text: "#ecfdf5" },
+  { bg: "#34d399", text: "#064e3b" },
+  { bg: "#6ee7b7", text: "#064e3b" },
+  { bg: "#a7f3d0", text: "#065f46" },
+];
+
+function buildTreemap(data: Array<{ label: string; count: number }>): TreeRect[] {
+  const rects: TreeRect[] = [];
+  const total = data.reduce((s, d) => s + d.count, 0);
+  if (!total) return rects;
+
+  function worst(row: typeof data, shorter: number, rem: number, area: number): number {
+    const rowSum = row.reduce((s, d) => s + d.count, 0);
+    if (!rowSum || !shorter) return Infinity;
+    const rowLen = area * rowSum / (rem * shorter);
+    if (!rowLen) return Infinity;
+    return Math.max(...row.map((d) => {
+      const cellLen = (area * d.count) / (rem * rowLen);
+      return Math.max(rowLen / cellLen, cellLen / rowLen);
+    }));
+  }
+
+  function lay(items: typeof data, x: number, y: number, w: number, h: number, rem: number) {
+    if (!items.length) return;
+    if (items.length === 1) { rects.push({ ...items[0], x, y, w, h }); return; }
+    const shorter = Math.min(w, h);
+    const area = w * h;
+    let row: typeof data = [];
+    let rest = [...items];
+    while (rest.length) {
+      const next = [...row, rest[0]];
+      if (row.length > 0 && worst(next, shorter, rem, area) > worst(row, shorter, rem, area)) break;
+      row.push(rest.shift()!);
+    }
+    const rowSum = row.reduce((s, d) => s + d.count, 0);
+    if (w >= h) {
+      const rowW = w * (rowSum / rem);
+      let py = y;
+      for (const item of row) { const ch = h * (item.count / rowSum); rects.push({ ...item, x, y: py, w: rowW, h: ch }); py += ch; }
+      lay(rest, x + rowW, y, w - rowW, h, rem - rowSum);
+    } else {
+      const rowH = h * (rowSum / rem);
+      let px = x;
+      for (const item of row) { const cw = w * (item.count / rowSum); rects.push({ ...item, x: px, y, w: cw, h: rowH }); px += cw; }
+      lay(rest, x, y + rowH, w, h - rowH, rem - rowSum);
+    }
+  }
+
+  lay(data, 0, 0, 1, 1, total);
+  return rects;
+}
+
 type SortMode = "newest" | "commercial" | "az" | "za";
 
 // ── Drawer types ──────────────────────────────────────────────────────────────
@@ -170,7 +232,6 @@ function ResearchDnaPanel({
   const hasStandout   = (profile?.standoutAssets?.length ?? 0) > 0;
   const hasAny        = hasBiology || hasStage || hasIndications || hasStandout;
 
-  const maxBiologyCnt = profile?.biologyBreakdown?.[0]?.count ?? 1;
   const totalStageCnt = profile?.stageBreakdown?.reduce((s, r) => s + r.count, 0) ?? 1;
 
   const sortedStages = profile?.stageBreakdown
@@ -212,30 +273,46 @@ function ResearchDnaPanel({
 
       <div className="bg-card p-5 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {/* Biology Drivers — proportional chip cloud */}
+          {/* Biology Drivers — squarified treemap */}
           <div className="space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Biology Drivers</p>
             {loading ? (
-              <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-7 rounded-full" style={{ width: `${60 + i * 18}px` }} />)}
-              </div>
+              <Skeleton className="w-full rounded-lg" style={{ aspectRatio: "1 / 1" }} />
             ) : hasBiology ? (
-              <div className="flex flex-wrap gap-2 items-start">
-                {profile!.biologyBreakdown.map((b, i) => {
-                  const scale = b.count / maxBiologyCnt;
-                  const fs = Math.round(10 + scale * 5);
-                  const px = Math.round(8 + scale * 6);
-                  const py = Math.round(3 + scale * 4);
+              <div className="relative w-full rounded-lg overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+                {buildTreemap(profile!.biologyBreakdown).map((rect, i) => {
+                  const { bg, text } = BIO_FILLS[i] ?? BIO_FILLS[BIO_FILLS.length - 1];
                   return (
                     <button
-                      key={b.label}
-                      onClick={() => onBiologyClick?.(b.label)}
-                      className="rounded-full border border-primary/25 bg-primary/5 hover:bg-primary/15 hover:border-primary/50 text-foreground/80 hover:text-foreground transition-all"
-                      style={{ fontSize: `${fs}px`, padding: `${py}px ${px}px`, lineHeight: 1.35 }}
+                      key={rect.label}
+                      className="absolute transition-opacity hover:opacity-75 rounded-[3px]"
+                      style={{
+                        left:       `calc(${rect.x * 100}% + 2px)`,
+                        top:        `calc(${rect.y * 100}% + 2px)`,
+                        width:      `calc(${rect.w * 100}% - 4px)`,
+                        height:     `calc(${rect.h * 100}% - 4px)`,
+                        background: bg,
+                      }}
+                      onClick={() => onBiologyClick?.(rect.label)}
                       data-testid={`biology-bar-${i}`}
+                      title={`${rect.label}: ${rect.count}`}
                     >
-                      {b.label}
-                      <span className="opacity-35 ml-1.5" style={{ fontSize: "9px" }}>{b.count}</span>
+                      {rect.h > 0.1 && (
+                        <span
+                          className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] font-semibold leading-tight line-clamp-2 text-left"
+                          style={{ color: text }}
+                        >
+                          {rect.label}
+                        </span>
+                      )}
+                      {rect.h > 0.18 && (
+                        <span
+                          className="absolute top-1.5 right-1.5 text-[9px] tabular-nums"
+                          style={{ color: text, opacity: 0.65 }}
+                        >
+                          {rect.count}
+                        </span>
+                      )}
                     </button>
                   );
                 })}
@@ -253,64 +330,43 @@ function ResearchDnaPanel({
                 <Skeleton className="h-44 w-44 rounded-full" />
               </div>
             ) : hasStage ? (
-              <div className="flex flex-col items-center gap-3">
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={sortedStages}
-                      dataKey="count"
-                      nameKey="stage"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={88}
-                      paddingAngle={2}
-                      strokeWidth={0}
-                      onClick={(entry) => onStageClick?.(entry.stage ?? "")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {sortedStages.map((s) => {
-                        const key = s.stage?.toLowerCase() ?? "";
-                        return (
-                          <Cell key={s.stage ?? key} fill={STAGE_DONUT_FILL[key] ?? "#34d399"} />
-                        );
-                      })}
-                    </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const d = payload[0].payload;
-                        const pct = Math.round((d.count / totalStageCnt) * 100);
-                        return (
-                          <div className="text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md">
-                            <span className="font-semibold text-foreground capitalize">{d.stage}</span>
-                            <span className="text-muted-foreground ml-2">{d.count} · {pct}%</span>
-                          </div>
-                        );
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap gap-x-3 gap-y-1.5 justify-center">
-                  {sortedStages.map((s) => {
-                    const key = s.stage?.toLowerCase() ?? "";
-                    const fill = STAGE_DONUT_FILL[key] ?? "#34d399";
-                    const pct = Math.round((s.count / totalStageCnt) * 100);
-                    return (
-                      <button
-                        key={s.stage}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={() => onStageClick?.(s.stage ?? "")}
-                        data-testid={`stage-bar-${key}`}
-                      >
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: fill }} />
-                        <span className="capitalize">{s.stage}</span>
-                        <span className="tabular-nums opacity-50">{pct}%</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie
+                    data={sortedStages}
+                    dataKey="count"
+                    nameKey="stage"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={70}
+                    outerRadius={115}
+                    paddingAngle={2}
+                    strokeWidth={0}
+                    onClick={(entry) => onStageClick?.(entry.stage ?? "")}
+                    style={{ cursor: "pointer" }}
+                  >
+                    {sortedStages.map((s) => {
+                      const key = s.stage?.toLowerCase() ?? "";
+                      return (
+                        <Cell key={s.stage ?? key} fill={STAGE_DONUT_FILL[key] ?? "#34d399"} />
+                      );
+                    })}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      const pct = Math.round((d.count / totalStageCnt) * 100);
+                      return (
+                        <div className="text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md">
+                          <span className="font-semibold text-foreground capitalize">{d.stage}</span>
+                          <span className="text-muted-foreground ml-2">{d.count} · {pct}%</span>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
             ) : (
               <p className="text-sm text-muted-foreground/60 italic">No stage data yet</p>
             )}
