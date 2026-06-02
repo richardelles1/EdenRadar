@@ -45,7 +45,7 @@ export type UserContext = {
 
 export type GeoKey = "us" | "eu" | "uk" | "asia";
 
-export type RecencyWindow = "last30" | "last90" | "last180" | "lastyear";
+export type RecencyWindow = "last7" | "last30" | "last90" | "last180" | "lastyear";
 
 export type QueryFilters = {
   modality?: string;
@@ -55,7 +55,7 @@ export type QueryFilters = {
   institution?: string;
   biology?: string;
   // Temporal filters — per-query only, never accumulated into SessionFocusContext.
-  // "last30/90/180/lastyear" maps to first_seen_at >= NOW() - INTERVAL.
+  // "last7/30/90/180/lastyear" maps to first_seen_at >= NOW() - INTERVAL.
   // trending=true adds a completeness_score threshold and signals EDEN to add market context.
   recency?: RecencyWindow;
   trending?: boolean;
@@ -355,7 +355,18 @@ const GEO_DETECT: Record<string, GeoKey> = {
 // precise set when the user names a US state, coast, or city.
 const US_SUBREGION_PATTERNS: Array<{ re: RegExp; rx: string }> = [
   {
-    re: /\bwest\s*coast\b|\bcalifornia\b|\bbay\s+area\b|\bsilicon\s+valley\b|\bpacific\s+northwest\b|\bseattle\b|\bportland\b/i,
+    // California-specific: explicitly excludes PNW institutions (UW, Fred Hutch, Oregon Health)
+    re: /\bcalifornia\b|\bbay\s+area\b|\bsilicon\s+valley\b|\bla\s+jolla\b|\blos\s+angeles\b|\bsan\s+francisco\b|\bsan\s+diego\b/i,
+    rx: "UCLA|UCSF|Stanford|UC Berkeley|UC San Diego|UC Davis|UC Irvine|UC Santa Barbara|UC Santa Cruz|Caltech|Salk|Scripps|USC|Buck Institute|Gladstone|Lawrence Berkeley|UC Riverside|UC Merced|Cedars-Sinai|City of Hope",
+  },
+  {
+    // Pacific Northwest: Seattle, Portland, Oregon — distinct from California
+    re: /\bpacific\s+northwest\b|\bseattle\b|\bportland\b|\boregon\b|\bwashington\s+state\b/i,
+    rx: "University of Washington|Fred Hutch|Oregon Health|Oregon State|Washington State",
+  },
+  {
+    // Broad West Coast: California + PNW combined
+    re: /\bwest\s*coast\b/i,
     rx: "UCLA|UCSF|Stanford|UC Berkeley|UC San Diego|UC Davis|UC Irvine|UC Santa Barbara|UC Santa Cruz|Caltech|Salk|Scripps|USC|Oregon Health|University of Washington|Fred Hutch|Buck Institute|Gladstone|Lawrence Berkeley|UC Riverside|UC Merced",
   },
   {
@@ -1006,6 +1017,7 @@ type AggResult = Record<string, unknown>[];
 type ExtraSQL = ReturnType<typeof sql>;
 
 const RECENCY_INTERVALS: Record<RecencyWindow, string> = {
+  last7: "7 days",
   last30: "30 days",
   last90: "90 days",
   last180: "180 days",
@@ -1376,7 +1388,7 @@ FILTER EXTRACTION (null if not mentioned):
 - modality shorthands: "RNA"→RNA Therapeutics, "biologics"→Protein/Biologics, "bi-specific"/"bispecific"→Bispecific Antibody, "CART"/"CAR T"→CAR-T, "base editing"/"prime editing"→Gene Editing, "naked antibody"→Antibody, "mAb"→Antibody, "ASO"→Antisense, "LNP"→mRNA (likely delivery), "viral vector"→Gene Therapy
 - geography: us | eu | uk | asia — set when a region, country, US state, or US coast is mentioned. US states and coasts (California, West Coast, East Coast, New England, Texas, Boston, New York, Midwest, Pacific Northwest, Bay Area, etc.) → "us". Do NOT extract a state or coast as institution — use geography:"us" instead.
 - biology: mechanism if mentioned (e.g. "immune evasion", "kinase signaling", "protein aggregation", "checkpoint inhibition", "gene silencing")
-- recency: "last30" (new, recent, last month), "last90" (last quarter, last 3 months), "last180" (last 6 months), "lastyear" (this year, last year)
+- recency: "last7" (today, this week, 7 days, past few days, recent activity), "last30" (new, recent, last month), "last90" (last quarter, last 3 months), "last180" (last 6 months), "lastyear" (this year, last year)
 - trending: true when user asks about "hot", "rising", "trending", "getting attention", "exciting right now", "what's interesting lately", "what's moving", "what's gaining momentum"
 
 back_ref_position: 0=first, 1=second, 2=third, null=not a positional ref
@@ -1419,6 +1431,14 @@ Note: asking about IP/patents for a specific already-shown asset is back_ref, NO
 Message: "tell me more about the second one"
 hasPriorAssets: false
 → {"intent":"search","filters":{},"back_ref_position":null,"live_source":null}
+
+Message: "show me activity in the past 7 days"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last7","trending":false},"back_ref_position":null,"live_source":null}
+
+Message: "what's new this week"
+hasPriorAssets: false
+→ {"intent":"search","filters":{"modality":null,"stage":null,"indication":null,"institution":null,"geography":null,"biology":null,"recency":"last7","trending":false},"back_ref_position":null,"live_source":null}
 
 Message: "what was new?"
 hasPriorAssets: false
@@ -1509,7 +1529,7 @@ export async function classifyIntent(
     const f = (parsed.filters ?? {}) as Record<string, unknown>;
     const isTrending = !!(f.trending);
     const rawRecency = (f.recency as string) || null;
-    const validRecencies: RecencyWindow[] = ["last30", "last90", "last180", "lastyear"];
+    const validRecencies: RecencyWindow[] = ["last7", "last30", "last90", "last180", "lastyear"];
     const recency = validRecencies.includes(rawRecency as RecencyWindow)
       ? (rawRecency as RecencyWindow)
       : isTrending && !rawRecency ? "last90" : undefined;

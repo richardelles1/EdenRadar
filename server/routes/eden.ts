@@ -557,6 +557,7 @@ export function registerEdenRoutes(app: Express): void {
 
       // Map recency window to a concrete Date for storage-layer filtering.
       const RECENCY_MS: Record<string, number> = {
+        last7: 7 * 24 * 60 * 60 * 1000,
         last30: 30 * 24 * 60 * 60 * 1000,
         last90: 90 * 24 * 60 * 60 * 1000,
         last180: 180 * 24 * 60 * 60 * 1000,
@@ -1237,7 +1238,7 @@ export function registerEdenRoutes(app: Express): void {
           ...allSemantic.filter((a) => a.similarity > broadThreshold && !institutionIds.has(a.id)),
         ].slice(0, 8);
       }
-      if (merged.length === 0) {
+      if (merged.length === 0 && !abortController.signal.aborted) {
         const kwFallback = await storage.keywordSearchIngestedAssets(message.trim(), 10, {
           modality: filters.modality,
           stage: filters.stage,
@@ -1245,6 +1246,22 @@ export function registerEdenRoutes(app: Express): void {
           institution: filters.institution ?? (institutionName ?? undefined),
         }).catch(() => [] as import("../storage").RetrievedAsset[]);
         merged = kwFallback.map((a) => ({ ...a, similarity: 0.5 }));
+      }
+
+      // ── Compound-indication filter-drop retry ─────────────────────────────────
+      // When indication is a multi-word phrase (e.g. "pediatric oncology"), the SQL
+      // ILIKE filter over-restricts because asset indications use varied phrasings.
+      // Retry with the cached embedding but no indication SQL filter — the semantic
+      // search already captures the intent without a second API call.
+      if (merged.length === 0 && cachedEmbedding && filters.indication?.includes(" ") && !abortController.signal.aborted) {
+        try {
+          const hits = await storage.filteredSemanticSearch(
+            cachedEmbedding, geoRx, filters.modality, filters.stage, undefined, filters.institution,
+            20, filters.biology, sinceDate, filters.trending ? 0.65 : undefined, true
+          );
+          const passing = hits.filter((a) => a.similarity > 0.38 && !institutionIds.has(a.id)).slice(0, 12);
+          if (passing.length > 0) merged = [...institutionAssets, ...passing].slice(0, 15);
+        } catch { /* fall through to re-embed broadening */ }
       }
 
       // ── Last-resort query broadening ──────────────────────────────────────────
@@ -1266,6 +1283,7 @@ export function registerEdenRoutes(app: Express): void {
 
         for (const term of [...new Set(coreTerms)]) {
           if (!term || term.length < 3) continue;
+          if (abortController.signal.aborted) break;
           try {
             const broaderEmbedding = await embedQuery(term);
             const hits = await storage.filteredSemanticSearch(
