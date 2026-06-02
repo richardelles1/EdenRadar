@@ -193,7 +193,7 @@ function ExternalResultsPanel({
       </div>
       <div className={compact ? "flex flex-col gap-1.5" : "grid grid-cols-1 sm:grid-cols-2 gap-2"}>
         {results.map((r, i) => (
-          <div key={r.id} style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${i * 60}ms` }}>
+          <div key={r.id} style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${i * 60}ms` }}>
             <ExternalResultCard result={r} bookmarkedIds={bookmarkedIds} onBookmark={onBookmark} compact={compact} />
           </div>
         ))}
@@ -553,8 +553,8 @@ export function EdenChatThread({
             className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
             style={{
               animation: msg.role === "user"
-                ? "em-slide-user 320ms cubic-bezier(0.16, 1, 0.3, 1) both"
-                : "em-slide-assistant 320ms cubic-bezier(0.16, 1, 0.3, 1) both",
+                ? "em-slide-user 520ms cubic-bezier(0, 0, 0.2, 1) both"
+                : "em-slide-assistant 540ms cubic-bezier(0, 0, 0.2, 1) both",
             }}
             data-testid={`chat-msg-${i}`}
           >
@@ -618,7 +618,7 @@ export function EdenChatThread({
                       onClick={() => onSend(msg.newArrivalsHint!.query)}
                       disabled={streaming}
                       className={`${compact ? "text-[10px] px-2 py-0.5" : "text-[11px] px-2.5 py-1"} rounded-full border border-amber-500/40 bg-amber-500/8 text-amber-700 dark:text-amber-400 font-medium hover:bg-amber-500/15 transition-all disabled:opacity-40`}
-                      style={{ animation: `em-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both` }}
+                      style={{ animation: `em-pill-in 380ms cubic-bezier(0, 0, 0.2, 1) both` }}
                       data-testid={`pill-new-arrivals-${i}`}
                     >
                       ✦ {msg.newArrivalsHint.count} new {msg.newArrivalsHint.label}
@@ -630,7 +630,7 @@ export function EdenChatThread({
                       onClick={() => onSend(pill)}
                       disabled={streaming}
                       className={`${compact ? "text-[10px] px-2 py-0.5" : "text-[11px] px-2.5 py-1"} rounded-full border border-emerald-500/25 bg-emerald-500/5 text-muted-foreground hover:text-foreground hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all disabled:opacity-40`}
-                      style={{ animation: `em-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${pi * 60}ms` }}
+                      style={{ animation: `em-pill-in 380ms cubic-bezier(0, 0, 0.2, 1) both`, animationDelay: `${pi * 60}ms` }}
                       data-testid={`pill-followup-${i}-${pi}`}
                     >
                       {pill}
@@ -711,7 +711,7 @@ export function EdenChatThread({
                         {sortAssetsByMention(msg.assets, msg.content).map((a, ci) => (
                           <div
                             key={a.id}
-                            style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 50}ms` }}
+                            style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${ci * 50}ms` }}
                           >
                             <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} onAssetSaved={onAssetSaved} compact={compact} />
                           </div>

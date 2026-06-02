@@ -400,16 +400,19 @@ export default function IndustryEden() {
     <div className="h-full bg-background flex flex-col" data-testid="industry-eden-page">
       <style>{`
         @keyframes em-slide-user {
-          from { opacity: 0; transform: translateX(20px) translateY(4px); }
-          to   { opacity: 1; transform: translateX(0) translateY(0); }
+          0%   { opacity: 0; transform: translateY(12px); }
+          55%  { transform: translateY(0); }
+          100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes em-slide-assistant {
-          from { opacity: 0; transform: translateX(-16px) translateY(4px); }
-          to   { opacity: 1; transform: translateX(0) translateY(0); }
+          0%   { opacity: 0; transform: translateY(10px); }
+          55%  { transform: translateY(0); }
+          100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes em-fade-in {
-          from { opacity: 0; transform: translateY(6px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
+          0%   { opacity: 0; transform: translateY(7px) scale(0.985); }
+          50%  { transform: translateY(0) scale(1); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         @keyframes ie-fade-up {
           from { opacity: 0; transform: translateY(14px); }
@@ -421,8 +424,8 @@ export default function IndustryEden() {
           66%      { transform: translateY(-5px) translateX(-3px); }
         }
         @keyframes em-pill-in {
-          from { opacity: 0; transform: translateY(6px) scale(0.95); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
+          0%   { opacity: 0; transform: translateY(5px) scale(0.97); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
       `}</style>
 
