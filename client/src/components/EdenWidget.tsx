@@ -161,20 +161,23 @@ export function EdenWidget() {
           to   { opacity: 1; transform: scale(1) translateY(0); transform-origin: bottom right; }
         }
         @keyframes em-slide-user {
-          from { opacity: 0; transform: translateX(16px) translateY(4px); }
-          to   { opacity: 1; transform: translateX(0) translateY(0); }
+          0%   { opacity: 0; transform: translateY(12px); }
+          55%  { transform: translateY(0); }
+          100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes em-slide-assistant {
-          from { opacity: 0; transform: translateX(-12px) translateY(4px); }
-          to   { opacity: 1; transform: translateX(0) translateY(0); }
+          0%   { opacity: 0; transform: translateY(10px); }
+          55%  { transform: translateY(0); }
+          100% { opacity: 1; transform: translateY(0); }
         }
         @keyframes em-fade-in {
-          from { opacity: 0; transform: translateY(6px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
+          0%   { opacity: 0; transform: translateY(7px) scale(0.985); }
+          50%  { transform: translateY(0) scale(1); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         @keyframes em-pill-in {
-          from { opacity: 0; transform: translateY(6px) scale(0.95); }
-          to   { opacity: 1; transform: translateY(0) scale(1); }
+          0%   { opacity: 0; transform: translateY(5px) scale(0.97); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
         }
         @keyframes eden-bubble-pulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
@@ -295,7 +298,7 @@ export function EdenWidget() {
                         onClick={() => handleSend(q)}
                         disabled={streaming}
                         className="text-[11px] px-3 py-2 rounded-lg border border-border bg-muted/40 text-muted-foreground hover:text-foreground hover:border-emerald-500/30 hover:bg-emerald-500/5 transition-all text-left disabled:opacity-40"
-                        style={{ animation: `em-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${i * 60}ms` }}
+                        style={{ animation: `em-pill-in 380ms cubic-bezier(0, 0, 0.2, 1) both`, animationDelay: `${i * 60}ms` }}
                         data-testid={`widget-prompt-${i}`}
                       >
                         {q}

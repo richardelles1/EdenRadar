@@ -235,16 +235,19 @@ function EdenTab({ pw }: { pw: string }) {
         <>
           <style>{`
             @keyframes em-slide-user {
-              from { opacity: 0; transform: translateX(20px) translateY(4px); }
-              to   { opacity: 1; transform: translateX(0) translateY(0); }
+              0%   { opacity: 0; transform: translateY(12px); }
+              55%  { transform: translateY(0); }
+              100% { opacity: 1; transform: translateY(0); }
             }
             @keyframes em-slide-assistant {
-              from { opacity: 0; transform: translateX(-20px) translateY(4px); }
-              to   { opacity: 1; transform: translateX(0) translateY(0); }
+              0%   { opacity: 0; transform: translateY(10px); }
+              55%  { transform: translateY(0); }
+              100% { opacity: 1; transform: translateY(0); }
             }
             @keyframes em-fade-in {
-              from { opacity: 0; transform: translateY(8px) scale(0.97); }
-              to   { opacity: 1; transform: translateY(0) scale(1); }
+              0%   { opacity: 0; transform: translateY(7px) scale(0.985); }
+              50%  { transform: translateY(0) scale(1); }
+              100% { opacity: 1; transform: translateY(0) scale(1); }
             }
             @keyframes em-fade-up {
               from { opacity: 0; transform: translateY(12px); }
@@ -256,8 +259,8 @@ function EdenTab({ pw }: { pw: string }) {
               66%       { transform: translateY(-5px) translateX(-3px); }
             }
             @keyframes em-pill-in {
-              from { opacity: 0; transform: translateY(6px) scale(0.95); }
-              to   { opacity: 1; transform: translateY(0) scale(1); }
+              0%   { opacity: 0; transform: translateY(5px) scale(0.97); }
+              100% { opacity: 1; transform: translateY(0) scale(1); }
             }
           `}</style>
           <div className="relative h-[580px] overflow-y-auto flex flex-col bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
@@ -293,7 +296,7 @@ function EdenTab({ pw }: { pw: string }) {
                 <div className="flex flex-col items-center justify-center flex-1 px-4 py-8" data-testid="chat-empty">
                   <div
                     className="flex flex-col items-center mb-6"
-                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+                    style={{ animation: "em-fade-up 480ms cubic-bezier(0, 0, 0.2, 1) both" }}
                   >
                     <div className="relative mb-4">
                       <EdenAvatar isThinking={chatStreaming} size={52} />
@@ -322,7 +325,7 @@ function EdenTab({ pw }: { pw: string }) {
                   </div>
                   <div
                     className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl"
-                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
+                    style={{ animation: "em-fade-up 480ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: "120ms" }}
                   >
                     {PROMPT_CARDS.map((card, ci) => {
                       const Icon = card.icon;
@@ -332,7 +335,7 @@ function EdenTab({ pw }: { pw: string }) {
                           onClick={() => sendChatMessage(card.q)}
                           disabled={chatStreaming}
                           className={`group text-left rounded-xl border bg-gradient-to-br p-3 sm:p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${card.color}`}
-                          style={{ animation: "em-fade-up 360ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${180 + ci * 45}ms` }}
+                          style={{ animation: "em-fade-up 440ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${180 + ci * 45}ms` }}
                           data-testid={`prompt-card-${ci}`}
                         >
                           <Icon className={`h-4 w-4 sm:h-5 sm:w-5 mb-2 sm:mb-2.5 shrink-0 ${card.iconColor}`} />
@@ -358,7 +361,7 @@ function EdenTab({ pw }: { pw: string }) {
                     <div
                       key={i}
                       className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                      style={{ animation: msg.role === "user" ? "em-slide-user 340ms cubic-bezier(0.16, 1, 0.3, 1) both" : "em-slide-assistant 340ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+                      style={{ animation: msg.role === "user" ? "em-slide-user 520ms cubic-bezier(0, 0, 0.2, 1) both" : "em-slide-assistant 540ms cubic-bezier(0, 0, 0.2, 1) both" }}
                       data-testid={`chat-msg-${i}`}
                     >
                       {msg.role === "assistant" && (
@@ -418,7 +421,7 @@ function EdenTab({ pw }: { pw: string }) {
                                 onClick={() => { sendChatMessage(pill); inputRef.current?.focus(); }}
                                 disabled={chatStreaming}
                                 className="text-[11px] px-2.5 py-1 rounded-full border border-emerald-500/25 bg-emerald-500/5 text-muted-foreground hover:text-foreground hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all disabled:opacity-40"
-                                style={{ animation: "em-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${pi * 60}ms` }}
+                                style={{ animation: "em-pill-in 380ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${pi * 60}ms` }}
                                 data-testid={`pill-followup-${i}-${pi}`}
                               >
                                 {pill}
@@ -427,39 +430,32 @@ function EdenTab({ pw }: { pw: string }) {
                           </div>
                         )}
 
-                        {/* Citation cards — deferred behind toggle */}
+                        {/* Citation cards — top 3 always visible, expand for more */}
                         {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                           <div className="mt-2.5" data-testid={`chat-citations-${i}`}>
-                            {!expandedCitations[i] ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {msg.assets
+                                .slice(0, (expandedCitations[i] ?? false) ? undefined : 3)
+                                .map((a, ci) => (
+                                  <div
+                                    key={a.id}
+                                    style={{ animation: "em-fade-in 420ms cubic-bezier(0, 0, 0.2, 1) both", animationDelay: `${ci * 55}ms` }}
+                                  >
+                                    <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} />
+                                  </div>
+                                ))}
+                            </div>
+                            {msg.assets.length > 3 && (
                               <button
-                                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group"
-                                onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: true }))}
-                                data-testid={`button-show-citations-${i}`}
+                                className="flex items-center gap-1 mt-1.5 text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
+                                onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: !(prev[i] ?? false) }))}
+                                data-testid={(expandedCitations[i] ?? false) ? `button-hide-citations-${i}` : `button-show-citations-${i}`}
                               >
-                                <ChevronDown className="h-3 w-3 shrink-0 group-hover:text-foreground transition-colors" />
-                                Show {msg.assets.length} matched asset{msg.assets.length !== 1 ? "s" : ""}
+                                <ChevronDown className={`h-3 w-3 shrink-0 transition-transform duration-200 ${(expandedCitations[i] ?? false) ? "rotate-180" : ""}`} />
+                                {(expandedCitations[i] ?? false)
+                                  ? "Show less"
+                                  : `${msg.assets.length - 3} more asset${msg.assets.length - 3 !== 1 ? "s" : ""}`}
                               </button>
-                            ) : (
-                              <>
-                                <button
-                                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-2 group"
-                                  onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: false }))}
-                                  data-testid={`button-hide-citations-${i}`}
-                                >
-                                  <ChevronDown className="h-3 w-3 shrink-0 rotate-180 group-hover:text-foreground transition-colors" />
-                                  Hide assets
-                                </button>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                                  {msg.assets.map((a, ci) => (
-                                    <div
-                                      key={a.id}
-                                      style={{ animation: "em-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 55}ms` }}
-                                    >
-                                      <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} />
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
                             )}
                           </div>
                         )}

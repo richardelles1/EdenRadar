@@ -78,7 +78,7 @@ export type StreamingStage = "idle" | "searching" | "ranking" | "generating";
 
 type SseContextPayload = { sessionId?: string; assets: ChatAsset[]; externalResults?: ExternalResult[]; activeSource?: ActiveSource };
 type SseTokenPayload = { text: string };
-type SseDonePayload = { sessionId?: string; newArrivalsHint?: { count: number; label: string; query: string } };
+type SseDonePayload = { sessionId?: string; intent?: string; newArrivalsHint?: { count: number; label: string; query: string } };
 type SseErrorPayload = { message: string };
 type SseActionOfferPayload = { offers: ActionOffer[] };
 

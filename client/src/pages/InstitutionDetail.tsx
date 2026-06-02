@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { Link, useParams } from "wouter";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -10,10 +10,10 @@ import {
 } from "lucide-react";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import type { IngestedAsset } from "@shared/schema";
-import type { InstitutionsListResponse, InstitutionProfile } from "@/lib/institutions";
+import type { Institution, InstitutionProfile } from "@/lib/institutions";
 
 import {
-  detectModality, detectStage, computeCommercialScore, formatRelativeTime,
+  detectModality, detectStage, computeCommercialScore,
 } from "@/lib/titleSignals";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -46,7 +46,78 @@ const STAGE_DONUT_FILL: Record<string, string> = {
 // Biology chips are categorical labels — hierarchy comes from the bar, not chip color
 const BIOLOGY_CHIP = "bg-muted/80 text-foreground/70 border-border/60";
 
+// ── Biology treemap ───────────────────────────────────────────────────────────
+
+interface TreeRect { label: string; count: number; x: number; y: number; w: number; h: number; }
+
+// Dark → light emerald: rank 0 (most prominent) is darkest
+const BIO_FILLS = [
+  { bg: "#064e3b", text: "#ecfdf5" },
+  { bg: "#065f46", text: "#ecfdf5" },
+  { bg: "#047857", text: "#ecfdf5" },
+  { bg: "#059669", text: "#ecfdf5" },
+  { bg: "#10b981", text: "#ecfdf5" },
+  { bg: "#34d399", text: "#064e3b" },
+  { bg: "#6ee7b7", text: "#064e3b" },
+  { bg: "#a7f3d0", text: "#065f46" },
+];
+
+function buildTreemap(data: Array<{ label: string; count: number }>): TreeRect[] {
+  const rects: TreeRect[] = [];
+  const total = data.reduce((s, d) => s + d.count, 0);
+  if (!total) return rects;
+
+  function worst(row: typeof data, shorter: number, rem: number, area: number): number {
+    const rowSum = row.reduce((s, d) => s + d.count, 0);
+    if (!rowSum || !shorter) return Infinity;
+    const rowLen = area * rowSum / (rem * shorter);
+    if (!rowLen) return Infinity;
+    return Math.max(...row.map((d) => {
+      const cellLen = (area * d.count) / (rem * rowLen);
+      return Math.max(rowLen / cellLen, cellLen / rowLen);
+    }));
+  }
+
+  function lay(items: typeof data, x: number, y: number, w: number, h: number, rem: number) {
+    if (!items.length) return;
+    if (items.length === 1) { rects.push({ ...items[0], x, y, w, h }); return; }
+    const shorter = Math.min(w, h);
+    const area = w * h;
+    let row: typeof data = [];
+    let rest = [...items];
+    while (rest.length) {
+      const next = [...row, rest[0]];
+      if (row.length > 0 && worst(next, shorter, rem, area) > worst(row, shorter, rem, area)) break;
+      row.push(rest.shift()!);
+    }
+    const rowSum = row.reduce((s, d) => s + d.count, 0);
+    if (w >= h) {
+      const rowW = w * (rowSum / rem);
+      let py = y;
+      for (const item of row) { const ch = h * (item.count / rowSum); rects.push({ ...item, x, y: py, w: rowW, h: ch }); py += ch; }
+      lay(rest, x + rowW, y, w - rowW, h, rem - rowSum);
+    } else {
+      const rowH = h * (rowSum / rem);
+      let px = x;
+      for (const item of row) { const cw = w * (item.count / rowSum); rects.push({ ...item, x: px, y, w: cw, h: rowH }); px += cw; }
+      lay(rest, x, y + rowH, w, h - rowH, rem - rowSum);
+    }
+  }
+
+  lay(data, 0, 0, 1, 1, total);
+  return rects;
+}
+
 type SortMode = "newest" | "commercial" | "az" | "za";
+
+const PAGE_SIZE = 20;
+
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "newest",     label: "Newest First" },
+  { value: "commercial", label: "Top Scoring" },
+  { value: "az",         label: "A → Z" },
+  { value: "za",         label: "Z → A" },
+];
 
 // ── Drawer types ──────────────────────────────────────────────────────────────
 
@@ -170,7 +241,13 @@ function ResearchDnaPanel({
   const hasStandout   = (profile?.standoutAssets?.length ?? 0) > 0;
   const hasAny        = hasBiology || hasStage || hasIndications || hasStandout;
 
-  const maxBiologyCnt = profile?.biologyBreakdown?.[0]?.count ?? 1;
+  const [bioTooltip, setBioTooltip] = useState<{ label: string; count: number; pct: number; x: number; y: number } | null>(null);
+  const total = profile?.biologyBreakdown?.reduce((s, b) => s + b.count, 0) ?? 1;
+  const treeRects = useMemo(
+    () => (profile?.biologyBreakdown ? buildTreemap(profile.biologyBreakdown) : []),
+    [profile?.biologyBreakdown],
+  );
+
   const totalStageCnt = profile?.stageBreakdown?.reduce((s, r) => s + r.count, 0) ?? 1;
 
   const sortedStages = profile?.stageBreakdown
@@ -212,34 +289,64 @@ function ResearchDnaPanel({
 
       <div className="bg-card p-5 space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          {/* Biology Drivers — proportional chip cloud */}
+          {/* Biology Drivers — squarified treemap */}
           <div className="space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Biology Drivers</p>
             {loading ? (
-              <div className="flex flex-wrap gap-2">
-                {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-7 rounded-full" style={{ width: `${60 + i * 18}px` }} />)}
-              </div>
+              <Skeleton className="w-full rounded-lg" style={{ aspectRatio: "1 / 1" }} />
             ) : hasBiology ? (
-              <div className="flex flex-wrap gap-2 items-start">
-                {profile!.biologyBreakdown.map((b, i) => {
-                  const scale = b.count / maxBiologyCnt;
-                  const fs = Math.round(10 + scale * 5);
-                  const px = Math.round(8 + scale * 6);
-                  const py = Math.round(3 + scale * 4);
-                  return (
-                    <button
-                      key={b.label}
-                      onClick={() => onBiologyClick?.(b.label)}
-                      className="rounded-full border border-primary/25 bg-primary/5 hover:bg-primary/15 hover:border-primary/50 text-foreground/80 hover:text-foreground transition-all"
-                      style={{ fontSize: `${fs}px`, padding: `${py}px ${px}px`, lineHeight: 1.35 }}
-                      data-testid={`biology-bar-${i}`}
-                    >
-                      {b.label}
-                      <span className="opacity-35 ml-1.5" style={{ fontSize: "9px" }}>{b.count}</span>
-                    </button>
-                  );
-                })}
-              </div>
+              <>
+                <div className="relative w-full rounded-lg overflow-hidden" style={{ aspectRatio: "1 / 1" }}>
+                  {treeRects.map((rect, i) => {
+                    const { bg, text } = BIO_FILLS[i] ?? BIO_FILLS[BIO_FILLS.length - 1];
+                    const pct = Math.round((rect.count / total) * 100);
+                    return (
+                      <button
+                        key={rect.label}
+                        className="absolute transition-opacity hover:opacity-75 rounded-[3px]"
+                        style={{
+                          left:       `calc(${rect.x * 100}% + 2px)`,
+                          top:        `calc(${rect.y * 100}% + 2px)`,
+                          width:      `calc(${rect.w * 100}% - 4px)`,
+                          height:     `calc(${rect.h * 100}% - 4px)`,
+                          background: bg,
+                        }}
+                        onClick={() => onBiologyClick?.(rect.label)}
+                        onMouseEnter={(e) => setBioTooltip({ label: rect.label, count: rect.count, pct, x: e.clientX, y: e.clientY })}
+                        onMouseMove={(e) => setBioTooltip((t) => t ? { ...t, x: e.clientX, y: e.clientY } : t)}
+                        onMouseLeave={() => setBioTooltip(null)}
+                        data-testid={`biology-bar-${i}`}
+                      >
+                        {rect.h > 0.1 && (
+                          <span
+                            className="absolute bottom-1.5 left-1.5 right-1.5 text-[10px] font-semibold leading-tight line-clamp-2 text-left"
+                            style={{ color: text }}
+                          >
+                            {rect.label}
+                          </span>
+                        )}
+                        {rect.h > 0.18 && (
+                          <span
+                            className="absolute top-1.5 right-1.5 text-[9px] tabular-nums"
+                            style={{ color: text, opacity: 0.65 }}
+                          >
+                            {rect.count}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {bioTooltip && (
+                  <div
+                    className="fixed z-50 pointer-events-none text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md"
+                    style={{ left: bioTooltip.x + 14, top: bioTooltip.y - 8 }}
+                  >
+                    <span className="font-semibold text-foreground capitalize">{bioTooltip.label}</span>
+                    <span className="text-muted-foreground ml-2">{bioTooltip.count} · {bioTooltip.pct}%</span>
+                  </div>
+                )}
+              </>
             ) : (
               <p className="text-sm text-muted-foreground/60 italic">No biology data yet</p>
             )}
@@ -249,67 +356,46 @@ function ResearchDnaPanel({
           <div className="space-y-3">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Stage Mix</p>
             {loading ? (
-              <div className="flex justify-center py-4">
-                <Skeleton className="h-44 w-44 rounded-full" />
-              </div>
+              <Skeleton className="w-full rounded-full" style={{ aspectRatio: "1 / 1" }} />
             ) : hasStage ? (
-              <div className="flex flex-col items-center gap-3">
-                <ResponsiveContainer width="100%" height={200}>
-                  <PieChart>
-                    <Pie
-                      data={sortedStages}
-                      dataKey="count"
-                      nameKey="stage"
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={88}
-                      paddingAngle={2}
-                      strokeWidth={0}
-                      onClick={(entry) => onStageClick?.(entry.stage ?? "")}
-                      style={{ cursor: "pointer" }}
-                    >
-                      {sortedStages.map((s) => {
-                        const key = s.stage?.toLowerCase() ?? "";
-                        return (
-                          <Cell key={s.stage ?? key} fill={STAGE_DONUT_FILL[key] ?? "#34d399"} />
-                        );
-                      })}
-                    </Pie>
-                    <Tooltip
-                      content={({ active, payload }) => {
-                        if (!active || !payload?.length) return null;
-                        const d = payload[0].payload;
-                        const pct = Math.round((d.count / totalStageCnt) * 100);
-                        return (
-                          <div className="text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md">
-                            <span className="font-semibold text-foreground capitalize">{d.stage}</span>
-                            <span className="text-muted-foreground ml-2">{d.count} · {pct}%</span>
-                          </div>
-                        );
-                      }}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-                <div className="flex flex-wrap gap-x-3 gap-y-1.5 justify-center">
-                  {sortedStages.map((s) => {
-                    const key = s.stage?.toLowerCase() ?? "";
-                    const fill = STAGE_DONUT_FILL[key] ?? "#34d399";
-                    const pct = Math.round((s.count / totalStageCnt) * 100);
-                    return (
-                      <button
-                        key={s.stage}
-                        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={() => onStageClick?.(s.stage ?? "")}
-                        data-testid={`stage-bar-${key}`}
-                      >
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: fill }} />
-                        <span className="capitalize">{s.stage}</span>
-                        <span className="tabular-nums opacity-50">{pct}%</span>
-                      </button>
-                    );
-                  })}
-                </div>
+              <div className="w-full" style={{ aspectRatio: "1 / 1" }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={sortedStages}
+                    dataKey="count"
+                    nameKey="stage"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius="28%"
+                    outerRadius="46%"
+                    paddingAngle={2}
+                    strokeWidth={0}
+                    onClick={(entry) => onStageClick?.(entry.stage ?? "")}
+                    style={{ cursor: "pointer" }}
+                  >
+                    {sortedStages.map((s) => {
+                      const key = s.stage?.toLowerCase() ?? "";
+                      return (
+                        <Cell key={s.stage ?? key} fill={STAGE_DONUT_FILL[key] ?? "#34d399"} />
+                      );
+                    })}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      const pct = Math.round((d.count / totalStageCnt) * 100);
+                      return (
+                        <div className="text-xs bg-popover border border-border rounded-md px-3 py-2 shadow-md">
+                          <span className="font-semibold text-foreground capitalize">{d.stage}</span>
+                          <span className="text-muted-foreground ml-2">{d.count} · {pct}%</span>
+                        </div>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground/60 italic">No stage data yet</p>
@@ -535,21 +621,33 @@ type SavedAssetsResponse = { assets: Array<{ ingestedAssetId: number | null }> }
 
 export default function InstitutionDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const PAGE_SIZE = 20;
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
   const [drawerFilter, setDrawerFilter] = useState<DrawerFilter>(null);
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const { data: instListData } = useQuery<InstitutionsListResponse>({
-    queryKey: ["/api/institutions"],
+  const { data: inst } = useQuery<Institution>({
+    queryKey: ["/api/institutions", slug],
+    queryFn: () => fetch(`/api/institutions/${slug}`).then((r) => r.json()),
+    enabled: !!slug,
     staleTime: 5 * 60 * 1000,
   });
-  const inst = instListData?.institutions.find((i) => i.slug === slug);
 
-  const { data, isLoading } = useQuery<{ assets: IngestedAsset[]; institution: string }>({
+  const {
+    data: assetsData,
+    isLoading,
+    isFetchingNextPage,
+    fetchNextPage,
+    hasNextPage,
+  } = useInfiniteQuery({
     queryKey: ["/api/institutions", slug, "assets"],
-    queryFn: () => fetch(`/api/institutions/${slug}/assets`).then((r) => r.json()),
+    queryFn: ({ pageParam }) =>
+      fetch(`/api/institutions/${slug}/assets?limit=20&page=${pageParam}`).then((r) => r.json()),
+    initialPageParam: 0,
+    getNextPageParam: (
+      lastPage: { assets: IngestedAsset[]; hasMore: boolean },
+      _allPages,
+      lastPageParam: number,
+    ) => (lastPage.hasMore ? lastPageParam + 1 : undefined),
     enabled: !!slug,
     staleTime: 5 * 60 * 1000,
   });
@@ -565,15 +663,20 @@ export default function InstitutionDetail() {
     queryKey: ["/api/saved-assets"],
     staleTime: 30000,
   });
-  const savedIngestedIds = new Set(
-    (savedData?.assets ?? []).map((a) => a.ingestedAssetId).filter((id): id is number => id != null)
-  );
+  const savedIngestedIds = useMemo(() =>
+    new Set(
+      (savedData?.assets ?? []).map((a) => a.ingestedAssetId).filter((id): id is number => id != null)
+    ),
+  [savedData]);
 
   const slugTitle = slug
     ? slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
     : "Unknown Institution";
 
-  const rawAssets = data?.assets ?? [];
+  const rawAssets = useMemo(
+    () => assetsData?.pages.flatMap((p) => (p as { assets: IngestedAsset[] }).assets) ?? [],
+    [assetsData],
+  );
   const isBlocked = inst?.accessRestricted ?? false;
 
   const { data: userAlerts = [] } = useQuery<UserAlert[]>({
@@ -617,29 +720,27 @@ export default function InstitutionDetail() {
     return [];
   }, [drawerFilter, rawAssets]);
 
-  const filtered = search.trim()
-    ? rawAssets.filter((a) => a.assetName.toLowerCase().includes(search.toLowerCase()))
-    : rawAssets;
+  // Pre-compute scores once per asset list change so the commercial sort
+  // comparator doesn't recompute O(n log n) times.
+  const scoredAssets = useMemo(() =>
+    rawAssets.map((a) => ({ asset: a, score: computeCommercialScore(a) })),
+  [rawAssets]);
 
-  const sorted = [...filtered].sort((a, b) => {
-    if (sortMode === "newest")     return new Date(b.firstSeenAt).getTime() - new Date(a.firstSeenAt).getTime();
-    if (sortMode === "commercial") return computeCommercialScore(b) - computeCommercialScore(a);
-    if (sortMode === "az")         return a.assetName.localeCompare(b.assetName);
-    if (sortMode === "za")         return b.assetName.localeCompare(a.assetName);
-    return 0;
-  });
-
-  // Reset pagination when search or sort changes
-  useEffect(() => { setVisibleCount(PAGE_SIZE); }, [search, sortMode]);
+  const sorted = useMemo(() => {
+    const searchLow = search.trim().toLowerCase();
+    const filtered = searchLow
+      ? scoredAssets.filter(({ asset }) => asset.assetName.toLowerCase().includes(searchLow))
+      : scoredAssets;
+    return [...filtered].sort((a, b) => {
+      if (sortMode === "newest")     return new Date(b.asset.firstSeenAt).getTime() - new Date(a.asset.firstSeenAt).getTime();
+      if (sortMode === "commercial") return b.score - a.score;
+      if (sortMode === "az")         return a.asset.assetName.localeCompare(b.asset.assetName);
+      if (sortMode === "za")         return b.asset.assetName.localeCompare(a.asset.assetName);
+      return 0;
+    }).map(({ asset }) => asset);
+  }, [scoredAssets, search, sortMode]);
 
   const activeCount = isLoading ? null : rawAssets.length;
-
-  const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-    { value: "newest",     label: "Newest First" },
-    { value: "commercial", label: "Top Scoring" },
-    { value: "az",         label: "A → Z" },
-    { value: "za",         label: "Z → A" },
-  ];
 
   return (
     <div className="min-h-full">
@@ -828,7 +929,7 @@ export default function InstitutionDetail() {
             </div>
           ) : (
             <div className="space-y-2">
-              {sorted.slice(0, visibleCount).map((asset, i) => (
+              {sorted.map((asset, i) => (
                 <AssetRow
                   key={asset.id}
                   asset={asset}
@@ -837,14 +938,19 @@ export default function InstitutionDetail() {
                   onOpen={(a) => setDrawerFilter({ type: "asset", asset: a })}
                 />
               ))}
-              {sorted.length > visibleCount && (
+              {hasNextPage && (
                 <button
-                  onClick={() => setVisibleCount((c) => c + PAGE_SIZE)}
-                  className="w-full py-2.5 text-xs font-medium text-muted-foreground border border-dashed border-border rounded-lg hover:text-foreground hover:border-border/80 transition-colors"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="w-full py-2.5 text-xs font-medium text-muted-foreground border border-dashed border-border rounded-lg hover:text-foreground hover:border-border/80 transition-colors disabled:opacity-50"
                   data-testid="button-load-more-assets"
                 >
-                  Show {Math.min(PAGE_SIZE, sorted.length - visibleCount)} more
-                  <span className="text-muted-foreground/60 ml-1">({sorted.length - visibleCount} remaining)</span>
+                  {isFetchingNextPage ? "Loading…" : `Load 20 more`}
+                  {profile?.totalAssets && (
+                    <span className="text-muted-foreground/60 ml-1">
+                      ({rawAssets.length} of {profile.totalAssets.toLocaleString()} loaded)
+                    </span>
+                  )}
                 </button>
               )}
             </div>
