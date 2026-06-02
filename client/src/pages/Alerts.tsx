@@ -29,10 +29,6 @@ import {
 import {
   Bell,
   Plus,
-  ChevronDown,
-  ChevronUp,
-  Lightbulb,
-  FlaskConical,
   Package,
   Clock,
   Trash2,
@@ -40,13 +36,13 @@ import {
   ChevronsUpDown,
   Pencil,
   Loader2,
-  ExternalLink,
   ArrowRight,
   ToggleLeft,
   ToggleRight,
   Zap,
   Bookmark,
   Search,
+  TrendingUp,
 } from "lucide-react";
 import type { ScoutSavedSearch } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
@@ -65,7 +61,7 @@ function defaultSince(): string {
 }
 
 function formatSinceLabel(dateStr: string | null | undefined): string {
-  if (!dateStr) return "the last 7 days";
+  if (!dateStr) return "the last 48 hours";
   const d = new Date(dateStr);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -85,16 +81,22 @@ interface IndustryDeltaResponse {
     hasAlerts: boolean;
     byInstitution: DeltaInstitution[];
   };
-  newConcepts: {
-    total: number;
-    items: Array<{ id: number; title: string; therapeuticArea: string; submitterAffiliation?: string; oneLiner?: string }>;
-  };
-  newProjects: {
-    total: number;
-    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string; projectUrl?: string | null; projectContributors?: Array<{ name: string; institution: string; role: string; email: string }> | null }>;
-  };
   windowHours: number;
   since?: string;
+}
+
+interface PipelineUpdate {
+  assetId: number;
+  assetName: string;
+  institution: string;
+  stageFrom: string | null;
+  stageTo: string | null;
+  occurredAt: string;
+}
+
+interface PipelineUpdatesResponse {
+  updates: PipelineUpdate[];
+  totalSaved: number;
 }
 
 interface AlertDeltaBucket {
@@ -171,6 +173,8 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   for (const m of (alert.modalities ?? [])) criteriaChips.push({ label: toDisplayModality(m), colorClass: "bg-primary/10 text-primary border-primary/20" });
   for (const s of (alert.stages ?? [])) criteriaChips.push({ label: toDisplayStage(s), colorClass: "bg-violet-500/10 text-violet-500 border-violet-500/20" });
   for (const inst of (alert.institutions ?? [])) criteriaChips.push({ label: inst, colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" });
+  for (const c of (alert.continents ?? [])) criteriaChips.push({ label: c, colorClass: "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20" });
+  for (const t of (alert.targets ?? [])) criteriaChips.push({ label: t, colorClass: "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20" });
 
   // Build a structured Scout URL that preserves the alert's actual criteria
   // (canonical slugs for modalities/stages, full names for institutions, optional
@@ -181,6 +185,8 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   if ((alert.modalities ?? []).length > 0) exploreParams.set("modalities", (alert.modalities ?? []).join(","));
   if ((alert.stages ?? []).length > 0) exploreParams.set("stages", (alert.stages ?? []).join(","));
   if ((alert.institutions ?? []).length > 0) exploreParams.set("institutions", (alert.institutions ?? []).join(","));
+  if ((alert.continents ?? []).length > 0) exploreParams.set("continents", (alert.continents ?? []).join(","));
+  if ((alert.targets ?? []).length > 0) exploreParams.set("targets", (alert.targets ?? []).join(","));
   const hasExploreCriteria = exploreParams.toString().length > 0;
   const exploreUrl = `/scout?${exploreParams.toString()}`;
 
@@ -435,6 +441,72 @@ function AlertBucketRows({ bucket }: { bucket: AlertDeltaBucket }) {
 
 const FLAT_LIST_MAX = 30;
 
+function PipelineUpdatesSection({ sinceParam }: { sinceParam: string }) {
+  const url = `/api/alerts/pipeline-updates?since=${encodeURIComponent(sinceParam)}`;
+  const { data, isLoading } = useQuery<PipelineUpdatesResponse>({
+    queryKey: [url],
+    queryFn: async () => {
+      const headers = await getAuthHeaders();
+      const r = await fetch(url, { credentials: "include", headers });
+      if (!r.ok) return { updates: [], totalSaved: 0 };
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const updates = data?.updates ?? [];
+  const totalSaved = data?.totalSaved ?? 0;
+
+  if (!isLoading && totalSaved === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-emerald-500" />
+          Pipeline Updates
+          {updates.length > 0 && (
+            <Badge variant="secondary" className="text-[11px] tabular-nums bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              {updates.length} stage {updates.length === 1 ? "change" : "changes"}
+            </Badge>
+          )}
+        </h2>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-2">
+          {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full rounded-md" />)}
+        </div>
+      ) : updates.length === 0 ? (
+        <p className="text-xs text-muted-foreground py-1 px-1">
+          No stage changes in your {totalSaved} tracked asset{totalSaved !== 1 ? "s" : ""} since your last visit.
+        </p>
+      ) : (
+        <div className="space-y-1.5">
+          {updates.map((u) => (
+            <Link key={`${u.assetId}-${u.occurredAt}`} href={`/asset/${u.assetId}`}>
+              <div className="flex items-start gap-3 px-3 py-2.5 rounded-md border border-border bg-card hover:border-primary/30 transition-colors cursor-pointer group">
+                <TrendingUp className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                    {u.assetName}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground truncate">{u.institution}</p>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0 text-[11px] font-medium">
+                  <span className="text-muted-foreground capitalize">{u.stageFrom ?? "—"}</span>
+                  <ArrowRight className="w-3 h-3 text-emerald-500" />
+                  <span className="text-emerald-600 dark:text-emerald-400 capitalize">{u.stageTo ?? "—"}</span>
+                </div>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function NewTtoAssetsSection({
   industryData,
   alertsDelta,
@@ -497,22 +569,16 @@ function NewTtoAssetsSection({
           {alertsDelta!.byAlert.map((bucket) => (
             <AlertBucketRows key={bucket.alertId} bucket={bucket} />
           ))}
-          {!hasAlerts && flatVisible.length > 0 && (
-            <div className="space-y-0.5 pt-2 border-t border-border/40">
-              <p className="text-[10px] text-muted-foreground/70 px-1 pb-1">All new assets</p>
-              {flatVisible.map((asset, i) => (
-                <AssetRow key={asset.id} id={asset.id} name={asset.name} institution={asset.institution} index={i} />
-              ))}
-            </div>
-          )}
         </div>
+      ) : hasAlerts ? (
+        // User has alerts but none matched — show focused message, not a raw dump
+        <p className="text-xs text-muted-foreground py-2 px-1" data-testid="no-alert-matches">
+          No new assets matched your alert criteria since your last visit.{" "}
+          <Link href="/scout" className="text-primary hover:underline">Search in Scout →</Link>
+        </p>
       ) : (
+        // No alerts set — show unfiltered discovery feed
         <>
-          {hasAlerts && (
-            <p className="text-xs text-muted-foreground py-1 px-1" data-testid="no-alert-matches">
-              No new assets match your saved alert criteria. All new assets are shown below.
-            </p>
-          )}
           {flatVisible.length > 0 ? (
             <div className="space-y-0.5" data-testid="flat-asset-list">
               {flatVisible.map((asset, i) => (
@@ -540,155 +606,13 @@ function NewTtoAssetsSection({
   );
 }
 
-function OtherActivitySection({
-  concepts,
-  projects,
-}: {
-  concepts: IndustryDeltaResponse["newConcepts"];
-  projects: IndustryDeltaResponse["newProjects"];
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const totalActivity = concepts.total + projects.total;
-
-  return (
-    <div className="rounded-lg border border-border bg-card overflow-hidden">
-      <button
-        className="w-full flex items-center gap-3 text-left px-4 py-3 hover:bg-muted/30 transition-colors"
-        onClick={() => setExpanded((v) => !v)}
-        data-testid="other-activity-toggle"
-      >
-        <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
-          <Lightbulb className="w-3.5 h-3.5 text-muted-foreground" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <span className="text-sm font-semibold text-foreground">Other Activity</span>
-          <p className="text-[10px] text-muted-foreground/70">Platform-wide concepts &amp; research projects</p>
-        </div>
-        <Badge variant="secondary" className="shrink-0 text-[11px] tabular-nums">
-          {totalActivity} new
-        </Badge>
-        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
-      </button>
-
-      {expanded && (
-        <div className="border-t border-border px-4 py-4 space-y-5">
-          {concepts.total > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
-                <span className="text-xs font-semibold text-foreground">New Concepts</span>
-                <Badge variant="secondary" className="text-[11px] tabular-nums">{concepts.total}</Badge>
-              </div>
-              <div className="space-y-0.5">
-                {concepts.items.map((concept) => (
-                  <Link href={`/discovery/concept/${concept.id}`} key={concept.id}>
-                    <div
-                      className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
-                      data-testid={`alert-concept-${concept.id}`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{concept.title}</p>
-                        {concept.oneLiner && (
-                          <p className="text-[10px] text-muted-foreground truncate">{concept.oneLiner}</p>
-                        )}
-                        {(concept.therapeuticArea || concept.submitterAffiliation) && (
-                          <p className="text-[10px] text-muted-foreground/70 truncate">
-                            {[concept.therapeuticArea, concept.submitterAffiliation].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              {concepts.total > concepts.items.length && (
-                <Link href="/industry/concepts">
-                  <p className="text-xs text-primary hover:underline cursor-pointer px-2">
-                    +{concepts.total - concepts.items.length} more — view all concepts
-                  </p>
-                </Link>
-              )}
-            </div>
-          )}
-
-          {concepts.total === 0 && (
-            <p className="text-xs text-muted-foreground">No new concepts since your last visit.</p>
-          )}
-
-          {projects.total > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <FlaskConical className="w-3.5 h-3.5 text-violet-500" />
-                <span className="text-xs font-semibold text-foreground">Research Projects</span>
-                <Badge variant="secondary" className="text-[11px] tabular-nums">{projects.total}</Badge>
-              </div>
-              <div className="space-y-0.5">
-                {projects.items.map((proj) => (
-                  <Link href="/industry/projects" key={proj.id}>
-                    <div
-                      className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
-                      data-testid={`alert-project-${proj.id}`}
-                    >
-                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0 mt-1" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{proj.discoveryTitle || proj.title}</p>
-                        {(proj.discoverySummary || proj.description) && (
-                          <p className="text-[10px] text-muted-foreground line-clamp-1">
-                            {proj.discoverySummary || proj.description}
-                          </p>
-                        )}
-                        <div className="flex items-center gap-2 mt-0.5">
-                          {proj.researchArea && (
-                            <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
-                          )}
-                          {(proj.projectContributors ?? [])[0]?.institution && (
-                            <span className="text-[10px] text-muted-foreground truncate">
-                              {(proj.projectContributors ?? [])[0].institution}
-                            </span>
-                          )}
-                          {proj.projectUrl && (
-                            <a
-                              href={proj.projectUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              onClick={(e) => e.stopPropagation()}
-                              className="text-[10px] text-violet-500 hover:underline flex items-center gap-0.5"
-                              data-testid={`alert-project-source-${proj.id}`}
-                            >
-                              <ExternalLink className="w-2.5 h-2.5" /> Source
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-              {projects.total > projects.items.length && (
-                <Link href="/industry/projects">
-                  <p className="text-xs text-primary hover:underline cursor-pointer px-2">
-                    +{projects.total - projects.items.length} more — view all projects
-                  </p>
-                </Link>
-              )}
-            </div>
-          )}
-
-          {projects.total === 0 && (
-            <p className="text-xs text-muted-foreground">No new research projects since your last visit.</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
 const MODALITY_OPTIONS = [
   "Small Molecule", "Antibody", "CAR-T", "Gene Therapy",
   "mRNA Therapy", "Peptide", "Bispecific Antibody", "ADC", "PROTAC",
 ];
 const STAGE_OPTIONS = ["Discovery", "Preclinical", "Phase 1", "Phase 2", "Phase 3"];
+const CONTINENT_OPTIONS = ["North America", "Europe", "Asia-Pacific", "Latin America"];
 
 function MultiSelectCombobox({
   options,
@@ -743,6 +667,49 @@ function MultiSelectCombobox({
   );
 }
 
+function TargetCombobox({ selected, onToggle }: { selected: string[]; onToggle: (val: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const { data: allTargets = [] } = useQuery<string[]>({
+    queryKey: ["/api/alerts/targets"],
+    staleTime: 10 * 60 * 1000,
+  });
+  const filtered = allTargets.filter((t) => t.toLowerCase().includes(search.toLowerCase())).slice(0, 80);
+  const label = selected.length === 0 ? "Any target" : selected.length === 1 ? selected[0] : `${selected.length} selected`;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm text-left hover:bg-accent/20 transition-colors"
+          data-testid="select-alert-targets"
+        >
+          <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground truncate"}>{label}</span>
+          <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-0" align="start">
+        <Command shouldFilter={false}>
+          <CommandInput placeholder="Search targets (KRAS, EGFR…)" value={search} onValueChange={setSearch} />
+          <CommandList className="max-h-60">
+            <CommandEmpty>No targets found.</CommandEmpty>
+            <CommandGroup>
+              {filtered.map((t) => (
+                <CommandItem key={t} onSelect={() => onToggle(t)} className="flex items-center gap-2">
+                  <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected.includes(t) ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
+                    {selected.includes(t) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                  </div>
+                  <span className="truncate text-sm">{t}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function InstitutionCombobox({ selected, onToggle }: { selected: string[]; onToggle: (val: string) => void }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -786,12 +753,12 @@ function InstitutionCombobox({ selected, onToggle }: { selected: string[]; onTog
   );
 }
 
-function AlertPreviewSection({ query, modalities, stages, institutions }: {
-  query: string; modalities: string[]; stages: string[]; institutions: string[];
+function AlertPreviewSection({ query, modalities, stages, institutions, continents, targets }: {
+  query: string; modalities: string[]; stages: string[]; institutions: string[]; continents: string[]; targets: string[];
 }) {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const hasAnyFilter = !!(query.trim()) || modalities.length > 0 || stages.length > 0 || institutions.length > 0;
+  const hasAnyFilter = !!(query.trim()) || modalities.length > 0 || stages.length > 0 || institutions.length > 0 || continents.length > 0 || targets.length > 0;
 
   useEffect(() => {
     if (!hasAnyFilter) { setPreview(null); return; }
@@ -803,6 +770,8 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
           modalities: modalities.map(normalizeModality),
           stages: stages.map(normalizeStage),
           institutions,
+          continents,
+          targets,
         });
         const data = await res.json();
         setPreview(data);
@@ -811,7 +780,7 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
     }, 500);
     return () => clearTimeout(timer);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, modalities.join(","), stages.join(","), institutions.join(","), hasAnyFilter]);
+  }, [query, modalities.join(","), stages.join(","), institutions.join(","), continents.join(","), targets.join(","), hasAnyFilter]);
 
   if (!hasAnyFilter) return null;
 
@@ -846,13 +815,14 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
 
 function AlertFormFields({
   query, setQuery,
-  modalities, stages, institutions,
-  toggleModality, toggleStage, toggleInstitution,
+  modalities, stages, institutions, continents, targets,
+  toggleModality, toggleStage, toggleInstitution, toggleContinent, toggleTarget,
   idPrefix,
 }: {
   query: string; setQuery: (v: string) => void;
-  modalities: string[]; stages: string[]; institutions: string[];
-  toggleModality: (v: string) => void; toggleStage: (v: string) => void; toggleInstitution: (v: string) => void;
+  modalities: string[]; stages: string[]; institutions: string[]; continents: string[]; targets: string[];
+  toggleModality: (v: string) => void; toggleStage: (v: string) => void;
+  toggleInstitution: (v: string) => void; toggleContinent: (v: string) => void; toggleTarget: (v: string) => void;
   idPrefix: string;
 }) {
   return (
@@ -881,6 +851,19 @@ function AlertFormFields({
         )}
       </div>
       <div className="space-y-2">
+        <Label>Target</Label>
+        <TargetCombobox selected={targets} onToggle={toggleTarget} />
+        {targets.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {targets.map((t) => (
+              <span key={t} className="text-[10px] px-1.5 py-0.5 rounded-full bg-teal-500/10 text-teal-600 border border-teal-500/20 flex items-center gap-1">
+                {t}<button onClick={() => toggleTarget(t)} className="hover:text-destructive">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
         <Label>Stage</Label>
         <MultiSelectCombobox options={STAGE_OPTIONS} selected={stages} onToggle={toggleStage} placeholder="Any stage" searchPlaceholder="Search stages..." testId={`select-${idPrefix}-stage`} />
         {stages.length > 0 && (
@@ -888,6 +871,19 @@ function AlertFormFields({
             {stages.map((s) => (
               <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 flex items-center gap-1">
                 {s}<button onClick={() => toggleStage(s)} className="hover:text-destructive">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label>Geography</Label>
+        <MultiSelectCombobox options={CONTINENT_OPTIONS} selected={continents} onToggle={toggleContinent} placeholder="All regions" searchPlaceholder="Search regions..." testId={`select-${idPrefix}-continent`} />
+        {continents.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {continents.map((c) => (
+              <span key={c} className="text-[10px] px-1.5 py-0.5 rounded-full bg-sky-500/10 text-sky-600 border border-sky-500/20 flex items-center gap-1">
+                {c}<button onClick={() => toggleContinent(c)} className="hover:text-destructive">×</button>
               </span>
             ))}
           </div>
@@ -907,7 +903,7 @@ function AlertFormFields({
           </div>
         )}
       </div>
-      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
+      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} continents={continents} targets={targets} />
     </>
   );
 }
@@ -919,6 +915,8 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
   const [modalities, setModalities] = useState<string[]>((alert.modalities ?? []).map(toDisplayModality));
   const [stages, setStages] = useState<string[]>((alert.stages ?? []).map(toDisplayStage));
   const [institutions, setInstitutions] = useState<string[]>(alert.institutions ?? []);
+  const [continents, setContinents] = useState<string[]>(alert.continents ?? []);
+  const [targets, setTargets] = useState<string[]>(alert.targets ?? []);
   const isAllNew = alert.criteriaType === "all_new";
 
   function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
@@ -933,6 +931,8 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
         modalities: isAllNew ? null : modalities.map(normalizeModality),
         stages: isAllNew ? null : stages.map(normalizeStage),
         institutions: isAllNew ? null : institutions,
+        continents: isAllNew ? null : continents,
+        targets: isAllNew ? null : targets,
         criteriaType: alert.criteriaType ?? null,
       }),
     onSuccess: () => {
@@ -951,7 +951,7 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
       toast({ title: "Alert name is required", variant: "destructive" });
       return;
     }
-    if (!isAllNew && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+    if (!isAllNew && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0 && continents.length === 0 && targets.length === 0) {
       toast({ title: "Set at least one filter", variant: "destructive" });
       return;
     }
@@ -979,10 +979,12 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
           {!isAllNew && (
             <AlertFormFields
               query={query} setQuery={setQuery}
-              modalities={modalities} stages={stages} institutions={institutions}
+              modalities={modalities} stages={stages} institutions={institutions} continents={continents} targets={targets}
               toggleModality={(v) => toggle(modalities, setModalities, v)}
               toggleStage={(v) => toggle(stages, setStages, v)}
               toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+              toggleContinent={(v) => toggle(continents, setContinents, v)}
+              toggleTarget={(v) => toggle(targets, setTargets, v)}
               idPrefix="edit-alert"
             />
           )}
@@ -1007,13 +1009,6 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
 }
 
 const QUICK_TEMPLATES = [
-  {
-    id: "all_new",
-    label: "All New Assets",
-    description: "Every new TTO asset added to the database",
-    criteriaType: "all_new" as const,
-    query: "", modalities: [] as string[], stages: [] as string[], institutions: [] as string[],
-  },
   {
     id: "therapeutic_focus",
     label: "My Therapeutic Focus",
@@ -1052,6 +1047,8 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const [modalities, setModalities] = useState<string[]>([]);
   const [stages, setStages] = useState<string[]>([]);
   const [institutions, setInstitutions] = useState<string[]>([]);
+  const [continents, setContinents] = useState<string[]>([]);
+  const [targets, setTargets] = useState<string[]>([]);
   const [criteriaType, setCriteriaType] = useState<string | null>(null);
 
   function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
@@ -1065,6 +1062,8 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
     setModalities([...tmpl.modalities]);
     setStages([...tmpl.stages]);
     setInstitutions([...tmpl.institutions]);
+    setContinents([]);
+    setTargets([]);
   }
 
   const saveMutation = useMutation({
@@ -1075,6 +1074,8 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
         modalities: criteriaType === "all_new" ? null : modalities.map(normalizeModality),
         stages: criteriaType === "all_new" ? null : stages.map(normalizeStage),
         institutions: criteriaType === "all_new" ? null : institutions,
+        continents: criteriaType === "all_new" ? null : continents,
+        targets: criteriaType === "all_new" ? null : targets,
         criteriaType: criteriaType ?? null,
       }),
     onSuccess: () => {
@@ -1082,7 +1083,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
       toast({ title: "Alert saved", description: "You'll see it in My Saved Alerts." });
-      setName(""); setQuery(""); setModalities([]); setStages([]); setInstitutions([]); setCriteriaType(null);
+      setName(""); setQuery(""); setModalities([]); setStages([]); setInstitutions([]); setContinents([]); setTargets([]); setCriteriaType(null);
       onClose();
     },
     onError: (err: any) => {
@@ -1095,7 +1096,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
       toast({ title: "Alert name is required", variant: "destructive" });
       return;
     }
-    if (criteriaType !== "all_new" && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+    if (criteriaType !== "all_new" && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0 && continents.length === 0 && targets.length === 0) {
       toast({ title: "Set at least one filter", variant: "destructive" });
       return;
     }
@@ -1149,7 +1150,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
                 <p className="text-[11px] text-muted-foreground mt-1">This alert matches every new relevant TTO asset — no filters applied.</p>
                 <button
                   className="text-[11px] text-muted-foreground hover:text-foreground underline mt-2"
-                  onClick={() => { setCriteriaType(null); setModalities([]); setStages([]); setQuery(""); }}
+                  onClick={() => { setCriteriaType(null); setModalities([]); setStages([]); setQuery(""); setContinents([]); setTargets([]); }}
                 >
                   Switch to filtered criteria
                 </button>
@@ -1157,10 +1158,12 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
             ) : (
               <AlertFormFields
                 query={query} setQuery={setQuery}
-                modalities={modalities} stages={stages} institutions={institutions}
+                modalities={modalities} stages={stages} institutions={institutions} continents={continents} targets={targets}
                 toggleModality={(v) => toggle(modalities, setModalities, v)}
                 toggleStage={(v) => toggle(stages, setStages, v)}
                 toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+                toggleContinent={(v) => toggle(continents, setContinents, v)}
+                toggleTarget={(v) => toggle(targets, setTargets, v)}
                 idPrefix="alert"
               />
             )}
@@ -1388,7 +1391,7 @@ export default function Alerts() {
   const sidebarTtoCount = hasAlerts
     ? (unreadData?.count ?? alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0)
     : (data?.newAssets.total ?? 0);
-  const totalNew = sidebarTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
+  const totalNew = sidebarTtoCount;
 
   const sinceLabel = formatSinceLabel(sinceParam);
 
@@ -1416,7 +1419,7 @@ export default function Alerts() {
             <div>
               <h1 className="text-xl font-bold text-foreground">Alerts</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                New TTO assets and research activity since {sinceLabel}. Alerts deliver by email when new matches are found.
+                New TTO assets since {sinceLabel}. Alerts deliver by email when new matches are found.
               </p>
             </div>
             <Button className="gap-2 shrink-0" onClick={() => setSheetOpen(true)} data-testid="button-create-alert">
@@ -1440,11 +1443,11 @@ export default function Alerts() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
-              <SavedSearchesSection />
-
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} matchCounts={alertMatchCounts} profile={profile} />
 
               <div className="border-t border-border/40" />
+
+              <PipelineUpdatesSection sinceParam={sinceParam} />
 
               <NewTtoAssetsSection
                 industryData={data.newAssets}
@@ -1454,10 +1457,7 @@ export default function Alerts() {
                 onCreateAlert={() => setSheetOpen(true)}
               />
 
-              <OtherActivitySection
-                concepts={data.newConcepts}
-                projects={data.newProjects}
-              />
+              <SavedSearchesSection />
             </div>
 
             <div className="lg:col-span-1">
@@ -1467,25 +1467,11 @@ export default function Alerts() {
                   <span className="text-xs font-medium">Since last visit</span>
                 </div>
                 <p className="text-[11px] text-muted-foreground/70 -mt-1" data-testid="text-since-label">
-                  Activity since {sinceLabel}
+                  {sinceLabel}
                 </p>
-                <div className="space-y-2 pt-1">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">TTO Assets</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-tto-count">+{sidebarTtoCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Concepts</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-concepts-count">+{data.newConcepts.total}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Research Projects</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-projects-count">+{data.newProjects.total}</span>
-                  </div>
-                </div>
                 <div className="border-t border-border/60 pt-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
-                  <span className="text-xl font-bold text-primary tabular-nums" data-testid="sidebar-total-count">+{totalNew}</span>
+                  <span className="text-sm text-muted-foreground">New TTO assets</span>
+                  <span className="text-xl font-bold text-primary tabular-nums" data-testid="sidebar-tto-count">+{totalNew}</span>
                 </div>
                 {totalNew > 0 && (
                   <button
@@ -1497,30 +1483,6 @@ export default function Alerts() {
                     Mark all as seen
                   </button>
                 )}
-
-                {/* Email delivery status */}
-                <div className="border-t border-border/40 pt-3 space-y-1.5">
-                  <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Email Delivery</p>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Frequency</span>
-                    <span className="font-medium text-foreground capitalize">
-                      {profile?.notificationPrefs?.frequency === "realtime"
-                        ? "As discovered"
-                        : profile?.notificationPrefs?.frequency === "weekly"
-                        ? "Weekly"
-                        : "Daily"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Email alerts</span>
-                    <span className={`font-medium ${profile?.subscribedToDigest ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                      {profile?.subscribedToDigest ? "Enabled" : "Disabled"}
-                    </span>
-                  </div>
-                  <Link href="/industry/settings">
-                    <span className="text-[11px] text-primary hover:underline">Manage settings →</span>
-                  </Link>
-                </div>
               </div>
             </div>
           </div>

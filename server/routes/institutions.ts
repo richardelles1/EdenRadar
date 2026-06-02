@@ -7,8 +7,79 @@ import { ingestedAssets, institutionMetadata } from "@shared/schema";
 import { ALL_SCRAPERS } from "../lib/scrapers/index";
 import { slugifyInstitutionName } from "../lib/institutionSeed";
 
-const INSTITUTIONS_CACHE_KEY = "institutions:all:v4";
+const INSTITUTIONS_CACHE_KEY = "institutions:all:v5";
 const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+// Maps ingested indication values → display specialty tags.
+// Curated specialties in institution_metadata always take precedence;
+// this only fires for institutions with no hand-curated entry.
+const INDICATION_TO_SPECIALTY: Record<string, string> = {
+  "cancer":                 "Oncology",
+  "oncology":               "Oncology",
+  "tumor":                  "Oncology",
+  "leukemia":               "Oncology",
+  "neurological disorder":  "Neuroscience",
+  "neuroscience":           "Neuroscience",
+  "cns":                    "Neuroscience",
+  "neurodegenerative":      "Neuroscience",
+  "cardiovascular disease": "Cardiovascular",
+  "cardiovascular":         "Cardiovascular",
+  "heart disease":          "Cardiovascular",
+  "infectious disease":     "Infectious Disease",
+  "infection":              "Infectious Disease",
+  "bacterial infection":    "Infectious Disease",
+  "viral infection":        "Infectious Disease",
+  "metabolic disease":      "Metabolic Disease",
+  "diabetes":               "Metabolic Disease",
+  "obesity":                "Metabolic Disease",
+  "rare disease":           "Rare Disease",
+  "genetic disorder":       "Rare Disease",
+  "orphan disease":         "Rare Disease",
+  "autoimmune disease":     "Immunology",
+  "autoimmune":             "Immunology",
+  "immunology":             "Immunology",
+  "inflammatory disease":   "Immunology",
+  "respiratory disease":    "Respiratory",
+  "pulmonary disease":      "Respiratory",
+  "asthma":                 "Respiratory",
+  "ophthalmology":          "Ophthalmology",
+  "ocular disease":         "Ophthalmology",
+  "gene therapy":           "Gene Therapy",
+  "cell therapy":           "Cell Therapy",
+  "musculoskeletal":        "Musculoskeletal",
+  "orthopedic":             "Musculoskeletal",
+};
+
+// Removes substring-redundant indications from a count-sorted list.
+// Iterates in order; skips any term that is a substring of (or contains)
+// an already-accepted term. "prostate cancer" gets dropped when "cancer"
+// is already present; "cancer" gets dropped if "prostate cancer" came first.
+function deduplicateIndications(indications: string[]): string[] {
+  const result: string[] = [];
+  for (const ind of indications) {
+    const lo = ind.toLowerCase();
+    const redundant = result.some((kept) => {
+      const klo = kept.toLowerCase();
+      return klo.includes(lo) || lo.includes(klo);
+    });
+    if (!redundant) result.push(ind);
+  }
+  return result;
+}
+
+function deriveSpecialties(indications: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const ind of indications) {
+    const specialty = INDICATION_TO_SPECIALTY[ind.toLowerCase().trim()];
+    if (specialty && !seen.has(specialty)) {
+      seen.add(specialty);
+      result.push(specialty);
+      if (result.length >= 3) break;
+    }
+  }
+  return result;
+}
 
 export function registerInstitutionRoutes(app: Express): void {
   app.get("/api/institutions/counts", async (_req, res) => {
@@ -32,7 +103,7 @@ export function registerInstitutionRoutes(app: Express): void {
       const cached = cacheGet<object>(INSTITUTIONS_CACHE_KEY);
       if (cached) return res.json(cached);
 
-      const [metadataRows, counts, biologyAgg] = await Promise.all([
+      const [metadataRows, counts, biologyAgg, indicationAgg] = await Promise.all([
         db.select().from(institutionMetadata),
         storage.getInstitutionAssetCounts(),
         db.execute<{ institution: string; biologies: string[] }>(sql`
@@ -42,6 +113,17 @@ export function registerInstitutionRoutes(app: Express): void {
             FROM ingested_assets
             WHERE biology IS NOT NULL AND biology NOT IN ('unknown', '')
             GROUP BY institution, biology
+          ) sub
+          GROUP BY institution
+        `),
+        db.execute<{ institution: string; indications: string[] }>(sql`
+          SELECT institution, array_agg(indication ORDER BY cnt DESC) AS indications
+          FROM (
+            SELECT institution, indication, COUNT(*) AS cnt
+            FROM ingested_assets
+            WHERE indication IS NOT NULL
+              AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')
+            GROUP BY institution, indication
           ) sub
           GROUP BY institution
         `),
@@ -70,6 +152,17 @@ export function registerInstitutionRoutes(app: Express): void {
         }
       }
 
+      // Build top-N indication list in canonical slug space for specialty derivation.
+      const indicationsBySlug = new Map<string, string[]>();
+      for (const row of indicationAgg.rows) {
+        const slug = slugifyInstitutionName(row.institution);
+        const existing = indicationsBySlug.get(slug) ?? [];
+        indicationsBySlug.set(slug, existing);
+        for (const ind of (row.indications ?? [])) {
+          if (!existing.includes(ind)) existing.push(ind);
+        }
+      }
+
       // Membership: only non-stub scrapers (mirrors Admin Data Health).
       const slugSet = new Set<string>();
       for (const s of ALL_SCRAPERS.filter((x) => x.scraperType !== "stub")) {
@@ -87,7 +180,9 @@ export function registerInstitutionRoutes(app: Express): void {
           city: meta?.city ?? null,
           ttoName: meta?.ttoName ?? null,
           website: meta?.website ?? null,
-          specialties: meta?.specialties ?? [],
+          specialties: (meta?.specialties?.length)
+            ? meta.specialties
+            : deriveSpecialties(indicationsBySlug.get(slug) ?? []),
           continent: meta?.continent ?? null,
           noPublicPortal: meta?.noPublicPortal ?? false,
           accessRestricted: meta?.accessRestricted ?? false,
@@ -158,7 +253,7 @@ export function registerInstitutionRoutes(app: Express): void {
           .where(and(inArray(ingestedAssets.institution, names), sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`))
           .groupBy(ingestedAssets.indication)
           .orderBy(desc(sql`count(*)`))
-          .limit(5),
+          .limit(12),
         db
           .select({
             id: ingestedAssets.id,
@@ -180,7 +275,9 @@ export function registerInstitutionRoutes(app: Express): void {
       res.json({
         biologyBreakdown: biologyRows.map((r) => ({ label: r.label, count: r.cnt })),
         stageBreakdown: stageRows.map((r) => ({ stage: r.stage, count: r.cnt })),
-        topIndications: indicationRows.map((r) => r.indication).filter(Boolean),
+        topIndications: deduplicateIndications(
+          indicationRows.map((r) => r.indication).filter((s): s is string => !!s)
+        ).slice(0, 5),
         standoutAssets: standoutRows.map((r) => ({
           id: r.id,
           assetName: r.assetName,
