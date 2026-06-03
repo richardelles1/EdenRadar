@@ -7,7 +7,7 @@ import { ingestedAssets, institutionMetadata } from "@shared/schema";
 import { ALL_SCRAPERS } from "../lib/scrapers/index";
 import { slugifyInstitutionName } from "../lib/institutionSeed";
 
-const INSTITUTIONS_CACHE_KEY = "institutions:all:v6";
+const INSTITUTIONS_CACHE_KEY = "institutions:all:v7";
 const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Maps ingested indication values → display specialty tags.
@@ -111,7 +111,8 @@ export function registerInstitutionRoutes(app: Express): void {
           FROM (
             SELECT institution, biology, COUNT(*) AS cnt
             FROM ingested_assets
-            WHERE biology IS NOT NULL AND biology NOT IN ('unknown', '')
+            WHERE relevant = true AND source_type = 'tech_transfer' AND canonical_asset_id IS NULL
+              AND biology IS NOT NULL AND biology NOT IN ('unknown', '')
             GROUP BY institution, biology
           ) sub
           GROUP BY institution
@@ -121,7 +122,8 @@ export function registerInstitutionRoutes(app: Express): void {
           FROM (
             SELECT institution, indication, COUNT(*) AS cnt
             FROM ingested_assets
-            WHERE indication IS NOT NULL
+            WHERE relevant = true AND source_type = 'tech_transfer' AND canonical_asset_id IS NULL
+              AND indication IS NOT NULL
               AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')
             GROUP BY institution, indication
           ) sub
@@ -299,24 +301,27 @@ export function registerInstitutionRoutes(app: Express): void {
       }
 
       const names = Array.from(aliasNames);
+      // TTO-only base: relevant licensed assets, no duplicates (canonical_asset_id IS NULL).
+      // This matches what EDEN, Scout, and Market Intelligence drawers show for the same institution.
+      const ttoBase = sql`relevant = true AND source_type = 'tech_transfer' AND canonical_asset_id IS NULL`;
       const [biologyRows, stageRows, indicationRows, standoutRows, totalRow] = await Promise.all([
         db
           .select({ label: ingestedAssets.biology, cnt: sql<number>`count(*)::int` })
           .from(ingestedAssets)
-          .where(and(inArray(ingestedAssets.institution, names), sql`biology IS NOT NULL AND biology NOT IN ('unknown', '')`))
+          .where(and(inArray(ingestedAssets.institution, names), ttoBase, sql`biology IS NOT NULL AND biology NOT IN ('unknown', '')`))
           .groupBy(ingestedAssets.biology)
           .orderBy(desc(sql`count(*)`))
           .limit(8),
         db
           .select({ stage: ingestedAssets.developmentStage, cnt: sql<number>`count(*)::int` })
           .from(ingestedAssets)
-          .where(and(inArray(ingestedAssets.institution, names), sql`development_stage IS NOT NULL AND development_stage NOT IN ('unknown', '')`))
+          .where(and(inArray(ingestedAssets.institution, names), ttoBase, sql`development_stage IS NOT NULL AND development_stage NOT IN ('unknown', '')`))
           .groupBy(ingestedAssets.developmentStage)
           .orderBy(desc(sql`count(*)`)),
         db
           .select({ indication: ingestedAssets.indication, cnt: sql<number>`count(*)::int` })
           .from(ingestedAssets)
-          .where(and(inArray(ingestedAssets.institution, names), sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`))
+          .where(and(inArray(ingestedAssets.institution, names), ttoBase, sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`))
           .groupBy(ingestedAssets.indication)
           .orderBy(desc(sql`count(*)`))
           .limit(12),
@@ -329,13 +334,13 @@ export function registerInstitutionRoutes(app: Express): void {
             indication: ingestedAssets.indication,
           })
           .from(ingestedAssets)
-          .where(and(inArray(ingestedAssets.institution, names), sql`completeness_score IS NOT NULL`))
+          .where(and(inArray(ingestedAssets.institution, names), ttoBase, sql`completeness_score IS NOT NULL`))
           .orderBy(desc(ingestedAssets.completenessScore))
           .limit(3),
         db
           .select({ cnt: sql<number>`count(*)::int` })
           .from(ingestedAssets)
-          .where(inArray(ingestedAssets.institution, names)),
+          .where(and(inArray(ingestedAssets.institution, names), ttoBase)),
       ]);
 
       res.json({
