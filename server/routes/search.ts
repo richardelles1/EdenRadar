@@ -1398,11 +1398,12 @@ export function registerSearchRoutes(app: Express): void {
           firstSeenAt: ingestedAssets.firstSeenAt,
         })
         .from(ingestedAssets)
+        .where(and(eq(ingestedAssets.relevant, true), sql`${ingestedAssets.sourceType} = 'tech_transfer'`))
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
         db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE relevant = true AND institution IS NOT NULL AND institution != ''`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM review_queue WHERE status = 'pending'`),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE first_seen_at >= NOW() - INTERVAL '7 days'`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE relevant = true AND source_type = 'tech_transfer' AND first_seen_at >= NOW() - INTERVAL '7 days'`),
       ]);
       const institutionCount = Number((institutionCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
       const assetsInReview = Number((reviewCount.rows[0] as Record<string, unknown>)?.n ?? 0);

@@ -92,7 +92,8 @@ export function registerAlertsRoutes(app: Express): void {
         .select({ target: ingestedAssets.target, cnt: sql<number>`count(*)::int` })
         .from(ingestedAssets)
         .where(sql`
-          target IS NOT NULL
+          relevant = true AND source_type = 'tech_transfer'
+          AND target IS NOT NULL
           AND target NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a', 'multiple', 'various')
           AND target NOT ILIKE '%multiple%'
           AND target NOT ILIKE '%various%'
