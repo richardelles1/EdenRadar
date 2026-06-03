@@ -1419,7 +1419,11 @@ export class DatabaseStorage implements IStorage {
         count: sql<number>`count(*)::int`,
       })
       .from(ingestedAssets)
-      .where(sql`(${ingestedAssets.sourceType} = 'tech_transfer' OR (${ingestedAssets.sourceType} = 'researcher' AND ${ingestedAssets.relevant} = true))`)
+      .where(and(
+        eq(ingestedAssets.relevant, true),
+        sql`${ingestedAssets.sourceType} = 'tech_transfer'`,
+        sql`${ingestedAssets.canonicalAssetId} IS NULL`,
+      ))
       .groupBy(ingestedAssets.institution);
 
     const result: Record<string, number> = {};

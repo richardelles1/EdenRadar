@@ -7,7 +7,7 @@ import { ingestedAssets, institutionMetadata } from "@shared/schema";
 import { ALL_SCRAPERS } from "../lib/scrapers/index";
 import { slugifyInstitutionName } from "../lib/institutionSeed";
 
-const INSTITUTIONS_CACHE_KEY = "institutions:all:v6";
+const INSTITUTIONS_CACHE_KEY = "institutions:all:v7";
 const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // Maps ingested indication values → display specialty tags.
@@ -111,7 +111,8 @@ export function registerInstitutionRoutes(app: Express): void {
           FROM (
             SELECT institution, biology, COUNT(*) AS cnt
             FROM ingested_assets
-            WHERE biology IS NOT NULL AND biology NOT IN ('unknown', '')
+            WHERE relevant = true AND source_type = 'tech_transfer' AND canonical_asset_id IS NULL
+              AND biology IS NOT NULL AND biology NOT IN ('unknown', '')
             GROUP BY institution, biology
           ) sub
           GROUP BY institution
@@ -121,7 +122,8 @@ export function registerInstitutionRoutes(app: Express): void {
           FROM (
             SELECT institution, indication, COUNT(*) AS cnt
             FROM ingested_assets
-            WHERE indication IS NOT NULL
+            WHERE relevant = true AND source_type = 'tech_transfer' AND canonical_asset_id IS NULL
+              AND indication IS NOT NULL
               AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')
             GROUP BY institution, indication
           ) sub
