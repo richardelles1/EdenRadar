@@ -12,7 +12,9 @@ import {
 import { registerClient, unregisterClient, broadcastToOrg } from "../lib/orgBroadcast";
 import { friendlyOpenAIError } from "../lib/llm";
 
-const saveAssetBodySchema = z.object({
+export const PARENT_CYCLE_DEPTH_LIMIT = 100;
+
+export const saveAssetBodySchema = z.object({
   ingested_asset_id: z.number().int().optional(),
   pipeline_list_id: z.number().int().optional().nullable(),
   parent_saved_asset_id: z.number().int().optional().nullable(),
@@ -66,14 +68,18 @@ export function registerPipelineRoutes(app: Express): void {
           ORDER BY pl.created_at DESC
         `;
 
+      const orgFilter = orgId
+        ? sql`(sa.user_id = ${userId} OR (sa.pipeline_list_id IS NOT NULL AND EXISTS (SELECT 1 FROM pipeline_lists pl WHERE pl.id = sa.pipeline_list_id AND pl.org_id = ${orgId})))`
+        : sql`sa.user_id = ${userId}`;
+
       const [lists, totalSavedResult, institutionCountResult, typeCountsResult] = await Promise.all([
         db.execute(listsQuery),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId}`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets sa WHERE ${orgFilter}`),
         db.execute(sql`
           SELECT COUNT(DISTINCT COALESCE(ia.institution, sa.source_journal))::int AS n
           FROM saved_assets sa
           LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
-          WHERE sa.user_id = ${userId}
+          WHERE ${orgFilter}
             AND COALESCE(ia.institution, sa.source_journal) IS NOT NULL
             AND COALESCE(ia.institution, sa.source_journal) != ''
             AND COALESCE(ia.institution, sa.source_journal) != 'unknown'
@@ -85,7 +91,7 @@ export function registerPipelineRoutes(app: Express): void {
             SUM(CASE WHEN ia.source_type = 'clinical_trial' THEN 1 ELSE 0 END)::int AS clinical_trials
           FROM saved_assets sa
           JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
-          WHERE sa.user_id = ${userId}
+          WHERE ${orgFilter}
         `),
       ]);
 
@@ -135,7 +141,7 @@ export function registerPipelineRoutes(app: Express): void {
           LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
           WHERE sa.pipeline_list_id = ${listId}
           ORDER BY sa.parent_saved_asset_id NULLS FIRST, sa.id ASC
-          LIMIT 100
+          LIMIT 101
         `),
       ]);
 
@@ -143,7 +149,8 @@ export function registerPipelineRoutes(app: Express): void {
       if (!listRow) return res.status(404).json({ error: "Pipeline list not found" });
       const pipelineName = String(listRow.name ?? "Pipeline");
 
-      const allRows = assetsResult.rows as Record<string, unknown>[];
+      const allRows = (assetsResult.rows as Record<string, unknown>[]).slice(0, 100);
+      const truncated = (assetsResult.rows as unknown[]).length > 100;
       const safePipelineName = pipelineName.replace(/[^\w\s\-.,()&]/g, "").slice(0, 120);
       if (allRows.length === 0) {
         return res.json({
@@ -219,11 +226,15 @@ export function registerPipelineRoutes(app: Express): void {
         ? `\nUNLINKED SIGNALS (${standaloneSignals.length}):\n` + standaloneSignals.map(s => `- [${s.type}] "${s.title}" (${s.year})`).join("\n")
         : "";
 
+      const truncationNote = truncated
+        ? `\n\nNOTE: This pipeline has more than 100 assets. This brief covers the first 100 only and may not reflect the full portfolio.`
+        : "";
+
       const prompt = `You are a biotech intelligence analyst writing a pipeline brief for a BD/licensing team.
 Pipeline: "${safePipelineName}"
 
 PIPELINE ASSETS:
-${assetContext}${standaloneCtx}
+${assetContext}${standaloneCtx}${truncationNote}
 
 Write a brief with EXACTLY these four sections. Plain text only — no markdown, no bullet symbols. Separate sections with a blank line. Use the exact section labels.
 
@@ -349,7 +360,45 @@ STRATEGIC ASSESSMENT
         const parsed = parseInt(rawPl as string, 10);
         if (!isNaN(parsed)) pipelineListId = parsed;
       }
-      const assets = await storage.getSavedAssets(pipelineListId, userId);
+
+      const userOrg = await storage.getOrgForUser(userId);
+      const orgId = userOrg?.id ?? null;
+
+      let assets: Awaited<ReturnType<typeof storage.getSavedAssets>>;
+      if (orgId && pipelineListId === undefined) {
+        const result = await db.execute(sql`
+          SELECT
+            sa.id,
+            sa.user_id            AS "userId",
+            sa.ingested_asset_id  AS "ingestedAssetId",
+            sa.pipeline_list_id   AS "pipelineListId",
+            sa.asset_name         AS "assetName",
+            sa.target,
+            sa.modality,
+            sa.development_stage  AS "developmentStage",
+            sa.disease_indication AS "diseaseIndication",
+            sa.summary,
+            sa.source_title       AS "sourceTitle",
+            sa.source_journal     AS "sourceJournal",
+            sa.publication_year   AS "publicationYear",
+            sa.source_name        AS "sourceName",
+            sa.source_url         AS "sourceUrl",
+            sa.pmid,
+            sa.status,
+            sa.parent_saved_asset_id AS "parentSavedAssetId",
+            sa.saved_at           AS "savedAt"
+          FROM saved_assets sa
+          WHERE sa.user_id = ${userId}
+             OR (sa.pipeline_list_id IS NOT NULL AND EXISTS (
+               SELECT 1 FROM pipeline_lists pl
+               WHERE pl.id = sa.pipeline_list_id AND pl.org_id = ${orgId}
+             ))
+          ORDER BY sa.saved_at DESC
+        `);
+        assets = result.rows as Awaited<ReturnType<typeof storage.getSavedAssets>>;
+      } else {
+        assets = await storage.getSavedAssets(pipelineListId, userId);
+      }
       const assetIds = assets.map((a) => a.id);
       const ingestedIds = assets
         .map((a) => a.ingestedAssetId)
@@ -447,6 +496,7 @@ STRATEGIC ASSESSMENT
 
   app.patch("/api/saved-assets/:id/pipeline", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { pipeline_list_id } = z.object({ pipeline_list_id: z.number().int().nullable() }).parse(req.body);
@@ -509,6 +559,7 @@ STRATEGIC ASSESSMENT
 
   app.patch("/api/saved-assets/:id/parent", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { parent_saved_asset_id } = z.object({
@@ -520,14 +571,17 @@ STRATEGIC ASSESSMENT
       if (!await canAccessSavedAsset(before, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       if (parent_saved_asset_id === id) return res.status(400).json({ error: "Asset cannot be its own parent" });
       if (parent_saved_asset_id !== null) {
+        const parentAsset = await storage.getSavedAsset(parent_saved_asset_id);
+        if (!parentAsset) return res.status(404).json({ error: "Parent asset not found" });
+        if (!await canAccessSavedAsset(parentAsset, userId ?? null)) return res.status(403).json({ error: "Access denied to parent asset" });
         const cycleCheck = await db.execute(sql`
-          WITH RECURSIVE chain(node) AS (
-            SELECT ${parent_saved_asset_id}::int
+          WITH RECURSIVE chain(node, depth) AS (
+            SELECT ${parent_saved_asset_id}::int, 0
             UNION ALL
-            SELECT sa.parent_saved_asset_id
+            SELECT sa.parent_saved_asset_id, c.depth + 1
             FROM saved_assets sa
             JOIN chain c ON sa.id = c.node
-            WHERE sa.parent_saved_asset_id IS NOT NULL
+            WHERE sa.parent_saved_asset_id IS NOT NULL AND c.depth < ${PARENT_CYCLE_DEPTH_LIMIT}
           )
           SELECT 1 FROM chain WHERE node = ${id} LIMIT 1
         `);
@@ -671,12 +725,25 @@ STRATEGIC ASSESSMENT
       const [lists, countsResult] = await Promise.all([
         storage.getPipelineLists(userId, orgId),
         userId
-          ? db.execute(sql`
-              SELECT pipeline_list_id, COUNT(*)::int AS cnt
-              FROM saved_assets
-              WHERE user_id = ${userId}
-              GROUP BY pipeline_list_id
-            `)
+          ? orgId
+            ? db.execute(sql`
+                SELECT sa.pipeline_list_id, COUNT(*)::int AS cnt
+                FROM saved_assets sa
+                WHERE (
+                  sa.pipeline_list_id IS NOT NULL AND EXISTS (
+                    SELECT 1 FROM pipeline_lists pl
+                    WHERE pl.id = sa.pipeline_list_id
+                      AND (pl.user_id = ${userId} OR pl.org_id = ${orgId})
+                  )
+                ) OR (sa.pipeline_list_id IS NULL AND sa.user_id = ${userId})
+                GROUP BY sa.pipeline_list_id
+              `)
+            : db.execute(sql`
+                SELECT pipeline_list_id, COUNT(*)::int AS cnt
+                FROM saved_assets
+                WHERE user_id = ${userId}
+                GROUP BY pipeline_list_id
+              `)
           : Promise.resolve({ rows: [] as unknown[] }),
       ]);
       const counts: Record<number, number> = {};
@@ -746,6 +813,7 @@ STRATEGIC ASSESSMENT
 
   app.post("/api/pipelines/:id/assets", async (req, res) => {
     try {
+      if (!(await requireNotViewer(req, res))) return;
       const pipelineId = parseInt(req.params.id);
       if (isNaN(pipelineId)) return res.status(400).json({ error: "Invalid pipeline ID" });
       const pipeline = await storage.getPipelineList(pipelineId);
@@ -768,6 +836,9 @@ STRATEGIC ASSESSMENT
         sourceUrl: body.source_url ?? null,
         pmid: body.pmid ?? null,
       }, userId);
+      logTeamActivity(userId ?? null, "saved_asset", body.ingested_asset_id ?? null, pipelineId, body.asset_name).catch(() => {});
+      const pipelineOrg = userId ? await storage.getOrgForUser(userId).catch(() => null) : null;
+      if (pipelineOrg) broadcastToOrg(pipelineOrg.id, "asset_saved", { savedAssetId: asset.id });
       res.status(201).json({ asset });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to add asset to pipeline" });

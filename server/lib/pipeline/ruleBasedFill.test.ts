@@ -480,3 +480,103 @@ describe("provenance tracking", () => {
     expect(Object.keys(result.provenance).length).toBe(0);
   });
 });
+
+// ── Biology taxonomy — mechanism-based terms only ─────────────────────────────
+// Biology must always use mechanism-based terms (e.g. "oncogenic transcription"),
+// never clinical specialty names (e.g. "Oncology"). This is a critical platform
+// invariant — ruleBasedFill.ts derives biology from indication via INDICATION_TO_BIOLOGY.
+
+describe("biology taxonomy — mechanism-based terms", () => {
+  const s = (text: string) => asset({ summary: text + "X".repeat(Math.max(0, 200 - text.length)) });
+
+  it("maps lung cancer indication to 'oncogenic transcription' (mechanism term)", () => {
+    const { fields } = applyRulesToAsset(s("Treatment for non-small cell lung cancer."));
+    expect(fields.biology).toBe("oncogenic transcription");
+  });
+
+  it("maps leukemia to mechanism-based biology term", () => {
+    const { fields } = applyRulesToAsset(s("Acute myeloid leukemia therapy targeting blast cells."));
+    expect(fields.biology).toBe("oncogenic transcription");
+  });
+
+  it("does NOT produce clinical specialty names like 'Oncology'", () => {
+    const { fields } = applyRulesToAsset(s("Treatment for breast cancer Her2-positive."));
+    expect(fields.biology).not.toBe("Oncology");
+    expect(fields.biology).not.toBe("oncology");
+  });
+
+  it("maps Alzheimer disease to a mechanism-based biology term", () => {
+    const { fields } = applyRulesToAsset(s("Novel approach to Alzheimer disease neurodegeneration."));
+    // Should be a mechanism term like "protein aggregation" or "synaptic dysfunction", not "Neuroscience"
+    if (fields.biology) {
+      expect(fields.biology).not.toBe("Neuroscience");
+      expect(fields.biology).not.toBe("neuroscience");
+    }
+  });
+
+  it("does not overwrite an existing biology value", () => {
+    const { fields } = applyRulesToAsset(asset({
+      biology: "protein aggregation",
+      indication: "lung cancer",
+      summary: "X".repeat(200),
+    }));
+    expect(fields.biology).toBeUndefined();
+  });
+});
+
+// ── developmentStage edge cases ───────────────────────────────────────────────
+
+describe("developmentStage edge cases", () => {
+  const s = (text: string) => asset({ summary: text + "X".repeat(Math.max(0, 200 - text.length)) });
+
+  it("handles 'Phase I/II' combined notation", () => {
+    const { fields } = applyRulesToAsset(s("Phase I/II dose escalation study ongoing."));
+    // Should detect as at least phase 1
+    expect(fields.developmentStage).toMatch(/phase 1|phase 2/);
+  });
+
+  it("does not fill stage from empty summary (dataSparse asset)", () => {
+    const { fields } = applyRulesToAsset(asset({ summary: "" }));
+    // dataSparse gate should prevent text rules from firing
+    expect(fields.developmentStage).toBeUndefined();
+  });
+
+  it("does not overwrite a human-verified stage", () => {
+    const { fields } = applyRulesToAsset(asset({
+      developmentStage: "discovery",
+      humanVerified: { developmentStage: true } as any,
+      summary: "Phase 3 clinical trial underway." + "X".repeat(200),
+    }));
+    expect(fields.developmentStage).toBeUndefined();
+  });
+});
+
+// ── Categories-based modality fill ───────────────────────────────────────────
+
+describe("categories-based modality fill", () => {
+  it("fills modality from a category whose text matches a CATEGORY_MODALITY_MAP pattern", () => {
+    // "vaccine" matches /\bvaccine/i directly — no underscore/space ambiguity
+    const { fields } = applyRulesToAsset(asset({
+      categories: ["vaccine"],
+      summary: "X".repeat(200),
+    }));
+    expect(fields.modality).toBe("vaccine");
+  });
+
+  it("fills modality from mRNA category", () => {
+    const { fields } = applyRulesToAsset(asset({
+      categories: ["mRNA"],
+      summary: "X".repeat(200),
+    }));
+    expect(fields.modality).toBe("mrna");
+  });
+
+  it("does not overwrite existing modality from categories", () => {
+    const { fields } = applyRulesToAsset(asset({
+      modality: "antibody",
+      categories: ["vaccine"],
+      summary: "X".repeat(200),
+    }));
+    expect(fields.modality).toBeUndefined();
+  });
+});

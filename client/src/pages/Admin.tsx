@@ -9,7 +9,7 @@ import {
   Activity, Database, PackagePlus, ClipboardList, Inbox, Send,
   Microscope, Lightbulb, ArrowUpCircle, FlaskConical, BrainCircuit,
   Users, Building2, CreditCard, Server, BarChart3, Eye,
-  Zap, Globe, Key,
+  Zap, Globe, Key, Newspaper,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
@@ -40,6 +40,7 @@ const PlatformInfo        = React.lazy(() => import("./admin/Misc").then(m => ({
 const DocumentsTab        = React.lazy(() => import("./admin/Documents").then(m => ({ default: m.DocumentsTab })));
 const JarvisTab           = React.lazy(() => import("./admin/Jarvis").then(m => ({ default: m.JarvisTab })));
 const TtoContactsTab      = React.lazy(() => import("./admin/TtoContacts").then(m => ({ default: m.TtoContactsTab })));
+const BriefTab            = React.lazy(() => import("./admin/BriefTab").then(m => ({ default: m.BriefTab })));
 
 function TabFallback() {
   return (
@@ -521,6 +522,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
                   <ClipboardList className="h-4 w-4" />
                   Export Log
                 </button>
+                <button
+                  onClick={() => setActiveTab("brief")}
+                  className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                    activeTab === "brief" ? "bg-emerald-500/10 text-emerald-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  data-testid="nav-brief"
+                >
+                  <Newspaper className="h-4 w-4" />
+                  The Eden Brief
+                </button>
               </>
             )}
 
@@ -735,6 +746,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, n
             )}
 
             {activeTab === "documents" && <DocumentsTab pw={pw} />}
+
+            {activeTab === "brief" && <BriefTab pw={pw} />}
 
             {activeTab === "jarvis" && <JarvisTab pw={pw} />}
 

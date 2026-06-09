@@ -967,22 +967,7 @@ async function runPostStartupTasks(): Promise<void> {
     log(`[startup] Could not clear orphaned runs: ${err?.message}`, "startup");
   }
 
-  // ── One-time startup quarantine for UC Berkeley + UC San Diego ────────────
-  // The 2025-03-31 URL format change (NCD/Detail?NCDId=XXX → NCD/XXXXX.html)
-  // caused ~262 UCB and ~450 UCSD staging rows to be flagged as new assets
-  // when they are actually already indexed. We quarantine them so they cannot
-  // be pushed until explicitly reviewed and released or discarded.
-  // The idempotency guard: if no quarantinable rows exist, the function returns 0.
-  for (const institution of ["UC Berkeley", "UC San Diego"]) {
-    try {
-      const n = await storage.quarantineNewStagingRows(institution);
-      if (n > 0) {
-        log(`[startup] Auto-quarantined ${n} false-new staging row(s) for ${institution}`, "startup");
-      }
-    } catch (err: any) {
-      log(`[startup] Auto-quarantine skipped for ${institution}: ${err?.message}`, "startup");
-    }
-  }
+  // UC Berkeley/UCSD URL quarantine resolved 2026-06-03 — see normalizeUCUrl in uctechtransfer.ts.
 }
 
 // ── Ensure institution_metadata table exists + is seeded (Task #729) ─────────

@@ -18,6 +18,7 @@ import { registerInstitutionRoutes } from "./routes/institutions";
 import { registerMiscRoutes } from "./routes/misc";
 import { registerContactRoutes } from "./routes/contacts";
 import { registerInternalRoutes } from "./routes/internal";
+import { registerBriefRoutes } from "./routes/brief";
 import { sendDemoRequestEmail } from "./email";
 
 export async function registerRoutes(
@@ -53,6 +54,7 @@ export async function registerRoutes(
   registerMiscRoutes(app);
   registerContactRoutes(app);
   registerInternalRoutes(app);
+  registerBriefRoutes(app);
 
   // Waitlist
   app.post("/api/waitlist", async (req, res) => {

@@ -7,6 +7,18 @@ const UA = "Mozilla/5.0 (compatible; EdenRadar/2.0)";
 const NEXT_TARGET = "ctl00$ContentPlaceHolder1$ucNCDList$ucPagination$nextPage";
 const DEFAULT_MAX_PAGES = 60;
 
+/**
+ * Canonicalises UC TechTransfer URLs to the current NCD/{id}.html format.
+ * Handles the old query-param format (NCD/Detail?NCDId=XXX) that the platform
+ * used before 2025-03-31, making the URL dedup layer format-agnostic.
+ */
+export function normalizeUCUrl(url: string): string {
+  if (!url) return url;
+  const queryMatch = url.match(/NCDId=(\d+)/i);
+  if (queryMatch) return `${BASE}/NCD/${queryMatch[1]}.html`;
+  return url;
+}
+
 function extractListings(html: string, institution: string): ScrapedListing[] {
   const $ = cheerio.load(html);
   const results: ScrapedListing[] = [];
@@ -18,7 +30,7 @@ function extractListings(html: string, institution: string): ScrapedListing[] {
     const ncdId = $(row).find("span[id$='_lblNCDId']").text().trim();
     if (!ncdId) return;
 
-    const url = `${BASE}/NCD/${ncdId}.html`;
+    const url = normalizeUCUrl(`${BASE}/NCD/${ncdId}.html`);
     const description = $(row).find(".tech-info p").first().text().trim();
     results.push({ title, description, url, institution });
   });

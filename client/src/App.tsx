@@ -64,6 +64,8 @@ import Demo from "@/pages/Demo";
 import Status from "@/pages/Status";
 import Dpa from "@/pages/Dpa";
 import ResearchPage from "@/pages/ResearchPage";
+import BriefArchive from "@/pages/BriefArchive";
+import BriefIssue from "@/pages/BriefIssue";
 import BillingSuccess from "@/pages/BillingSuccess";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
@@ -427,6 +429,8 @@ function Router() {
       <Route path="/demo" component={Demo} />
       <Route path="/status" component={Status} />
       <Route path="/dpa" component={Dpa} />
+      <Route path="/brief/:slug" component={BriefIssue} />
+      <Route path="/brief" component={BriefArchive} />
       <Route path="/billing/success" component={BillingSuccess} />
 
       <Route path="/discovery">

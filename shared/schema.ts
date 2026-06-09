@@ -1858,3 +1858,59 @@ export const orgEntitlementOverrides = pgTable("org_entitlement_overrides", {
 ]);
 export type OrgEntitlementOverride = typeof orgEntitlementOverrides.$inferSelect;
 export type InsertOrgEntitlementOverride = typeof orgEntitlementOverrides.$inferInsert;
+
+// ── Eden Brief ────────────────────────────────────────────────────────────────
+
+export type BriefTagType = "default" | "oncology" | "cns" | "rare" | "gene";
+
+export type BriefContent = {
+  the_number: {
+    figure: string;
+    delta: string;
+    headline: string;
+    body: string;
+  };
+  whats_moving: Array<{
+    text: string;
+    chart?: Array<{ label: string; value: number; maxValue: number }>;
+  }>;
+  therapeutic_spotlight: {
+    area: string;
+    body: string[];
+    stats: Array<{ figure: string; label: string }>;
+    ring?: { pct: number; label: string; detail: string };
+  };
+  brief_take: {
+    quote: string;
+    attribution: string;
+  };
+  pipeline: Array<{
+    mechanism: string;
+    tags: Array<{ label: string; type: BriefTagType }>;
+    stage: string;
+    tier: string;
+    status: "available" | "in_discussion";
+  }>;
+};
+
+export const edenBriefIssues = pgTable("eden_brief_issues", {
+  id:           serial("id").primaryKey(),
+  slug:         text("slug").notNull().unique(),
+  issueNumber:  integer("issue_number").notNull(),
+  title:        text("title").notNull(),
+  status:       text("status").notNull().default("draft"),
+  content:      jsonb("content").$type<BriefContent>().notNull().default(sql`'{}'::jsonb`),
+  publishedAt:  timestamp("published_at", { withTimezone: true }),
+  createdAt:    timestamp("created_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type EdenBriefIssue = typeof edenBriefIssues.$inferSelect;
+export type InsertEdenBriefIssue = typeof edenBriefIssues.$inferInsert;
+
+export const edenBriefSubscribers = pgTable("eden_brief_subscribers", {
+  id:           serial("id").primaryKey(),
+  email:        text("email").notNull().unique(),
+  active:       boolean("active").notNull().default(true),
+  token:        text("token").notNull().default(""),
+  subscribedAt: timestamp("subscribed_at", { withTimezone: true }).default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type EdenBriefSubscriber = typeof edenBriefSubscribers.$inferSelect;
