@@ -1,21 +1,21 @@
 /**
  * Duke University — Office of Technology Commercialization (OTC)
  *
- * Platform: WordPress, CPT slug pt__technology (changed from "technologies")
- * API: WP REST API at /wp-json/wp/v2/pt__technology — bypasses Anubis bot protection
- *   (Anubis blocks HTML pages; the REST API endpoint is unprotected)
- * No proxy required — direct fetch works from any IP.
- * X-WP-Total / X-WP-TotalPages headers available directly.
- * Verified 2026-05-21: 548 technologies across 6 pages at per_page=100.
+ * Platform: WordPress, CPT slug pt__technology
+ * API: WP REST API at /wp-json/wp/v2/pt__technology
+ * Anti-bot: Anubis proof-of-work gate — blocks browser User-Agents (Mozilla/5.0 etc.)
+ *   but passes non-browser UAs through to the REST API without challenge.
+ * Fix: raw fetch() with EdenRadar-Indexer/1.0 UA — never use fetchJson() here.
+ * Per-page cap: WordPress limits to 9 per page regardless of per_page param.
+ * Verified 2026-06-09: 548 technologies across 61 pages at 9/page.
  */
 
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchJson } from "./utils";
 
 const INST = "Duke University";
 const BASE = "https://otc.duke.edu";
 const WP_API = `${BASE}/wp-json/wp/v2/pt__technology`;
-const PER_PAGE = 100;
+const BOT_UA = "EdenRadar-Indexer/1.0";
 
 interface WpPost {
   id: number;
@@ -25,7 +25,19 @@ interface WpPost {
 }
 
 function cleanHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/&[a-z]+;/gi, " ").replace(/\s+/g, " ").trim();
+  return html.replace(/<[^>]+>/g, "").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+}
+
+async function fetchPage(page: number, perPage: number): Promise<{ posts: WpPost[]; totalPages: number }> {
+  const url = `${WP_API}?per_page=${perPage}&page=${page}&_fields=id,title,link,excerpt`;
+  const res = await fetch(url, {
+    headers: { "User-Agent": BOT_UA },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (!res.ok) return { posts: [], totalPages: 0 };
+  const totalPages = parseInt(res.headers.get("X-WP-TotalPages") ?? "1", 10);
+  const posts: WpPost[] = await res.json();
+  return { posts, totalPages };
 }
 
 function mapPost(p: WpPost): ScrapedListing {
@@ -39,34 +51,35 @@ function mapPost(p: WpPost): ScrapedListing {
 
 export const dukeScraper: InstitutionScraper = {
   institution: INST,
-  scraperType: "manual",
+  scraperType: "api",
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
-    const posts = await fetchJson<WpPost[]>(
-      `${WP_API}?per_page=${maxResults}&page=1&_fields=id,title,link,excerpt`,
-      15_000
-    );
-    if (!posts) return [];
+    const { posts } = await fetchPage(1, maxResults);
     return posts.map(mapPost).filter((r) => r.title.length > 3).slice(0, maxResults);
   },
 
   async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: fetching via WP REST API (pt__technology)...`);
+    console.log(`[scraper] ${INST}: fetching via WP REST API (non-browser UA)...`);
     const results: ScrapedListing[] = [];
 
-    for (let page = 1; page <= 10; page++) {
-      const posts = await fetchJson<WpPost[]>(
-        `${WP_API}?per_page=${PER_PAGE}&page=${page}&_fields=id,title,link,excerpt`,
-        20_000
-      );
-      if (!posts || posts.length === 0) break;
+    const { posts: firstPage, totalPages } = await fetchPage(1, 9);
+    if (firstPage.length === 0) {
+      console.error(`[scraper] ${INST}: page 1 returned 0 posts — possible block`);
+      return [];
+    }
+    for (const p of firstPage) {
+      const listing = mapPost(p);
+      if (listing.title.length > 3) results.push(listing);
+    }
 
+    const maxPages = Math.max(totalPages, 65);
+    for (let page = 2; page <= maxPages; page++) {
+      const { posts } = await fetchPage(page, 9);
+      if (posts.length === 0) break;
       for (const p of posts) {
         const listing = mapPost(p);
         if (listing.title.length > 3) results.push(listing);
       }
-
-      if (posts.length < PER_PAGE) break;
     }
 
     console.log(`[scraper] ${INST}: ${results.length} listings`);
