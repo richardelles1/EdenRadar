@@ -836,7 +836,7 @@ STRATEGIC ASSESSMENT
         sourceUrl: body.source_url ?? null,
         pmid: body.pmid ?? null,
       }, userId);
-      logTeamActivity(userId ?? null, "saved_asset", body.ingested_asset_id ?? null, pipelineId, body.asset_name).catch(() => {});
+      logTeamActivity(userId ?? null, "saved_asset", body.ingested_asset_id ?? null, null, body.asset_name).catch(() => {});
       const pipelineOrg = userId ? await storage.getOrgForUser(userId).catch(() => null) : null;
       if (pipelineOrg) broadcastToOrg(pipelineOrg.id, "asset_saved", { savedAssetId: asset.id });
       res.status(201).json({ asset });

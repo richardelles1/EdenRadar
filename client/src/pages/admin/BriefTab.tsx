@@ -19,7 +19,7 @@ import type { BriefContent, BriefTagType, EdenBriefIssue } from "@shared/schema"
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function authH(pw: string) {
+function authH(pw: string): Record<string, string> {
   return pw ? { Authorization: `Bearer ${pw}`, "Content-Type": "application/json" } : { "Content-Type": "application/json" };
 }
 
@@ -676,7 +676,7 @@ function IssueList({
                     {issue.status}
                   </Badge>
                 </td>
-                <td className="py-3 pr-4 text-xs text-muted-foreground">{fmtDate(issue.publishedAt)}</td>
+                <td className="py-3 pr-4 text-xs text-muted-foreground">{fmtDate(issue.publishedAt instanceof Date ? issue.publishedAt.toISOString() : issue.publishedAt)}</td>
                 <td className="py-3 text-right">
                   <div className="flex items-center gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
