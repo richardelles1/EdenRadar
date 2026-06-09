@@ -95,6 +95,12 @@ type BrowseAsset = {
   firstSeenAt: string;
 };
 
+type RecommendationsResponse = {
+  assets: BrowseAsset[];
+  signal: "saves" | "profile" | "explore";
+  saveCount?: number;
+};
+
 type SavedAssetRow = {
   id: number;
   ingestedAssetId: number | null;
@@ -656,8 +662,8 @@ export default function IndustryDashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
-    queryKey: ["/api/browse/assets?limit=24&sortBy=completeness"],
+  const { data: exploreData, isLoading: exploreLoading } = useQuery<RecommendationsResponse>({
+    queryKey: ["/api/recommendations"],
     staleTime: 10 * 60 * 1000,
   });
 
@@ -1049,10 +1055,20 @@ export default function IndustryDashboard() {
             {/* ── Right: Recommended for You (40%) ── */}
             <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 flex flex-col gap-3" data-testid="dashboard-recommended">
               {/* Header */}
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 shrink-0">
-                  <Compass className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-bold text-foreground">Recommended for You</span>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-2">
+                    <Compass className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-bold text-foreground">
+                      {exploreData?.signal === "explore" ? "Explore EdenRadar" : "Recommended for You"}
+                    </span>
+                  </div>
+                  {exploreData?.signal === "saves" && exploreData.saveCount != null && (
+                    <p className="text-[10px] text-muted-foreground pl-6">Based on your {exploreData.saveCount} saved asset{exploreData.saveCount !== 1 ? "s" : ""}</p>
+                  )}
+                  {exploreData?.signal === "profile" && (
+                    <p className="text-[10px] text-muted-foreground pl-6">Based on your deal focus</p>
+                  )}
                 </div>
                 <Link href="/scout">
                   <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer shrink-0">
@@ -1069,8 +1085,14 @@ export default function IndustryDashboard() {
                 {exploreLoading ? (
                   [1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
                 ) : visibleExploreAssets.length === 0 ? (
-                  <div className="py-4 text-center">
-                    <p className="text-xs text-muted-foreground">No assets indexed yet.</p>
+                  <div className="py-6 text-center space-y-2">
+                    <p className="text-xs font-medium text-foreground">Save assets in Scout to unlock picks</p>
+                    <p className="text-[11px] text-muted-foreground">We'll surface similar assets as you build your pipeline</p>
+                    <Link href="/scout">
+                      <span className="inline-flex items-center gap-1 mt-1 text-[11px] font-semibold text-primary border border-primary/30 rounded-md px-3 py-1.5 hover:bg-primary/5 transition-colors cursor-pointer">
+                        Open Scout <ArrowRight className="w-3 h-3" />
+                      </span>
+                    </Link>
                   </div>
                 ) : (
                   visibleExploreAssets.map((asset) => {
@@ -1100,7 +1122,7 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {!exploreLoading && exploreCategory && (
+              {!exploreLoading && exploreCategory && exploreData?.signal !== "explore" && (
                 <div className="pt-1 border-t border-border/50 flex items-center gap-1.5">
                   <span className="text-[9px] uppercase tracking-wide text-muted-foreground/50 font-medium">Showing</span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/70 border border-primary/15 capitalize font-medium">
