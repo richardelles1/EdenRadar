@@ -1387,9 +1387,11 @@ export default function Alerts() {
   const alertMatchCounts: Record<number, number> = Object.fromEntries(
     (alertsDelta?.byAlert ?? []).map((b) => [b.alertId, b.matchCount])
   );
-  // Use the same unread-count endpoint as the sidebar badge — single source of truth.
+  // alertsDelta reflects the pre-visit snapshot (sinceParam) and is the right
+  // source for "since last visit" counts. unreadData is zeroed by mark-read on
+  // mount, so using it first produces +0 even when there are new assets.
   const sidebarTtoCount = hasAlerts
-    ? (unreadData?.count ?? alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0)
+    ? (alertsDelta?.distinctTotal ?? alertsDelta?.total ?? unreadData?.count ?? 0)
     : (data?.newAssets.total ?? 0);
   const totalNew = sidebarTtoCount;
 

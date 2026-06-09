@@ -143,6 +143,12 @@ function Router() {
       <Route path="/discover">
         <Redirect to="/scout" />
       </Route>
+      <Route path="/search">
+        <Redirect to="/scout" />
+      </Route>
+      <Route path="/profile">
+        <Redirect to="/scout" />
+      </Route>
       <Route path="/pipeline">
         <Redirect to="/assets" />
       </Route>
