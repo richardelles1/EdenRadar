@@ -8,21 +8,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
-  TrendingDown,
-  Minus,
   Sparkles,
-  Activity,
   Search,
   Bell,
-  ShoppingBag,
   Star,
   Package,
+  ArrowRight,
 } from "lucide-react";
 
 type Highlight = {
@@ -44,13 +41,8 @@ type RecapPayload = {
   counts: { newAssets: number; saves: number; statusChanges: number; marketListings: number };
   deltas?: { newAssets: number; saves: number; statusChanges: number; marketListings: number };
   newAssets?: { total: number; byModality: Array<{ modality: string; count: number }>; top: Highlight[] };
-  activity?: {
-    label: "Team activity" | "Your activity";
-    entries: Array<{ action: string; actorName: string; userId: string; assetId: number | null; assetName: string; at: string }>;
-  };
   topSearches?: Array<{ query: string; count: number }>;
   marketSignals?: Array<{ alertName: string; matchCount: number; topAssets: Highlight[] }>;
-  edenMarket?: { count: number };
   worthALook?: Highlight[];
 };
 
@@ -59,27 +51,6 @@ type RecapResponse = {
   frozen: boolean;
   payload: RecapPayload;
 };
-
-function DeltaPill({ value }: { value: number }) {
-  if (value === 0) {
-    return (
-      <span className="inline-flex items-center gap-0.5 text-[11px] text-muted-foreground">
-        <Minus className="w-3 h-3" />0
-      </span>
-    );
-  }
-  const positive = value > 0;
-  return (
-    <span
-      className={`inline-flex items-center gap-0.5 text-[11px] font-medium ${
-        positive ? "text-primary" : "text-amber-600 dark:text-amber-400"
-      }`}
-    >
-      {positive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-      {Math.abs(value)} vs last week
-    </span>
-  );
-}
 
 function SectionHeader({ icon: Icon, title }: { icon: any; title: string }) {
   return (
@@ -98,32 +69,24 @@ function assetHref(id: number | null | undefined, fallbackName: string): string 
 }
 
 function HighlightRow({ h }: { h: Highlight }) {
+  const meta = [h.institution, h.modality, h.indication].filter(Boolean).join(" · ");
   return (
     <Link href={assetHref(h.id, h.assetName)}>
       <a
-        className="block rounded-lg border border-border/50 bg-white dark:bg-card px-4 py-3 hover:border-primary/40 hover:bg-primary/[0.04] transition-colors"
+        className="flex items-start gap-3 rounded-lg border border-border/50 bg-white dark:bg-card px-4 py-3 hover:border-primary/40 hover:bg-primary/[0.03] transition-colors"
         data-testid={`recap-highlight-${h.id}`}
       >
-        <p className="text-sm font-semibold text-foreground line-clamp-1">{h.assetName}</p>
-        <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-          {[h.institution, h.modality, h.indication].filter(Boolean).join(" · ") || "—"}
-        </p>
-        {h.reason && (
-          <p className="text-[11px] text-primary mt-1.5 font-medium">{h.reason}</p>
-        )}
+        <span className="mt-0.5 w-1 self-stretch rounded-full bg-primary/30 shrink-0" />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground line-clamp-1">{h.assetName}</p>
+          {meta && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{meta}</p>}
+          {h.reason && (
+            <p className="text-[11px] text-primary mt-1.5 font-medium">{h.reason}</p>
+          )}
+        </div>
       </a>
     </Link>
   );
-}
-
-function actionVerb(action: string, isSolo: boolean): string {
-  switch (action) {
-    case "saved_asset": return isSolo ? "you saved" : "saved";
-    case "moved_asset": return isSolo ? "you moved" : "moved";
-    case "added_note": return isSolo ? "you added a note to" : "added a note to";
-    case "removed_asset": return isSolo ? "you removed" : "removed";
-    default: return action;
-  }
 }
 
 function previousWeekKey(): string {
@@ -142,16 +105,12 @@ export function WeeklyRecapModal({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  // null = current week (live preview); string = a Monday ISO date.
-  // Default to last completed week; user can navigate forward to live preview.
   const [weekKey, setWeekKey] = useState<string | null>(previousWeekKey);
 
   useEffect(() => {
     if (open) setWeekKey(previousWeekKey());
   }, [open]);
 
-  // Default queryFn (queryClient.ts) attaches Supabase auth headers and uses
-  // queryKey[0] as the URL, so we encode the full path there.
   const url = weekKey === null ? "/api/recap/current" : `/api/recap/${weekKey}`;
   const { data, isLoading } = useQuery<RecapResponse>({
     queryKey: [url],
@@ -188,8 +147,6 @@ export function WeeklyRecapModal({
     setWeekKey(next.toISOString().slice(0, 10));
   }
 
-  // "On current" means we're showing the in-progress week — either the live
-  // sentinel (weekKey === null) or an explicit Monday equal to this week's.
   const onCurrent =
     weekKey === null ||
     (data?.weekStart !== undefined &&
@@ -211,7 +168,7 @@ export function WeeklyRecapModal({
                 Weekly Recap
               </DialogTitle>
               <p className="text-sm text-muted-foreground" data-testid="text-recap-week-label">
-                {p?.weekLabel ?? "—"}
+                {p?.weekLabel ?? "Loading..."}
                 {data && !data.frozen && (
                   <span className="ml-2 inline-block px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[11px] font-medium">
                     Live preview
@@ -254,32 +211,23 @@ export function WeeklyRecapModal({
             </div>
           ) : (
             <div className="space-y-7">
-              {/* Summary headline */}
+
+              {/* Hero stat */}
               <div
-                className="rounded-xl border border-primary/20 bg-primary/[0.05] px-5 py-4"
+                className="rounded-xl border border-primary/20 bg-primary/[0.05] px-5 py-4 flex items-center justify-between gap-4"
                 data-testid="recap-summary"
               >
-                <p className="text-base text-foreground leading-relaxed">{p.summary}</p>
-              </div>
-
-              {/* Headline counts with WoW deltas */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                {[
-                  { key: "newAssets" as const, label: "New assets", value: p.counts.newAssets },
-                  { key: "saves" as const, label: p.isSolo ? "Saved" : "Team saves", value: p.counts.saves },
-                  { key: "statusChanges" as const, label: "Status moves", value: p.counts.statusChanges },
-                  { key: "marketListings" as const, label: "Market listings", value: p.counts.marketListings },
-                ].map((c) => (
-                  <div
-                    key={c.key}
-                    className="rounded-xl border border-border/60 bg-white dark:bg-card px-4 py-3"
-                    data-testid={`recap-count-${c.key}`}
-                  >
-                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium">{c.label}</p>
-                    <p className="text-2xl font-semibold text-foreground mt-1.5">{c.value}</p>
-                    {p.deltas && <div className="mt-1"><DeltaPill value={p.deltas[c.key]} /></div>}
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-primary font-semibold mb-1">New this week</p>
+                  <p className="text-3xl font-bold text-foreground tabular-nums">{p.counts.newAssets}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">TTO assets indexed</p>
+                </div>
+                {p.deltas && p.deltas.newAssets !== 0 && (
+                  <div className="flex items-center gap-1.5 text-sm font-medium text-primary bg-primary/10 rounded-lg px-3 py-2 shrink-0">
+                    <TrendingUp className="w-4 h-4" />
+                    {p.deltas.newAssets > 0 ? "+" : ""}{p.deltas.newAssets} vs last week
                   </div>
-                ))}
+                )}
               </div>
 
               {/* New assets */}
@@ -289,7 +237,11 @@ export function WeeklyRecapModal({
                   {p.newAssets.byModality.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 mb-3">
                       {p.newAssets.byModality.map((m) => (
-                        <Badge key={m.modality} variant="secondary" className="text-[11px] bg-primary/10 text-primary border-0 hover:bg-primary/15">
+                        <Badge
+                          key={m.modality}
+                          variant="secondary"
+                          className="text-[11px] bg-primary/10 text-primary border-0 hover:bg-primary/15 font-medium"
+                        >
                           {m.modality} · {m.count}
                         </Badge>
                       ))}
@@ -298,40 +250,12 @@ export function WeeklyRecapModal({
                   <div className="space-y-2">
                     {p.newAssets.top.map((h) => <HighlightRow key={h.id} h={h} />)}
                   </div>
-                </section>
-              )}
-
-              {/* Activity */}
-              {p.activity && (
-                <section data-testid="recap-section-activity">
-                  <SectionHeader icon={Activity} title={p.activity.label} />
-                  <ul className="space-y-2">
-                    {p.activity.entries.map((a, i) => {
-                      const content = p.isSolo ? (
-                        <>
-                          <span className="text-foreground">{actionVerb(a.action, true)}</span>{" "}
-                          <span className="font-medium text-foreground">{a.assetName}</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="font-medium text-foreground">{a.actorName}</span>{" "}
-                          {actionVerb(a.action, false)}{" "}
-                          <span className="font-medium text-foreground">{a.assetName}</span>
-                        </>
-                      );
-                      // Always link the activity row — `assetHref` falls back
-                      // to /scout?q=... when there's no resolvable id, so the
-                      // entry is never rendered as dead text.
-                      const liClass = "text-sm text-muted-foreground rounded-md px-3 py-2 hover:bg-primary/[0.04] transition-colors";
-                      return (
-                        <li key={i} data-testid={`recap-activity-${i}`}>
-                          <Link href={assetHref(a.assetId, a.assetName)}>
-                            <a className={`block ${liClass}`}>{content}</a>
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <Link href="/industry/new-arrivals">
+                    <a className="mt-3 flex items-center gap-1.5 text-xs text-primary hover:underline font-medium" data-testid="link-recap-see-all">
+                      See all {p.newAssets.total} new assets
+                      <ArrowRight className="w-3 h-3" />
+                    </a>
+                  </Link>
                 </section>
               )}
 
@@ -347,7 +271,7 @@ export function WeeklyRecapModal({
                           data-testid={`recap-search-${i}`}
                         >
                           <span className="text-foreground line-clamp-1">{s.query}</span>
-                          <span className="text-muted-foreground text-xs shrink-0">×{s.count}</span>
+                          <span className="text-muted-foreground text-xs shrink-0 tabular-nums">{s.count} searches</span>
                         </a>
                       </Link>
                     ))}
@@ -355,36 +279,23 @@ export function WeeklyRecapModal({
                 </section>
               )}
 
-              {/* Market signals */}
+              {/* Market signals (alert matches) */}
               {p.marketSignals && p.marketSignals.length > 0 && (
                 <section data-testid="recap-section-market-signals">
-                  <SectionHeader icon={Bell} title="Market signals" />
+                  <SectionHeader icon={Bell} title="Alert matches" />
                   <div className="space-y-4">
                     {p.marketSignals.map((s, i) => (
                       <div key={i} data-testid={`recap-market-signal-${i}`}>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          <span className="font-semibold text-foreground">{s.alertName}</span> — {s.matchCount} new match{s.matchCount === 1 ? "" : "es"}
-                        </p>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-semibold text-foreground">{s.alertName}</p>
+                          <span className="text-xs text-muted-foreground tabular-nums">{s.matchCount} new match{s.matchCount === 1 ? "" : "es"}</span>
+                        </div>
                         <div className="space-y-2">
                           {s.topAssets.map((h) => <HighlightRow key={h.id} h={h} />)}
                         </div>
                       </div>
                     ))}
                   </div>
-                </section>
-              )}
-
-              {/* EdenMarket new listings */}
-              {p.edenMarket && (
-                <section data-testid="recap-section-edenmarket">
-                  <SectionHeader icon={ShoppingBag} title="EdenMarket" />
-                  <p className="text-sm text-muted-foreground">
-                    {p.edenMarket.count} new listing{p.edenMarket.count === 1 ? "" : "s"} on{" "}
-                    <Link href="/market">
-                      <a className="text-primary hover:underline font-medium" data-testid="link-recap-edenmarket">EdenMarket</a>
-                    </Link>{" "}
-                    this week.
-                  </p>
                 </section>
               )}
 
@@ -397,6 +308,7 @@ export function WeeklyRecapModal({
                   </div>
                 </section>
               )}
+
             </div>
           )}
         </div>
