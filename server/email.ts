@@ -944,3 +944,46 @@ export function sendDemoRequestEmail(data: {
     replyTo: data.email,
   });
 }
+
+// ── Eden Brief ───────────────────────────────────────────────────────────────
+
+const FROM_BRIEF = "Eden Brief <brief@edenradar.com>";
+
+export async function sendBriefEmail(
+  to: string[],
+  issueNumber: number,
+  title: string,
+  issueUrl: string,
+): Promise<void> {
+  if (to.length === 0) return;
+  const subject = `The Eden Brief - Issue ${issueNumber}: ${title}`;
+  const html = baseHtml(`
+    <div style="margin-bottom:4px;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#6b7280;font-family:monospace;">
+      Eden NX · Intelligence Brief
+    </div>
+    <h1 style="margin:0 0 4px;font-size:28px;font-weight:700;letter-spacing:-0.5px;color:#111827;">
+      The Eden Brief
+    </h1>
+    <p style="margin:0 0 24px;font-size:13px;color:#6b7280;font-family:monospace;letter-spacing:0.04em;">
+      Issue ${issueNumber} · ${title}
+    </p>
+    <div style="height:3px;background:#2d7a52;margin-bottom:28px;"></div>
+    <p style="margin:0 0 20px;font-size:15px;color:#374151;line-height:1.7;">
+      Your monthly intelligence brief is ready. This issue covers new signals from across 400+ monitored TTO portfolios.
+    </p>
+    <a href="${escapeHtml(issueUrl)}"
+       style="display:inline-block;background:#2d7a52;color:#fff;text-decoration:none;padding:12px 28px;font-size:13px;font-family:monospace;letter-spacing:0.1em;text-transform:uppercase;margin-bottom:28px;">
+      Read Issue ${issueNumber}
+    </a>
+    <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;line-height:1.6;">
+      Published monthly by Eden NX. Signal from the licensing frontier.
+    </p>
+  `, { accentColor: "#2d7a52" });
+
+  // Send in batches to avoid Resend's per-request recipient limit
+  const BATCH = 50;
+  for (let i = 0; i < to.length; i += BATCH) {
+    const batch = to.slice(i, i + BATCH);
+    await sendEmail(batch, subject, html, { from: FROM_BRIEF });
+  }
+}

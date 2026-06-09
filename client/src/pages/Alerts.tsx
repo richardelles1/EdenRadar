@@ -283,10 +283,10 @@ function DeliveryStatusBanner({ profile }: { profile: IndustryProfileBrief | nul
 
   if (!subscribed) {
     return (
-      <div className="flex items-center gap-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-        <Bell className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-        <p className="text-xs text-amber-700 dark:text-amber-400 flex-1">
-          Email alerts are disabled.{" "}
+      <div className="flex items-center gap-2 rounded-md border border-[#166534]/20 bg-[#166534]/5 px-3 py-2">
+        <Bell className="w-3.5 h-3.5 text-[#166534] shrink-0" />
+        <p className="text-xs text-[#166534]/80 dark:text-emerald-400 flex-1">
+          Email alerts are paused.{" "}
           <Link href="/industry/settings" className="underline font-medium">Enable in Settings</Link>.
         </p>
       </div>
@@ -1387,9 +1387,11 @@ export default function Alerts() {
   const alertMatchCounts: Record<number, number> = Object.fromEntries(
     (alertsDelta?.byAlert ?? []).map((b) => [b.alertId, b.matchCount])
   );
-  // Use the same unread-count endpoint as the sidebar badge — single source of truth.
+  // alertsDelta reflects the pre-visit snapshot (sinceParam) and is the right
+  // source for "since last visit" counts. unreadData is zeroed by mark-read on
+  // mount, so using it first produces +0 even when there are new assets.
   const sidebarTtoCount = hasAlerts
-    ? (unreadData?.count ?? alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0)
+    ? (alertsDelta?.distinctTotal ?? alertsDelta?.total ?? unreadData?.count ?? 0)
     : (data?.newAssets.total ?? 0);
   const totalNew = sidebarTtoCount;
 

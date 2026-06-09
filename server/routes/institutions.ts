@@ -243,6 +243,8 @@ export function registerInstitutionRoutes(app: Express): void {
           .from(ingestedAssets)
           .where(and(
             inArray(ingestedAssets.institution, Array.from(aliasNames)),
+            eq(ingestedAssets.relevant, true),
+            sql`${ingestedAssets.sourceType} = 'tech_transfer'`,
             sql`indication IS NOT NULL AND indication NOT IN ('unknown', '', 'not applicable', 'N/A', 'n/a')`,
           ))
           .groupBy(ingestedAssets.indication)

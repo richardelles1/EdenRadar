@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -1414,9 +1414,16 @@ export default function Pipeline() {
     const a = document.createElement("a"); a.href = url; a.download = "eden-pipeline.json"; a.click(); URL.revokeObjectURL(url);
   };
 
-  const totalAssets = savedAssets.length;
+  const totalAssets = ttoAssets.length + unlinkedSignals.length;
   const ttoCount = ttoAssets.length;
-  const signalCount = signalAssets.length;
+  const signalCount = unlinkedSignals.length;
+
+  const pipelineCardCounts = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const d of deckAssets) if (d.pipelineListId != null) m.set(d.pipelineListId, (m.get(d.pipelineListId) ?? 0) + 1);
+    for (const s of unlinkedSignals) if (s.pipelineListId != null) m.set(s.pipelineListId, (m.get(s.pipelineListId) ?? 0) + 1);
+    return m;
+  }, [deckAssets, unlinkedSignals]);
   const activeDragAsset = activeDragId ? savedAssets.find((a) => `signal-${a.id}` === activeDragId || `tto-${a.id}` === activeDragId) : null;
 
   return (
@@ -1586,7 +1593,7 @@ export default function Pipeline() {
                     </button>
                     {pipelines.length > 0 && <div className="my-1.5 border-t border-border" />}
                     {pipelines.map((pl) => {
-                      const count = savedAssets.filter((a) => a.pipelineListId === pl.id).length;
+                      const count = pipelineCardCounts.get(pl.id) ?? 0;
                       const isActive = filterPipeline === pl.id;
                       const isRenaming = renamingPipelineId === pl.id;
                       if (isRenaming) {

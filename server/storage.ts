@@ -47,6 +47,8 @@ import {
   planEntitlements, type PlanEntitlement,
   orgEntitlementOverrides, type OrgEntitlementOverride, type InsertOrgEntitlementOverride,
   type IndustryProfileStatus,
+  edenBriefIssues, type EdenBriefIssue, type InsertEdenBriefIssue,
+  edenBriefSubscribers, type EdenBriefSubscriber,
 } from "@shared/schema";
 import { computeMomentumScore } from "./lib/pipeline/computeMomentumScore";
 import { db } from "./db";
@@ -811,6 +813,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteSavedAsset(id: number): Promise<void> {
+    await db.update(savedAssets).set({ parentSavedAssetId: null }).where(eq(savedAssets.parentSavedAssetId, id));
     await db.delete(savedAssets).where(eq(savedAssets.id, id));
   }
 
@@ -5533,6 +5536,52 @@ export class DatabaseStorage implements IStorage {
     `);
     const row = res.rows?.[0] as { count: number; last_ingested_at: Date | null } | undefined;
     return { count: row?.count ?? 0, lastIngestedAt: row?.last_ingested_at ?? null };
+  }
+
+  // ── Eden Brief ──────────────────────────────────────────────────────────────
+
+  async listBriefIssues(status?: string): Promise<EdenBriefIssue[]> {
+    const q = db.select().from(edenBriefIssues)
+      .orderBy(desc(edenBriefIssues.publishedAt));
+    if (status) return q.where(eq(edenBriefIssues.status, status));
+    return q;
+  }
+
+  async getBriefIssue(slug: string): Promise<EdenBriefIssue | undefined> {
+    const [row] = await db.select().from(edenBriefIssues)
+      .where(eq(edenBriefIssues.slug, slug));
+    return row;
+  }
+
+  async createBriefIssue(data: InsertEdenBriefIssue): Promise<EdenBriefIssue> {
+    const [row] = await db.insert(edenBriefIssues).values(data).returning();
+    return row;
+  }
+
+  async updateBriefIssue(id: number, data: Partial<InsertEdenBriefIssue>): Promise<EdenBriefIssue> {
+    const [row] = await db.update(edenBriefIssues)
+      .set(data).where(eq(edenBriefIssues.id, id)).returning();
+    return row;
+  }
+
+  async subscribeToBrief(email: string, token: string): Promise<void> {
+    await db.insert(edenBriefSubscribers)
+      .values({ email, token, active: true })
+      .onConflictDoUpdate({
+        target: edenBriefSubscribers.email,
+        set: { active: true },
+      });
+  }
+
+  async unsubscribeFromBrief(email: string): Promise<void> {
+    await db.update(edenBriefSubscribers)
+      .set({ active: false })
+      .where(eq(edenBriefSubscribers.email, email));
+  }
+
+  async listActiveBriefSubscribers(): Promise<EdenBriefSubscriber[]> {
+    return db.select().from(edenBriefSubscribers)
+      .where(eq(edenBriefSubscribers.active, true));
   }
 }
 

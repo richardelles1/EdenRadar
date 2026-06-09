@@ -611,6 +611,10 @@ export default function Scout() {
     queryKey: ["/api/scout/stats"],
     staleTime: 15 * 60 * 1000,
   });
+  const { data: recapData } = useQuery<{ payload?: { topSearches?: Array<{ query: string; count: number }> } }>({
+    queryKey: ["/api/recap/current"],
+    staleTime: 15 * 60 * 1000,
+  });
   const coveredInstitutions = useMemo(
     () => (coverageData?.institutions ?? []).map((i) => i.name),
     [coverageData],
@@ -1234,7 +1238,7 @@ export default function Scout() {
                           style={{ background: "hsl(142 71% 45% / 0.08)", border: "1px solid hsl(142 71% 45% / 0.15)" }}
                         >
                           <span className="font-black tabular-nums text-foreground">
-                            {scoutStats ? scoutStats.relevantAssets.toLocaleString() : "33,000+"}
+                            {scoutStats ? scoutStats.relevantAssets.toLocaleString() : <span className="text-muted-foreground font-normal">...</span>}
                           </span>
                           <span className="text-muted-foreground">TTO assets</span>
                         </div>
@@ -1255,7 +1259,7 @@ export default function Scout() {
                         >
                           <Building2 className="w-3 h-3 text-muted-foreground" />
                           <span className="font-black tabular-nums text-foreground">
-                            {scoutStats?.institutions || liveInstitutionCount || 346}
+                            {scoutStats?.institutions || liveInstitutionCount || <span className="text-muted-foreground font-normal">...</span>}
                           </span>
                           <span className="text-muted-foreground">institutions</span>
                         </div>
@@ -1359,22 +1363,33 @@ export default function Scout() {
                     </span>
                   </div>
 
-                  {/* Suggestion chips */}
-                  <div>
-                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Try a search</p>
-                    <div className="flex flex-wrap gap-2">
-                      {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"].map((chip) => (
-                        <HoverBorderGradient
-                          key={chip}
-                          onClick={() => handleChipClick(chip)}
-                          className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
-                          data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
-                        >
-                          {chip}
-                        </HoverBorderGradient>
-                      ))}
-                    </div>
-                  </div>
+                  {/* Suggestion chips — personalized from recent searches when available */}
+                  {(() => {
+                    const recentSearches = recapData?.payload?.topSearches?.slice(0, 6).map(s => s.query) ?? [];
+                    const isPersonalized = recentSearches.length >= 3;
+                    const chips = isPersonalized
+                      ? recentSearches
+                      : ["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "CRISPR gene therapy", "PD-1 immunotherapy", "PROTAC degrader"];
+                    return (
+                      <div>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                          {isPersonalized ? "Your recent searches" : "Try a search"}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {chips.map((chip) => (
+                            <HoverBorderGradient
+                              key={chip}
+                              onClick={() => handleChipClick(chip)}
+                              className="px-3 py-1.5 text-xs text-muted-foreground hover:text-primary transition-colors duration-150 font-medium tracking-wide"
+                              data-testid={`chip-prequery-${chip.toLowerCase().replace(/\s+/g, "-")}`}
+                            >
+                              {chip}
+                            </HoverBorderGradient>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
             </div>

@@ -8,7 +8,7 @@ import { z } from "zod";
 import { db } from "../db";
 import { eq, and, ne, or, sql, desc, inArray, gte, count as drizzleCount } from "drizzle-orm";
 import { storage } from "../storage";
-import { ingestedAssets, type IngestedAsset, marketListings, scoutSavedSearches, insertScoutSavedSearchSchema } from "@shared/schema";
+import { ingestedAssets, type IngestedAsset, marketListings, scoutSavedSearches, insertScoutSavedSearchSchema, savedAssets } from "@shared/schema";
 import { verifyAnyAuth, tryGetUserId, requireAdmin, getAdminEmails } from "../lib/supabaseAuth";
 import { dataSources, collectAllSignals, collectAllSignalsWithDiag, ALL_SOURCE_KEYS, withHardTimeout, getSourceHealthEntries, type SourceKey, type SourceDiag } from "../lib/sources/index";
 import { searchPatents } from "../lib/sources/patents";
@@ -1382,6 +1382,123 @@ export function registerSearchRoutes(app: Express): void {
     }
   });
 
+  app.get("/api/recommendations", async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req).catch(() => null);
+
+      const browseAssetShape = {
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
+        modality: ingestedAssets.modality,
+        indication: ingestedAssets.indication,
+        developmentStage: ingestedAssets.developmentStage,
+        categories: ingestedAssets.categories,
+        completenessScore: ingestedAssets.completenessScore,
+        firstSeenAt: ingestedAssets.firstSeenAt,
+      };
+
+      // ── Tier 1: saved-asset signals ──
+      if (userId) {
+        const savedRows = await db
+          .select({
+            ingestedAssetId: savedAssets.ingestedAssetId,
+            biology: ingestedAssets.biology,
+            modality: ingestedAssets.modality,
+          })
+          .from(savedAssets)
+          .innerJoin(ingestedAssets, eq(ingestedAssets.id, savedAssets.ingestedAssetId))
+          .where(and(eq(savedAssets.userId, userId), eq(ingestedAssets.relevant, true)))
+          .limit(100);
+
+        const savedIds = savedRows
+          .map(r => r.ingestedAssetId)
+          .filter((id): id is number => id != null);
+
+        const biologyCounts = new Map<string, number>();
+        const modalityCounts = new Map<string, number>();
+        for (const row of savedRows) {
+          if (row.biology) biologyCounts.set(row.biology, (biologyCounts.get(row.biology) ?? 0) + 1);
+          if (row.modality) modalityCounts.set(row.modality, (modalityCounts.get(row.modality) ?? 0) + 1);
+        }
+
+        const topBiologies = [...biologyCounts.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([label]) => label);
+        const topModality = [...modalityCounts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? null;
+
+        if (topBiologies.length > 0 || topModality) {
+          const biologyConditions = topBiologies.map(b =>
+            sql`lower(${ingestedAssets.biology}) LIKE ${`%${b.toLowerCase()}%`}`
+          );
+          const modalityCondition = topModality ? eq(ingestedAssets.modality, topModality) : null;
+
+          const tagFilter = biologyConditions.length > 0 && modalityCondition
+            ? or(...biologyConditions, modalityCondition)!
+            : biologyConditions.length > 0
+              ? or(...biologyConditions)!
+              : modalityCondition!;
+
+          const excludeCondition = savedIds.length > 0
+            ? sql`${ingestedAssets.id} != ALL(ARRAY[${sql.join(savedIds.map(id => sql`${id}`), sql`, `)}]::int[])`
+            : sql`true`;
+
+          // Score by tag overlap then completeness
+          const overlapScore = sql<number>`(
+            ${topBiologies.map(b =>
+              sql`CASE WHEN lower(${ingestedAssets.biology}) LIKE ${`%${b.toLowerCase()}%`} THEN 1 ELSE 0 END`
+            ).reduce((acc, c) => sql`${acc} + ${c}`)}
+            ${topModality ? sql`+ CASE WHEN ${ingestedAssets.modality} = ${topModality} THEN 2 ELSE 0 END` : sql``}
+          )`;
+
+          const assets = await db
+            .select(browseAssetShape)
+            .from(ingestedAssets)
+            .where(and(eq(ingestedAssets.relevant, true), tagFilter, excludeCondition))
+            .orderBy(sql`${overlapScore} DESC, ${ingestedAssets.completenessScore} DESC NULLS LAST`)
+            .limit(24);
+
+          return res.json({ assets, signal: "saves", saveCount: savedIds.length });
+        }
+
+        // ── Tier 2: buyer profile signals ──
+        const profile = await storage.getIndustryProfileByUserId(userId).catch(() => undefined);
+        const buyerProfile = profile?.buyerProfile as Record<string, unknown> | null | undefined;
+        const profileModalities = (buyerProfile?.modalities as string[] | undefined) ?? [];
+
+        if (profileModalities.length > 0) {
+          const assets = await db
+            .select(browseAssetShape)
+            .from(ingestedAssets)
+            .where(and(
+              eq(ingestedAssets.relevant, true),
+              or(...profileModalities.map(m => eq(ingestedAssets.modality, m)))!,
+              savedIds.length > 0
+                ? sql`${ingestedAssets.id} != ALL(ARRAY[${sql.join(savedIds.map(id => sql`${id}`), sql`, `)}]::int[])`
+                : sql`true`,
+            ))
+            .orderBy(sql`${ingestedAssets.completenessScore} DESC NULLS LAST, ${ingestedAssets.firstSeenAt} DESC`)
+            .limit(24);
+          return res.json({ assets, signal: "profile" });
+        }
+      }
+
+      // ── Tier 3: top by completeness (explore) ──
+      const assets = await db
+        .select(browseAssetShape)
+        .from(ingestedAssets)
+        .where(eq(ingestedAssets.relevant, true))
+        .orderBy(sql`${ingestedAssets.completenessScore} DESC NULLS LAST, ${ingestedAssets.firstSeenAt} DESC`)
+        .limit(24);
+
+      return res.json({ assets, signal: "explore" });
+    } catch (err: any) {
+      console.error("[recommendations] Error:", err);
+      return res.status(500).json({ error: "Failed to load recommendations" });
+    }
+  });
+
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const dashUserId = await tryGetUserId(req);
@@ -1398,11 +1515,12 @@ export function registerSearchRoutes(app: Express): void {
           firstSeenAt: ingestedAssets.firstSeenAt,
         })
         .from(ingestedAssets)
+        .where(and(eq(ingestedAssets.relevant, true), sql`${ingestedAssets.sourceType} = 'tech_transfer'`))
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
         db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE relevant = true AND institution IS NOT NULL AND institution != ''`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM review_queue WHERE status = 'pending'`),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE first_seen_at >= NOW() - INTERVAL '7 days'`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE relevant = true AND source_type = 'tech_transfer' AND first_seen_at >= NOW() - INTERVAL '7 days'`),
       ]);
       const institutionCount = Number((institutionCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
       const assetsInReview = Number((reviewCount.rows[0] as Record<string, unknown>)?.n ?? 0);

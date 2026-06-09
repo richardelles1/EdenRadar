@@ -564,19 +564,19 @@ function CategoryDrawer({
         style={{ animation: "slide-in-right 220ms ease both" }}
       >
         {/* Drawer header */}
-        <div className="flex items-start justify-between p-5 border-b border-border shrink-0">
-          <div className="flex-1 min-w-0 pr-3">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-0.5">{subtitle}</p>
-            <h3 className="text-sm font-bold text-foreground leading-tight capitalize line-clamp-2">{title}</h3>
+        <div className="bg-gradient-to-br from-[#14532d] via-[#166534] to-[#15803d] px-5 py-4 shrink-0 flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-[10px] font-semibold text-white/55 uppercase tracking-wide mb-0.5">{subtitle}</p>
+            <h3 className="text-sm font-bold text-white leading-tight capitalize line-clamp-2">{title}</h3>
             {!isSingle && (
-              <p className="text-[10px] text-muted-foreground mt-1">
+              <p className="text-[10px] text-white/55 mt-1">
                 {displayAssets.length} asset{displayAssets.length !== 1 ? "s" : ""}
               </p>
             )}
           </div>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground transition-colors shrink-0 mt-0.5"
+            className="text-white/60 hover:text-white transition-colors shrink-0 mt-0.5"
             aria-label="Close"
           >
             <X className="w-4 h-4" />

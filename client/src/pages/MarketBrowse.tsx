@@ -516,8 +516,17 @@ export default function MarketBrowse() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground">
           <ShoppingBag className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p className="text-sm font-medium">No listings match your filters</p>
-          <p className="text-xs mt-1">Try adjusting the filters above</p>
+          {listings.length === 0 ? (
+            <>
+              <p className="text-sm font-medium">EdenMarket is launching soon</p>
+              <p className="text-xs mt-1">Listings will appear here once sellers go live</p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-medium">No listings match your filters</p>
+              <p className="text-xs mt-1">Try adjusting the filters above</p>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">

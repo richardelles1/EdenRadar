@@ -2359,26 +2359,80 @@ export async function* documentQuery(
 // ── Session summarization (turn 8+) ──────────────────────────────────────
 // Compresses older turns into a 200-token context note, keeping last 4 turns
 // fresh. Called async after the assistant message is persisted.
+// ── Session summarization ─────────────────────────────────────────────────
+// Upgraded to extract BD decision signals, not just topic history.
+// Accepts full session messages so structured asset data (which assets
+// appeared, how many times) can inform the summary alongside the text.
+type SummarizableMessage = {
+  role: "user" | "assistant";
+  content: string;
+  assets?: Array<{ id: number; assetName: string; institution: string }>;
+};
+
 export async function summarizeSession(
-  messages: Array<{ role: "user" | "assistant"; content: string }>
+  messages: SummarizableMessage[]
 ): Promise<string> {
   const toSummarize = messages.slice(0, -4);
   if (toSummarize.length < 4) return "";
+
+  // Build asset engagement record: assets shown in multiple turns signal genuine interest
+  const assetTurns: Record<string, { name: string; institution: string; count: number }> = {};
+  for (const msg of toSummarize) {
+    if (msg.role === "assistant" && msg.assets?.length) {
+      for (const a of msg.assets) {
+        const key = String(a.id);
+        if (!assetTurns[key]) assetTurns[key] = { name: a.assetName, institution: a.institution, count: 0 };
+        assetTurns[key].count++;
+      }
+    }
+  }
+  const engagedAssets = Object.values(assetTurns)
+    .filter((a) => a.count > 1)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 6)
+    .map((a) => `  • ${a.name} (${a.institution}) — surfaced ${a.count} turns`);
+
+  const engagementBlock = engagedAssets.length
+    ? `\nAssets that appeared across multiple turns (engagement signals):\n${engagedAssets.join("\n")}`
+    : "";
+
+  // Transcript: full user messages (short) + first 500 chars of EDEN responses (captures assessments)
   const transcript = toSummarize
-    .map((m) => `${m.role === "user" ? "User" : "EDEN"}: ${m.content.slice(0, 300)}`)
+    .map((m) => {
+      if (m.role === "user") return `User: ${m.content}`;
+      return `EDEN: ${m.content.slice(0, 500)}${m.content.length > 500 ? "…" : ""}`;
+    })
     .join("\n");
+
   try {
     const resp = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: "Summarize this biotech BD research conversation. Extract: assets discussed (names + institutions), therapy areas or modalities explored, any active filters the user set, key decisions made. Output 3-5 concise bullet points.",
+          content: `You are summarizing a biotech BD research session for EDEN's memory system. This summary is injected into future sessions so EDEN can be immediately useful without re-asking what the user is working on.
+
+Extract exactly these five things — be specific, not generic. Asset names and institutions matter more than general labels.
+
+DEAL THESIS: What is the user building or evaluating? (e.g. "Series A oncology company in-licensing phase 1-ready CAR-T for solid tumors")
+
+ASSETS WITH TRACTION: Which specific assets received follow-up, back-references, or explicit interest? Format: [Asset Name] (Institution) — what stood out.
+
+WHAT DIDN'T FIT: What did the user pass over or pivot away from? Name the pattern (e.g. "skipped discovery-stage", "passed on viral vector delivery", "not interested in EU institutions").
+
+ACTIVE FILTERS AT END: Last known focus — modality, indication, stage, geography, institution preferences still in play.
+
+NATURAL NEXT STEP: What query or search would naturally follow from where the session ended?
+
+Output as labeled sections. Under 320 words total.`,
         },
-        { role: "user", content: transcript },
+        {
+          role: "user",
+          content: `TRANSCRIPT:\n${transcript}${engagementBlock}`,
+        },
       ],
       temperature: 0.3,
-      max_tokens: 200,
+      max_tokens: 380,
     });
     return resp.choices[0]?.message?.content ?? "";
   } catch {

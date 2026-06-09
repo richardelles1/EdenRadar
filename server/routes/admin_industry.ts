@@ -28,7 +28,11 @@ export function registerIndustryRoutes(app: Express): void {
       const rows = await db
         .selectDistinct({ institution: ingestedAssets.institution })
         .from(ingestedAssets)
-        .where(sql`${ingestedAssets.institution} IS NOT NULL AND ${ingestedAssets.institution} != ''`)
+        .where(and(
+          sql`${ingestedAssets.institution} IS NOT NULL AND ${ingestedAssets.institution} != ''`,
+          eq(ingestedAssets.relevant, true),
+          sql`${ingestedAssets.sourceType} = 'tech_transfer'`,
+        ))
         .orderBy(ingestedAssets.institution)
         .limit(500);
       res.json(rows.map((r) => r.institution).filter(Boolean));
