@@ -333,7 +333,7 @@ export function IndustryOnboarding({ open, onClose, initialCompanyName, onSave, 
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    onClick={() => handleNavigate("/pipeline")}
+                    onClick={() => handleNavigate("/assets")}
                     className="group flex items-center gap-3 p-3.5 rounded-xl border border-border hover:border-primary/30 bg-background hover:bg-muted/30 transition-all duration-150 text-left"
                   >
                     <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 group-hover:bg-primary/10 transition-colors">
