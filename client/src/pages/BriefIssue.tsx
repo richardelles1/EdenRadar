@@ -634,7 +634,7 @@ export default function BriefIssue() {
             <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `2px solid ${EMERALD}` }}>
-                  {["Asset", "Stage", "Institution", "Status"].map((h, i) => (
+                  {["Asset", "Stage", "Tier", "Status"].map((h, i) => (
                     <th
                       key={h}
                       className="pb-2.5"
