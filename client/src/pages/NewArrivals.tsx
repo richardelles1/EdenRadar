@@ -11,6 +11,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { OrientationHint } from "@/components/OrientationHint";
 
 type NewArrivalsAsset = {
   id: number;
@@ -217,6 +218,13 @@ export default function NewArrivals() {
             </div>
           </div>
         </div>
+
+        <OrientationHint
+          hintId="new-arrivals-set-alert"
+          title="Never miss a batch."
+          body="These assets were just indexed from TTO portals. Set an alert in Alerts to get notified automatically when assets matching your focus arrive."
+          accent="violet"
+        />
 
         {/* Institution summary */}
         {!isLoading && institutions.length > 0 && (

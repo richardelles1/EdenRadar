@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, ChevronRight, ChevronLeft, Search, Bell, Layers, ArrowRight, Sparkles } from "lucide-react";
 import { getIndustryProfile, saveIndustryProfile, type IndustryProfile } from "@/hooks/use-industry";
-import { SCOUT_TOUR_STORAGE_KEY } from "@/components/ScoutTour";
 
 interface Props {
   open: boolean;
@@ -117,7 +116,6 @@ export function IndustryOnboarding({ open, onClose, initialCompanyName, onSave, 
       onboardingDone: true,
       companyName: initialCompanyName ?? saved.companyName,
     });
-    localStorage.setItem(SCOUT_TOUR_STORAGE_KEY, "1");
   }
 
   function handleFinish() {
@@ -128,7 +126,6 @@ export function IndustryOnboarding({ open, onClose, initialCompanyName, onSave, 
 
   function handleSkip() {
     saveIndustryProfile({ onboardingDone: true, companyName: initialCompanyName ?? saved.companyName });
-    localStorage.setItem(SCOUT_TOUR_STORAGE_KEY, "1");
     onClose();
   }
 

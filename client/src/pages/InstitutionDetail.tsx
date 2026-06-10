@@ -18,6 +18,7 @@ import {
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { UserAlert } from "@shared/schema";
+import { OrientationHint } from "@/components/OrientationHint";
 
 // ── Stage & Biology config ────────────────────────────────────────────────────
 
@@ -837,6 +838,13 @@ export default function InstitutionDetail() {
 
       {/* ── Content ── */}
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+        <OrientationHint
+          hintId="institution-detail-click-categories"
+          title="Everything is clickable."
+          body="Click any biology bar, stage chip, or indication to open a filtered view of assets matching that profile from this institution."
+          accent="emerald"
+        />
 
         {/* Research DNA — first, every bar and indication is clickable */}
         <ResearchDnaPanel

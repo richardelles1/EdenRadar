@@ -26,6 +26,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { OrientationHint } from "@/components/OrientationHint";
 import {
   Bell,
   Plus,
@@ -351,6 +352,13 @@ function MyAlertsSection({ onCreateAlert, matchCounts = {}, profile }: { onCreat
         </div>
 
         <DeliveryStatusBanner profile={profile} />
+
+        <OrientationHint
+          hintId="alerts-how-it-works"
+          title="Your deal radar."
+          body="Alerts watch the TTO corpus 24/7. Set search criteria once and get notified by email when matching assets appear."
+          accent="emerald"
+        />
 
         {isLoading ? (
           <div className="space-y-2">
