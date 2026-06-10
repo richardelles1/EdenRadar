@@ -283,7 +283,7 @@ export default function BriefIssue() {
         {/* Hero band */}
         <div className="relative overflow-hidden" style={{ background: EMERALD }}>
           <MolecularLattice />
-          <div className="relative px-12 py-10">
+          <div className="relative px-5 sm:px-12 py-8 sm:py-10">
             <div
               className="flex items-center gap-3 mb-3"
               style={{ color: "rgba(255,255,255,0.55)" }}
@@ -297,7 +297,7 @@ export default function BriefIssue() {
               <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.15)" }} />
             </div>
             <h1
-              className="text-5xl text-white mb-2"
+              className="text-3xl sm:text-5xl text-white mb-2"
               style={{ fontFamily: "'DM Serif Display', Georgia, serif", lineHeight: 1.05 }}
             >
               The Eden <em>Brief</em>
@@ -305,7 +305,7 @@ export default function BriefIssue() {
             <p className="text-sm font-light mb-7" style={{ color: "rgba(255,255,255,0.65)" }}>
               Signal from the licensing frontier
             </p>
-            <div className="flex gap-8">
+            <div className="flex flex-wrap gap-x-8 gap-y-3">
               {[
                 ["Issue",    `No. ${issue.issueNumber}`],
                 ["Published", issue.publishedAt
@@ -334,7 +334,7 @@ export default function BriefIssue() {
         </div>
 
         {/* Body */}
-        <div className="px-12 py-11">
+        <div className="px-5 sm:px-12 py-8 sm:py-11">
 
           {/* 01 - THE NUMBER */}
           <section className="mb-11">
@@ -389,14 +389,14 @@ export default function BriefIssue() {
           {/* 02 - WHAT'S MOVING */}
           <section className="mb-11">
             <SectionLabel>02 &middot; What&apos;s Moving</SectionLabel>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {c.whats_moving.map((item, i) => {
                 const isLast = i === c.whats_moving.length - 1;
                 const hasChart = Boolean(item.chart?.length);
                 return (
                   <div
                     key={i}
-                    className={`p-4 ${isLast && hasChart ? "col-span-2 grid grid-cols-2 gap-5 items-center" : isLast ? "col-span-2" : ""}`}
+                    className={`p-4 ${isLast && hasChart ? "sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-5 items-center" : isLast ? "sm:col-span-2" : ""}`}
                     style={{ background: PAPER_WARM, border: `1px solid ${RULE}` }}
                   >
                     <div>
@@ -483,8 +483,8 @@ export default function BriefIssue() {
           {/* 03 - THERAPEUTIC SPOTLIGHT */}
           <section className="mb-11">
             <SectionLabel>03 &middot; Therapeutic Spotlight</SectionLabel>
-            <div className="grid grid-cols-3 gap-8 items-start">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 items-start">
+              <div className="sm:col-span-2">
                 <p
                   className="text-xs mb-1.5"
                   style={{
@@ -591,8 +591,8 @@ export default function BriefIssue() {
           <section className="mb-11">
             <SectionLabel>04 &middot; The Brief Take</SectionLabel>
             <div
-              className="px-10 py-8 relative"
-              style={{ background: EMERALD, margin: "0 -48px" }}
+              className="-mx-5 sm:-mx-12 px-5 sm:px-10 py-8 relative"
+              style={{ background: EMERALD }}
             >
               <span
                 className="absolute top-3 left-6 leading-none select-none"
@@ -630,6 +630,7 @@ export default function BriefIssue() {
           {/* 05 - FROM THE PIPELINE */}
           <section className="mb-4">
             <SectionLabel>05 &middot; From the Pipeline</SectionLabel>
+            <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `2px solid ${EMERALD}` }}>
@@ -702,6 +703,7 @@ export default function BriefIssue() {
                 ))}
               </tbody>
             </table>
+            </div>
             <div
               className="mt-4 py-3 text-center text-sm"
               style={{
@@ -721,7 +723,7 @@ export default function BriefIssue() {
 
         {/* Footer band */}
         <div
-          className="px-12 py-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6"
+          className="px-5 sm:px-12 py-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6"
           style={{ background: INK }}
         >
           <div>

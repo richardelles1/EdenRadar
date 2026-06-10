@@ -96,7 +96,7 @@ export default function BriefArchive() {
     <div className="min-h-screen" style={{ background: "#e8e6e1" }}>
       <Nav />
 
-      <div className="max-w-5xl mx-auto px-6 py-16">
+      <div className="max-w-5xl mx-auto px-6 py-10 sm:py-16">
 
         {/* Page header */}
         <div className="mb-12">
@@ -107,7 +107,7 @@ export default function BriefArchive() {
             Eden NX · Intelligence Brief
           </p>
           <h1
-            className="text-5xl mb-3"
+            className="text-3xl sm:text-5xl mb-3"
             style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: "#1a1e23", lineHeight: 1.1 }}
           >
             The Eden <em>Brief</em>
