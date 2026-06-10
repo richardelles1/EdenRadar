@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Building2, Search, ShieldOff, SlidersHorizontal, X } from "lucide-react";
 import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
+import { OrientationHint } from "@/components/OrientationHint";
 
 // Specialty chips — faint primary tint, ties to Scout portal identity
 const SPECIALTY_CHIP = "bg-primary/10 text-primary/80 border-primary/15";
@@ -314,6 +315,14 @@ export default function Institutions() {
       </div>
 
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
+        <div className="mb-5">
+          <OrientationHint
+            hintId="institutions-portfolio-dna"
+            title="Portfolio DNA."
+            body="Each card shows the institution's biology concentration. Click any card to explore the full TTO portfolio and see individual asset details."
+            accent="emerald"
+          />
+        </div>
         {noneScanned && (
           <div className="mb-6 flex items-center gap-3 px-4 py-3 rounded-lg border border-amber-500/20 bg-amber-500/5 text-amber-700 dark:text-amber-400 text-sm">
             <span className="font-medium">Listing counts are not yet available.</span>

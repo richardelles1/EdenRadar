@@ -22,99 +22,99 @@ CREATE TABLE IF NOT EXISTS eden_brief_subscribers (
 
 INSERT INTO eden_brief_issues (slug, issue_number, title, status, published_at, content)
 VALUES (
-  '2026-06',
+  '2026-05',
   1,
-  'Q2 Signals',
+  'May 2026',
   'published',
   CURRENT_TIMESTAMP,
   $json${
     "the_number": {
-      "figure": "847",
-      "delta": "+14% vs Q2 2025",
-      "headline": "New biotech assets entered monitored TTO portfolios in Q2 2026",
-      "body": "Across 400+ technology transfer offices tracked by Eden NX, Q2 saw a 14% increase in new filings versus the same period last year. The majority remain invisible to active BD buyers: not due to access restrictions, but because discovery infrastructure has not kept pace with filing volume."
+      "figure": "2,846",
+      "delta": "May 2026 intake",
+      "headline": "New biotech assets indexed across 348 monitored TTO portfolios",
+      "body": "Eden's monitored corpus reached 34,170 relevant biotech assets as of May 2026. The 2,846 new records added this month span 348 technology transfer offices: from Tier 1 research universities to regional institutions rarely represented in standard conference-circuit deal flow. The majority remain below the threshold of active BD discovery."
     },
     "whats_moving": [
       {
-        "text": "<strong>Oncology competition is at a three-year high.</strong> BD teams scanning for oncology assets are contesting the same narrow visible set while a secondary tier of less-indexed assets goes uncontested. Concentration of attention is the problem, not lack of supply."
+        "text": "<strong>Oncology leads all categories, accounting for 14% of May intake.</strong> 406 assets carried oncology tags across 12 identified cancer subtypes. BD attention remains concentrated on a narrow visible tier while a secondary set from less-indexed institutions goes uncontested. The supply is not the constraint."
       },
       {
-        "text": "<strong>CNS and rare metabolic filings are underrepresented relative to need.</strong> Lower licensing competition and a growing cluster of university-stage assets align with mid-size pharma's current appetite, particularly pre-clinical programmes with early efficacy signals."
+        "text": "<strong>44.9% of May intake carries no structured indication.</strong> 1,278 of 2,846 assets lack classification: not because the science is absent, but because TTOs describe technology at the filing stage without standardised terminology. Without structured metadata, these assets are invisible to any BD team running indication-filtered searches."
       },
       {
-        "text": "<strong>Gene silencing mechanisms are entering the pipeline at a rate not seen since 2019.</strong> Multiple Tier 1 institutions filed related assets within a 90-day window. Whether coordinated research momentum or independent convergence, the licensing window is narrow.",
+        "text": "<strong>Neurology and immunology account for 378 May assets combined, with significantly lower BD competition than oncology.</strong> 207 CNS and neurology-tagged assets entered the corpus alongside 171 immunology records. Both categories show a structural mismatch between filing volume and active BD attention.",
         "chart": [
-          { "label": "Oncology",  "value": 312, "maxValue": 312 },
-          { "label": "CNS",       "value": 143, "maxValue": 312 },
-          { "label": "Rare Dis.", "value": 98,  "maxValue": 312 },
-          { "label": "Gene Sil.", "value": 77,  "maxValue": 312 },
-          { "label": "Other",     "value": 217, "maxValue": 312 }
+          { "label": "Oncology",    "value": 406, "maxValue": 406 },
+          { "label": "Diagnostics", "value": 199, "maxValue": 406 },
+          { "label": "Immunology",  "value": 171, "maxValue": 406 },
+          { "label": "Inf. Disease","value": 152, "maxValue": 406 },
+          { "label": "Neurology",   "value": 143, "maxValue": 406 }
         ]
       }
     ],
     "therapeutic_spotlight": {
-      "area": "Central Nervous System",
+      "area": "Oncology",
       "body": [
-        "CNS represents one of the most structurally underdiscovered categories in the academic licensing market. Filing volume has grown steadily since 2022, but the proportion of CNS assets reaching active licensing conversations remains disproportionately low, driven primarily by discoverability rather than demand.",
-        "The assets most likely to go unnoticed are early pre-clinical programmes at regional research universities, where TTO outreach capacity is limited. These institutions rarely appear in standard conference circuits, yet several have produced assets with validated mechanisms that have not yet attracted qualified inquiries."
+        "Oncology is the most densely represented category in academic biotech filings, and May 2026 reinforces that pattern. 406 oncology-tagged assets entered Eden's monitored corpus across 12 identified cancer subtypes: solid tumours, haematologic malignancies, CNS cancers, and more.",
+        "The concentration problem is structural. BD teams scanning oncology compete for the same narrow visible set: assets from Tier 1 institutions with active TTO outreach programmes. A secondary tier of oncology assets from less-indexed universities and regional research centres remains uncontested, not because of lower quality, but because the discovery infrastructure has not reached them."
       ],
       "stats": [
-        { "figure": "143",  "label": "CNS assets in active pipeline" },
-        { "figure": "+38%", "label": "Year-on-year filing growth" },
-        { "figure": "2.1x", "label": "Demand-to-visibility gap ratio" }
+        { "figure": "406", "label": "Oncology assets added in May" },
+        { "figure": "12",  "label": "Cancer subtypes represented" },
+        { "figure": "14%", "label": "Share of total May intake" }
       ],
       "ring": {
-        "pct": 75,
-        "label": "Uncontested",
-        "detail": "of CNS assets have had no qualified BD inquiry in 12 months"
+        "pct": 76,
+        "label": "Pre-IND",
+        "detail": "of May assets are at discovery or early stage"
       }
     },
     "brief_take": {
-      "quote": "The licensing market conflates recency with relevance. A three-year-old pre-clinical asset with clean IP and a strong institution behind it is frequently more valuable than a newly filed one with unclear protection. The industry's search infrastructure does not reflect that: it sorts by date, not by fit. Until BD teams can query by mechanism, stage, IP clarity, and institutional track record simultaneously, they are not searching. They are browsing.",
-      "attribution": "Eden NX Editorial, June 2026"
+      "quote": "Nearly half of what enters the academic biotech pipeline each month carries no structured indication. It is not sparse data: the science is documented, the IP is filed, the inventor is named. What is missing is the layer of structured metadata that makes an asset findable. Without it, a pre-clinical oncology asset filed at a regional university looks identical to a blank record to any BD team running an indication-filtered search. This is the problem Eden exists to solve.",
+      "attribution": "Eden NX Editorial, May 2026"
     },
     "pipeline": [
       {
-        "mechanism": "Novel gene-silencing mechanism targeting validated CNS pathway",
+        "mechanism": "AAV-delivered GRK2 inhibitor restoring cardiac GPCR signalling in heart failure",
         "tags": [
-          { "label": "CNS",                    "type": "cns"     },
-          { "label": "Gene Silencing",          "type": "gene"    },
-          { "label": "Efficacy data available", "type": "default" }
+          { "label": "Cardiology",   "type": "default" },
+          { "label": "Gene Therapy", "type": "gene"    },
+          { "label": "Preclinical",  "type": "default" }
         ],
-        "stage": "Pre-clinical",
-        "tier": "Tier 1",
-        "status": "available"
-      },
-      {
-        "mechanism": "Protein aggregation inhibitor for rare metabolic disease with validated target",
-        "tags": [
-          { "label": "Rare Disease",        "type": "rare"    },
-          { "label": "Protein Aggregation", "type": "default" },
-          { "label": "Clean IP",            "type": "default" }
-        ],
-        "stage": "IND-enabling",
-        "tier": "Tier 1",
-        "status": "available"
-      },
-      {
-        "mechanism": "Oncogenic transcription factor with synthetic lethality approach in solid tumours",
-        "tags": [
-          { "label": "Oncology",     "type": "oncology" },
-          { "label": "Transcription","type": "default"  }
-        ],
-        "stage": "Pre-clinical",
+        "stage": "Preclinical",
         "tier": "Tier 2",
-        "status": "in_discussion"
+        "status": "available"
       },
       {
-        "mechanism": "Epigenetic modifier with dual CNS and inflammatory disease potential",
+        "mechanism": "Dual GPR18/TRPV1 modulator with neuroprotective and immunomodulatory activity for multiple sclerosis",
         "tags": [
-          { "label": "CNS",         "type": "cns"     },
-          { "label": "Epigenetics", "type": "default" },
-          { "label": "Grant-backed","type": "default" }
+          { "label": "Neurology",  "type": "cns"     },
+          { "label": "Immunology", "type": "default" },
+          { "label": "Dual target","type": "default" }
         ],
         "stage": "Discovery",
         "tier": "Tier 2",
+        "status": "available"
+      },
+      {
+        "mechanism": "Oncogenic transcription factor suppression panel for bladder cancer risk stratification",
+        "tags": [
+          { "label": "Oncology",    "type": "oncology" },
+          { "label": "Diagnostics", "type": "default"  }
+        ],
+        "stage": "Preclinical",
+        "tier": "Tier 2",
+        "status": "available"
+      },
+      {
+        "mechanism": "Allosteric GLP-1R small molecule agonist for type 2 diabetes and obesity",
+        "tags": [
+          { "label": "Metabolic",  "type": "rare"    },
+          { "label": "Small Mol.", "type": "default" },
+          { "label": "GLP-1R",    "type": "default" }
+        ],
+        "stage": "Discovery",
+        "tier": "Tier 3",
         "status": "available"
       }
     ]

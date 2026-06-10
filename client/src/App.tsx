@@ -108,7 +108,10 @@ function SettingsRoute() {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (!loading && !session) navigate("/login", { replace: true });
+    if (!loading && !session) {
+      const dest = window.location.pathname + window.location.search;
+      navigate(`/login?redirect=${encodeURIComponent(dest)}`, { replace: true });
+    }
   }, [loading, session, navigate]);
 
   if (loading) {
@@ -471,7 +474,8 @@ function SessionExpiredGuard() {
 
   function handleSignInAgain() {
     clearSessionExpired();
-    navigate("/login", { replace: true });
+    const dest = window.location.pathname + window.location.search;
+    navigate(`/login?redirect=${encodeURIComponent(dest)}`, { replace: true });
   }
 
   return (

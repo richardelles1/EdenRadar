@@ -15,7 +15,7 @@ const STEPS: TourStep[] = [
   {
     testId: null,
     title: "Welcome to EdenRadar",
-    body: "EdenRadar searches 33,000+ TTO assets across 350+ institutions — ranked by fit to your deal thesis in real time.",
+    body: "EdenRadar searches tens of thousands of TTO assets across 350+ institutions — ranked by fit to your deal thesis in real time.",
   },
   {
     testId: "input-search",

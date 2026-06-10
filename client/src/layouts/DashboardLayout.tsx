@@ -7,9 +7,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
 import { useOrg } from "@/hooks/use-org";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AlertTriangle, Clock, X, ExternalLink } from "lucide-react";
+import { AlertTriangle, Clock, X, ExternalLink, HelpCircle, RotateCcw, Lightbulb } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { SCOUT_TOUR_STORAGE_KEY } from "@/components/ScoutTour";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -93,6 +95,57 @@ function TrialBanner({ daysLeft, periodEnd }: { daysLeft: number; periodEnd: str
         {chargeDate && <span className="text-muted-foreground"> You won't be charged until {chargeDate}. Cancel anytime from settings.</span>}
       </span>
     </div>
+  );
+}
+
+function HelpMenu({ navigate }: { navigate: (path: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const { toast } = useToast();
+
+  function retakeTour() {
+    localStorage.removeItem(SCOUT_TOUR_STORAGE_KEY);
+    setOpen(false);
+    navigate("/scout");
+    toast({ title: "Scout tour reset", description: "The guided tour will start when you reach Scout." });
+  }
+
+  function resetTips() {
+    localStorage.removeItem("eden-orientation-dismissed");
+    setOpen(false);
+    toast({ title: "Tips reset", description: "All orientation hints will reappear." });
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+          aria-label="Help and tutorials"
+          data-testid="button-help-menu"
+        >
+          <HelpCircle className="w-4 h-4" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-52 p-1.5 space-y-0.5">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">Help</p>
+        <button
+          onClick={retakeTour}
+          className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-xs text-foreground hover:bg-muted/60 transition-colors text-left"
+          data-testid="button-retake-tour"
+        >
+          <RotateCcw className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          Retake Scout tour
+        </button>
+        <button
+          onClick={resetTips}
+          className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-xs text-foreground hover:bg-muted/60 transition-colors text-left"
+          data-testid="button-reset-tips"
+        >
+          <Lightbulb className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          Reset all tips
+        </button>
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -198,7 +251,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     >
       <IndustrySidebar />
       <div className="flex-1 flex flex-col min-w-0">
-        <div className="h-12 flex items-center justify-end px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">
+        <div className="h-12 flex items-center justify-end gap-2 px-4 border-b border-border bg-background/60 backdrop-blur-sm shrink-0">
+          <HelpMenu navigate={navigate} />
           <AppSwitcher active="scout" />
         </div>
         {showPastDue && (
