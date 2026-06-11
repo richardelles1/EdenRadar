@@ -31,7 +31,7 @@ export function registerIngestRoutes(app: Express): void {
     });
   });
 
-  app.get("/api/ingest/status", async (_req, res) => {
+  app.get("/api/ingest/status", requireAdmin, async (_req, res) => {
     try {
       const lastRun = await storage.getLastIngestionRun();
       if (!lastRun) {
@@ -61,7 +61,7 @@ export function registerIngestRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/ingest/delta", async (_req, res) => {
+  app.get("/api/ingest/delta", requireAdmin, async (_req, res) => {
     try {
       const lastRun = await storage.getLastIngestionRun();
       if (!lastRun || lastRun.status !== "completed") {
@@ -164,7 +164,7 @@ export function registerIngestRoutes(app: Express): void {
     res.json({ ok: true, message: `Concurrency set to ${concurrency}`, concurrency });
   });
 
-  app.get("/api/admin/scraper-health", async (req, res) => {
+  app.get("/api/admin/scraper-health", requireAdmin, async (req, res) => {
     try {
       const rows = await getAllScraperHealth();
       const now = Date.now();
@@ -181,7 +181,7 @@ export function registerIngestRoutes(app: Express): void {
     }
   });
 
-  app.post("/api/admin/scraper-health/:institution/clear-backoff", async (req, res) => {
+  app.post("/api/admin/scraper-health/:institution/clear-backoff", requireAdmin, async (req, res) => {
     try {
       const institution = decodeURIComponent(String(req.params.institution));
       await clearScraperBackoff(institution);

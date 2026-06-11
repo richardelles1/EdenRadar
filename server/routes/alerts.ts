@@ -116,6 +116,7 @@ export function registerAlertsRoutes(app: Express): void {
   app.get("/api/alerts", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
       const alerts = await storage.listUserAlerts(userId);
       res.json(alerts);
     } catch (err: any) {

@@ -398,16 +398,13 @@ export function registerBillingRoutes(app: Express): void {
       const newStripePriceId = updatedSub.items?.data?.[0]?.price?.id ?? newPriceId;
       const newStatus = updatedSub.status ?? "active";
 
-      await storage.updateOrganization(org.id, {
-        planTier: PLAN_TIER_MAP[targetPlanId],
-        seatLimit: PLAN_SEAT_MAP[targetPlanId],
-        stripePriceId: newStripePriceId,
-        stripeStatus: newStatus,
-      });
+      // Do NOT write plan tier here — the authoritative update comes from the
+      // customer.subscription.updated webhook once Stripe confirms payment.
+      // Writing here races against proration invoice failure and can grant
+      // a free upgrade when the charge subsequently fails.
+      console.log(`[stripe/upgrade-plan] Org ${org.id}: plan change to ${targetPlanId} submitted (sub ${org.stripeSubscriptionId}) — awaiting webhook confirmation`);
 
-      console.log(`[stripe/upgrade-plan] Org ${org.id}: ${org.planTier} â†’ ${targetPlanId} (sub ${org.stripeSubscriptionId})`);
-
-      return res.json({ ok: true, planTier: PLAN_TIER_MAP[targetPlanId], seatLimit: PLAN_SEAT_MAP[targetPlanId] });
+      return res.json({ ok: true, pending: true, planTier: PLAN_TIER_MAP[targetPlanId], seatLimit: PLAN_SEAT_MAP[targetPlanId] });
     } catch (err: any) {
       console.error("[stripe/upgrade-plan]", err?.message);
       return res.status(500).json({ error: "Failed to change plan" });
@@ -433,8 +430,8 @@ export function registerBillingRoutes(app: Express): void {
 
     const rawBody = req.rawBody as Buffer | string | undefined;
     if (!rawBody) {
-      console.warn("[stripe/webhook] rawBody is missing â€” body-parser verify callback did not fire. Returning 200 to stop Stripe retries.");
-      return res.status(200).json({ received: true, skipped: "no_raw_body" });
+      console.error("[stripe/webhook] rawBody missing - cannot verify signature. Returning 400 so Stripe retries.");
+      return res.status(400).json({ error: "rawBody unavailable - cannot verify signature" });
     }
 
     let event: { type: string; data: { object: Record<string, unknown> } };
@@ -663,14 +660,16 @@ export function registerBillingRoutes(app: Express): void {
           const priceId = rawPriceId ?? orgU.stripePriceId ?? "";
           const matchedPlanId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0];
           const resolvedPlanId: StripePlanId | null = matchedPlanId && isStripePlanId(matchedPlanId) ? matchedPlanId : null;
-          const planTierU = resolvedPlanId ? PLAN_TIER_MAP[resolvedPlanId] : orgU.planTier;
-          const seatLimitU = resolvedPlanId ? PLAN_SEAT_MAP[resolvedPlanId] : orgU.seatLimit;
+          const stripeStatusStr = String(sub["status"] ?? "active");
+          const isCanceled = stripeStatusStr === "canceled";
+          const planTierU = resolvedPlanId ? PLAN_TIER_MAP[resolvedPlanId] : (isCanceled ? "none" : orgU.planTier);
+          const seatLimitU = resolvedPlanId ? PLAN_SEAT_MAP[resolvedPlanId] : (isCanceled ? 1 : orgU.seatLimit);
           const periodEndU = typeof sub["current_period_end"] === "number" ? new Date(sub["current_period_end"] * 1000) : null;
           const cancelAtU = typeof sub["cancel_at"] === "number" ? new Date(sub["cancel_at"] * 1000) : null;
           await storage.applyStripeSubscription(orgU.id, {
             stripeCustomerId,
             stripeSubscriptionId,
-            stripeStatus: String(sub["status"] ?? "active"),
+            stripeStatus: stripeStatusStr,
             stripePriceId: priceId,
             planTier: planTierU,
             seatLimit: seatLimitU,

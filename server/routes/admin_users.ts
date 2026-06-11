@@ -133,8 +133,10 @@ export function registerUserRoutes(app: Express): void {
       const { role } = roleSchema.parse(req.body);
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data: existing, error: fetchErr } = await adminSupabase.auth.admin.getUserById(id);
+      if (fetchErr || !existing?.user) return res.status(404).json({ error: "User not found" });
       const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
-        user_metadata: { role },
+        user_metadata: { ...existing.user.user_metadata, role },
       });
       if (error) return res.status(500).json({ error: "Internal server error" });
       const adminUser = await getAdminUser(req);

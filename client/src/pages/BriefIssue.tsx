@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Nav } from "@/components/Nav";
@@ -59,7 +60,7 @@ function AssetTag({ label, type }: { label: string; type: BriefTagType }) {
       className="text-xs px-1.5 py-0.5 rounded-sm"
       style={{
         fontFamily: "'JetBrains Mono', monospace",
-        fontSize: "8.5px",
+        fontSize: "10px",
         letterSpacing: "0.06em",
         textTransform: "uppercase",
         color: s.color,
@@ -127,39 +128,63 @@ function SubscribeInline() {
 
   if (state === "done") {
     return (
-      <p style={{ fontFamily: "'JetBrains Mono', monospace" }}
-         className="text-xs tracking-widest uppercase text-white opacity-80">
+      <p
+        className="text-xs tracking-widest uppercase"
+        style={{ fontFamily: "'JetBrains Mono', monospace", color: EMERALD }}
+      >
         Subscribed. Next issue comes directly to you.
       </p>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex gap-0">
-      <input
-        type="email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        placeholder="your@email.com"
-        required
-        className="w-48 border border-white/20 bg-white/10 px-3 py-2 text-sm text-white placeholder-white/40 outline-none focus:border-white/50"
-        style={{ fontFamily: "inherit" }}
-      />
-      <button
-        type="submit"
-        disabled={state === "loading"}
-        className="bg-white text-emerald-800 px-4 py-2 text-xs tracking-widest uppercase hover:bg-white/90 transition-colors disabled:opacity-60 flex-shrink-0 font-semibold"
-        style={{ fontFamily: "'JetBrains Mono', monospace" }}
+    <div>
+      <div
+        className="text-xs tracking-widest uppercase mb-2"
+        style={{ fontFamily: "'JetBrains Mono', monospace", color: EMERALD, fontSize: "10px" }}
       >
-        {state === "loading" ? "..." : "Subscribe"}
-      </button>
-    </form>
+        Subscribe
+      </div>
+      <form onSubmit={handleSubmit} className="flex gap-0 w-full sm:w-auto">
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="your@email.com"
+          required
+          className="flex-1 sm:w-48 border border-r-0 px-3 py-2 text-sm outline-none min-w-0"
+          style={{
+            fontFamily: "inherit",
+            borderColor: RULE,
+            background: PAPER,
+            color: INK,
+          }}
+        />
+        <button
+          type="submit"
+          disabled={state === "loading"}
+          className="px-4 py-2 text-xs tracking-widest uppercase transition-colors disabled:opacity-60 flex-shrink-0 font-semibold"
+          style={{
+            fontFamily: "'JetBrains Mono', monospace",
+            background: EMERALD,
+            color: "#fff",
+            border: `1px solid ${EMERALD}`,
+          }}
+        >
+          {state === "loading" ? "..." : "Subscribe"}
+        </button>
+      </form>
+      {state === "error" && (
+        <p className="text-xs mt-1" style={{ color: "#b05010" }}>Something went wrong. Please try again.</p>
+      )}
+    </div>
   );
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function BriefIssue() {
+  const [copied, setCopied] = useState(false);
   const [, params] = useRoute("/brief/:slug");
   const slug = params?.slug ?? "";
 
@@ -183,7 +208,10 @@ export default function BriefIssue() {
 
   function handleShare() {
     if (navigator.clipboard) {
-      navigator.clipboard.writeText(briefUrl);
+      navigator.clipboard.writeText(briefUrl).then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      });
     }
   }
 
@@ -231,18 +259,19 @@ export default function BriefIssue() {
         className="max-w-3xl mx-auto px-6 pt-6 pb-3 print:hidden"
         style={{ maxWidth: "760px" }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <Link href="/brief">
             <a
-              className="text-xs tracking-widest uppercase"
+              className="hidden sm:block text-xs tracking-widest uppercase"
               style={{ fontFamily: "'JetBrains Mono', monospace", color: "#7a7570", textDecoration: "none" }}
             >
               edenradar.com/brief
             </a>
           </Link>
-          <div className="flex gap-2">
+          <div className="flex gap-2 sm:ml-auto">
             <button
               onClick={handlePrint}
+              title="Opens your browser's print dialog — choose 'Save as PDF' to download"
               className="text-xs tracking-widest uppercase px-3 py-1.5 border transition-colors hover:text-emerald-700 hover:border-emerald-600"
               style={{
                 fontFamily: "'JetBrains Mono', monospace",
@@ -251,19 +280,21 @@ export default function BriefIssue() {
                 background: "rgba(255,255,255,0.7)",
               }}
             >
-              Download PDF
+              <span className="sm:hidden">PDF</span>
+              <span className="hidden sm:inline">Print / Save PDF</span>
             </button>
             <button
               onClick={handleShare}
               className="text-xs tracking-widest uppercase px-3 py-1.5 border transition-colors hover:text-emerald-700 hover:border-emerald-600"
               style={{
                 fontFamily: "'JetBrains Mono', monospace",
-                color: "#5a5550",
-                borderColor: "rgba(0,0,0,0.15)",
-                background: "rgba(255,255,255,0.7)",
+                color: copied ? EMERALD : "#5a5550",
+                borderColor: copied ? EMERALD_BORDER : "rgba(0,0,0,0.15)",
+                background: copied ? EMERALD_LIGHT : "rgba(255,255,255,0.7)",
+                transition: "color 0.15s, border-color 0.15s, background 0.15s",
               }}
             >
-              Share Link
+              {copied ? "Copied!" : "Share"}
             </button>
           </div>
         </div>
@@ -302,7 +333,7 @@ export default function BriefIssue() {
             >
               The Eden <em>Brief</em>
             </h1>
-            <p className="text-sm font-light mb-7" style={{ color: "rgba(255,255,255,0.65)" }}>
+            <p className="text-sm mb-7" style={{ color: "rgba(255,255,255,0.65)" }}>
               Signal from the licensing frontier
             </p>
             <div className="flex flex-wrap gap-x-8 gap-y-3">
@@ -312,12 +343,11 @@ export default function BriefIssue() {
                   ? new Date(issue.publishedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
                   : ""],
                 ["Coverage", "400+ TTO portfolios"],
-                ["Permalink", `edenradar.com/brief/${issue.slug}`],
               ].map(([label, value]) => (
                 <div key={label} className="flex flex-col gap-0.5">
                   <span
                     className="text-xs tracking-widest uppercase"
-                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", fontSize: "8px" }}
+                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", fontSize: "10px" }}
                   >
                     {label}
                   </span>
@@ -329,6 +359,21 @@ export default function BriefIssue() {
                   </span>
                 </div>
               ))}
+              <div className="flex flex-col gap-0.5">
+                <span
+                  className="text-xs tracking-widest uppercase"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", fontSize: "10px" }}
+                >
+                  Permalink
+                </span>
+                <a
+                  href={`/brief/${issue.slug}`}
+                  className="text-xs hover:underline"
+                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.85)", fontSize: "11px", textDecoration: "none" }}
+                >
+                  edenradar.com/brief/{issue.slug}
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -344,7 +389,6 @@ export default function BriefIssue() {
               style={{
                 background: EMERALD_LIGHT,
                 border: `1px solid ${EMERALD_BORDER}`,
-                borderLeft: `4px solid ${EMERALD}`,
               }}
             >
               <div className="flex-shrink-0 text-center pt-1">
@@ -379,7 +423,7 @@ export default function BriefIssue() {
                 >
                   {c.the_number.headline}
                 </h2>
-                <p className="text-sm font-light leading-relaxed" style={{ color: INK_MID }}>
+                <p className="text-sm leading-relaxed" style={{ color: INK_MID }}>
                   {c.the_number.body}
                 </p>
               </div>
@@ -407,7 +451,7 @@ export default function BriefIssue() {
                           letterSpacing: "0.16em",
                           textTransform: "uppercase",
                           color: EMERALD,
-                          fontSize: "8.5px",
+                          fontSize: "10px",
                         }}
                       >
                         Observation {String(i + 1).padStart(2, "0")}
@@ -415,7 +459,7 @@ export default function BriefIssue() {
                       <p
                         className="text-sm font-normal leading-relaxed"
                         style={{ color: INK_MID }}
-                        dangerouslySetInnerHTML={{ __html: item.text }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.text) }}
                       />
                     </div>
                     {hasChart && item.chart && (
@@ -424,7 +468,7 @@ export default function BriefIssue() {
                           className="mb-2.5"
                           style={{
                             fontFamily: "'JetBrains Mono', monospace",
-                            fontSize: "8px",
+                            fontSize: "10px",
                             letterSpacing: "0.1em",
                             textTransform: "uppercase",
                             color: INK_FAINT,
@@ -446,11 +490,11 @@ export default function BriefIssue() {
                               {bar.label}
                             </span>
                             <div
-                              className="flex-1 h-2 rounded-sm overflow-hidden"
-                              style={{ background: "rgba(0,0,0,0.06)" }}
+                              className="flex-1 h-2 overflow-hidden"
+                              style={{ background: "rgba(0,0,0,0.08)" }}
                             >
                               <div
-                                className="h-full rounded-sm"
+                                className="h-full"
                                 style={{
                                   width: `${Math.round((bar.value / bar.maxValue) * 100)}%`,
                                   background: bar.label === "Oncology" || bar.label === "CNS"
@@ -492,7 +536,7 @@ export default function BriefIssue() {
                     letterSpacing: "0.15em",
                     textTransform: "uppercase",
                     color: INK_FAINT,
-                    fontSize: "8.5px",
+                    fontSize: "10px",
                   }}
                 >
                   This month&apos;s focus area
@@ -510,7 +554,7 @@ export default function BriefIssue() {
                 </h2>
                 <div className="space-y-3">
                   {c.therapeutic_spotlight.body.map((para, i) => (
-                    <p key={i} className="text-sm font-light leading-relaxed" style={{ color: INK_MID }}>
+                    <p key={i} className="text-sm leading-relaxed" style={{ color: INK_MID }}>
                       {para}
                     </p>
                   ))}
@@ -539,7 +583,7 @@ export default function BriefIssue() {
                     <div
                       style={{
                         fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: "8.5px",
+                        fontSize: "10px",
                         letterSpacing: "0.1em",
                         textTransform: "uppercase",
                         color: INK_FAINT,
@@ -640,7 +684,7 @@ export default function BriefIssue() {
                       className="pb-2.5"
                       style={{
                         fontFamily: "'JetBrains Mono', monospace",
-                        fontSize: "8px",
+                        fontSize: "10px",
                         letterSpacing: "0.16em",
                         textTransform: "uppercase",
                         color: EMERALD,
@@ -688,7 +732,7 @@ export default function BriefIssue() {
                         className="inline-block px-2 py-0.5 text-xs rounded-sm"
                         style={{
                           fontFamily: "'JetBrains Mono', monospace",
-                          fontSize: "8.5px",
+                          fontSize: "10px",
                           letterSpacing: "0.08em",
                           textTransform: "uppercase",
                           ...(asset.status === "available"
@@ -705,17 +749,40 @@ export default function BriefIssue() {
             </table>
             </div>
             <div
-              className="mt-4 py-3 text-center text-sm"
+              className="mt-6 px-6 py-5"
               style={{
-                border: `1px dashed ${EMERALD_BORDER}`,
                 background: EMERALD_LIGHT,
-                color: INK_MID,
+                border: `1px solid ${EMERALD_BORDER}`,
               }}
             >
-              Full dossiers and match reports available to registered users.{" "}
-              <a href="/scout" style={{ color: EMERALD, fontWeight: 500, textDecoration: "none", borderBottom: `1px solid ${EMERALD_BORDER}` }}>
-                Access EdenRadar
-              </a>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <div
+                    className="text-sm font-medium mb-1"
+                    style={{ color: INK }}
+                  >
+                    Full dossiers and match reports on every asset above.
+                  </div>
+                  <div
+                    className="text-xs"
+                    style={{ color: INK_MID }}
+                  >
+                    Scout searches 400+ TTO portfolios in real time. Results ranked by your therapeutic focus.
+                  </div>
+                </div>
+                <a
+                  href="/scout"
+                  className="sm:flex-shrink-0 px-5 py-2.5 text-xs tracking-widest uppercase font-semibold transition-colors hover:opacity-90 text-center"
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    background: EMERALD,
+                    color: "#fff",
+                    textDecoration: "none",
+                  }}
+                >
+                  Access EdenRadar &rarr;
+                </a>
+              </div>
             </div>
           </section>
 
@@ -724,18 +791,18 @@ export default function BriefIssue() {
         {/* Footer band */}
         <div
           className="px-5 sm:px-12 py-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6"
-          style={{ background: INK }}
+          style={{ background: PAPER_WARM, borderTop: `1px solid ${RULE}` }}
         >
           <div>
             <h3
               className="text-xl mb-1"
-              style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: "#fff" }}
+              style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: INK }}
             >
-              Eden <em style={{ color: "#3a9c69" }}>Brief</em>
+              Eden <em style={{ color: EMERALD }}>Brief</em>
             </h3>
-            <div className="text-xs leading-relaxed" style={{ color: "rgba(255,255,255,0.4)", lineHeight: 1.8 }}>
+            <div className="text-xs leading-relaxed" style={{ color: INK_FAINT, lineHeight: 1.8 }}>
               Published monthly by Eden NX &middot;{" "}
-              <a href="https://edenradar.com" style={{ color: "rgba(255,255,255,0.6)", textDecoration: "none" }}>
+              <a href="https://edenradar.com" style={{ color: INK_MID, textDecoration: "none" }}>
                 edenradar.com
               </a>
               <br />

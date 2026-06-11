@@ -570,7 +570,7 @@ export function sendMarketNdaSignedEmail(
 // Escapes user-supplied text for safe inclusion in our HTML email bodies.
 // We never want a buyer/seller to be able to inject markup into the
 // preview block of a deal-room notification.
-function escapeHtml(s: string): string {
+export function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")

@@ -110,9 +110,12 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 app.use(
   cors({
     origin(origin, callback) {
-      // Non-browser requests (curl, server-to-server) have no Origin header —
-      // allow them so admin scripts and health checks keep working.
-      if (!origin) return callback(null, true);
+      // No-Origin requests (curl, server-to-server): allow in dev/test,
+      // block in production to prevent CORS bypass by internal attackers.
+      if (!origin) {
+        if (process.env.NODE_ENV === "production") return callback(null, false);
+        return callback(null, true);
+      }
 
       const allowed =
         /^https:\/\/[a-zA-Z0-9-]+\.replit\.app$/.test(origin) ||

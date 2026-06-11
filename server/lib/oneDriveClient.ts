@@ -1,4 +1,5 @@
 // OneDrive integration via Replit connector proxy (connection:conn_onedrive_01KPVAA2ZWKJXKWHAYGD97TP7H)
+import path from "path";
 import { Client } from "@microsoft/microsoft-graph-client";
 
 let connectionSettings: any;
@@ -124,7 +125,8 @@ export async function uploadToOneDrive(
   // Ensure the target folder path exists (supports nested paths like "EdenRadar/Documents")
   await ensureOneDriveFolderPath(accessToken, folder);
 
-  const remotePath = `${folder}/${filename}`;
+  const safeFilename = path.basename(filename);
+  const remotePath = `${folder}/${safeFilename}`;
   const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(remotePath)}:/content`;
 
   const uploadResponse = await fetch(uploadUrl, {

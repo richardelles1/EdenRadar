@@ -1228,7 +1228,9 @@ export const marketDeals = pgTable("market_deals", {
 });
 
 export const insertMarketDealSchema = createInsertSchema(marketDeals)
-  .omit({ id: true, createdAt: true, updatedAt: true })
+  .omit({ id: true, createdAt: true, updatedAt: true,
+          successFeeAmount: true, successFeePaidAt: true,
+          successFeeInvoiceId: true, successFeeDealSizeM: true })
   .extend({ statusHistory: z.array(z.object({ status: z.string(), changedAt: z.string(), changedBy: z.string() })).optional() });
 export type InsertMarketDeal = z.infer<typeof insertMarketDealSchema>;
 export type MarketDeal = typeof marketDeals.$inferSelect;

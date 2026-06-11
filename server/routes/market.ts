@@ -28,7 +28,7 @@ import {
   sendDealRoomMessageEmail, sendDealRoomDocumentEmail,
   sendMarketEoiDeclinedEmail, sendMarketObserverInviteEmail,
   sendMarketFeedbackRequestEmail, sendMarketAdHocEmail,
-  sendAdminNotificationEmail, APP_URL,
+  sendAdminNotificationEmail, APP_URL, escapeHtml,
 } from "../email";
 import { logAppEvent } from "../lib/routeHelpers";
 import { captureException as sentryCaptureException } from "../lib/sentry";
@@ -826,12 +826,13 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         const sellerEmail = sellerOrg?.billingEmail;
         if (sellerEmail) {
           const assetLabel = listing.blind ? `a blind ${listing.therapeuticArea} ${listing.modality} listing` : (listing.assetName || `Listing #${listing.id}`);
+          const safeAssetLabel = escapeHtml(assetLabel);
           await sendMarketAdHocEmail(
             sellerEmail,
-            `New Expression of Interest received â€” ${assetLabel}`,
-            `<p>A qualified buyer has submitted an Expression of Interest for <strong>${assetLabel}</strong>.</p>
-             <p>Log in to your <a href="${APP_URL}/market/seller">Seller Dashboard</a> to review the EOI details.</p>
-             <p style="font-size:12px;color:#9ca3af">Buyer identity is kept confidential until you accept and both parties agree to reveal.</p>`
+            `New Expression of Interest received â€” ${safeAssetLabel}`,
+            `<p>A qualified buyer has submitted an Expression of Interest for <strong>${safeAssetLabel}</strong>.</p>
+             <p>Log in to your <a href=”${APP_URL}/market/seller”>Seller Dashboard</a> to review the EOI details.</p>
+             <p style=”font-size:12px;color:#9ca3af”>Buyer identity is kept confidential until you accept and both parties agree to reveal.</p>`
           );
         }
       } catch (e) { console.warn("[market] seller EOI-submitted email failed", e); }
@@ -945,7 +946,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
     }
   }
 
-  app.get("/api/admin/market/stats", async (req, res) => {
+  app.get("/api/admin/market/stats", requireAdmin, async (req, res) => {
     try {
       const stats = await storage.getMarketAdminStats();
       res.json(stats);
@@ -954,7 +955,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
     }
   });
 
-  app.get("/api/admin/market/listings", async (req, res) => {
+  app.get("/api/admin/market/listings", requireAdmin, async (req, res) => {
     try {
       const { status } = req.query as { status?: string };
       const listings = await storage.getMarketListings(status ? { status } : undefined);
@@ -965,7 +966,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
     }
   });
 
-  app.patch("/api/admin/market/listings/:id", async (req, res) => {
+  app.patch("/api/admin/market/listings/:id", requireAdmin, async (req, res) => {
     try {
       const id = parseInt(String(req.params.id), 10);
       const schema = z.object({
@@ -1150,7 +1151,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
     }
   });
 
-  app.get("/api/admin/market/eois", async (req, res) => {
+  app.get("/api/admin/market/eois", requireAdmin, async (req, res) => {
     try {
       const listings = await storage.getMarketListings();
       const result = await Promise.all(
@@ -1162,7 +1163,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
     }
   });
 
-  app.get("/api/admin/market/subscribers", async (req, res) => {
+  app.get("/api/admin/market/subscribers", requireAdmin, async (req, res) => {
     try {
       const orgs = await storage.getMarketSubscriberOrgs();
       res.json(orgs);
@@ -1179,7 +1180,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
   //   action="revoke" â†’ immediately set edenMarketAccess=false and clear
   //     marketAccessExpiresAt. Use for fraud / compliance / hard-cancel.
   // All transitions emit a logAppEvent for audit.
-  app.patch("/api/admin/orgs/:id/market-access", async (req, res) => {
+  app.patch("/api/admin/orgs/:id/market-access", requireAdmin, async (req, res) => {
     try {
       const orgId = parseInt(String(req.params.id), 10);
       if (isNaN(orgId)) return res.status(400).json({ error: "Invalid org id" });
@@ -1243,7 +1244,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
   // PATCH /api/admin/orgs/:id/market-seller-verification â€” admin marks an org
   // as a verified EdenMarket seller (or revokes verification).
   // Mounted under /api/admin â†’ already gated by requireAdmin middleware.
-  app.patch("/api/admin/orgs/:id/market-seller-verification", async (req, res) => {
+  app.patch("/api/admin/orgs/:id/market-seller-verification", requireAdmin, async (req, res) => {
     try {
       const orgId = parseInt(String(req.params.id), 10);
       if (isNaN(orgId)) return res.status(400).json({ error: "Invalid org id" });
@@ -1761,7 +1762,7 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
       // Persist the deal-size up-front so we have it on record even if invoice
       // generation fails partway through. The status flips to "closed" in the
       // same UPDATE so the helper sees a closed deal.
-      const updatePayload: Partial<import("@shared/schema").InsertMarketDeal> = {
+      const updatePayload: Partial<import("@shared/schema").MarketDeal> = {
         status,
         statusHistory: [...currentHistory, historyEntry],
       };
@@ -2418,14 +2419,15 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         const sellerOrg = await storage.getOrgForUser(listing.sellerId);
         if (sellerOrg?.billingEmail) {
           const assetLabel = listing.assetName || `Listing #${listing.id}`;
+          const safeAssetLabel = escapeHtml(assetLabel);
           await sendMarketAdHocEmail(
             sellerOrg.billingEmail,
-            `Your listing is live â€” ${assetLabel} â€” EdenMarket`,
-            `<h2 style="margin:0 0 14px;font-size:18px;font-weight:700;color:#111827;">Your listing is now live</h2>
-             <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-               Great news! <strong>${assetLabel}</strong> has been reviewed and is now visible to qualified buyers on EdenMarket.
+            `Your listing is live â€” ${safeAssetLabel} â€” EdenMarket`,
+            `<h2 style=”margin:0 0 14px;font-size:18px;font-weight:700;color:#111827;”>Your listing is now live</h2>
+             <p style=”margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;”>
+               Great news! <strong>${safeAssetLabel}</strong> has been reviewed and is now visible to qualified buyers on EdenMarket.
              </p>
-             <a href="${APP_URL}/market/seller" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+             <a href=”${APP_URL}/market/seller” style=”display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;”>
                View Seller Dashboard
              </a>`
           );
@@ -2455,17 +2457,19 @@ Write in a professional deal memo tone. 2â€“4 sentences. Focus on the strat
         const sellerOrg = await storage.getOrgForUser(listing.sellerId);
         if (sellerOrg?.billingEmail) {
           const assetLabel = listing.assetName || `Listing #${listing.id}`;
+          const safeAssetLabel = escapeHtml(assetLabel);
+          const safeNote = escapeHtml(note);
           await sendMarketAdHocEmail(
             sellerOrg.billingEmail,
-            `Listing review â€” action required â€” ${assetLabel} â€” EdenMarket`,
-            `<h2 style="margin:0 0 14px;font-size:18px;font-weight:700;color:#111827;">Your listing needs a few changes</h2>
-             <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-               Our team has reviewed <strong>${assetLabel}</strong> and has some feedback before we can publish it.
+            `Listing review â€” action required â€” ${safeAssetLabel} â€” EdenMarket`,
+            `<h2 style=”margin:0 0 14px;font-size:18px;font-weight:700;color:#111827;”>Your listing needs a few changes</h2>
+             <p style=”margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;”>
+               Our team has reviewed <strong>${safeAssetLabel}</strong> and has some feedback before we can publish it.
              </p>
-             <div style="background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:14px 16px;margin:0 0 24px;">
-               <p style="margin:0;font-size:14px;color:#713f12;">${note}</p>
+             <div style=”background:#fef9c3;border:1px solid #fde047;border-radius:6px;padding:14px 16px;margin:0 0 24px;”>
+               <p style=”margin:0;font-size:14px;color:#713f12;”>${safeNote}</p>
              </div>
-             <a href="${APP_URL}/market/seller" style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+             <a href=”${APP_URL}/market/seller” style=”display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;”>
                Edit Listing
              </a>`
           );

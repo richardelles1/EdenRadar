@@ -10,6 +10,10 @@ type BriefIssue = {
   issueNumber: number;
   title: string;
   publishedAt: string | null;
+  content?: {
+    therapeutic_spotlight?: { area?: string };
+    the_number?: { figure?: string; headline?: string };
+  };
 };
 
 function formatDate(iso: string | null): string {
@@ -146,32 +150,68 @@ export default function BriefArchive() {
             )}
 
             <div className="divide-y" style={{ borderColor: "#dddad4" }}>
-              {issues.map((issue) => (
-                <Link key={issue.id} href={`/brief/${issue.slug}`}>
-                  <a className="flex items-start justify-between py-5 group">
-                    <div>
-                      <div
-                        className="text-xs tracking-widest uppercase mb-1"
+              {issues.map((issue) => {
+                const spotlightArea = issue.content?.therapeutic_spotlight?.area;
+                const statFigure = issue.content?.the_number?.figure;
+                return (
+                  <Link key={issue.id} href={`/brief/${issue.slug}`}>
+                    <a className="flex items-start justify-between py-5 group" style={{ textDecoration: "none" }}>
+                      <div className="flex-1 min-w-0">
+                        <div
+                          className="text-xs tracking-widest uppercase mb-1"
+                          style={{ fontFamily: "'JetBrains Mono', monospace", color: "#9a9590" }}
+                        >
+                          Issue {issue.issueNumber} &middot; {formatDate(issue.publishedAt)}
+                        </div>
+                        <div
+                          className="text-lg font-medium group-hover:text-emerald-700 transition-colors mb-1.5"
+                          style={{ color: "#1a1e23" }}
+                        >
+                          {issue.title}
+                        </div>
+                        {(spotlightArea || statFigure) && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {spotlightArea && (
+                              <span
+                                className="text-xs px-2 py-0.5 rounded-sm"
+                                style={{
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontSize: "10px",
+                                  letterSpacing: "0.06em",
+                                  textTransform: "uppercase",
+                                  color: "#2d7a52",
+                                  background: "#e8f5ee",
+                                  border: "1px solid #b8dfc8",
+                                }}
+                              >
+                                Spotlight: {spotlightArea}
+                              </span>
+                            )}
+                            {statFigure && (
+                              <span
+                                className="text-xs"
+                                style={{
+                                  fontFamily: "'JetBrains Mono', monospace",
+                                  fontSize: "10px",
+                                  color: "#9a9590",
+                                }}
+                              >
+                                {statFigure} assets tracked
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <span
+                        className="text-xs tracking-widest uppercase mt-1 flex-shrink-0 ml-4 group-hover:text-emerald-700 transition-colors"
                         style={{ fontFamily: "'JetBrains Mono', monospace", color: "#9a9590" }}
                       >
-                        Issue {issue.issueNumber} &middot; {formatDate(issue.publishedAt)}
-                      </div>
-                      <div
-                        className="text-lg font-medium group-hover:text-emerald-700 transition-colors"
-                        style={{ color: "#1a1e23" }}
-                      >
-                        {issue.title}
-                      </div>
-                    </div>
-                    <span
-                      className="text-xs tracking-widest uppercase mt-1 flex-shrink-0 ml-4 group-hover:text-emerald-700 transition-colors"
-                      style={{ fontFamily: "'JetBrains Mono', monospace", color: "#9a9590" }}
-                    >
-                      Read &rarr;
-                    </span>
-                  </a>
-                </Link>
-              ))}
+                        Read &rarr;
+                      </span>
+                    </a>
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
