@@ -713,7 +713,7 @@ const INSTITUTION_ROWS = [
     "Michigan State", "Case Western", "Rochester", "Cincinnati", "Wake Forest",
     "Indiana", "Iowa", "Rutgers", "Maryland", "Florida", "Utah", "Nebraska",
     "Oklahoma", "Tennessee", "Alabama", "Scripps Research", "Salk Institute",
-    "Cold Spring Harbor", "Jackson Laboratory", "NIH",
+    "Cold Spring Harbor", "Jackson Laboratory", "NIH", "Weill Cornell",
   ],
   [
     "Ohio State", "Penn State", "Texas", "USC", "UCSD", "UC Davis", "Georgia Tech",
@@ -727,7 +727,7 @@ const INSTITUTION_ROWS = [
   ],
   [
     "UCSB", "UC Irvine", "UC Santa Cruz", "Stony Brook", "UMass Medical", "UConn",
-    "UMass Amherst", "Buffalo", "Pittsburgh", "Penn State Hershey", "Florida State",
+    "UMass Amherst", "Buffalo", "Penn State Hershey", "Florida State",
     "USF", "Georgia", "Tulane", "Missouri", "Kansas", "Iowa State", "Arizona",
     "New Mexico", "Hawaii", "Nevada", "Colorado State", "Oregon State",
     "Institut Pasteur", "Curie Institute", "INSERM", "CNRS", "Ghent", "Basel",
