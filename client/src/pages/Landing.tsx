@@ -359,10 +359,27 @@ function FeedCard({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={onLeave}
       >
+        {/* Bloom — erupts from top-left on hover, clipped by overflow-hidden */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            width: 60, height: 60, borderRadius: "50%",
+            background: "rgba(45,122,82,0.55)",
+            top: -30, left: -30,
+            transform: hovered ? "scale(24)" : "scale(1)",
+            opacity: hovered ? 0.11 : 0,
+            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+            pointerEvents: "none",
+            zIndex: 0,
+          }}
+        />
+
         {/* Header strip — institution identity, no chip */}
         <div
-          className="flex items-center justify-between px-4 py-3 shrink-0"
+          className="relative flex items-center justify-between px-4 py-3 shrink-0"
           style={{
+            zIndex: 1,
             background: "rgba(45,122,82,0.055)",
             borderBottom: "1px solid rgba(45,122,82,0.11)",
           }}
@@ -376,7 +393,7 @@ function FeedCard({
         </div>
 
         {/* Narrative body */}
-        <div className="px-4 py-4 flex-1">
+        <div className="relative px-4 py-4 flex-1" style={{ zIndex: 1 }}>
           <p className="text-[13px] leading-[1.7] text-muted-foreground">
             {parts.map((p, i) =>
               p.bold
