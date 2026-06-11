@@ -339,10 +339,12 @@ function FeedCard({
     <div ref={slotRef} style={{ perspective: "900px" }}>
       <div
         ref={innerRef}
-        className="relative flex flex-col overflow-hidden bg-background"
+        className="relative flex flex-col overflow-hidden"
         style={{
+          height: "182px",
           borderRadius: "14px",
           border: `1px solid ${hovered ? "rgba(45,122,82,0.28)" : "rgba(0,0,0,0.09)"}`,
+          background: "linear-gradient(175deg, rgba(45,122,82,0.032) 0%, #ffffff 48%)",
           willChange: "transform",
           transformStyle: "preserve-3d",
           transform: tilt.on
@@ -394,7 +396,7 @@ function FeedCard({
 
         {/* Narrative body */}
         <div className="relative px-4 py-4 flex-1" style={{ zIndex: 1 }}>
-          <p className="text-[13px] leading-[1.7] text-muted-foreground">
+          <p className="text-[13px] leading-[1.7] text-muted-foreground line-clamp-4">
             {parts.map((p, i) =>
               p.bold
                 ? <strong key={i} style={{ fontWeight: 600, color: "#2d7a52" }}>{p.text}</strong>
@@ -493,11 +495,11 @@ function RecentFeed() {
 
   return (
     <section ref={sectionRef} id="explore" className="reveal-section border-b border-border bg-background">
-      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
 
-        <h2 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-8">
+        <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-6">
           Surfaced in the last 48 hours.{" "}
-          <span className="text-muted-foreground font-normal">Most BD teams won't find these for weeks.</span>
+          <span className="text-muted-foreground font-normal sm:text-3xl">Most BD teams won't find these for weeks.</span>
         </h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
