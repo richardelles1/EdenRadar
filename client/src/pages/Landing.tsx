@@ -697,25 +697,44 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 const INSTITUTION_ROWS = [
   [
     "MIT", "Stanford", "Harvard", "Johns Hopkins", "UCSF", "UCLA", "Columbia", "Yale",
-    "Cornell", "Penn", "Duke", "Michigan", "Wisconsin-Madison", "UNC Chapel Hill",
-    "UC Berkeley", "Northwestern", "NYU", "Vanderbilt", "Emory", "Pittsburgh",
+    "Cornell", "Penn", "Duke", "Princeton", "Caltech", "UC Berkeley", "Northwestern",
+    "NYU", "Dartmouth", "Brown", "Tufts", "Georgetown", "Oxford", "Cambridge",
+    "ETH Zurich", "EPFL", "Karolinska", "Max Planck", "Imperial College", "UCL",
+    "Edinburgh", "Toronto", "McGill", "UBC", "Melbourne", "Monash", "Tokyo",
+    "Seoul National", "NUS Singapore", "Peking University", "HKU", "Zurich",
+    "Helsinki", "Copenhagen", "Oslo", "Uppsala", "Aarhus",
   ],
   [
-    "Ohio State", "Penn State", "Texas", "USC", "UCSD", "UC Davis", "Wash U St. Louis",
     "Mayo Clinic", "Mass General Hospital", "Brigham and Women's", "Memorial Sloan Kettering",
     "MD Anderson", "Cleveland Clinic", "Mount Sinai", "CHOP", "Boston Children's",
-    "Dartmouth", "Brown", "Tufts", "Georgetown",
+    "Dana-Farber", "Fred Hutchinson", "Roswell Park", "City of Hope", "Moffitt",
+    "Cedars-Sinai", "OHSU", "Houston Methodist", "Vanderbilt", "Emory", "Pittsburgh",
+    "Michigan", "Wisconsin-Madison", "UNC Chapel Hill", "Wash U St. Louis", "Virginia",
+    "Michigan State", "Case Western", "Rochester", "Cincinnati", "Wake Forest",
+    "Indiana", "Iowa", "Rutgers", "Maryland", "Florida", "Utah", "Nebraska",
+    "Oklahoma", "Tennessee", "Alabama", "Scripps Research", "Salk Institute",
+    "Cold Spring Harbor", "Jackson Laboratory", "NIH",
   ],
   [
-    "Georgia Tech", "Purdue", "Illinois", "Minnesota", "Texas A&M", "Virginia", "Arizona State",
-    "Michigan State", "Colorado", "Oregon", "Washington", "Iowa", "Indiana", "Rutgers",
-    "Case Western", "BU", "Northeastern", "GWU", "Temple", "Drexel",
+    "Ohio State", "Penn State", "Texas", "USC", "UCSD", "UC Davis", "Georgia Tech",
+    "Purdue", "Illinois", "Minnesota", "Texas A&M", "Arizona State", "Colorado", "Oregon",
+    "Washington", "Virginia Tech", "Delaware", "South Carolina", "Kentucky", "Louisville",
+    "BU", "Northeastern", "GWU", "Drexel", "Temple", "Miami", "Rice", "Baylor",
+    "Lawrence Berkeley Lab", "Argonne", "Oak Ridge", "Sandia", "PNNL", "Brookhaven",
+    "Alberta", "Calgary", "McMaster", "Queen's", "Dalhousie", "UNSW", "Sydney",
+    "Queensland", "ANU", "KU Leuven", "Ghent", "Amsterdam UMC", "Erasmus MC",
+    "Heidelberg", "Charité Berlin", "NKI Amsterdam",
   ],
   [
-    "Wake Forest", "Miami", "Rochester", "Delaware", "Maryland", "Virginia Tech",
-    "Cincinnati", "Louisville", "Kentucky", "Caltech", "Rice", "Baylor",
-    "Lawrence Berkeley Lab", "Argonne National Lab", "NIH", "Nebraska", "Oklahoma",
-    "South Carolina", "Tennessee", "Alabama",
+    "UCSB", "UC Irvine", "UC Santa Cruz", "Stony Brook", "UMass Medical", "UConn",
+    "UMass Amherst", "Buffalo", "Pittsburgh", "Penn State Hershey", "Florida State",
+    "USF", "Georgia", "Tulane", "Missouri", "Kansas", "Iowa State", "Arizona",
+    "New Mexico", "Hawaii", "Nevada", "Colorado State", "Oregon State",
+    "Institut Pasteur", "Curie Institute", "INSERM", "CNRS", "Ghent", "Basel",
+    "Lausanne", "Leiden", "Utrecht", "Munich LMU", "TU Munich", "Freiburg",
+    "Lund", "Stockholm", "Gothenburg", "Bristol", "Manchester", "Nottingham",
+    "Sheffield", "Leeds", "Birmingham", "Liverpool", "Cardiff", "Newcastle",
+    "Glasgow", "Tsinghua", "Fudan", "Osaka",
   ],
 ];
 
@@ -724,11 +743,7 @@ function InstitutionMarquee() {
   const directions = ["marquee-left", "marquee-right", "marquee-left", "marquee-right"] as const;
 
   return (
-    <section className="py-12 overflow-hidden border-y border-border/40">
-      <div className="mb-7 text-center">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-primary">350+ Institutions Indexed</p>
-      </div>
-
+    <section className="py-10 overflow-hidden border-y border-border/40">
       <div className="space-y-2.5">
         {INSTITUTION_ROWS.map((row, ri) => {
           const doubled = [...row, ...row];
