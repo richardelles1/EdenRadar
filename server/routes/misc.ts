@@ -45,7 +45,7 @@ const exportBodySchema = z.object({
   filename: z.string().min(1).max(200),
   fileType: z.string().min(1).max(50).default("document"),
   content: z.string().min(1),
-  campaignSlug: z.string().min(1).max(120).regex(/^[a-z0-9][a-z0-9._-]*$/i).optional(),
+  campaignSlug: z.string().min(1).max(120).regex(/^[a-z0-9][a-z0-9_-]*$/i).optional(),
 });
 
 const MAX_EXPORT_BYTES = 8 * 1024 * 1024;
@@ -488,7 +488,7 @@ export function registerMiscRoutes(app: Express): void {
     }
   });
 
-  app.get("/api/admin/export-log", async (req, res) => {
+  app.get("/api/admin/export-log", requireAdmin, async (req, res) => {
     try {
       const limit = Math.min(Number(req.query.limit ?? 20), 100);
       const exports = await storage.getRecentExports(limit);

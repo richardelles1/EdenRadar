@@ -154,9 +154,9 @@ export async function verifyAnyAuth(
   res: Response,
   next: NextFunction,
 ) {
-  // Smoke-test bypass (Task #714) — defense-in-depth, no committed secret.
+  // Smoke-test bypass (Task #714) — local test runner only, never deployed envs.
   if (
-    process.env.NODE_ENV !== "production" &&
+    process.env.NODE_ENV === "test" &&
     process.env.ENABLE_SMOKE_AUTH_BYPASS === "true"
   ) {
     const remote = req.socket?.remoteAddress ?? "";

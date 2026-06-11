@@ -183,7 +183,10 @@ export function registerAnalyticsRoutes(app: Express): void {
       return res.status(400).json({ error: "Only SELECT statements are allowed" });
     }
     try {
-      const result = await db.execute(sql.raw(trimmed));
+      const result = await db.transaction(async (tx) => {
+        await tx.execute(sql`SET TRANSACTION READ ONLY`);
+        return await tx.execute(sql.raw(trimmed));
+      });
       res.json({ rows: result.rows, rowCount: result.rows.length });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Query failed" });

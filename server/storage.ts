@@ -486,6 +486,7 @@ export interface IStorage {
   getOrganization(id: number): Promise<Organization | undefined>;
   createOrganization(data: InsertOrganization): Promise<Organization>;
   updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
+  updateOrgProfile(id: number, data: Partial<Pick<InsertOrganization, "name" | "billingEmail" | "logoUrl" | "primaryColor">>): Promise<Organization | undefined>;
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
@@ -560,7 +561,7 @@ export interface IStorage {
   getMarketDeal(id: number): Promise<MarketDeal | undefined>;
   getMarketDealsForUser(userId: string): Promise<MarketDeal[]>;
   getAllMarketDeals(): Promise<MarketDeal[]>;
-  updateMarketDeal(id: number, data: Partial<Omit<InsertMarketDeal, "listingId" | "eoiId" | "sellerId" | "buyerId">>): Promise<MarketDeal | undefined>;
+  updateMarketDeal(id: number, data: Partial<Omit<typeof marketDeals.$inferInsert, "id" | "listingId" | "eoiId" | "sellerId" | "buyerId" | "createdAt" | "updatedAt">>): Promise<MarketDeal | undefined>;
   getDealForEoi(eoiId: number): Promise<MarketDeal | undefined>;
 
   // EdenMarket — Deal Documents
@@ -4404,6 +4405,18 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async updateOrgProfile(
+    id: number,
+    data: Partial<Pick<InsertOrganization, "name" | "billingEmail" | "logoUrl" | "primaryColor">>,
+  ): Promise<Organization | undefined> {
+    const [row] = await db
+      .update(organizations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(organizations.id, id))
+      .returning();
+    return row;
+  }
+
   async deleteOrganization(id: number): Promise<void> {
     await db.delete(organizations).where(eq(organizations.id, id));
   }
@@ -4931,7 +4944,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(marketDeals).orderBy(desc(marketDeals.createdAt));
   }
 
-  async updateMarketDeal(id: number, data: Partial<Omit<InsertMarketDeal, "listingId" | "eoiId" | "sellerId" | "buyerId">>): Promise<MarketDeal | undefined> {
+  async updateMarketDeal(id: number, data: Partial<Omit<typeof marketDeals.$inferInsert, "id" | "listingId" | "eoiId" | "sellerId" | "buyerId" | "createdAt" | "updatedAt">>): Promise<MarketDeal | undefined> {
     const [row] = await db.update(marketDeals)
       .set({ ...data, updatedAt: new Date() })
       .where(eq(marketDeals.id, id))

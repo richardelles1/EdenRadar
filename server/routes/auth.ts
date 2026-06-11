@@ -109,7 +109,7 @@ export function registerAuthRoutes(app: Express): void {
       if (body.name !== undefined) updates.name = body.name;
       if (body.billingEmail !== undefined) updates.billingEmail = body.billingEmail || null;
       if (Object.keys(updates).length === 0) return res.json({ ok: true });
-      const updated = await storage.updateOrganization(org.id, updates);
+      const updated = await storage.updateOrgProfile(org.id, updates);
       res.json(updated);
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });

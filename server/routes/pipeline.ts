@@ -121,6 +121,7 @@ export function registerPipelineRoutes(app: Express): void {
     try {
       const userId = await tryGetUserId(req);
       if (!userId) return res.status(401).json({ error: "Authentication required" });
+      if (!(await requireNotViewer(req, res))) return;
 
       const listId = parseInt(req.params.id, 10);
       if (isNaN(listId)) return res.status(400).json({ error: "Invalid pipeline list ID" });

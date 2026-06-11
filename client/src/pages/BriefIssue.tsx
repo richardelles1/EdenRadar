@@ -1,4 +1,5 @@
 import { useState } from "react";
+import DOMPurify from "dompurify";
 import { useRoute, Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Nav } from "@/components/Nav";
@@ -415,7 +416,7 @@ export default function BriefIssue() {
                       <p
                         className="text-sm font-normal leading-relaxed"
                         style={{ color: INK_MID }}
-                        dangerouslySetInnerHTML={{ __html: item.text }}
+                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(item.text) }}
                       />
                     </div>
                     {hasChart && item.chart && (

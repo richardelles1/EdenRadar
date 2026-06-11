@@ -83,6 +83,9 @@ export async function loadActiveSessionByToken(
   if (!row) return null;
   if (row.ended_at) return null;
   if (row.admin_id !== expectedAdminId) return null;
+  const MAX_SESSION_AGE_MS = 8 * 60 * 60 * 1000;
+  const startedAt = row.started_at instanceof Date ? row.started_at : new Date(String(row.started_at));
+  if (Date.now() - startedAt.getTime() > MAX_SESSION_AGE_MS) return null;
   return {
     id: row.id,
     adminId: row.admin_id,
@@ -203,6 +206,7 @@ async function verifyBearerAdmin(bearer: string): Promise<{ id: string; email: s
     const email = data?.user?.email?.toLowerCase();
     if (!email || !data.user) return null;
     if (!getAdminEmails().includes(email)) return null;
+    if (data.user.user_metadata?.is_admin !== true) return null;
     const result = { id: data.user.id, email };
     adminVerifyCache.set(bearer, { ...result, expires: Date.now() + ADMIN_VERIFY_TTL_MS });
     return result;

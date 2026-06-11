@@ -54,10 +54,11 @@ function logUsage(
 export function requireApiKey(requiredScope?: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     const start = Date.now();
-    const ip =
-      (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim() ??
-      req.socket.remoteAddress ??
-      null;
+    const xffEntries = (req.headers["x-forwarded-for"] as string | undefined)
+      ?.split(",").map(s => s.trim()).filter(Boolean) ?? [];
+    const ip = xffEntries.length > 0
+      ? xffEntries[xffEntries.length - 1]
+      : (req.socket.remoteAddress ?? null);
     const ua = (req.headers["user-agent"] as string | undefined) ?? null;
     const endpoint = req.path;
     const method = req.method;

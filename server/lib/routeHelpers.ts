@@ -62,8 +62,12 @@ export async function canMutatePipeline(
   requestUserId: string | null
 ): Promise<boolean> {
   if (!requestUserId) return false;
-  // Unclaimed pipelines (null userId) are accessible to any authenticated user — backward compat
-  if (pipeline.userId === null) return true;
+  // Null-owner pipelines: grant access only if requester shares the same org
+  if (pipeline.userId === null) {
+    if (!pipeline.orgId) return false;
+    const requesterOrg = await storage.getOrgForUser(requestUserId);
+    return !!requesterOrg && requesterOrg.id === pipeline.orgId;
+  }
   if (pipeline.userId === requestUserId) return true;
   if (pipeline.orgId) {
     const requesterOrg = await storage.getOrgForUser(requestUserId);
