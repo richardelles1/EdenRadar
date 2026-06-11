@@ -297,39 +297,105 @@ function buildNarrative(asset: FeedAsset): Array<{ text: string; bold: boolean }
   return parts;
 }
 
-function FeedRow({ asset }: { asset: FeedAsset }) {
-  const inst = asset.institution && asset.institution !== "unknown" ? asset.institution : "Unknown Institution";
+function relativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const h = Math.floor(diff / 3600000);
+  if (h >= 48) return `${Math.floor(h / 24)}d ago`;
+  if (h >= 1) return `${h}h ago`;
+  const m = Math.floor(diff / 60000);
+  return m <= 1 ? "just now" : `${m}m ago`;
+}
+
+const FEED_FLIP_HALF = 270;
+const FEED_EASE_IN  = `transform ${FEED_FLIP_HALF}ms cubic-bezier(0.4,0,1,1)`;
+const FEED_EASE_OUT = `transform ${FEED_FLIP_HALF}ms cubic-bezier(0,0,0.2,1)`;
+
+function FeedCard({
+  asset,
+  slotRef,
+}: {
+  asset: FeedAsset;
+  slotRef: (el: HTMLDivElement | null) => void;
+}) {
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0, on: false });
+  const [hovered, setHovered] = useState(false);
+
+  const inst  = asset.institution && asset.institution !== "unknown" ? asset.institution : "Unknown Institution";
   const parts = buildNarrative(asset);
 
+  const onMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = innerRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const rx = (e.clientX - r.left) / r.width;
+    const ry = (e.clientY - r.top)  / r.height;
+    setTilt({ x: Math.max(-2, Math.min(2, (ry - 0.5) * -3.5)), y: Math.max(-2, Math.min(2, (rx - 0.5) * 3.5)), on: true });
+  };
+
+  const onLeave = () => { setHovered(false); setTilt({ x: 0, y: 0, on: false }); };
+
   return (
-    <div className="grid border-b border-border/60" style={{ gridTemplateColumns: "240px 1fr", minHeight: "64px" }}>
+    <div ref={slotRef} style={{ perspective: "900px" }}>
       <div
-        className="flex items-center px-7 py-4 border-r border-primary/30"
-        style={{ background: "hsl(var(--primary))" }}
+        ref={innerRef}
+        className="relative flex flex-col overflow-hidden bg-background"
+        style={{
+          borderRadius: "14px",
+          border: `1px solid ${hovered ? "rgba(45,122,82,0.28)" : "rgba(0,0,0,0.09)"}`,
+          willChange: "transform",
+          transformStyle: "preserve-3d",
+          transform: tilt.on
+            ? `perspective(900px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+            : "perspective(900px) rotateX(0deg) rotateY(0deg)",
+          transition: tilt.on
+            ? "transform 0.08s ease-out, box-shadow 0.2s, border-color 0.2s"
+            : "transform 0.5s cubic-bezier(0.23,1,0.32,1), box-shadow 0.4s, border-color 0.3s",
+          boxShadow: hovered
+            ? "0 14px 40px rgba(0,0,0,0.13), 0 3px 10px rgba(0,0,0,0.07)"
+            : "0 2px 10px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.04)",
+        }}
+        onMouseMove={onMove}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={onLeave}
       >
-        <span className="text-sm font-bold text-white leading-snug">{inst}</span>
-      </div>
-      <div className="flex items-center px-8 py-4">
-        <p className="text-sm leading-snug" style={{ color: "hsl(220 18% 35%)" }}>
-          {parts.map((p, i) =>
-            p.bold
-              ? <strong key={i} style={{ color: "hsl(142 52% 32%)", fontWeight: 600 }}>{p.text}</strong>
-              : <span key={i}>{p.text}</span>
-          )}
-        </p>
+        {/* Header strip — institution identity, no chip */}
+        <div
+          className="flex items-center justify-between px-4 py-3 shrink-0"
+          style={{
+            background: "rgba(45,122,82,0.055)",
+            borderBottom: "1px solid rgba(45,122,82,0.11)",
+          }}
+        >
+          <span className="text-[12px] font-semibold leading-tight truncate pr-3" style={{ color: "#2d7a52" }}>
+            {inst}
+          </span>
+          <span className="text-[10px] tabular-nums shrink-0" style={{ color: "#b0aaa4" }}>
+            {relativeTime(asset.firstSeenAt)}
+          </span>
+        </div>
+
+        {/* Narrative body */}
+        <div className="px-4 py-4 flex-1">
+          <p className="text-[13px] leading-[1.7] text-muted-foreground">
+            {parts.map((p, i) =>
+              p.bold
+                ? <strong key={i} style={{ fontWeight: 600, color: "#2d7a52" }}>{p.text}</strong>
+                : <span key={i}>{p.text}</span>
+            )}
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
 function shuffleDedupe(raw: FeedAsset[]): FeedAsset[] {
-  // Fisher-Yates shuffle
   const arr = [...raw];
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  // Reorder so no two consecutive rows share an institution
   const result: FeedAsset[] = [];
   const pool = [...arr];
   while (pool.length > 0) {
@@ -340,61 +406,100 @@ function shuffleDedupe(raw: FeedAsset[]): FeedAsset[] {
   return result;
 }
 
+const FEED_SLOTS = 6;
+
 function RecentFeed() {
-  const ref = useReveal();
+  const sectionRef = useReveal();
   const { data } = useQuery<{ assets: FeedAsset[]; total: number }>({
     queryKey: ["/api/browse/new-arrivals?window=30d&limit=30"],
     staleTime: 10 * 60 * 1000,
     retry: false,
   });
 
-  const assets = useMemo(
+  const all = useMemo(
     () => shuffleDedupe(data?.assets?.length ? data.assets : FEED_FALLBACK),
     [data]
   );
-  const doubled = [...assets, ...assets];
+
+  const [visible, setVisible] = useState<FeedAsset[]>([]);
+  const slotRefs = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
+  const allRef   = useRef<FeedAsset[]>([]);
+  const poolIdx  = useRef(FEED_SLOTS);
+  const flipQ    = useRef<number[]>([]);
+
+  useEffect(() => {
+    allRef.current = all;
+    setVisible(all.slice(0, FEED_SLOTS));
+    poolIdx.current = FEED_SLOTS;
+  }, [all]);
+
+  useEffect(() => {
+    if (visible.length < FEED_SLOTS) return;
+
+    const nextPos = () => {
+      if (!flipQ.current.length) {
+        const q = Array.from({ length: FEED_SLOTS }, (_, i) => i);
+        for (let i = q.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [q[i], q[j]] = [q[j], q[i]];
+        }
+        flipQ.current = q;
+      }
+      return flipQ.current.pop()!;
+    };
+
+    const id = setInterval(() => {
+      const pos  = nextPos();
+      const slot = slotRefs.current[pos];
+      if (!slot) return;
+      const pool = allRef.current;
+      if (!pool.length) return;
+      const next = pool[poolIdx.current % pool.length];
+      poolIdx.current++;
+
+      slot.style.transition = FEED_EASE_IN;
+      slot.style.transform  = "rotateY(90deg)";
+
+      setTimeout(() => {
+        setVisible(prev => { const u = [...prev]; u[pos] = next; return u; });
+        slot.style.transition = "none";
+        slot.style.transform  = "rotateY(-90deg)";
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          slot.style.transition = FEED_EASE_OUT;
+          slot.style.transform  = "rotateY(0deg)";
+        }));
+      }, FEED_FLIP_HALF + 12);
+    }, 2400);
+
+    return () => clearInterval(id);
+  }, [visible.length]);
 
   return (
-    <section ref={ref} id="explore" className="reveal-section border-b border-border bg-background">
+    <section ref={sectionRef} id="explore" className="reveal-section border-b border-border bg-background">
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-8">
-          <div>
-            <div className="flex items-center gap-2 mb-2.5">
-              <span
-                className="w-2 h-2 rounded-full bg-primary shrink-0"
-                style={{ animation: "eden-pulse 2s ease-in-out infinite" }}
-              />
-              <p className="text-[10px] font-bold uppercase tracking-widest text-primary">
-                Live · Last 48 hours
-              </p>
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">
-              EdenRadar users saw these assets in the past 48 hours.
-            </h2>
-          </div>
-          <p className="text-sm text-muted-foreground pb-0.5 shrink-0">
-            Delivered to EdenRadar subscribers
-          </p>
+
+        <h2 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight mb-8">
+          Surfaced in the last 48 hours.{" "}
+          <span className="text-muted-foreground font-normal">Most BD teams won't find these for weeks.</span>
+        </h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {visible.map((asset, i) => (
+            <FeedCard
+              key={i}
+              asset={asset}
+              slotRef={(el) => { slotRefs.current[i] = el; }}
+            />
+          ))}
         </div>
 
-        <div
-          className="border border-border rounded-xl overflow-hidden bg-white dark:bg-zinc-900 shadow-sm"
-          style={{ height: "420px", position: "relative" }}
-          aria-label="Recently indexed assets"
-        >
-          {/* Fade masks */}
-          <div className="absolute inset-x-0 top-0 h-14 pointer-events-none z-10"
-            style={{ background: "linear-gradient(to bottom, white, transparent)" }} />
-          <div className="absolute inset-x-0 bottom-0 h-14 pointer-events-none z-10"
-            style={{ background: "linear-gradient(to top, white, transparent)" }} />
-
-          <div
-            style={{ animation: "ticker-up 600s linear infinite", willChange: "transform" }}
-          >
-            {doubled.map((asset, i) => (
-              <FeedRow key={i} asset={asset} />
-            ))}
-          </div>
+        <div className="mt-8 pt-6 border-t border-border flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            A sample of what's indexed. Thousands more across 350+ institutions.
+          </p>
+          <a href="/demo" className="text-sm font-medium text-primary hover:underline shrink-0">
+            Search and filter the full dataset →
+          </a>
         </div>
       </div>
     </section>
