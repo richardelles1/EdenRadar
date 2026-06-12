@@ -306,7 +306,8 @@ function relativeTime(iso: string): string {
   return m <= 1 ? "just now" : `${m}m ago`;
 }
 
-const FEED_FLIP_HALF = 270;
+const FEED_SLOTS    = 9;
+const FEED_FLIP_HALF = 400;
 const FEED_EASE_IN  = `transform ${FEED_FLIP_HALF}ms cubic-bezier(0.4,0,1,1)`;
 const FEED_EASE_OUT = `transform ${FEED_FLIP_HALF}ms cubic-bezier(0,0,0.2,1)`;
 
@@ -341,7 +342,7 @@ function FeedCard({
         ref={innerRef}
         className="relative flex flex-col overflow-hidden"
         style={{
-          height: "182px",
+          height: "130px",
           borderRadius: "14px",
           border: `1px solid ${hovered ? "rgba(45,122,82,0.28)" : "rgba(0,0,0,0.09)"}`,
           background: "linear-gradient(175deg, rgba(45,122,82,0.032) 0%, #ffffff 48%)",
@@ -386,7 +387,7 @@ function FeedCard({
             borderBottom: "1px solid rgba(45,122,82,0.11)",
           }}
         >
-          <span className="text-[12px] font-semibold leading-tight truncate pr-3" style={{ color: "#2d7a52" }}>
+          <span className="text-[16px] font-semibold leading-tight truncate pr-3" style={{ color: "#2d7a52" }}>
             {inst}
           </span>
           <span className="text-[10px] tabular-nums shrink-0" style={{ color: "#b0aaa4" }}>
@@ -395,8 +396,8 @@ function FeedCard({
         </div>
 
         {/* Narrative body */}
-        <div className="relative px-4 py-4 flex-1" style={{ zIndex: 1 }}>
-          <p className="text-[13px] leading-[1.7] text-muted-foreground line-clamp-4">
+        <div className="relative px-4 py-3 flex-1" style={{ zIndex: 1 }}>
+          <p className="text-[14px] leading-[1.65] text-muted-foreground line-clamp-4">
             {parts.map((p, i) =>
               p.bold
                 ? <strong key={i} style={{ fontWeight: 600, color: "#2d7a52" }}>{p.text}</strong>
@@ -425,7 +426,21 @@ function shuffleDedupe(raw: FeedAsset[]): FeedAsset[] {
   return result;
 }
 
-const FEED_SLOTS = 6;
+function pickUnique(pool: FeedAsset[], count: number): FeedAsset[] {
+  const result: FeedAsset[] = [];
+  const used = new Set<string>();
+  for (const a of pool) {
+    if (!used.has(a.institution)) { result.push(a); used.add(a.institution); }
+    if (result.length >= count) break;
+  }
+  if (result.length < count) {
+    for (const a of pool) {
+      if (result.length >= count) break;
+      if (!result.includes(a)) result.push(a);
+    }
+  }
+  return result;
+}
 
 function RecentFeed() {
   const sectionRef = useReveal();
@@ -441,68 +456,86 @@ function RecentFeed() {
   );
 
   const [visible, setVisible] = useState<FeedAsset[]>([]);
-  const slotRefs = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
-  const allRef   = useRef<FeedAsset[]>([]);
-  const poolIdx  = useRef(FEED_SLOTS);
-  const flipQ    = useRef<number[]>([]);
+  const slotRefs   = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
+  const allRef     = useRef<FeedAsset[]>([]);
+  const visRef     = useRef<FeedAsset[]>([]);
+  const poolIdx    = useRef(0);
+  const flipPos    = useRef(0);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     allRef.current = all;
-    setVisible(all.slice(0, FEED_SLOTS));
-    poolIdx.current = FEED_SLOTS;
+    const initial = pickUnique(all, FEED_SLOTS);
+    setVisible(initial);
+    poolIdx.current = 0;
   }, [all]);
+
+  useEffect(() => { visRef.current = visible; }, [visible]);
 
   useEffect(() => {
     if (visible.length < FEED_SLOTS) return;
 
     const nextPos = () => {
-      if (!flipQ.current.length) {
-        const q = Array.from({ length: FEED_SLOTS }, (_, i) => i);
-        for (let i = q.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [q[i], q[j]] = [q[j], q[i]];
-        }
-        flipQ.current = q;
-      }
-      return flipQ.current.pop()!;
+      const pos = flipPos.current % FEED_SLOTS;
+      flipPos.current++;
+      return pos;
     };
 
-    const id = setInterval(() => {
-      const pos  = nextPos();
-      const slot = slotRefs.current[pos];
-      if (!slot) return;
-      const pool = allRef.current;
-      if (!pool.length) return;
-      const next = pool[poolIdx.current % pool.length];
-      poolIdx.current++;
+    const startDelay = setTimeout(() => {
+      const intervalId = setInterval(() => {
+        const pos  = nextPos();
+        const slot = slotRefs.current[pos];
+        if (!slot) return;
+        const pool = allRef.current;
+        if (!pool.length) return;
 
-      slot.style.transition = FEED_EASE_IN;
-      slot.style.transform  = "rotateY(90deg)";
+        const shownInsts = new Set(
+          visRef.current.map((a, i) => i !== pos ? a.institution : null).filter(Boolean) as string[]
+        );
+        let next: FeedAsset | null = null;
+        const start = poolIdx.current;
+        for (let i = 0; i < pool.length; i++) {
+          const candidate = pool[(start + i) % pool.length];
+          if (!shownInsts.has(candidate.institution)) {
+            next = candidate;
+            poolIdx.current = (start + i + 1) % pool.length;
+            break;
+          }
+        }
+        if (!next) { next = pool[poolIdx.current % pool.length]; poolIdx.current++; }
 
-      setTimeout(() => {
-        setVisible(prev => { const u = [...prev]; u[pos] = next; return u; });
-        slot.style.transition = "none";
-        slot.style.transform  = "rotateY(-90deg)";
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-          slot.style.transition = FEED_EASE_OUT;
-          slot.style.transform  = "rotateY(0deg)";
-        }));
-      }, FEED_FLIP_HALF + 12);
-    }, 2400);
+        slot.style.transition = FEED_EASE_IN;
+        slot.style.transform  = "rotateY(90deg)";
 
-    return () => clearInterval(id);
+        setTimeout(() => {
+          setVisible(prev => { const u = [...prev]; u[pos] = next!; return u; });
+          slot.style.transition = "none";
+          slot.style.transform  = "rotateY(-90deg)";
+          requestAnimationFrame(() => requestAnimationFrame(() => {
+            slot.style.transition = FEED_EASE_OUT;
+            slot.style.transform  = "rotateY(0deg)";
+          }));
+        }, FEED_FLIP_HALF + 12);
+      }, 3500);
+      intervalRef.current = intervalId;
+    }, 2800);
+
+    return () => { clearTimeout(startDelay); clearInterval(intervalRef.current!); };
   }, [visible.length]);
 
   return (
     <section ref={sectionRef} id="explore" className="reveal-section border-b border-border bg-background">
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
 
-        <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight mb-6">
-          Surfaced in the last 48 hours.{" "}
-          <span className="text-muted-foreground font-normal sm:text-3xl">Most BD teams won't find these for weeks.</span>
+        <h2 className="text-3xl sm:text-4xl font-bold leading-tight mb-6">
+          <span style={{ color: "#2d7a52" }}>Surfaced in the last 48 hours.</span>{" "}
+          <span className="font-normal sm:text-3xl" style={{ color: "#6b7280" }}>
+            Most BD teams won't find these for{" "}
+            <strong style={{ fontWeight: 700, color: "#2d7a52" }}>weeks</strong>.
+          </span>
         </h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {visible.map((asset, i) => (
             <FeedCard
               key={i}
@@ -739,7 +772,7 @@ const INSTITUTION_ROWS = [
 ];
 
 function InstitutionMarquee() {
-  const speeds = [34, 42, 50, 38];
+  const speeds = [110, 135, 155, 120];
   const directions = ["marquee-left", "marquee-right", "marquee-left", "marquee-right"] as const;
 
   return (
