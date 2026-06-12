@@ -191,8 +191,10 @@ export function createUCTechTransferScraper(
         if (sample) console.log(`[scraper] ${institution}: sample — "${sample.title.slice(0, 60)}" desc=${sample.description!.length} chars`);
         return allResults;
       } catch (err: any) {
-        console.error(`[scraper] ${institution} failed: ${err?.message}`);
-        return [];
+        // Re-throw so the ingestion pipeline records the correct error message
+        // (e.g. "HTTP 503") and shows "site_down" in the health dashboard instead
+        // of silently returning [] which appears as "empty_response".
+        throw err;
       }
     },
   };

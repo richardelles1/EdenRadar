@@ -2264,7 +2264,11 @@ export const ohioScraper: InstitutionScraper = {
 };
 
 // 2. UMKC
-// Page uses Bootstrap accordion: each .card has a h3 button (title) + .card-body (description + PDF link)
+// Re-probed 2026-06-12: page no longer uses Bootstrap accordion (.card/.card-body).
+// Technologies are listed flat inside .standard--content as sequential siblings:
+//   <h2> = technology title
+//   <h3>Description</h3> (or "Brief Description" / "Invention Description") + <p> = description
+//   <a href="*.pdf"> anywhere between two h2s = canonical URL (PDF data sheet)
 export const umkcScraper: InstitutionScraper = {
   institution: "University of Missouri – Kansas City (UMKC)",
   async scrape(): Promise<ScrapedListing[]> {
@@ -2274,23 +2278,77 @@ export const umkcScraper: InstitutionScraper = {
     if (!$) return [];
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
-    // Each accordion card: .card-header (title button) + .card-body (description + PDF)
-    $(".card").each((_, card) => {
-      const title = cleanText($(card).find(".card-header button").first().text());
-      if (!title || title.length < 10 || title.length > 250) return;
-      if (seen.has(title.toLowerCase())) return;
-      seen.add(title.toLowerCase());
-      const cardBody = $(card).find(".card-body");
-      // Description: first <p> after the "Description:" h4 (using :contains selector)
-      const descP = cardBody.find("h4:contains('Description')").first().next("p");
-      const description = cleanText(descP.text()).slice(0, 400);
-      // PDF URL: any relative link to technology-docs or .pdf file
-      const pdfHref = cardBody.find('a[href*="technology-docs"], a[href*=".pdf"]').first().attr("href") ?? "";
-      const pdfUrl = pdfHref
-        ? (pdfHref.startsWith("http") ? pdfHref : `${base}/${pdfHref.replace(/^\/+/, "")}`)
-        : listUrl;
-      results.push({ title, description, url: pdfUrl, institution: "University of Missouri – Kansas City (UMKC)" });
+    const content = $(".standard--content");
+    if (!content.length) {
+      console.log(`[scraper] UMKC: .standard--content not found`);
+      return [];
+    }
+
+    // Walk children: group everything between consecutive <h2> tags
+    let currentTitle = "";
+    let descLines: string[] = [];
+    let pdfUrl = "";
+    let inDescSection = false;
+
+    const flush = () => {
+      if (!currentTitle || currentTitle.length < 5) return;
+      if (seen.has(currentTitle.toLowerCase())) return;
+      seen.add(currentTitle.toLowerCase());
+      results.push({
+        title: currentTitle,
+        description: descLines.join(" ").slice(0, 400),
+        url: pdfUrl || listUrl,
+        institution: "University of Missouri – Kansas City (UMKC)",
+      });
+    };
+
+    content.children().each((_, el) => {
+      const tag = el.type === "tag" ? (el as any).name?.toLowerCase() : "";
+      const text = cleanText($(el).text());
+
+      if (tag === "h2") {
+        flush();
+        currentTitle = text;
+        descLines = [];
+        pdfUrl = "";
+        inDescSection = false;
+        return;
+      }
+      if (!currentTitle) return; // skip content before first h2
+
+      if (tag === "h3" || tag === "h4") {
+        // Enter description mode when heading mentions "description"
+        inDescSection = /description/i.test(text);
+        return;
+      }
+      if (tag === "p") {
+        if (inDescSection && descLines.length === 0 && text.length > 10) {
+          descLines.push(text);
+        }
+        // Look for PDF link inside <p>
+        if (!pdfUrl) {
+          const href = $(el).find('a[href*=".pdf"], a[href*="technology-docs"]').first().attr("href") ?? "";
+          if (href) pdfUrl = href.startsWith("http") ? href : `${base}/${href.replace(/^\/+/, "")}`;
+        }
+        return;
+      }
+      if (tag === "ul" || tag === "ol") {
+        // Also look for PDF links inside list items
+        if (!pdfUrl) {
+          const href = $(el).find('a[href*=".pdf"], a[href*="technology-docs"]').first().attr("href") ?? "";
+          if (href) pdfUrl = href.startsWith("http") ? href : `${base}/${href.replace(/^\/+/, "")}`;
+        }
+        return;
+      }
+      if (tag === "a") {
+        const href = $(el).attr("href") ?? "";
+        if (!pdfUrl && (href.includes(".pdf") || href.includes("technology-docs"))) {
+          pdfUrl = href.startsWith("http") ? href : `${base}/${href.replace(/^\/+/, "")}`;
+        }
+      }
     });
+    flush(); // flush the last entry
+
     console.log(`[scraper] UMKC: ${results.length} listings`);
     return results;
   },
@@ -4188,15 +4246,16 @@ export const nemoursScraper: InstitutionScraper = {
 // ── International Batch A (Task #113) ──────────────────────────────────────
 
 // ── Oxford University Innovation ─────────────────────────────────────────────
-// Technologies paginated at /technologies-available/technology-licensing/page/N/
-// Individual tech URLs are at /licence-details/SLUG/ — 18 pages, ~12 per page.
+// Re-probed 2026-06-12: all ~378 listings now render on a single server-side page
+// at /technologies-available/technology-licensing (no pagination — /page/2/ returns 404).
+// Individual tech URLs are /licence-details/SLUG  (no trailing slash since 2026-Q2 redesign).
 // Title derived by converting slug hyphens → spaces + title-casing each word.
 export const oxfordInnovationScraper: InstitutionScraper = {
   institution: "Oxford University Innovation",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Oxford University Innovation";
     const BASE = "https://innovation.ox.ac.uk/technologies-available/technology-licensing";
-    const TIMEOUT_MS = 20_000;
+    const TIMEOUT_MS = 25_000;
     const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
     const slugToTitle = (slug: string): string =>
@@ -4216,7 +4275,9 @@ export const oxfordInnovationScraper: InstitutionScraper = {
       };
 
       const extractFromHtml = (html: string) => {
-        const licenceRe = /href="https:\/\/innovation\.ox\.ac\.uk\/licence-details\/([^/"]+)\/"/g;
+        // Oxford removed trailing slashes from /licence-details/ URLs in 2026-Q2.
+        // Match with optional trailing slash so this works regardless of format.
+        const licenceRe = /href="https:\/\/innovation\.ox\.ac\.uk\/licence-details\/([^/"]+)\/?"/g;
         let m: RegExpExecArray | null;
         while ((m = licenceRe.exec(html)) !== null) {
           const slug = m[1];
@@ -4225,33 +4286,16 @@ export const oxfordInnovationScraper: InstitutionScraper = {
           results.push({
             title: slugToTitle(slug),
             description: "",
-            url: `https://innovation.ox.ac.uk/licence-details/${slug}/`,
+            // Use the canonical no-trailing-slash form that the site now serves
+            url: `https://innovation.ox.ac.uk/licence-details/${slug}`,
             institution: INST,
           });
         }
       };
 
-      // Page 1 = base listing URL (with all-category filter to force server-side render)
-      const categoryIds = ["4337","26","10","14","24","45","16","21","22","23","4338","42","4339","33","37","4341","18","4340"];
-      const filterQS = categoryIds.map(id => `filter%5B%5D=${id}`).join("&");
-      try {
-        const page1Html = await fetchPage(`${BASE}/?${filterQS}`);
-        extractFromHtml(page1Html);
-      } catch {
-        // If the filter approach fails, page 1 results will be picked up via next pages
-      }
-
-      // Pages 2..25 are server-rendered without any filter needed
-      for (let page = 2; page <= 25; page++) {
-        try {
-          const html = await fetchPage(`${BASE}/page/${page}/`);
-          const before = results.length;
-          extractFromHtml(html);
-          if (results.length === before && page > 3) break; // No new listings = past last page
-        } catch {
-          if (page > 5) break;
-        }
-      }
+      // All listings are on the single base page — fetch it once.
+      const page1Html = await fetchPage(BASE);
+      extractFromHtml(page1Html);
 
       console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;

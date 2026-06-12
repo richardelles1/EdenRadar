@@ -1,1 +1,2 @@
 - [MCP SDK dependency](mcp-sdk-dependency.md) — `@modelcontextprotocol/sdk` must be installed or the server won't start; not in package.json by default.
+- [Scraper live endpoints 2026-Q2](scraper-endpoints-2026q2.md) — UW moved to els2.comotion.uw.edu; Oxford no trailing slash; UMKC flat h2/p structure; NCD 503 = propagate error.

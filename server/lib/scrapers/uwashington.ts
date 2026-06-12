@@ -1,94 +1,61 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText } from "./utils";
 
 const INST = "University of Washington";
 
+// Re-probed 2026-06-12:
+//   techtransfer.washington.edu — TCP connection refused (domain dead)
+//   comotion.uw.edu sitemaps   — HTTP 403 regardless of UA
+//   els2.comotion.uw.edu       — current UW Enterprise License System portal
+//     /autocomplete/products   — returns all 250+ technologies as JSON
+//     individual pages at      — https://els2.comotion.uw.edu/product/SLUG
 export const uwashingtonScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
     try {
-      const results: ScrapedListing[] = [];
-      const seen = new Set<string>();
+      const UA =
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-      const techRes = await fetch(
-        "https://techtransfer.washington.edu/available-technologies/",
+      const res = await fetch(
+        "https://els2.comotion.uw.edu/autocomplete/products",
         {
           headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "User-Agent": UA,
+            Accept: "application/json, */*",
+            Referer: "https://els2.comotion.uw.edu/products/available-technologies",
           },
-          signal: AbortSignal.timeout(15_000),
-          redirect: "follow",
+          signal: AbortSignal.timeout(20_000),
         }
-      ).catch(() => null);
+      );
 
-      if (techRes && techRes.ok) {
-        const html = await techRes.text();
-        const cheerio = await import("cheerio");
-        const $ = cheerio.load(html);
-        $(
-          "a[href*='/technologies/'], a[href*='/available-technologies/']"
-        ).each((_, el) => {
-          const href = $(el).attr("href") ?? "";
-          if (
-            href.includes("available-technologies") &&
-            !href.includes("?")
-          )
-            return;
-          const title = cleanText($(el).text());
-          if (!title || title.length < 8 || seen.has(title)) return;
-          seen.add(title);
-          results.push({
-            title,
-            description: "",
-            url: href.startsWith("http")
-              ? href
-              : `https://techtransfer.washington.edu${href}`,
-            institution: INST,
-          });
-        });
-        if (results.length > 0) {
-          console.log(
-            `[scraper] ${INST}: ${results.length} listings via techtransfer.washington.edu`
-          );
-          return results;
-        }
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      const sitemapUrl = "https://comotion.uw.edu/startups-sitemap.xml";
-      const $ = await fetchHtml(sitemapUrl);
-      if ($) {
-        $("url loc").each((_, el) => {
-          const loc = $(el).text().trim();
-          if (loc.includes("/startups/") && !loc.endsWith("/startups/")) {
-            const slug = loc.replace(/\/$/, "").split("/").pop() ?? "";
-            const title = slug
-              .split("-")
-              .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-              .join(" ");
-            if (title.length > 3 && !seen.has(loc)) {
-              seen.add(loc);
-              results.push({
-                title,
-                description: "",
-                url: loc,
-                institution: INST,
-              });
-            }
-          }
-        });
-        if (results.length > 0) {
-          console.log(
-            `[scraper] ${INST}: ${results.length} startups via CoMotion sitemap`
-          );
-          return results;
-        }
+      type ELS2Item = {
+        name: string;
+        dataAttributes?: { id?: number; url?: string };
+      };
+
+      const items: ELS2Item[] = await res.json();
+      if (!Array.isArray(items)) throw new Error("Unexpected response shape");
+
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+
+      for (const item of items) {
+        const title = item.name?.trim();
+        if (!title || title.length < 5) continue;
+        const slug = item.dataAttributes?.url ?? "";
+        const url = slug
+          ? `https://els2.comotion.uw.edu/${slug}`
+          : "https://els2.comotion.uw.edu/products/available-technologies";
+        if (seen.has(url)) continue;
+        seen.add(url);
+        results.push({ title, description: "", url, institution: INST });
       }
 
       console.log(
-        `[scraper] ${INST}: 0 results (techtransfer.washington.edu and CoMotion sitemap both unreachable)`
+        `[scraper] ${INST}: ${results.length} listings via els2.comotion.uw.edu`
       );
-      return [];
+      return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
