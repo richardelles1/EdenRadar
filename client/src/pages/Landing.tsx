@@ -342,7 +342,7 @@ function FeedCard({
         ref={innerRef}
         className="relative flex flex-col overflow-hidden"
         style={{
-          height: "168px",
+          height: "130px",
           borderRadius: "14px",
           border: `1px solid ${hovered ? "rgba(45,122,82,0.28)" : "rgba(0,0,0,0.09)"}`,
           background: "linear-gradient(175deg, rgba(45,122,82,0.032) 0%, #ffffff 48%)",
@@ -387,7 +387,7 @@ function FeedCard({
             borderBottom: "1px solid rgba(45,122,82,0.11)",
           }}
         >
-          <span className="text-[14px] font-semibold leading-tight truncate pr-3" style={{ color: "#2d7a52" }}>
+          <span className="text-[16px] font-semibold leading-tight truncate pr-3" style={{ color: "#2d7a52" }}>
             {inst}
           </span>
           <span className="text-[10px] tabular-nums shrink-0" style={{ color: "#b0aaa4" }}>
@@ -396,7 +396,7 @@ function FeedCard({
         </div>
 
         {/* Narrative body */}
-        <div className="relative px-4 py-4 flex-1" style={{ zIndex: 1 }}>
+        <div className="relative px-4 py-3 flex-1" style={{ zIndex: 1 }}>
           <p className="text-[14px] leading-[1.65] text-muted-foreground line-clamp-4">
             {parts.map((p, i) =>
               p.bold
@@ -460,7 +460,7 @@ function RecentFeed() {
   const allRef     = useRef<FeedAsset[]>([]);
   const visRef     = useRef<FeedAsset[]>([]);
   const poolIdx    = useRef(0);
-  const flipQ      = useRef<number[]>([]);
+  const flipPos    = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -476,15 +476,9 @@ function RecentFeed() {
     if (visible.length < FEED_SLOTS) return;
 
     const nextPos = () => {
-      if (!flipQ.current.length) {
-        const q = Array.from({ length: FEED_SLOTS }, (_, i) => i);
-        for (let i = q.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [q[i], q[j]] = [q[j], q[i]];
-        }
-        flipQ.current = q;
-      }
-      return flipQ.current.pop()!;
+      const pos = flipPos.current % FEED_SLOTS;
+      flipPos.current++;
+      return pos;
     };
 
     const startDelay = setTimeout(() => {
