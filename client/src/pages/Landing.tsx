@@ -3,6 +3,7 @@ import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 import { useAuth } from "@/hooks/use-auth";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import { NumberTicker } from "@/components/ui/number-ticker";
@@ -307,16 +308,18 @@ function relativeTime(iso: string): string {
 }
 
 const FEED_SLOTS    = 9;
-const FEED_FLIP_HALF = 400;
+const FEED_FLIP_HALF = 300;
 const FEED_EASE_IN  = `transform ${FEED_FLIP_HALF}ms cubic-bezier(0.4,0,1,1)`;
 const FEED_EASE_OUT = `transform ${FEED_FLIP_HALF}ms cubic-bezier(0,0,0.2,1)`;
 
 function FeedCard({
   asset,
   slotRef,
+  ambientBloom = false,
 }: {
   asset: FeedAsset;
   slotRef: (el: HTMLDivElement | null) => void;
+  ambientBloom?: boolean;
 }) {
   const innerRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, on: false });
@@ -362,7 +365,7 @@ function FeedCard({
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={onLeave}
       >
-        {/* Bloom — erupts from top-left on hover, clipped by overflow-hidden */}
+        {/* Bloom — erupts from top-left on hover; breathes faintly when ambient */}
         <div
           aria-hidden="true"
           style={{
@@ -370,9 +373,11 @@ function FeedCard({
             width: 60, height: 60, borderRadius: "50%",
             background: "rgba(45,122,82,0.55)",
             top: -30, left: -30,
-            transform: hovered ? "scale(24)" : "scale(1)",
-            opacity: hovered ? 0.11 : 0,
-            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+            transform: (hovered || ambientBloom) ? "scale(24)" : "scale(1)",
+            opacity: hovered ? 0.11 : ambientBloom ? 0.055 : 0,
+            transition: hovered
+              ? "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease"
+              : "transform 1.4s cubic-bezier(0.4,0,0.2,1), opacity 1.1s ease",
             pointerEvents: "none",
             zIndex: 0,
           }}
@@ -456,12 +461,14 @@ function RecentFeed() {
   );
 
   const [visible, setVisible] = useState<FeedAsset[]>([]);
-  const slotRefs   = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
-  const allRef     = useRef<FeedAsset[]>([]);
-  const visRef     = useRef<FeedAsset[]>([]);
-  const poolIdx    = useRef(0);
-  const flipPos    = useRef(0);
+  const [ambientSlot, setAmbientSlot] = useState<number | null>(null);
+  const slotRefs    = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
+  const allRef      = useRef<FeedAsset[]>([]);
+  const visRef      = useRef<FeedAsset[]>([]);
+  const poolIdx     = useRef(0);
+  const flipPos     = useRef(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ambientRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     allRef.current = all;
@@ -489,9 +496,7 @@ function RecentFeed() {
         const pool = allRef.current;
         if (!pool.length) return;
 
-        const shownInsts = new Set(
-          visRef.current.map((a, i) => i !== pos ? a.institution : null).filter(Boolean) as string[]
-        );
+        const shownInsts = new Set(visRef.current.map(a => a.institution));
         let next: FeedAsset | null = null;
         const start = poolIdx.current;
         for (let i = 0; i < pool.length; i++) {
@@ -523,6 +528,22 @@ function RecentFeed() {
     return () => { clearTimeout(startDelay); clearInterval(intervalRef.current!); };
   }, [visible.length]);
 
+  // Ambient bloom: one card softly lit at a time, drifting every 5.5s
+  useEffect(() => {
+    if (visible.length < FEED_SLOTS) return;
+    const startDelay = setTimeout(() => {
+      setAmbientSlot(1);
+      ambientRef.current = setInterval(() => {
+        setAmbientSlot(prev => {
+          let next = Math.floor(Math.random() * FEED_SLOTS);
+          if (next === prev) next = (next + 3) % FEED_SLOTS;
+          return next;
+        });
+      }, 5500);
+    }, 1600);
+    return () => { clearTimeout(startDelay); clearInterval(ambientRef.current!); };
+  }, [visible.length]);
+
   return (
     <section ref={sectionRef} id="explore" className="reveal-section border-b border-border bg-background">
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
@@ -541,6 +562,7 @@ function RecentFeed() {
               key={i}
               asset={asset}
               slotRef={(el) => { slotRefs.current[i] = el; }}
+              ambientBloom={ambientSlot === i}
             />
           ))}
         </div>
@@ -690,7 +712,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
           className="text-base sm:text-lg mb-10 max-w-xl mx-auto leading-relaxed"
           style={{ color: "hsl(220 18% 34%)" }}
         >
-          EdenRadar tracks pre-clinical and clinical assets across hundreds of research institutions. Know what's available before your competitors do.
+          EdenRadar tracks pre-clinical and clinical assets across {TTO_COUNT_LABEL} research institutions. Know what's available before your competitors do.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
           <Link href="/demo" className="w-full sm:w-auto">
@@ -700,7 +722,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
               className="w-full sm:w-auto h-11 px-7 font-semibold text-base gap-2"
               style={{ background: "linear-gradient(148deg, hsl(33 70% 46%) 0%, hsl(33 62% 38%) 100%)", color: "hsl(33 40% 94%)", border: "none" }}
             >
-              See the demo
+              Request Access
               <ArrowRight className="w-4 h-4" />
             </Button>
           </Link>
@@ -726,6 +748,22 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 }
 
 /* ─────────────────────────── InstitutionMarquee ──────────────── */
+
+const MARQUEE_HIGHLIGHTS = new Set([
+  // Row 1 qualifiers (100+ assets, ≥80% completeness)
+  "MIT", "Stanford", "Harvard", "Johns Hopkins", "UCSF", "UCLA", "Yale",
+  "Cornell", "Penn", "Princeton", "UC Berkeley", "Northwestern", "Georgetown", "McGill",
+  // Row 2 qualifiers
+  "Cleveland Clinic", "Boston Children's", "Moffitt", "Emory", "Pittsburgh",
+  "Michigan", "Wisconsin-Madison", "UNC Chapel Hill", "Wash U St. Louis",
+  "Rochester", "Indiana", "Rutgers", "Florida", "NIH", "Weill Cornell", "Alabama",
+  // Row 3 qualifiers
+  "Ohio State", "Penn State", "USC", "UCSD", "UC Davis", "Georgia Tech", "Purdue",
+  "Illinois", "Minnesota", "Texas A&M", "Arizona State", "South Carolina",
+  "Louisville", "Rice", "Lawrence Berkeley Lab",
+  // Row 4 qualifiers
+  "UConn", "USF", "Georgia", "Arizona", "New Mexico",
+]);
 
 const INSTITUTION_ROWS = [
   [
@@ -797,7 +835,7 @@ function InstitutionMarquee() {
                   <span
                     key={i}
                     className="flex-shrink-0 whitespace-nowrap text-[11px] font-semibold tracking-wider"
-                    style={{ color: "hsl(var(--foreground) / 0.50)" }}
+                    style={{ color: MARQUEE_HIGHLIGHTS.has(name) ? "#2d7a52" : "hsl(var(--foreground) / 0.68)" }}
                   >
                     {name}
                     <span
@@ -1251,12 +1289,12 @@ export default function Landing() {
                 </p>
                 <Button
                   size="lg"
-                  onClick={handleGetStarted}
+                  onClick={handleLogin}
                   data-testid="button-cta-get-started"
                   className="h-11 px-8 font-semibold gap-2"
                   style={{ background: "hsl(33 85% 44%)", border: "none", color: "white" }}
                 >
-                  Get started
+                  Request Access
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
                 <div ref={statsRef} className="reveal-section grid grid-cols-2 gap-x-10 gap-y-5 mt-12 w-full max-w-sm">

@@ -645,7 +645,7 @@ export default function OnePager() {
               <div>
                 <h2 className="op-sec-hed">Map the research landscape before targeting a single asset.</h2>
                 <p className="op-sec-body">
-                  The <strong>Intelligence</strong> tab provides a real-time view of the entire indexed corpus
+                  The <strong>Intelligence</strong> tab provides a real-time view of the entire TTO index
                   across all 350+ TTO portals. See which <strong>therapeutic mechanisms</strong> have the
                   highest research activity, identify <strong>supply gaps</strong> where unmet need is high and
                   competing assets are scarce, and monitor <strong>modality momentum</strong> to see which

@@ -3,7 +3,7 @@
 const SITE_NAME = "EdenRadar";
 const DEFAULT_OG_IMAGE = "/og-image.png";
 const DEFAULT_DESCRIPTION =
-  "EdenRadar connects world-class university biotech research with industry teams. AI-enriched asset discovery across 300+ tech transfer offices, scientific literature, and a confidential biopharma deal marketplace.";
+  "EdenRadar connects world-class university biotech research with industry teams. AI-enriched asset discovery across 350+ tech transfer offices, scientific literature, and a confidential biopharma deal marketplace.";
 const TWITTER_HANDLE = "@edenradar";
 
 export type PublicPage = {
@@ -21,7 +21,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
     path: "/",
     title: "EdenRadar — Where Biotech Research Meets Industry Intelligence",
     description:
-      "AI-powered biotech asset discovery across 300+ tech transfer offices and scientific literature. Connect industry BD teams with university researchers, surface licensable assets, and run a confidential deal marketplace — all in EdenRadar.",
+      "AI-powered biotech asset discovery across 350+ tech transfer offices and scientific literature. Connect industry BD teams with university researchers, surface licensable assets, and run a confidential deal marketplace — all in EdenRadar.",
     changefreq: "weekly",
   },
   {
@@ -35,7 +35,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
     path: "/what-we-do",
     title: "What We Do — Biotech Asset Discovery & Deal Intelligence | EdenRadar",
     description:
-      "EdenRadar enriches biotech assets from 300+ TTOs and academic literature with AI scoring, then connects them to BD teams, researchers, and a confidential deal marketplace.",
+      "EdenRadar enriches biotech assets from 350+ TTOs and academic literature with AI scoring, then connects them to BD teams, researchers, and a confidential deal marketplace.",
     changefreq: "monthly",
   },
   {
@@ -57,7 +57,7 @@ export const PUBLIC_PAGES: PublicPage[] = [
         "@type": "Product",
         name: "EdenRadar",
         description:
-          "Continuous discovery and AI enrichment of biotech assets from 300+ tech transfer offices for industry BD teams.",
+          "Continuous discovery and AI enrichment of biotech assets from 350+ tech transfer offices for industry BD teams.",
         brand: { "@type": "Brand", name: "EdenRadar" },
         offers: {
           "@type": "AggregateOffer",

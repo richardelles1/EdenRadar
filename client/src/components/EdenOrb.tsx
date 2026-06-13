@@ -342,7 +342,7 @@ export const PROMPT_CARDS = [
   {
     icon: Clock,
     label: "New this month",
-    q: "What new TTO assets have been added to the corpus in the last 30 days?",
+    q: "What new TTO assets have been added to the index in the last 30 days?",
     color: "from-green-500/10 to-green-600/5 border-green-500/20 hover:border-green-500/40",
     iconColor: "text-green-500",
     tags: ["oncology", "gene therapy", "autoimmune", "cns", "rare disease", "new"],
@@ -366,7 +366,7 @@ export const PROMPT_CARDS = [
   {
     icon: Search,
     label: "Where are the gaps?",
-    q: "Where is the white space in the TTO corpus — which therapeutic areas are underrepresented given current BD trends?",
+    q: "Where is the white space in the TTO index: which therapeutic areas are underrepresented given current BD trends?",
     color: "from-slate-500/10 to-slate-600/5 border-slate-500/20 hover:border-slate-500/40",
     iconColor: "text-slate-500",
     tags: [],
@@ -432,7 +432,7 @@ const SEARCH_EXTERNAL_MAP: Array<[RegExp, string]> = [
 ];
 
 const SEARCH_POOL = [
-  "Scanning the corpus…",
+  "Scanning the index…",
   "Mapping the space…",
   "Checking university pipelines…",
   "Digging through recent assets…",

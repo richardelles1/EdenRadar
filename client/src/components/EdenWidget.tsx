@@ -8,6 +8,7 @@ import { EdenAvatar } from "@/components/EdenOrb";
 import { EdenChatThread } from "@/components/EdenChatThread";
 import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type ExternalResult, type AlertOfferConfig } from "@/hooks/useEdenChat";
 import { getAuthHeaders } from "@/lib/queryClient";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
@@ -284,7 +285,7 @@ export function EdenWidget() {
                   <div>
                     <p className="text-sm font-semibold text-foreground">Ask Eden anything</p>
                     <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">
-                      Search 300+ TTO portfolios by modality, indication, stage, or institution.
+                      Search {TTO_COUNT_LABEL} TTO portfolios by modality, indication, stage, or institution.
                     </p>
                   </div>
                   <div className="flex flex-col gap-1.5 w-full max-w-[280px]">

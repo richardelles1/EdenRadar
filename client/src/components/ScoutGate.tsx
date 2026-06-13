@@ -4,13 +4,14 @@ import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Radar, CheckCircle2, ArrowRight, Lock, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 
 type PlanResponse = { plan: string | null; orgName: string | null; stripeStatus: string | null; stripeCurrentPeriodEnd: string | null };
 
 const PAID_PLANS = ["individual", "team5", "team10", "enterprise"] as const;
 
 const SCOUT_FEATURES = [
-  "Semantic search across 300+ TTO asset catalogs",
+  `Semantic search across ${TTO_COUNT_LABEL} TTO asset catalogs`,
   "Match Report generation with AI enrichment",
   "Pipeline lists and saved asset tracking",
   "New arrivals feed with weekly institution updates",
@@ -104,7 +105,7 @@ export function ScoutGate({ children }: { children: React.ReactNode }) {
             <span className="text-emerald-600">EdenRadar</span> platform
           </h1>
           <p className="text-muted-foreground text-base max-w-xl mx-auto">
-            EdenRadar gives your BD team continuous access to licensable biotech assets from 300+ tech transfer offices, enriched and scored by EDEN.
+            EdenRadar gives your BD team continuous access to licensable biotech assets from {TTO_COUNT_LABEL} tech transfer offices, enriched and scored by EDEN.
           </p>
         </div>
 

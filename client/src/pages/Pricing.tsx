@@ -45,11 +45,12 @@ const SCOUT_PLANS = [
     tagline: "For BD teams that share pipeline and move fast.",
     teamCallout: "Share access across your BD team — invite up to 4 colleagues after checkout.",
     features: [
-      "Everything in Individual",
-      "5 shared team seats",
-      "Shared pipeline lists and watchlists",
-      "Member attribution on pipeline actions",
-      "Org-level dashboard and team view",
+      "Everything in Individual, for up to 5 teammates",
+      "5 shared seats at a lower per-seat price than solo",
+      "Shared pipeline lists, watchlists, and saved searches",
+      "Team activity feed with member attribution",
+      "Org-level dashboard and team pipeline view",
+      "Centralized billing and seat management",
       "Priority email support",
     ],
     highlighted: true,
@@ -812,8 +813,8 @@ export default function Pricing() {
         <div
           className="rounded-xl p-7 sm:p-9"
           style={{
-            background: "linear-gradient(135deg, hsl(155 25% 6%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
-            border: "1px solid hsl(var(--portal-scout) / 0.25)",
+            background: "linear-gradient(135deg, hsl(152 45% 96%) 0%, hsl(150 38% 92%) 100%)",
+            border: "1px solid hsl(var(--portal-scout) / 0.3)",
           }}
           data-testid="pricing-card-enterprise"
         >
@@ -821,21 +822,21 @@ export default function Pricing() {
             <div className="flex-1 space-y-3">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "hsl(var(--portal-scout) / 0.2)" }}>
-                  <Building2 className="w-[18px] h-[18px]" style={{ color: "hsl(142 65% 60%)" }} />
+                  <Building2 className="w-[18px] h-[18px]" style={{ color: "hsl(142 60% 30%)" }} />
                 </div>
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "hsl(142 65% 60%)" }}>Enterprise</p>
-                  <h3 className="text-lg font-bold text-white">Custom pricing</h3>
+                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: "hsl(142 60% 30%)" }}>Enterprise</p>
+                  <h3 className="text-lg font-bold text-foreground">Custom pricing</h3>
                 </div>
               </div>
-              <p className="text-sm leading-relaxed" style={{ color: "hsl(210 15% 70%)" }}>
+              <p className="text-sm leading-relaxed" style={{ color: "hsl(155 12% 32%)" }}>
                 {ENTERPRISE.tagline}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
                 {ENTERPRISE.bullets.map((b) => (
                   <div key={b} className="flex items-start gap-2">
-                    <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: "hsl(142 65% 60%)" }} />
-                    <span className="text-xs" style={{ color: "hsl(210 15% 70%)" }}>{b}</span>
+                    <Check className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" style={{ color: "hsl(142 60% 30%)" }} />
+                    <span className="text-xs" style={{ color: "hsl(155 12% 32%)" }}>{b}</span>
                   </div>
                 ))}
               </div>
@@ -850,7 +851,7 @@ export default function Pricing() {
                   Contact sales
                 </Button>
               </a>
-              <p className="text-[10px] text-center mt-2" style={{ color: "hsl(210 15% 50%)" }}>{CONTACT_SALES}</p>
+              <p className="text-[10px] text-center mt-2" style={{ color: "hsl(155 10% 42%)" }}>{CONTACT_SALES}</p>
             </div>
           </div>
         </div>

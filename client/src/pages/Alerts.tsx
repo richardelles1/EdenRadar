@@ -356,7 +356,7 @@ function MyAlertsSection({ onCreateAlert, matchCounts = {}, profile }: { onCreat
         <OrientationHint
           hintId="alerts-how-it-works"
           title="Your deal radar."
-          body="Alerts watch the TTO corpus 24/7. Set search criteria once and get notified by email when matching assets appear."
+          body="Alerts watch the TTO index 24/7. Set search criteria once and get notified by email when matching assets appear."
           accent="emerald"
         />
 

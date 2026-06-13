@@ -27,7 +27,7 @@ const RANKING_LABEL = "Ranking the closest matches…";
 const GENERATING_LABEL = "Pulling it together…";
 
 const SOURCE_DISPLAY: Record<ActiveSource, { label: string; Icon: React.ComponentType<{ className?: string }> }> = {
-  tto:            { label: "TTO Corpus", Icon: Database },
+  tto:            { label: "TTO Index", Icon: Database },
   clinicaltrials: { label: "ClinicalTrials.gov", Icon: FlaskConical },
   patents:        { label: "Patent Search", Icon: FileSearch },
   harvard:        { label: "Harvard Library", Icon: Library },
@@ -462,8 +462,8 @@ export default function IndustryEden() {
               const isTto = activeSource === "tto";
               return (
                 <button
-                  onClick={() => !isTto && handleSend("show me TTO corpus assets")}
-                  title={isTto ? "Searching TTO corpus (default)" : "Click to return to TTO corpus"}
+                  onClick={() => !isTto && handleSend("show me TTO index assets")}
+                  title={isTto ? "Searching the TTO index (default)" : "Click to return to the TTO index"}
                   className={`flex items-center gap-1 text-[10px] font-medium rounded-full px-2 py-0.5 border transition-colors shrink-0 ${
                     isTto
                       ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 cursor-default"

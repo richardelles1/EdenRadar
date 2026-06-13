@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, useSearch } from "wouter";
 import type { InstitutionsListResponse } from "@/lib/institutions";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { ResearchCard } from "@/components/ResearchCard";
@@ -622,7 +623,6 @@ export default function Scout() {
   // Coverage badge counts every institution we index (curated metadata ∪
   // ALL_SCRAPERS ∪ ingested), not just those with assets already pulled —
   // /api/scout/institutions returns the latter and is kept for ranking only.
-  const liveInstitutionCount = coverageData?.total ?? institutionsData?.total ?? 0;
 
 
   function getDateBounds(filter: string): { since?: string; before?: string } {
@@ -1259,7 +1259,7 @@ export default function Scout() {
                         >
                           <Building2 className="w-3 h-3 text-muted-foreground" />
                           <span className="font-black tabular-nums text-foreground">
-                            {scoutStats?.institutions || liveInstitutionCount || <span className="text-muted-foreground font-normal">...</span>}
+                            {TTO_COUNT_LABEL}
                           </span>
                           <span className="text-muted-foreground">institutions</span>
                         </div>
