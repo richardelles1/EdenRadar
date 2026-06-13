@@ -29,12 +29,12 @@ const INK_MID = "#4a5260";
 const INK_FAINT = "#8a9199";
 const RULE = "#dddad4";
 
-const TAG_STYLES: Record<BriefTagType, { color: string; background: string }> = {
-  default:  { color: INK_FAINT,  background: "rgba(0,0,0,0.05)" },
-  oncology: { color: "#b05010",  background: "rgba(176,80,16,0.08)" },
-  cns:      { color: "#5050b0",  background: "rgba(80,80,176,0.08)" },
-  rare:     { color: "#8a6b10",  background: "rgba(138,107,16,0.08)" },
-  gene:     { color: EMERALD,    background: EMERALD_LIGHT },
+const TAG_STYLES: Record<BriefTagType, { color: string; background: string; border: string }> = {
+  default:  { color: INK_FAINT,  background: "rgba(0,0,0,0.04)",        border: "rgba(0,0,0,0.06)" },
+  oncology: { color: "#b05010",  background: "rgba(160,72,16,0.07)",    border: "rgba(160,72,16,0.12)" },
+  cns:      { color: "#5050b0",  background: "rgba(64,64,160,0.07)",    border: "rgba(64,64,160,0.12)" },
+  rare:     { color: "#8a6b10",  background: "rgba(128,112,16,0.07)",   border: "rgba(128,112,16,0.12)" },
+  gene:     { color: EMERALD,    background: EMERALD_LIGHT,             border: EMERALD_BORDER },
 };
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -65,6 +65,7 @@ function AssetTag({ label, type }: { label: string; type: BriefTagType }) {
         textTransform: "uppercase",
         color: s.color,
         background: s.background,
+        border: `1px solid ${s.border}`,
       }}
     >
       {label}
@@ -72,36 +73,15 @@ function AssetTag({ label, type }: { label: string; type: BriefTagType }) {
   );
 }
 
-function MolecularLattice() {
-  const hexes: React.ReactNode[] = [];
-  const rows = 4;
-  const cols = 18;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const offset = r % 2 === 1 ? 20 : 0;
-      const cx = offset + c * 40 + 20;
-      const cy = r * 36 + 20;
-      const pts = [0, 60, 120, 180, 240, 300].map((deg) => {
-        const rad = (deg * Math.PI) / 180;
-        return `${cx + 14 * Math.cos(rad)},${cy + 14 * Math.sin(rad)}`;
-      }).join(" ");
-      hexes.push(<polygon key={`${r}-${c}`} points={pts} />);
-      if (r < rows - 1 && c < cols - 1) {
-        hexes.push(<circle key={`d-${r}-${c}`} cx={cx + 20} cy={cy + 18} r="2.5" fill="white" />);
-      }
-    }
-  }
+function HeroTexture() {
   return (
-    <svg
-      className="absolute inset-0 w-full h-full"
-      viewBox="0 0 740 160"
-      preserveAspectRatio="xMidYMid slice"
+    <div
       aria-hidden="true"
-    >
-      <g fill="none" stroke="white" strokeWidth="0.8" opacity="0.1">
-        {hexes}
-      </g>
-    </svg>
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.04) 28px, rgba(255,255,255,0.04) 29px)",
+      }}
+    />
   );
 }
 
@@ -201,7 +181,7 @@ export default function BriefIssue() {
     title: issue
       ? `The Eden Brief - Issue ${issue.issueNumber}: ${issue.title}`
       : "The Eden Brief",
-    description: "Monthly intelligence on the biotech asset licensing market from Eden NX.",
+    description: "Monthly intelligence on the biotech asset licensing market from EdenNX.",
   });
 
   const briefUrl = typeof window !== "undefined" ? window.location.href : "";
@@ -312,8 +292,8 @@ export default function BriefIssue() {
       >
 
         {/* Hero band */}
-        <div className="relative overflow-hidden" style={{ background: EMERALD }}>
-          <MolecularLattice />
+        <div className="relative overflow-hidden" style={{ background: "linear-gradient(150deg, #2d7a52 0%, #1c5138 100%)" }}>
+          <HeroTexture />
           <div className="relative px-5 sm:px-12 py-8 sm:py-10">
             <div
               className="flex items-center gap-3 mb-3"
@@ -323,7 +303,7 @@ export default function BriefIssue() {
                 className="text-xs tracking-widest uppercase"
                 style={{ fontFamily: "'JetBrains Mono', monospace" }}
               >
-                Eden NX &middot; Intelligence Brief
+                EdenNX &middot; Intelligence Brief
               </span>
               <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.15)" }} />
             </div>
@@ -359,21 +339,6 @@ export default function BriefIssue() {
                   </span>
                 </div>
               ))}
-              <div className="flex flex-col gap-0.5">
-                <span
-                  className="text-xs tracking-widest uppercase"
-                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", fontSize: "10px" }}
-                >
-                  Permalink
-                </span>
-                <a
-                  href={`/brief/${issue.slug}`}
-                  className="text-xs hover:underline"
-                  style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.85)", fontSize: "11px", textDecoration: "none" }}
-                >
-                  edenradar.com/brief/{issue.slug}
-                </a>
-              </div>
             </div>
           </div>
         </div>
@@ -405,12 +370,14 @@ export default function BriefIssue() {
                   {c.the_number.figure}
                 </div>
                 <span
-                  className="inline-block mt-1.5 px-2 py-0.5 text-xs rounded-sm"
+                  className="block mt-2"
                   style={{
                     fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: "10px",
+                    fontSize: "9px",
+                    letterSpacing: "0.12em",
+                    textTransform: "uppercase",
                     color: EMERALD,
-                    background: "rgba(45,122,82,0.12)",
+                    opacity: 0.75,
                   }}
                 >
                   {c.the_number.delta}
@@ -454,7 +421,7 @@ export default function BriefIssue() {
                           fontSize: "10px",
                         }}
                       >
-                        Observation {String(i + 1).padStart(2, "0")}
+                        Signal {String(i + 1).padStart(2, "0")}
                       </div>
                       <p
                         className="text-sm font-normal leading-relaxed"
@@ -678,7 +645,7 @@ export default function BriefIssue() {
             <table className="w-full text-sm" style={{ borderCollapse: "collapse" }}>
               <thead>
                 <tr style={{ borderBottom: `2px solid ${EMERALD}` }}>
-                  {["Asset", "Stage", "Tier", "Status"].map((h, i) => (
+                  {["Asset", "Stage", "Source", "Status"].map((h, i) => (
                     <th
                       key={h}
                       className="pb-2.5"
@@ -801,12 +768,12 @@ export default function BriefIssue() {
               Eden <em style={{ color: EMERALD }}>Brief</em>
             </h3>
             <div className="text-xs leading-relaxed" style={{ color: INK_FAINT, lineHeight: 1.8 }}>
-              Published monthly by Eden NX &middot;{" "}
+              Published monthly by EdenNX &middot;{" "}
               <a href="https://edenradar.com" style={{ color: INK_MID, textDecoration: "none" }}>
                 edenradar.com
               </a>
               <br />
-              2026 Eden NX. All rights reserved.
+              2026 EdenNX. All rights reserved.
             </div>
           </div>
           <SubscribeInline />
