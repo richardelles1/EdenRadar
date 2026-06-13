@@ -88,7 +88,7 @@ function QuoteBreak({ quote, name, title }: { quote: string; name: string; title
     <section
       ref={ref}
       className="reveal-section py-20 sm:py-28"
-      style={{ background: "hsl(222 47% 5%)" }}
+      style={{ background: "hsl(152 40% 96%)" }}
     >
       <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
         <div
@@ -98,17 +98,17 @@ function QuoteBreak({ quote, name, title }: { quote: string; name: string; title
         >
           &ldquo;
         </div>
-        <blockquote className="text-xl sm:text-2xl font-medium text-white leading-relaxed">
+        <blockquote className="text-xl sm:text-2xl font-medium text-foreground leading-relaxed">
           {quote}
         </blockquote>
         <div
           className="mt-8 pt-6"
-          style={{ borderTop: "1px solid hsl(0 0% 100% / 0.08)" }}
+          style={{ borderTop: "1px solid hsl(0 0% 0% / 0.1)" }}
         >
           <p className="text-sm font-semibold" style={{ color: AMBER }}>
             {name}
           </p>
-          <p className="text-xs mt-0.5" style={{ color: "hsl(220 15% 62%)" }}>{title}</p>
+          <p className="text-xs mt-0.5" style={{ color: "hsl(155 12% 38%)" }}>{title}</p>
         </div>
       </div>
     </section>
@@ -172,16 +172,16 @@ export default function About() {
           <div
             className="rounded-2xl p-8 sm:p-12 text-center relative overflow-hidden"
             style={{
-              background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
-              border: "1px solid hsl(var(--portal-scout) / 0.2)",
+              background: "linear-gradient(135deg, hsl(152 45% 96%) 0%, hsl(150 38% 92%) 100%)",
+              border: "1px solid hsl(var(--portal-scout) / 0.3)",
             }}
           >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 55% / 0.15) 0%, transparent 60%)" }} aria-hidden="true" />
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(142 65% 45% / 0.08) 0%, transparent 60%)" }} aria-hidden="true" />
             <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">Our Mission</p>
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-6 leading-tight max-w-3xl mx-auto">
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-6 leading-tight max-w-3xl mx-auto">
               Accelerate science to patient impact by eliminating the discovery gap between university research and industry development.
             </h2>
-            <p className="text-base leading-relaxed max-w-2xl mx-auto" style={{ color: "hsl(220 15% 62%)" }}>
+            <p className="text-base leading-relaxed max-w-2xl mx-auto" style={{ color: "hsl(155 12% 32%)" }}>
               Every year, thousands of licensable technologies sit quietly inside research institutions while industry teams spend months and millions searching through fragmented databases and cold calls. EdenRadar changes that with EDEN-enriched discovery, structured intelligence, and a connected ecosystem designed for the modern biotech deal.
             </p>
           </div>
@@ -313,15 +313,15 @@ export default function About() {
           <div
             className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{
-              background: "linear-gradient(135deg, hsl(25 80% 6%) 0%, hsl(33 75% 9%) 60%, hsl(38 70% 7%) 100%)",
+              background: "linear-gradient(135deg, hsl(38 80% 96%) 0%, hsl(33 65% 90%) 100%)",
               border: `1px solid ${AMBER_BORDER}`,
             }}
           >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 44% / 0.12) 0%, transparent 60%)" }} aria-hidden="true" />
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 50% / 0.08) 0%, transparent 60%)" }} aria-hidden="true" />
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4">
               The discovery gap is a solvable problem.
             </h2>
-            <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(33 40% 68%)" }}>
+            <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(25 35% 32%)" }}>
               EdenRadar was built to close it: systematically, at scale, starting with the first search you run.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -330,7 +330,7 @@ export default function About() {
                 size="lg"
                 data-testid="about-cta-bottom"
                 className="h-11 px-7 font-semibold"
-                style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}
+                style={{ background: AMBER, color: "white", border: "none" }}
               >
                 <Link href="/demo">
                   Request Access
@@ -342,7 +342,7 @@ export default function About() {
                 size="lg"
                 data-testid="about-cta-pricing"
                 className="h-11 px-7 font-semibold"
-                style={{ background: "transparent", border: `1px solid ${AMBER_BORDER_LIGHT}`, color: "hsl(33 60% 68%)" }}
+                style={{ background: "transparent", border: `1px solid ${AMBER_BORDER}`, color: "hsl(25 70% 32%)" }}
               >
                 <Link href="/pricing">See Pricing</Link>
               </Button>

@@ -3,6 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { AssetCard } from "./AssetCard";
 import { FlaskConical, SearchX, Microscope } from "lucide-react";
 import type { ScoredAsset } from "@/lib/types";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 
 type SearchResultsProps = {
   assets: ScoredAsset[];
@@ -84,7 +85,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         <div>
           <h3 className="text-lg font-semibold text-foreground mb-1">Start Your Discovery</h3>
           <p className="text-muted-foreground text-sm max-w-sm">
-            Search 300+ TTO assets from leading research institutions, ranked for your acquisition thesis.
+            Search the TTO index across {TTO_COUNT_LABEL} institutions, ranked for your acquisition thesis.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 max-w-lg">

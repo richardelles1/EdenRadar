@@ -252,7 +252,7 @@ export default function Developers() {
         <h1 className="text-2xl font-bold text-foreground mb-2">Developer Docs</h1>
         <p className="text-sm text-muted-foreground max-w-xl">
           Integrate EdenRadar's biotech asset intelligence directly into your workflows.
-          The V1 API gives programmatic access to the same corpus that powers Scout.
+          The V1 API gives programmatic access to the same index that powers Scout.
         </p>
         <div className="flex items-center gap-3 mt-4">
           <Badge variant="outline" className="text-xs gap-1.5">
@@ -283,9 +283,9 @@ export default function Developers() {
             Overview
           </SectionTitle>
           <p>
-            The EdenRadar API provides read access to a corpus of over 33,000 biotech and
-            pharmaceutical assets — including drug candidates, research programs, and
-            licensing opportunities — sourced and enriched by the EdenRadar pipeline.
+            The EdenRadar API provides read access to an index of over 33,000 biotech and
+            pharmaceutical assets, including drug candidates, research programs, and
+            licensing opportunities, sourced and enriched by the EdenRadar pipeline.
           </p>
           <p className="mt-3">
             All responses are JSON. All endpoints require an API key (see{" "}
@@ -429,7 +429,7 @@ Retry-After: 86400   # only present on 429 responses`}
           {/* ── GET /v1/assets/search ─────────────────────── */}
           <SubTitle id="endpoint-search">GET /v1/assets/search</SubTitle>
           <p className="mb-3">
-            Full-text and fuzzy search across the EdenRadar asset corpus.
+            Full-text and fuzzy search across the EdenRadar asset index.
             Requires scope <IC>read:assets</IC>.
           </p>
 
@@ -510,7 +510,7 @@ Retry-After: 86400   # only present on 429 responses`}
 }`}
           </CodeBlock>
 
-          <p>Returns <IC>404</IC> if the ID does not exist or belongs to an asset that is not in the public corpus.</p>
+          <p>Returns <IC>404</IC> if the ID does not exist or belongs to an asset that is not in the public index.</p>
 
           {/* ── Asset schema ──────────────────────────────── */}
           <SectionTitle id="asset-schema">
@@ -566,7 +566,7 @@ Retry-After: 86400   # only present on 429 responses`}
                   ["401", "key_revoked", "Key has been revoked."],
                   ["401", "key_expired", "Key's expiry date has passed."],
                   ["403", "insufficient_scope", "Key does not have the required scope for this endpoint."],
-                  ["404", "not_found", "Asset ID does not exist in the public corpus."],
+                  ["404", "not_found", "Asset ID does not exist in the public index."],
                   ["422", "invalid_params", "Query parameters failed validation."],
                   ["429", "rate_limit_exceeded", "Daily call quota exhausted. Retry after next UTC midnight."],
                   ["500", "internal_error", "Unexpected server error."],

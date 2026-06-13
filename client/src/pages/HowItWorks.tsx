@@ -766,15 +766,15 @@ export default function HowItWorks() {
           <div
             className="rounded-2xl p-10 sm:p-14 text-center relative overflow-hidden"
             style={{
-              background: "linear-gradient(135deg, hsl(25 80% 6%) 0%, hsl(33 75% 9%) 60%, hsl(38 70% 7%) 100%)",
-              border: "1px solid hsl(33 85% 44% / 0.25)",
+              background: "linear-gradient(135deg, hsl(38 80% 96%) 0%, hsl(33 65% 90%) 100%)",
+              border: "1px solid hsl(33 85% 44% / 0.4)",
             }}
           >
-            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 44% / 0.12) 0%, transparent 60%)" }} aria-hidden />
-            <h2 className="text-2xl sm:text-3xl font-bold text-white mb-4">
+            <div className="absolute inset-0 pointer-events-none" style={{ background: "radial-gradient(ellipse at 50% 0%, hsl(33 85% 50% / 0.08) 0%, transparent 60%)" }} aria-hidden />
+            <h2 className="text-2xl sm:text-3xl font-bold text-foreground mb-4">
               Your next deal is already indexed.
             </h2>
-            <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(33 40% 68%)" }}>
+            <p className="mb-8 max-w-md mx-auto" style={{ color: "hsl(25 35% 32%)" }}>
               Join the BD teams using EdenRadar to find, evaluate, and close licensing deals before the competition does.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -783,7 +783,7 @@ export default function HowItWorks() {
                 onClick={() => navigate("/demo")}
                 data-testid="howitworks-cta-main"
                 className="h-11 px-7 font-semibold"
-                style={{ background: "hsl(38 25% 91%)", color: "hsl(25 80% 12%)", border: "none" }}
+                style={{ background: "hsl(33 85% 44%)", color: "white", border: "none" }}
               >
                 Request Access
                 <ArrowRight className="w-4 h-4 ml-2" />
@@ -793,12 +793,12 @@ export default function HowItWorks() {
                 onClick={() => navigate("/pricing")}
                 data-testid="howitworks-cta-pricing"
                 className="h-11 px-7 font-semibold"
-                style={{ background: "transparent", border: "1px solid hsl(33 85% 44% / 0.3)", color: "hsl(33 60% 68%)" }}
+                style={{ background: "transparent", border: "1px solid hsl(33 85% 44% / 0.5)", color: "hsl(25 70% 32%)" }}
               >
                 See Pricing
               </Button>
             </div>
-            <p className="text-xs mt-6" style={{ color: "hsl(33 30% 48%)" }}>
+            <p className="text-xs mt-6" style={{ color: "hsl(25 30% 38%)" }}>
               3-day free trial on EdenRadar · No card required for researcher tiers
             </p>
           </div>

@@ -666,7 +666,7 @@ export function EdenChatThread({
                 (!msg.assets || msg.assets.length === 0) && !(msg.externalResults?.length) && (
                 <div className={`mt-2 flex items-center gap-1.5 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground/60`}>
                   <span className="inline-block w-1 h-1 rounded-full bg-muted-foreground/40" />
-                  No TTO corpus matches — try broadening the search or adjusting filters
+                  No TTO index matches: try broadening the search or adjusting filters
                 </div>
               )}
 
@@ -675,7 +675,7 @@ export function EdenChatThread({
                 <div className="mt-3" data-testid={`chat-citations-${i}`}>
                   {msg.externalResults?.length ? (
                     <p className={`${compact ? "text-[9px]" : "text-[10px]"} text-muted-foreground/60 mb-1.5 uppercase tracking-wide font-medium`}>
-                      Also in TTO corpus
+                      Also in the TTO index
                     </p>
                   ) : null}
                   <div className={gridCols}>
