@@ -497,8 +497,10 @@ function RecentFeed() {
         if (!pool.length) return;
 
         const shownInsts = new Set(visRef.current.map(a => a.institution));
+        const shownIds   = new Set(visRef.current.map(a => a.id));
         let next: FeedAsset | null = null;
         const start = poolIdx.current;
+        // Pass 1: different institution from anything visible
         for (let i = 0; i < pool.length; i++) {
           const candidate = pool[(start + i) % pool.length];
           if (!shownInsts.has(candidate.institution)) {
@@ -507,6 +509,18 @@ function RecentFeed() {
             break;
           }
         }
+        // Pass 2: same institution ok, but must be a different asset
+        if (!next) {
+          for (let i = 0; i < pool.length; i++) {
+            const candidate = pool[(start + i) % pool.length];
+            if (!shownIds.has(candidate.id)) {
+              next = candidate;
+              poolIdx.current = (start + i + 1) % pool.length;
+              break;
+            }
+          }
+        }
+        // Pass 3: pool is tiny, just advance
         if (!next) { next = pool[poolIdx.current % pool.length]; poolIdx.current++; }
 
         slot.style.transition = FEED_EASE_IN;
