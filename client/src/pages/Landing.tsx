@@ -450,7 +450,7 @@ function pickUnique(pool: FeedAsset[], count: number): FeedAsset[] {
 function RecentFeed() {
   const sectionRef = useReveal();
   const { data } = useQuery<{ assets: FeedAsset[]; total: number }>({
-    queryKey: ["/api/browse/new-arrivals?window=30d&limit=30"],
+    queryKey: ["/api/browse/new-arrivals?window=30d&limit=100"],
     staleTime: 10 * 60 * 1000,
     retry: false,
   });
@@ -462,13 +462,17 @@ function RecentFeed() {
 
   const [visible, setVisible] = useState<FeedAsset[]>([]);
   const [ambientSlot, setAmbientSlot] = useState<number | null>(null);
-  const slotRefs    = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
-  const allRef      = useRef<FeedAsset[]>([]);
-  const visRef      = useRef<FeedAsset[]>([]);
-  const poolIdx     = useRef(0);
-  const flipPos     = useRef(0);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const ambientRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const slotRefs      = useRef<(HTMLDivElement | null)[]>(Array(FEED_SLOTS).fill(null));
+  const allRef        = useRef<FeedAsset[]>([]);
+  const visRef        = useRef<FeedAsset[]>([]);
+  const poolIdx       = useRef(0);
+  const flipPos       = useRef(0);
+  const intervalRef   = useRef<ReturnType<typeof setInterval> | null>(null);
+  const ambientRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Cooldown queue: IDs of assets that recently flipped off-screen.
+  // Kept for FEED_SLOTS * 2 flips so an asset can't reappear immediately after rotating away.
+  const cooldownRef   = useRef<number[]>([]);
+  const COOLDOWN_SIZE = FEED_SLOTS * 2;
 
   useEffect(() => {
     allRef.current = all;
@@ -496,20 +500,33 @@ function RecentFeed() {
         const pool = allRef.current;
         if (!pool.length) return;
 
-        const shownInsts = new Set(visRef.current.map(a => a.institution));
-        const shownIds   = new Set(visRef.current.map(a => a.id));
+        const shownInsts  = new Set(visRef.current.map(a => a.institution));
+        const shownIds    = new Set(visRef.current.map(a => a.id));
+        const cooldownIds = new Set(cooldownRef.current);
+        const excluded    = new Set([...shownIds, ...cooldownIds]);
         let next: FeedAsset | null = null;
         const start = poolIdx.current;
-        // Pass 1: different institution from anything visible
+        // Pass 1: different institution, not visible, not in cooldown
         for (let i = 0; i < pool.length; i++) {
           const candidate = pool[(start + i) % pool.length];
-          if (!shownInsts.has(candidate.institution)) {
+          if (!shownInsts.has(candidate.institution) && !excluded.has(candidate.id)) {
             next = candidate;
             poolIdx.current = (start + i + 1) % pool.length;
             break;
           }
         }
-        // Pass 2: same institution ok, but must be a different asset
+        // Pass 2: relax institution constraint — different asset not visible/cooldown
+        if (!next) {
+          for (let i = 0; i < pool.length; i++) {
+            const candidate = pool[(start + i) % pool.length];
+            if (!excluded.has(candidate.id)) {
+              next = candidate;
+              poolIdx.current = (start + i + 1) % pool.length;
+              break;
+            }
+          }
+        }
+        // Pass 3: relax cooldown — any asset not currently visible
         if (!next) {
           for (let i = 0; i < pool.length; i++) {
             const candidate = pool[(start + i) % pool.length];
@@ -520,13 +537,20 @@ function RecentFeed() {
             }
           }
         }
-        // Pass 3: pool is tiny, just advance
+        // Pass 4: pool smaller than grid, just advance
         if (!next) { next = pool[poolIdx.current % pool.length]; poolIdx.current++; }
+
+        // Record the asset rotating out before overwriting visible state
+        const evictedId = visRef.current[pos]?.id;
 
         slot.style.transition = FEED_EASE_IN;
         slot.style.transform  = "rotateY(90deg)";
 
         setTimeout(() => {
+          // Add evicted ID to cooldown queue, trim to COOLDOWN_SIZE
+          if (evictedId != null) {
+            cooldownRef.current = [evictedId, ...cooldownRef.current].slice(0, COOLDOWN_SIZE);
+          }
           setVisible(prev => { const u = [...prev]; u[pos] = next!; return u; });
           slot.style.transition = "none";
           slot.style.transform  = "rotateY(-90deg)";

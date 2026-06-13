@@ -332,25 +332,48 @@ export function registerIndexingRoutes(app: Express): void {
       const institutions = (instRows.rows as { institution: string; count: number }[])
         .map((r) => ({ institution: r.institution || "Unknown", count: r.count }));
 
-      // Paginated asset list
-      const assets = await db
-        .select({
-          id: ingestedAssets.id,
-          assetName: ingestedAssets.assetName,
-          institution: ingestedAssets.institution,
-          modality: ingestedAssets.modality,
-          indication: ingestedAssets.indication,
-          developmentStage: ingestedAssets.developmentStage,
-          summary: ingestedAssets.summary,
-          mechanismOfAction: ingestedAssets.mechanismOfAction,
-          completenessScore: ingestedAssets.completenessScore,
-          firstSeenAt: ingestedAssets.firstSeenAt,
-        })
-        .from(ingestedAssets)
-        .where(windowCondition)
-        .orderBy(desc(ingestedAssets.firstSeenAt))
-        .limit(limit)
-        .offset(offset);
+      // Institution-interleaved asset list: rank assets within each institution by recency,
+      // then order by rank first so the first N rows are guaranteed to have N unique institutions.
+      // This prevents scraper batch clustering (e.g. 15 Stanford assets dominating a 30-asset pool).
+      const assetRows = await db.execute(sql`
+        WITH ranked AS (
+          SELECT
+            id, asset_name, institution, modality, indication,
+            development_stage, summary, mechanism_of_action,
+            completeness_score, first_seen_at,
+            ROW_NUMBER() OVER (PARTITION BY institution ORDER BY first_seen_at DESC) AS rn
+          FROM ingested_assets
+          WHERE relevant = true
+            AND ${intervalRawSql}
+            AND modality IS NOT NULL AND modality != 'unknown'
+            AND indication IS NOT NULL AND indication != 'unknown'
+        )
+        SELECT id, asset_name, institution, modality, indication,
+               development_stage, summary, mechanism_of_action,
+               completeness_score, first_seen_at
+        FROM ranked
+        ORDER BY rn, first_seen_at DESC
+        LIMIT ${limit} OFFSET ${offset}
+      `);
+
+      const assets = (assetRows.rows as {
+        id: number; asset_name: string | null; institution: string;
+        modality: string | null; indication: string | null;
+        development_stage: string | null; summary: string | null;
+        mechanism_of_action: string | null; completeness_score: number | null;
+        first_seen_at: string;
+      }[]).map(r => ({
+        id: r.id,
+        assetName: r.asset_name,
+        institution: r.institution,
+        modality: r.modality,
+        indication: r.indication,
+        developmentStage: r.development_stage,
+        summary: r.summary,
+        mechanismOfAction: r.mechanism_of_action,
+        completenessScore: r.completeness_score,
+        firstSeenAt: r.first_seen_at,
+      }));
 
       res.json({ assets, institutions, total, window: windowParam, hasMore: offset + assets.length < total });
     } catch (err: any) {
