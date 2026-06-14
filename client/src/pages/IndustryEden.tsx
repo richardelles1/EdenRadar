@@ -65,34 +65,41 @@ function EmptyState({
         className="flex flex-col items-center gap-3 w-full max-w-xl"
         style={{ animation: "ie-fade-up 380ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
       >
-        <div className="flex flex-col items-center gap-1 text-center">
-          <EdenAvatar isThinking={streaming} size={36} />
-          <h1 className="text-lg font-bold tracking-tight text-foreground leading-none mt-2">EDEN</h1>
-          {isFirstVisit ? (
-            <p className="text-xs text-muted-foreground max-w-[280px]">
-              Search 400k+ TTO assets, compare institutions, and analyze your pipeline.
-            </p>
-          ) : (
-            <p className="text-[11px] text-muted-foreground tracking-widest uppercase">
-              Engine for Discovery &amp; Emerging Networks
-            </p>
-          )}
-          {!isFirstVisit && greetName && (
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
-              {profile.therapeuticAreas.length > 0 && (
-                <> · <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
-              )}
-            </p>
-          )}
-          {totalIndexed > 0 && (
-            <p className="text-[10px] text-muted-foreground/50 mt-0.5">
-              {totalIndexed.toLocaleString()} assets · 220+ institutions
-            </p>
-          )}
+        <div className="flex flex-col items-center gap-1.5 text-center">
+          <EdenAvatar isThinking={streaming} size={40} />
+          <div className="flex flex-col items-center gap-1 mt-1">
+            <h1
+              className="font-extrabold text-foreground leading-none"
+              style={{ fontSize: "clamp(20px, 4vw, 26px)", letterSpacing: "-0.035em" }}
+            >
+              EDEN
+            </h1>
+            {isFirstVisit ? (
+              <p className="text-[11px] text-muted-foreground max-w-[260px] leading-relaxed">
+                Search 400k+ TTO assets, compare institutions, and analyze your pipeline.
+              </p>
+            ) : (
+              <p className="text-[10px] text-muted-foreground/70 tracking-[0.12em] uppercase">
+                Engine for Discovery &amp; Emerging Networks
+              </p>
+            )}
+            {!isFirstVisit && greetName && (
+              <p className="text-[11px] text-muted-foreground">
+                Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
+                {profile.therapeuticAreas.length > 0 && (
+                  <> · <span style={{ color: "#2d7a52" }} className="font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
+                )}
+              </p>
+            )}
+            {totalIndexed > 0 && (
+              <p className="text-[10px] text-muted-foreground/40">
+                {totalIndexed.toLocaleString()} assets · 220+ institutions
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 w-full">
           {cards.map((card, i) => {
             const Icon = card.icon;
             return (
@@ -100,12 +107,12 @@ function EmptyState({
                 key={card.q}
                 onClick={() => onSend(card.q)}
                 disabled={streaming}
-                className="group text-left rounded-xl border border-border/70 bg-card px-3 py-3 transition-all duration-200 hover:bg-muted hover:border-border active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
-                style={{ animation: `ie-fade-up 340ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${60 + i * 40}ms` }}
+                className="group text-left rounded-lg border border-border/60 bg-card px-3 py-2.5 transition-all duration-150 hover:border-[#2d7a52]/25 hover:bg-[#2d7a52]/[0.025] active:scale-[0.97] disabled:opacity-40 disabled:pointer-events-none"
+                style={{ animation: `ie-fade-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${50 + i * 35}ms` }}
                 data-testid={`prompt-card-${i}`}
               >
-                <Icon className="h-4 w-4 mb-1.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />
-                <p className="text-[11px] font-semibold text-foreground leading-tight">{card.label}</p>
+                <Icon className="h-3.5 w-3.5 mb-1.5 shrink-0 text-muted-foreground/50 group-hover:text-[#2d7a52] transition-colors duration-150" />
+                <p className="text-[11px] font-medium text-foreground/80 group-hover:text-foreground leading-snug transition-colors duration-150">{card.label}</p>
               </button>
             );
           })}

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Dna, FlaskConical, Brain, Shield, TrendingUp, Building2, Microscope, Pill, Zap, Globe, BarChart2, Layers, FileSearch, BookOpen, Clock, Flame, MapPin, Search } from "lucide-react";
 
 export function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; size?: number }) {
@@ -11,26 +11,26 @@ export function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boo
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" className="shrink-0" aria-hidden="true">
       <defs>
         <radialGradient id={gradId} cx="50%" cy="38%" r="62%">
-          <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.55"/>
-          <stop offset="55%" stopColor="#10b981" stopOpacity="0.22"/>
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.04"/>
+          <stop offset="0%" stopColor="#2d7a52" stopOpacity="0.45"/>
+          <stop offset="55%" stopColor="#2d7a52" stopOpacity="0.16"/>
+          <stop offset="100%" stopColor="#2d7a52" stopOpacity="0.03"/>
         </radialGradient>
       </defs>
       <style>{`
-        @keyframes eden-ring1 { 0%,100%{opacity:.18;r:${ring1R}px} 50%{opacity:.38;r:${ring1R * 1.06}px} }
-        @keyframes eden-ring2 { 0%,100%{opacity:.08;r:${ring2R}px} 50%{opacity:.22;r:${ring2R * 1.04}px} }
-        @keyframes eden-think1 { 0%,100%{opacity:.35;r:${ring1R}px} 50%{opacity:.6;r:${ring1R * 1.1}px} }
-        @keyframes eden-think2 { 0%,100%{opacity:.18;r:${ring2R}px} 50%{opacity:.4;r:${ring2R * 1.07}px} }
-        @keyframes eden-core { 0%,100%{opacity:.85} 50%{opacity:1} }
+        @keyframes eden-ring1 { 0%,100%{opacity:.14;r:${ring1R}px} 50%{opacity:.30;r:${ring1R * 1.06}px} }
+        @keyframes eden-ring2 { 0%,100%{opacity:.06;r:${ring2R}px} 50%{opacity:.18;r:${ring2R * 1.04}px} }
+        @keyframes eden-think1 { 0%,100%{opacity:.28;r:${ring1R}px} 50%{opacity:.52;r:${ring1R * 1.1}px} }
+        @keyframes eden-think2 { 0%,100%{opacity:.14;r:${ring2R}px} 50%{opacity:.34;r:${ring2R * 1.07}px} }
+        @keyframes eden-core { 0%,100%{opacity:.8} 50%{opacity:1} }
       `}</style>
-      <circle cx={r} cy={r} r={ring2R} fill="none" stroke="#10b981"
+      <circle cx={r} cy={r} r={ring2R} fill="none" stroke="#2d7a52"
         style={{ animation: isThinking ? `eden-think2 1s ease-in-out infinite` : `eden-ring2 2.8s ease-in-out infinite` }} />
-      <circle cx={r} cy={r} r={ring1R} fill="none" stroke="#10b981" strokeWidth="1.2"
+      <circle cx={r} cy={r} r={ring1R} fill="none" stroke="#2d7a52" strokeWidth="1.2"
         style={{ animation: isThinking ? `eden-think1 0.8s ease-in-out infinite` : `eden-ring1 2.2s ease-in-out infinite` }} />
       <circle cx={r} cy={r} r={innerR} fill={`url(#${gradId})`} />
-      <circle cx={r} cy={r} r={innerR * 0.6} fill="#10b981"
+      <circle cx={r} cy={r} r={innerR * 0.6} fill="#2d7a52"
         style={{ animation: `eden-core ${isThinking ? "0.7s" : "2s"} ease-in-out infinite` }} />
-      <circle cx={r} cy={r} r={innerR * 0.28} fill="#ecfdf5" />
+      <circle cx={r} cy={r} r={innerR * 0.28} fill="hsl(var(--background))" />
     </svg>
   );
 }
@@ -525,30 +525,42 @@ export function getFollowUpPills(responseText: string, hasAssets: boolean): stri
 
 // ── EDEN acronym intro animation ──────────────────────────────────────────
 export function EdenIntro({ onDone }: { onDone: () => void }) {
+  const [isFading, setIsFading] = useState(false);
+
   useEffect(() => {
-    const t = setTimeout(onDone, 1500);
-    return () => clearTimeout(t);
-  }, [onDone]);
+    const fadeTimer = setTimeout(() => setIsFading(true), 1200);
+    return () => clearTimeout(fadeTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!isFading) return;
+    const doneTimer = setTimeout(onDone, 220);
+    return () => clearTimeout(doneTimer);
+  }, [isFading, onDone]);
 
   const LETTERS = ["E", "D", "E", "N"];
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-4 select-none pointer-events-none">
+    <div
+      className="flex flex-col items-center justify-center flex-1 px-4 select-none pointer-events-none"
+      style={{ transition: "opacity 220ms ease-out", opacity: isFading ? 0 : 1 }}
+    >
       <style>{`
         @keyframes eden-letter-in {
-          from { opacity: 0; transform: translateY(6px); }
-          to   { opacity: 1; transform: translateY(0); }
+          from { opacity: 0; transform: translateY(10px) scale(0.93); filter: blur(3px); }
+          to   { opacity: 1; transform: translateY(0)   scale(1);    filter: blur(0);   }
         }
       `}</style>
-      <div className="flex gap-1 sm:gap-2">
+      <div className="flex items-end gap-[0.04em]">
         {LETTERS.map((letter, i) => (
           <span
             key={i}
-            className="font-black tracking-tight leading-none text-foreground"
+            className="font-black leading-none text-foreground"
             style={{
-              fontSize: "clamp(56px, 13vw, 112px)",
+              fontSize: "clamp(52px, 12vw, 104px)",
+              letterSpacing: "-0.03em",
               opacity: 0,
-              animation: `eden-letter-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${i * 120}ms both`,
+              animation: `eden-letter-in 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${i * 110}ms both`,
             }}
           >
             {letter}
