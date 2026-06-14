@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Nav } from "@/components/Nav";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 
 type BriefIssue = {
   id: number;
@@ -55,7 +56,7 @@ function SubscribeForm({ compact = false }: { compact?: boolean }) {
     <form onSubmit={handleSubmit} className={compact ? "flex gap-0" : "flex flex-col gap-2"}>
       {!compact && (
         <p className="text-sm text-stone-500 leading-relaxed mb-2">
-          Monthly intelligence from 400+ monitored TTO portfolios.
+          Monthly intelligence from {TTO_COUNT_LABEL} monitored TTO portfolios.
           No pitch. Just signal.
         </p>
       )}
@@ -88,7 +89,7 @@ function SubscribeForm({ compact = false }: { compact?: boolean }) {
 export default function BriefArchive() {
   useDocumentMeta({
     title: "The Eden Brief - Intelligence from the Licensing Frontier",
-    description: "Monthly intelligence on the biotech asset licensing market. Signal from 400+ monitored TTO portfolios, published by Eden NX.",
+    description: `Monthly intelligence on the biotech asset licensing market. Signal from ${TTO_COUNT_LABEL} monitored TTO portfolios, published by EdenNX.`,
   });
 
   const { data: issues = [], isLoading } = useQuery<BriefIssue[]>({
@@ -108,7 +109,7 @@ export default function BriefArchive() {
             className="text-xs tracking-widest uppercase mb-3"
             style={{ fontFamily: "'JetBrains Mono', monospace", color: "#6b7570" }}
           >
-            Eden NX · Intelligence Brief
+            EdenNX · Intelligence Brief
           </p>
           <h1
             className="text-3xl sm:text-5xl mb-3"
