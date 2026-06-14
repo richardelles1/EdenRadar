@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Nav } from "@/components/Nav";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 import type { BriefContent, BriefTagType } from "@shared/schema";
+import { TTO_COUNT_LABEL } from "@shared/platformStats";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,8 +44,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 mb-5">
       <span
-        className="text-xs font-semibold tracking-widest uppercase flex-shrink-0"
-        style={{ fontFamily: "'JetBrains Mono', monospace", color: EMERALD }}
+        className="uppercase flex-shrink-0"
+        style={{ fontFamily: "'JetBrains Mono', monospace", color: EMERALD, fontSize: "9.5px", fontWeight: 500, letterSpacing: "0.2em" }}
       >
         {children}
       </span>
@@ -322,18 +323,18 @@ export default function BriefIssue() {
                 ["Published", issue.publishedAt
                   ? new Date(issue.publishedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
                   : ""],
-                ["Coverage", "400+ TTO portfolios"],
+                ["Coverage", `${TTO_COUNT_LABEL} TTO portfolios`],
               ].map(([label, value]) => (
                 <div key={label} className="flex flex-col gap-0.5">
                   <span
                     className="text-xs tracking-widest uppercase"
-                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.45)", fontSize: "10px" }}
+                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.6)", fontSize: "10px" }}
                   >
                     {label}
                   </span>
                   <span
                     className="text-xs"
-                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.85)", fontSize: "11px" }}
+                    style={{ fontFamily: "'JetBrains Mono', monospace", color: "rgba(255,255,255,0.9)", fontSize: "11px" }}
                   >
                     {value}
                   </span>
@@ -734,7 +735,7 @@ export default function BriefIssue() {
                     className="text-xs"
                     style={{ color: INK_MID }}
                   >
-                    Scout searches 400+ TTO portfolios in real time. Results ranked by your therapeutic focus.
+                    Scout searches {TTO_COUNT_LABEL} TTO portfolios in real time. Results ranked by your therapeutic focus.
                   </div>
                 </div>
                 <a
