@@ -3,7 +3,7 @@ import { OrientationHint } from "@/components/OrientationHint";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Loader2, Zap, Mic, MicOff, ChevronRight, PanelLeft, Plus, FlaskConical, FileSearch, Library, Database } from "lucide-react";
-import { EdenAvatar, EdenOrb, EdenIntro, getPersonalizedCards, getSearchLabel } from "@/components/EdenOrb";
+import { EdenAvatar, EdenIntro, getPersonalizedCards, getSearchLabel } from "@/components/EdenOrb";
 import { EdenChatThread } from "@/components/EdenChatThread";
 import { useEdenChat, type EdenSessionSummary, type EdenUserContext, type StreamingStage, type ActiveSource, type ExternalResult, type AlertOfferConfig } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -34,7 +34,6 @@ const SOURCE_DISPLAY: Record<ActiveSource, { label: string; Icon: React.Componen
 };
 
 // ── Empty state with personalized prompt cards ────────────────────────────
-const CAPABILITY_CHIPS = ["Search TTO assets", "Compare institutions", "Analyze your pipeline", "Draft term sheets", "Set smart alerts"];
 
 function EmptyState({
   onSend,
@@ -61,90 +60,57 @@ function EmptyState({
   const greetName = profile.companyName || null;
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-4 py-4" data-testid="chat-empty">
+    <div className="flex flex-col items-center justify-center flex-1 px-4 py-4 overflow-hidden" data-testid="chat-empty">
       <div
-        className="flex flex-col items-center mb-4 w-full"
-        style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+        className="flex flex-col items-center gap-3 w-full max-w-xl"
+        style={{ animation: "ie-fade-up 380ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
       >
-        <div className="relative w-full max-w-[320px] sm:max-w-[560px] mx-auto mb-1">
-          <EdenOrb isThinking={streaming} />
-          {streaming && (
-            <span className="absolute bottom-6 right-8 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background animate-pulse" />
-          )}
-        </div>
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground leading-none mt-1">
-          <span style={{
-            background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 60%, #6ee7b7 100%)",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-          }}>
-            E · D · E · N
-          </span>
-        </h1>
-        {isFirstVisit ? (
-          <p className="text-xs text-muted-foreground mt-2 text-center max-w-xs" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "60ms" }}>
-            Your biotech BD intelligence layer — search 400k+ TTO assets, compare institutions, analyze your pipeline, and draft deal documents.
-          </p>
-        ) : (
-          <>
-            <p className="text-[11px] text-muted-foreground mt-1 tracking-widest uppercase">
+        <div className="flex flex-col items-center gap-1 text-center">
+          <EdenAvatar isThinking={streaming} size={36} />
+          <h1 className="text-lg font-bold tracking-tight text-foreground leading-none mt-2">EDEN</h1>
+          {isFirstVisit ? (
+            <p className="text-xs text-muted-foreground max-w-[280px]">
+              Search 400k+ TTO assets, compare institutions, and analyze your pipeline.
+            </p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground tracking-widest uppercase">
               Engine for Discovery &amp; Emerging Networks
             </p>
-            {greetName && (
-              <p className="text-xs text-muted-foreground mt-2" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "80ms" }}>
-                Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
-                {profile.therapeuticAreas.length > 0 && (
-                  <> · focused on <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
-                )}
-              </p>
-            )}
-          </>
-        )}
-        {totalIndexed > 0 && (
-          <p className="text-[11px] text-muted-foreground/60 mt-1">
-            {totalIndexed.toLocaleString()} assets indexed across 220+ institutions
-          </p>
-        )}
-      </div>
-
-      <div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl"
-        style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
-      >
-        {cards.map((card, i) => {
-          const Icon = card.icon;
-          return (
-            <button
-              key={card.q}
-              onClick={() => onSend(card.q)}
-              disabled={streaming}
-              className={`group text-left rounded-xl border bg-gradient-to-br p-3 sm:p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${card.color}`}
-              style={{ animation: `ie-fade-up 360ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${180 + i * 45}ms` }}
-              data-testid={`prompt-card-${i}`}
-            >
-              <Icon className={`h-4 w-4 sm:h-5 sm:w-5 mb-2 sm:mb-2.5 shrink-0 ${card.iconColor}`} />
-              <p className="text-[11px] sm:text-xs font-semibold text-foreground leading-tight">{card.label}</p>
-            </button>
-          );
-        })}
-      </div>
-
-      {isFirstVisit && (
-        <div
-          className="flex flex-wrap items-center justify-center gap-1.5 mt-4 max-w-xl"
-          style={{ animation: "ie-fade-up 360ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "460ms" }}
-        >
-          {CAPABILITY_CHIPS.map((chip) => (
-            <span
-              key={chip}
-              className="text-[10px] text-muted-foreground/70 bg-muted/50 border border-border/50 rounded-full px-2.5 py-1"
-            >
-              {chip}
-            </span>
-          ))}
+          )}
+          {!isFirstVisit && greetName && (
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
+              {profile.therapeuticAreas.length > 0 && (
+                <> · <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
+              )}
+            </p>
+          )}
+          {totalIndexed > 0 && (
+            <p className="text-[10px] text-muted-foreground/50 mt-0.5">
+              {totalIndexed.toLocaleString()} assets · 220+ institutions
+            </p>
+          )}
         </div>
-      )}
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 w-full">
+          {cards.map((card, i) => {
+            const Icon = card.icon;
+            return (
+              <button
+                key={card.q}
+                onClick={() => onSend(card.q)}
+                disabled={streaming}
+                className="group text-left rounded-xl border border-border/70 bg-card px-3 py-3 transition-all duration-200 hover:bg-muted hover:border-border active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none"
+                style={{ animation: `ie-fade-up 340ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${60 + i * 40}ms` }}
+                data-testid={`prompt-card-${i}`}
+              >
+                <Icon className="h-4 w-4 mb-1.5 shrink-0 text-muted-foreground/60 group-hover:text-foreground/70 transition-colors" />
+                <p className="text-[11px] font-semibold text-foreground leading-tight">{card.label}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -561,13 +527,13 @@ export default function IndustryEden() {
           {/* Ambient background dots */}
           <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
             {[
-              { s: 5,  x: "6%",  y: "18%", c: "#10b981", o: 0.07, d: 7.2,  dl: 0.0 },
-              { s: 4,  x: "17%", y: "78%", c: "#10b981", o: 0.06, d: 9.8,  dl: 2.3 },
-              { s: 6,  x: "58%", y: "9%",  c: "#6ee7b7", o: 0.07, d: 11.5, dl: 4.7 },
-              { s: 3,  x: "86%", y: "72%", c: "#10b981", o: 0.06, d: 8.1,  dl: 6.2 },
-              { s: 5,  x: "3%",  y: "48%", c: "#6ee7b7", o: 0.05, d: 10.3, dl: 1.1 },
-              { s: 7,  x: "91%", y: "22%", c: "#10b981", o: 0.07, d: 8.7,  dl: 3.4 },
-              { s: 4,  x: "44%", y: "88%", c: "#6ee7b7", o: 0.05, d: 12.0, dl: 5.9 },
+              { s: 5,  x: "6%",  y: "18%", c: "#2d7a52", o: 0.07, d: 7.2,  dl: 0.0 },
+              { s: 4,  x: "17%", y: "78%", c: "#2d7a52", o: 0.06, d: 9.8,  dl: 2.3 },
+              { s: 6,  x: "58%", y: "9%",  c: "#2d7a52", o: 0.07, d: 11.5, dl: 4.7 },
+              { s: 3,  x: "86%", y: "72%", c: "#2d7a52", o: 0.06, d: 8.1,  dl: 6.2 },
+              { s: 5,  x: "3%",  y: "48%", c: "#2d7a52", o: 0.05, d: 10.3, dl: 1.1 },
+              { s: 7,  x: "91%", y: "22%", c: "#2d7a52", o: 0.07, d: 8.7,  dl: 3.4 },
+              { s: 4,  x: "44%", y: "88%", c: "#2d7a52", o: 0.05, d: 12.0, dl: 5.9 },
             ].map((dot, i) => (
               <div
                 key={i}

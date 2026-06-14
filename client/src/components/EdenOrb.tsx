@@ -526,7 +526,7 @@ export function getFollowUpPills(responseText: string, hasAssets: boolean): stri
 // ── EDEN acronym intro animation ──────────────────────────────────────────
 export function EdenIntro({ onDone }: { onDone: () => void }) {
   useEffect(() => {
-    const t = setTimeout(onDone, 1800);
+    const t = setTimeout(onDone, 1500);
     return () => clearTimeout(t);
   }, [onDone]);
 
@@ -536,7 +536,7 @@ export function EdenIntro({ onDone }: { onDone: () => void }) {
     <div className="flex flex-col items-center justify-center flex-1 px-4 select-none pointer-events-none">
       <style>{`
         @keyframes eden-letter-in {
-          from { opacity: 0; transform: translateY(8px); }
+          from { opacity: 0; transform: translateY(6px); }
           to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
@@ -544,15 +544,11 @@ export function EdenIntro({ onDone }: { onDone: () => void }) {
         {LETTERS.map((letter, i) => (
           <span
             key={i}
-            className="font-black tracking-tight leading-none"
+            className="font-black tracking-tight leading-none text-foreground"
             style={{
-              fontSize: "clamp(72px, 18vw, 160px)",
+              fontSize: "clamp(56px, 13vw, 112px)",
               opacity: 0,
-              animation: `eden-letter-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${i * 150}ms both`,
-              background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
+              animation: `eden-letter-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) ${i * 120}ms both`,
             }}
           >
             {letter}
