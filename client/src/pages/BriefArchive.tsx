@@ -103,23 +103,42 @@ export default function BriefArchive() {
 
       <div className="max-w-5xl mx-auto px-6 py-10 sm:py-16">
 
-        {/* Page header */}
-        <div className="mb-12">
-          <p
-            className="text-xs tracking-widest uppercase mb-3"
-            style={{ fontFamily: "'JetBrains Mono', monospace", color: "#6b7570" }}
-          >
-            EdenNX · Intelligence Brief
-          </p>
-          <h1
-            className="text-3xl sm:text-5xl mb-3"
-            style={{ fontFamily: "'DM Serif Display', Georgia, serif", color: "#1a1e23", lineHeight: 1.1 }}
-          >
-            The Eden <em>Brief</em>
-          </h1>
-          <p className="text-base text-stone-500 font-light">
-            Signal from the licensing frontier. Published monthly.
-          </p>
+        {/* Page header — emerald hero masthead (matches the issue page) */}
+        <div
+          className="relative overflow-hidden rounded-lg mb-12"
+          style={{ background: "linear-gradient(150deg, #2d7a52 0%, #1c5138 100%)" }}
+        >
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(255,255,255,0.04) 28px, rgba(255,255,255,0.04) 29px)",
+            }}
+          />
+          <div className="relative px-6 sm:px-10 py-10 sm:py-14">
+            <div
+              className="flex items-center gap-3 mb-3"
+              style={{ color: "rgba(255,255,255,0.55)" }}
+            >
+              <span
+                className="text-xs tracking-widest uppercase"
+                style={{ fontFamily: "'JetBrains Mono', monospace" }}
+              >
+                EdenNX &middot; Intelligence Brief
+              </span>
+              <div className="flex-1 h-px" style={{ background: "rgba(255,255,255,0.15)" }} />
+            </div>
+            <h1
+              className="text-3xl sm:text-5xl text-white mb-2"
+              style={{ fontFamily: "'DM Serif Display', Georgia, serif", lineHeight: 1.05 }}
+            >
+              The Eden <em>Brief</em>
+            </h1>
+            <p className="text-sm sm:text-base" style={{ color: "rgba(255,255,255,0.65)" }}>
+              Signal from the licensing frontier. Published monthly.
+            </p>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
