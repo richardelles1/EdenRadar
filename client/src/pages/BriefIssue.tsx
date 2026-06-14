@@ -351,13 +351,13 @@ export default function BriefIssue() {
           <section className="mb-11">
             <SectionLabel>01 &middot; The Number</SectionLabel>
             <div
-              className="flex gap-8 items-start p-7 relative"
+              className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-7 p-6 sm:p-8 relative"
               style={{
                 background: EMERALD_LIGHT,
                 border: `1px solid ${EMERALD_BORDER}`,
               }}
             >
-              <div className="flex-shrink-0 text-center pt-1">
+              <div className="flex-shrink-0 text-center sm:border-r sm:pr-7" style={{ borderColor: EMERALD_BORDER }}>
                 <div
                   className="leading-none block"
                   style={{
